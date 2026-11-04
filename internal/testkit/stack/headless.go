@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/doors-dev/gox"
 	"neui.dev/api"
 	"neui.dev/internal/common"
 	"neui.dev/internal/page"
@@ -21,6 +22,7 @@ type Host struct {
 	Provider *testkit.Provider
 	Config   api.ThreadConfig
 	Options  []common.Option
+	Page     gox.Elem
 }
 
 type Chat struct {
@@ -32,17 +34,22 @@ type Chat struct {
 
 func Headless(t *testing.T, h Host) *Chat {
 	t.Helper()
+	ctx := context.WithValue(context.Background(), common.ConfigKey{}, h.Config)
+	return open(t, h, ctx, page.NewPage(ctx))
+}
+
+func open(t *testing.T, h Host, ctx context.Context, p page.Page) *Chat {
+	t.Helper()
 	store, err := local.NewFileStorage()
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { store.Remove() })
-	ctx := context.WithValue(context.Background(), common.ConfigKey{}, h.Config)
 	options := append([]common.Option{common.OptionProvider(h.Provider)}, h.Options...)
 	backend := common.NewBackend(ctx, local.NewMessageStorage(), store, store, options)
 	c := &Chat{
 		t:      t,
-		link:   thread.NewLink(backend, page.NewPage(ctx)),
+		link:   thread.NewLink(backend, p),
 		events: make(chan api.ChatEvent, 256),
 		inits:  make(chan api.ChatState, 1),
 	}
