@@ -2,66 +2,13 @@ package xls
 
 import (
 	"context"
-	"errors"
-	"iter"
 	"strings"
 	"testing"
 
 	"github.com/xuri/excelize/v2"
 	"neui.dev/api"
-	"neui.dev/internal/common"
-	"neui.dev/internal/filesystem"
-	"neui.dev/internal/storage/local"
+	"neui.dev/internal/testkit"
 )
-
-type testThread struct{ fs api.FS }
-
-func (testThread) Context() context.Context { return context.Background() }
-
-func (testThread) ID() api.ThreadID { return "thread" }
-
-func (testThread) PageContext() context.Context { return context.Background() }
-
-func (testThread) Task(string, map[string]any, context.CancelCauseFunc) (common.Task, error) {
-	return nil, errors.New("no tasks in tests")
-}
-
-func (testThread) Ask(api.ChatAsk) (func(context.Context), error) {
-	return nil, errors.New("no asks in tests")
-}
-
-func (testThread) Rename(context.Context, string) error { return nil }
-
-func (testThread) Modules() iter.Seq[common.Module] {
-	return func(func(common.Module) bool) {}
-}
-
-func (t testThread) FS() api.FS               { return t.fs }
-func (t testThread) Model() api.Model         { return api.Model{} }
-func (t testThread) Config() api.ThreadConfig { return api.ThreadConfig{} }
-
-func (testThread) FilesConfig() api.FilesConfig {
-	return common.FilesConfigDefaults(api.FilesConfig{})
-}
-
-func threadCtx(fs api.FS) context.Context {
-	return context.WithValue(context.Background(), common.KeyController, testThread{fs: fs})
-}
-
-func newFSStore(t *testing.T) (filesystem.FS, *local.FileStorage) {
-	t.Helper()
-	store, err := local.NewFileStorage()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Remove() })
-	ws, err := store.WorkspaceOpen("thread")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { ws.Close() })
-	return filesystem.New("thread", ws, store, api.FilesConfig{}), store
-}
 
 func buildBook(t *testing.T, fs api.FS, name string) {
 	t.Helper()
@@ -121,9 +68,10 @@ func buildBook(t *testing.T, fs api.FS, name string) {
 }
 
 func TestSheets(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	infos, err := sheetsTool(threadCtx(fs), sheetsArg{Path: "book.xlsx"})
+	infos, err := sheetsTool(c.Ctx(), sheetsArg{Path: "book.xlsx"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,9 +87,10 @@ func TestSheets(t *testing.T) {
 }
 
 func TestProfile(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	res, err := profileTool(threadCtx(fs), profileArg{Path: "book.xlsx", Sheet: "Data"})
+	res, err := profileTool(c.Ctx(), profileArg{Path: "book.xlsx", Sheet: "Data"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,9 +112,10 @@ func TestProfile(t *testing.T) {
 }
 
 func TestProfileRange(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	res, err := profileTool(threadCtx(fs), profileArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:B3"})
+	res, err := profileTool(c.Ctx(), profileArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:B3"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,9 +128,10 @@ func TestProfileRange(t *testing.T) {
 }
 
 func TestReadPaging(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	ctx := threadCtx(fs)
+	ctx := c.Ctx()
 	res, err := readTool(ctx, readArg{Path: "book.xlsx", Sheet: "Data", Offset: 1, Limit: 2})
 	if err != nil {
 		t.Fatal(err)
@@ -204,9 +155,10 @@ func TestReadPaging(t *testing.T) {
 }
 
 func TestReadRawFormatted(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	ctx := threadCtx(fs)
+	ctx := c.Ctx()
 	res, err := readTool(ctx, readArg{Path: "book.xlsx", Sheet: "Data", Range: "C2:D2"})
 	if err != nil {
 		t.Fatal(err)
@@ -230,9 +182,10 @@ func TestReadRawFormatted(t *testing.T) {
 }
 
 func TestFind(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	res, err := findTool(threadCtx(fs), findArg{Path: "book.xlsx", Query: "Bob"})
+	res, err := findTool(c.Ctx(), findArg{Path: "book.xlsx", Query: "Bob"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -242,7 +195,7 @@ func TestFind(t *testing.T) {
 	if res.Truncated {
 		t.Fatal("truncated on a full result")
 	}
-	res, err = findTool(threadCtx(fs), findArg{Path: "book.xlsx", Query: "note", Sheet: "Notes"})
+	res, err = findTool(c.Ctx(), findArg{Path: "book.xlsx", Query: "note", Sheet: "Notes"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -252,14 +205,15 @@ func TestFind(t *testing.T) {
 }
 
 func TestOpenReadErrors(t *testing.T) {
-	fs, store := newFSStore(t)
-	if _, err := sheetsTool(threadCtx(fs), sheetsArg{Path: "missing.xlsx"}); err == nil {
+	c := testkit.NewController(t, testkit.Setup{})
+	store := c.Store()
+	if _, err := sheetsTool(c.Ctx(), sheetsArg{Path: "missing.xlsx"}); err == nil {
 		t.Fatal("missing file: no error")
 	}
 	if _, err := store.FilePut(context.Background(), "thread", api.OriginUser, "up.xlsx", "application/octet-stream", strings.NewReader("junk"), false); err != nil {
 		t.Fatal(err)
 	}
-	_, err := sheetsTool(threadCtx(fs), sheetsArg{Path: "user_uploads/up.xlsx"})
+	_, err := sheetsTool(c.Ctx(), sheetsArg{Path: "user_uploads/up.xlsx"})
 	if err == nil || !strings.Contains(err.Error(), "virtual") {
 		t.Fatalf("virtual err = %v", err)
 	}

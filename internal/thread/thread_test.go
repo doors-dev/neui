@@ -13,60 +13,27 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"modernc.org/quickjs"
 	"neui.dev/api"
 	"neui.dev/internal/common"
 	"neui.dev/internal/filesystem"
 	"neui.dev/internal/replay"
+	"neui.dev/internal/schema"
 	"neui.dev/internal/storage/local"
+	"neui.dev/internal/testkit"
 	"neui.dev/internal/thread/toolkit"
+	"neui.dev/internal/tools"
 )
 
-type probeTool struct {
-	calls *atomic.Int64
-}
-
-func (p probeTool) Params() []byte { return []byte(`{"type":"object","properties":{}}`) }
-
-func (p probeTool) Name() string { return "run" }
-
-func (p probeTool) Desc() string { return "counts every dispatch it receives" }
-
-func (p probeTool) Summary() string { return p.Desc() }
-
-func (p probeTool) Output() []byte { return []byte(`{}`) }
-
-func (p probeTool) Dispatched(ctx context.Context, arg json.RawMessage) (any, error) {
-	return p.Agent(ctx, arg)
-}
-
-func (p probeTool) Agent(ctx context.Context, input json.RawMessage) (api.UserContents, error) {
-	p.calls.Add(1)
-	return api.UserContents{api.ContentText{Text: "ran " + string(input)}}, nil
-}
-
-func (p probeTool) JS(ctx context.Context) quickjs.HostFunc { return nil }
-
-type probeModule struct {
-	tool probeTool
-}
-
-func (p probeModule) Name() string { return "probe" }
-
-func (p probeModule) Desc() string { return "" }
-
-func (p probeModule) List() []common.Tool { return []common.Tool{p.tool} }
-
-func (p probeModule) Get(name string) (common.Tool, bool) {
-	if name != p.tool.Name() {
-		return nil, false
-	}
-	return p.tool, true
-}
-
-func probeLink(limit int, calls *atomic.Int64) *link {
+func probeLink(t *testing.T, limit int, calls *atomic.Int64) *link {
+	t.Helper()
 	ctx := context.WithValue(context.Background(), common.ConfigKey{}, api.ThreadConfig{ToolCallLimit: limit})
-	m := probeModule{probeTool{calls}}
+	m := tools.NewModule("probe", "")
+	if _, err := m.AddRaw("run", "counts every dispatch it receives", schema.ObjectRawSchema, schema.AnyRawSchema, func(ctx context.Context, input json.RawMessage) (any, error) {
+		calls.Add(1)
+		return "ran " + string(input), nil
+	}); err != nil {
+		t.Fatal(err)
+	}
 	return &link{
 		backend:     common.NewBackend(ctx, nil, nil, nil, nil),
 		linkToolkit: toolkit.NewToolkit(ctx, func(context.Context) common.Module { return m }),
@@ -90,7 +57,7 @@ func useProbe(t *testing.T, l *link, use []api.ContentToolUse) map[string]api.Co
 func TestToolCallLimitAnswersEveryCallPastIt(t *testing.T) {
 	const limit = 3
 	var calls atomic.Int64
-	l := probeLink(limit, &calls)
+	l := probeLink(t, limit, &calls)
 	use := make([]api.ContentToolUse, 0, limit+2)
 	for i := range limit + 2 {
 		use = append(use, api.ContentToolUse{ID: fmt.Sprintf("c%d", i), Name: "probe__run", Input: json.RawMessage(`{}`)})
@@ -119,7 +86,7 @@ func TestToolCallLimitAnswersEveryCallPastIt(t *testing.T) {
 
 func TestDiscardedArgumentsAnswerWithoutRunning(t *testing.T) {
 	var calls atomic.Int64
-	l := probeLink(32, &calls)
+	l := probeLink(t, 32, &calls)
 	use := []api.ContentToolUse{
 		{ID: "empty-object", Name: "probe__run", Input: json.RawMessage(`{}`)},
 		{ID: "no-arguments", Name: "probe__run"},
@@ -276,34 +243,6 @@ func TestToolRoundEndWipesScratch(t *testing.T) {
 	}
 }
 
-type stubProvider struct {
-	model  api.Model
-	events []api.Event
-}
-
-func (stubProvider) Name() string { return "stub" }
-
-func (p stubProvider) Model() api.Model { return p.model }
-
-func (p stubProvider) Stream(context.Context, api.Request) <-chan api.Event {
-	ch := make(chan api.Event, len(p.events))
-	for _, e := range p.events {
-		ch <- e
-	}
-	close(ch)
-	return ch
-}
-
-type recordingProvider struct {
-	stubProvider
-	sent *[]api.Request
-}
-
-func (p recordingProvider) Stream(ctx context.Context, request api.Request) <-chan api.Event {
-	*p.sent = append(*p.sent, request)
-	return p.stubProvider.Stream(ctx, request)
-}
-
 func stubThread(t *testing.T, id api.ThreadID, p api.Provider, config api.ThreadConfig) (*thread, api.MessageStorage, replay.Replay) {
 	t.Helper()
 	ctx := context.WithValue(context.Background(), common.ConfigKey{}, config)
@@ -361,7 +300,7 @@ func TestProviderRefusalOfMeasuredBytesIsTerminal(t *testing.T) {
 	model := api.Model{Name: "stub", RequestBytes: declared}
 	run := func(t *testing.T, id api.ThreadID, cause error) (*thread, replay.Replay) {
 		t.Helper()
-		p := stubProvider{model, []api.Event{api.EventErr{Code: api.CodeTooLarge, Err: cause}}}
+		p := testkit.NewProvider(model, testkit.Events(api.EventErr{Code: api.CodeTooLarge, Err: cause}))
 		th, _, r := stubThread(t, id, p, api.ThreadConfig{})
 		state := startRound(t, th, r, api.Input{Text: "go"})
 		for i := 0; i < 8 && th.state == any(state); i++ {
@@ -412,7 +351,7 @@ func TestOversizedInputIsRefusedWhereItIsSubmitted(t *testing.T) {
 	}
 
 	t.Run("draft", func(t *testing.T) {
-		th, messages, _ := stubThread(t, "input-draft", stubProvider{api.Model{Name: "stub"}, nil}, api.ThreadConfig{InputBytes: limit})
+		th, messages, _ := stubThread(t, "input-draft", testkit.NewProvider(api.Model{Name: "stub"}), api.ThreadConfig{InputBytes: limit})
 		op := NewOperation(ctx)
 		th.on(commandInput{link: th.link, input: oversized, Operation: op})
 		if err := op.Receive(); !errors.Is(err, api.ErrInputTooLarge) {
@@ -427,7 +366,7 @@ func TestOversizedInputIsRefusedWhereItIsSubmitted(t *testing.T) {
 	})
 
 	t.Run("send", func(t *testing.T) {
-		th, messages, r := stubThread(t, "input-send", stubProvider{api.Model{Name: "stub"}, nil}, api.ThreadConfig{InputBytes: limit})
+		th, messages, r := stubThread(t, "input-send", testkit.NewProvider(api.Model{Name: "stub"}), api.ThreadConfig{InputBytes: limit})
 		wait := threadWait{thread: th}
 		th.state = wait
 		op := NewOperation(ctx)
@@ -450,7 +389,7 @@ func TestOversizedInputIsRefusedWhereItIsSubmitted(t *testing.T) {
 	})
 
 	t.Run("rewind", func(t *testing.T) {
-		th, messages, r := stubThread(t, "input-rewind", stubProvider{api.Model{Name: "stub"}, nil}, api.ThreadConfig{InputBytes: limit})
+		th, messages, r := stubThread(t, "input-rewind", testkit.NewProvider(api.Model{Name: "stub"}), api.ThreadConfig{InputBytes: limit})
 		first, _, err := r.RoundInit(api.Input{Text: "one"})
 		if err != nil {
 			t.Fatalf("replay RoundInit: %v", err)
@@ -480,7 +419,7 @@ func TestOversizedInputIsRefusedWhereItIsSubmitted(t *testing.T) {
 	})
 
 	t.Run("rewind during a round", func(t *testing.T) {
-		th, messages, r := stubThread(t, "input-rewind-round", stubProvider{api.Model{Name: "stub"}, nil}, api.ThreadConfig{InputBytes: limit})
+		th, messages, r := stubThread(t, "input-rewind-round", testkit.NewProvider(api.Model{Name: "stub"}), api.ThreadConfig{InputBytes: limit})
 		first, _, err := r.RoundInit(api.Input{Text: "one"})
 		if err != nil {
 			t.Fatalf("replay RoundInit: %v", err)
@@ -506,7 +445,7 @@ func TestOversizedInputIsRefusedWhereItIsSubmitted(t *testing.T) {
 	})
 
 	t.Run("at the limit", func(t *testing.T) {
-		th, _, _ := stubThread(t, "input-fits", stubProvider{api.Model{Name: "stub"}, nil}, api.ThreadConfig{InputBytes: limit})
+		th, _, _ := stubThread(t, "input-fits", testkit.NewProvider(api.Model{Name: "stub"}), api.ThreadConfig{InputBytes: limit})
 		fits := api.Input{Text: strings.Repeat("x", limit)}
 		op := NewOperation(ctx)
 		th.on(commandInput{link: th.link, input: fits, Operation: op})
@@ -519,7 +458,7 @@ func TestOversizedInputIsRefusedWhereItIsSubmitted(t *testing.T) {
 	})
 
 	t.Run("attachments count toward the limit", func(t *testing.T) {
-		th, _, _ := stubThread(t, "input-attach", stubProvider{api.Model{Name: "stub"}, nil}, api.ThreadConfig{InputBytes: limit})
+		th, _, _ := stubThread(t, "input-attach", testkit.NewProvider(api.Model{Name: "stub"}), api.ThreadConfig{InputBytes: limit})
 		text := strings.Repeat("x", limit-10)
 		op := NewOperation(ctx)
 		th.on(commandInput{link: th.link, input: api.Input{Text: text}, Operation: op})
@@ -538,7 +477,7 @@ func TestOversizedInputIsRefusedWhereItIsSubmitted(t *testing.T) {
 	})
 
 	t.Run("non-positive takes the default", func(t *testing.T) {
-		th, _, _ := stubThread(t, "input-default", stubProvider{api.Model{Name: "stub"}, nil}, api.ThreadConfig{InputBytes: -1})
+		th, _, _ := stubThread(t, "input-default", testkit.NewProvider(api.Model{Name: "stub"}), api.ThreadConfig{InputBytes: -1})
 		if got := th.link.backend.Config().InputBytes; got != 256<<10 {
 			t.Fatalf("a negative InputBytes resolved to %d, want the 256 KiB default: the input ceiling has no off switch", got)
 		}
@@ -559,10 +498,15 @@ func TestOversizedInputIsRefusedWhereItIsSubmitted(t *testing.T) {
 }
 
 func TestByteDrivenCompactionBlocksTheRoundItPrecedes(t *testing.T) {
-	summary := []api.Event{
+	summary := testkit.Events(
 		api.EventStart{ID: "c", Model: "stub"},
 		api.EventText{Index: 0, Text: "the summary"},
 		api.EventOk{Code: api.CodeTurn},
+	)
+	compacting := func(model api.Model) *testkit.Provider {
+		p := testkit.NewProvider(model)
+		p.OnCompaction(summary)
+		return p
 	}
 	heavy := api.Indexed[api.Content]{0: api.ContentText{Text: strings.Repeat("x", 40_000)}}
 	grow := func(t *testing.T, r replay.Replay, usage api.EventUsage) {
@@ -579,7 +523,7 @@ func TestByteDrivenCompactionBlocksTheRoundItPrecedes(t *testing.T) {
 
 	t.Run("bytes", func(t *testing.T) {
 		config := api.ThreadConfig{ThreadMemoryLimit: 60_000, CompactionPreserve: 0.25, CompactionTrigger: 2}
-		th, messages, r := stubThread(t, "compact-bytes", stubProvider{api.Model{Name: "stub"}, summary}, config)
+		th, messages, r := stubThread(t, "compact-bytes", compacting(api.Model{Name: "stub"}), config)
 		grow(t, r, api.EventUsage{Input: 10})
 		state := startRound(t, th, r, api.Input{Text: "three"})
 		th.pending = true
@@ -607,7 +551,7 @@ func TestByteDrivenCompactionBlocksTheRoundItPrecedes(t *testing.T) {
 
 	t.Run("tokens", func(t *testing.T) {
 		config := api.ThreadConfig{ThreadMemoryLimit: -1, CompactionPreserve: 0.25, CompactionTrigger: 0.5}
-		th, _, r := stubThread(t, "compact-tokens", stubProvider{api.Model{Name: "stub", Context: 1000}, summary}, config)
+		th, _, r := stubThread(t, "compact-tokens", compacting(api.Model{Name: "stub", Context: 1000}), config)
 		grow(t, r, api.EventUsage{Input: 900})
 		state := startRound(t, th, r, api.Input{Text: "three"})
 		th.pending = true
@@ -621,10 +565,15 @@ func TestByteDrivenCompactionBlocksTheRoundItPrecedes(t *testing.T) {
 }
 
 func TestByteDrivenCompactionBlocksTheRoundAfterTheTools(t *testing.T) {
-	summary := []api.Event{
+	summary := testkit.Events(
 		api.EventStart{ID: "c", Model: "stub"},
 		api.EventText{Index: 0, Text: "the summary"},
 		api.EventOk{Code: api.CodeTurn},
+	)
+	compacting := func(model api.Model) *testkit.Provider {
+		p := testkit.NewProvider(model)
+		p.OnCompaction(summary)
+		return p
 	}
 	call := api.Indexed[api.Content]{0: api.ContentToolUse{ID: "big", Name: "probe__run", Input: json.RawMessage(`{}`)}}
 	result := map[string]api.ContentToolResult{
@@ -655,7 +604,7 @@ func TestByteDrivenCompactionBlocksTheRoundAfterTheTools(t *testing.T) {
 
 	t.Run("bytes", func(t *testing.T) {
 		config := api.ThreadConfig{ThreadMemoryLimit: 60_000, CompactionPreserve: 0.25, CompactionTrigger: 2}
-		th, messages, r := stubThread(t, "tools-bytes", stubProvider{api.Model{Name: "stub"}, summary}, config)
+		th, messages, r := stubThread(t, "tools-bytes", compacting(api.Model{Name: "stub"}), config)
 		grow(t, r, api.EventUsage{Input: 10})
 		tools := toolRound(t, th, r, api.EventUsage{Input: 10})
 		if got := r.NeedCompaction(); got != replay.CompactionNone {
@@ -684,7 +633,7 @@ func TestByteDrivenCompactionBlocksTheRoundAfterTheTools(t *testing.T) {
 
 	t.Run("tokens", func(t *testing.T) {
 		config := api.ThreadConfig{ThreadMemoryLimit: -1, CompactionPreserve: 0.25, CompactionTrigger: 0.5}
-		th, _, r := stubThread(t, "tools-tokens", stubProvider{api.Model{Name: "stub", Context: 1000}, summary}, config)
+		th, _, r := stubThread(t, "tools-tokens", compacting(api.Model{Name: "stub", Context: 1000}), config)
 		grow(t, r, api.EventUsage{Input: 900})
 		tools := toolRound(t, th, r, api.EventUsage{Input: 900})
 		tools.finalize()
@@ -696,14 +645,19 @@ func TestByteDrivenCompactionBlocksTheRoundAfterTheTools(t *testing.T) {
 }
 
 func TestBytePressureBlocksTheRoundWhileTokensAlsoOverflow(t *testing.T) {
-	summary := []api.Event{
+	summary := testkit.Events(
 		api.EventStart{ID: "c", Model: "stub"},
 		api.EventText{Index: 0, Text: "the summary"},
 		api.EventOk{Code: api.CodeTurn},
+	)
+	compacting := func(model api.Model) *testkit.Provider {
+		p := testkit.NewProvider(model)
+		p.OnCompaction(summary)
+		return p
 	}
 	config := api.ThreadConfig{ThreadMemoryLimit: 60_000, CompactionPreserve: 0.25, CompactionTrigger: 0.5}
-	var sent []api.Request
-	th, _, r := stubThread(t, "both-causes", recordingProvider{stubProvider{api.Model{Name: "stub", Context: 1000}, summary}, &sent}, config)
+	p := compacting(api.Model{Name: "stub", Context: 1000})
+	th, _, r := stubThread(t, "both-causes", p, config)
 	for _, name := range []string{"one", "two"} {
 		if _, _, err := r.RoundInit(api.Input{Text: name}); err != nil {
 			t.Fatalf("replay RoundInit(%q): %v", name, err)
@@ -735,7 +689,8 @@ func TestBytePressureBlocksTheRoundWhileTokensAlsoOverflow(t *testing.T) {
 		t.Fatalf("the blocked thread is in %T after the compaction applied, want the round it was holding", th.state)
 	}
 	images := 0
-	for _, m := range sent[len(sent)-1].Messages {
+	requests := p.Requests()
+	for _, m := range requests[len(requests)-1].Messages {
 		for _, block := range m.Content {
 			result, ok := block.(api.ContentToolResult)
 			if !ok {
@@ -766,15 +721,10 @@ func taskRecords(request api.Request) []string {
 	return records
 }
 
-func taskThread(t *testing.T, id api.ThreadID) (*thread, replay.Replay, *[]api.Request, api.RoundID) {
+func taskThread(t *testing.T, id api.ThreadID) (*thread, replay.Replay, *testkit.Provider, api.RoundID) {
 	t.Helper()
-	sent := &[]api.Request{}
-	reply := []api.Event{
-		api.EventStart{ID: "r", Model: "stub"},
-		api.EventText{Index: 0, Text: "ok"},
-		api.EventOk{Code: api.CodeTurn},
-	}
-	th, _, r := stubThread(t, id, recordingProvider{stubProvider{api.Model{Name: "stub"}, reply}, sent}, api.ThreadConfig{})
+	p := testkit.NewProvider(api.Model{Name: "stub"})
+	th, _, r := stubThread(t, id, p, api.ThreadConfig{})
 	round, _, err := r.RoundInit(api.Input{Text: "start the task"})
 	if err != nil {
 		t.Fatalf("replay RoundInit: %v", err)
@@ -782,7 +732,12 @@ func taskThread(t *testing.T, id api.ThreadID) (*thread, replay.Replay, *[]api.R
 	if _, err := r.RoundOk(api.EventUsage{}, api.Indexed[api.Content]{0: api.ContentText{Text: "started"}}); err != nil {
 		t.Fatalf("replay RoundOk: %v", err)
 	}
-	return th, r, sent, round.ID
+	return th, r, p, round.ID
+}
+
+func lastRequest(t *testing.T, p *testkit.Provider) api.Request {
+	t.Helper()
+	return p.Request(t, len(p.Requests())-1)
 }
 
 func deliver(th *thread, send func()) Command {
@@ -791,7 +746,7 @@ func deliver(th *thread, send func()) Command {
 }
 
 func TestTaskNotifyWhileIdleStartsARound(t *testing.T) {
-	th, _, sent, origin := taskThread(t, "notify-idle")
+	th, _, p, origin := taskThread(t, "notify-idle")
 	meta := map[string]any{"island": "chart"}
 	task := th.link.taskAdd(origin, "js", "run", "drawing", meta, func(error) {})
 	wait := threadWait{thread: th}
@@ -800,7 +755,7 @@ func TestTaskNotifyWhileIdleStartsARound(t *testing.T) {
 	if _, ok := th.state.(*threadRound); !ok {
 		t.Fatalf("a notify while idle left the thread in %T, want a round", th.state)
 	}
-	records := taskRecords((*sent)[len(*sent)-1])
+	records := taskRecords(lastRequest(t, p))
 	if len(records) != 1 || !strings.HasPrefix(records[0], "<task_notify") || !strings.Contains(records[0], `"clicked":1`) || !strings.Contains(records[0], "drawing") {
 		t.Fatalf("the round's request carries %q, want the one task_notify", records)
 	}
@@ -813,7 +768,7 @@ func TestTaskNotifyWhileIdleStartsARound(t *testing.T) {
 }
 
 func TestTaskNotifyDuringToolsIsDeliveredWithTheNextRound(t *testing.T) {
-	th, r, sent, origin := taskThread(t, "notify-tools")
+	th, r, p, origin := taskThread(t, "notify-tools")
 	task := th.link.taskAdd(origin, "js", "run", "", map[string]any{}, func(error) {})
 	state := startRound(t, th, r, api.Input{Text: "call"})
 	state.ok(api.CodeTurn, api.Indexed[api.Content]{0: api.ContentToolUse{ID: "c", Name: "probe__run", Input: json.RawMessage(`{}`)}}, api.EventUsage{})
@@ -830,14 +785,14 @@ func TestTaskNotifyDuringToolsIsDeliveredWithTheNextRound(t *testing.T) {
 	if _, ok := th.state.(*threadRound); !ok {
 		t.Fatalf("the tools ended into %T, want the next round", th.state)
 	}
-	records := taskRecords((*sent)[len(*sent)-1])
+	records := taskRecords(lastRequest(t, p))
 	if len(records) != 1 || !strings.Contains(records[0], "mid-tools") {
 		t.Fatalf("the round after the tools carries %q, want the notify that arrived during them", records)
 	}
 }
 
 func TestTaskNotifyAfterOkIsDropped(t *testing.T) {
-	th, _, sent, origin := taskThread(t, "notify-after-ok")
+	th, _, p, origin := taskThread(t, "notify-after-ok")
 	task := th.link.taskAdd(origin, "js", "run", "", map[string]any{}, func(error) {})
 	th.on(deliver(th, func() { task.Ok(json.RawMessage(`"final"`)) }))
 	wait := threadWait{thread: th}
@@ -846,20 +801,20 @@ func TestTaskNotifyAfterOkIsDropped(t *testing.T) {
 	if _, ok := th.state.(threadWait); !ok {
 		t.Fatalf("a notify from a finished task left the thread in %T, want it still waiting", th.state)
 	}
-	if len(*sent) != 0 {
-		t.Fatalf("a notify from a finished task sent %d requests", len(*sent))
+	if len(p.Requests()) != 0 {
+		t.Fatalf("a notify from a finished task sent %d requests", len(p.Requests()))
 	}
 	if _, err := th.switchStateRound(); err != nil {
 		t.Fatalf("switchStateRound: %v", err)
 	}
-	records := taskRecords((*sent)[len(*sent)-1])
+	records := taskRecords(lastRequest(t, p))
 	if len(records) != 1 || !strings.HasPrefix(records[0], "<task_result") {
 		t.Fatalf("the next round carries %q, want only the task_result", records)
 	}
 }
 
 func TestTaskNotifyAfterUnlinkIsDropped(t *testing.T) {
-	th, _, sent, origin := taskThread(t, "notify-unlink")
+	th, _, p, origin := taskThread(t, "notify-unlink")
 	task := th.link.taskAdd(origin, "js", "run", "", map[string]any{}, func(error) {})
 	wait := threadWait{thread: th}
 	th.state = wait
@@ -868,8 +823,8 @@ func TestTaskNotifyAfterUnlinkIsDropped(t *testing.T) {
 		t.Fatalf("the unlink left the link in place")
 	}
 	wait.on(deliver(th, func() { task.Notify(json.RawMessage(`"orphan"`), nil) }))
-	if _, ok := th.state.(threadWait); !ok || len(*sent) != 0 {
-		t.Fatalf("a notify after unlink left the thread in %T with %d requests sent", th.state, len(*sent))
+	if _, ok := th.state.(threadWait); !ok || len(p.Requests()) != 0 {
+		t.Fatalf("a notify after unlink left the thread in %T with %d requests sent", th.state, len(p.Requests()))
 	}
 	th.close = make(chan struct{})
 	close(th.close)
@@ -877,7 +832,7 @@ func TestTaskNotifyAfterUnlinkIsDropped(t *testing.T) {
 }
 
 func TestTaskNotifiesThenOkArriveInOrder(t *testing.T) {
-	th, _, sent, origin := taskThread(t, "notify-order")
+	th, _, p, origin := taskThread(t, "notify-order")
 	task := th.link.taskAdd(origin, "js", "run", "", map[string]any{}, func(error) {})
 	wait := threadWait{thread: th}
 	th.state = wait
@@ -892,7 +847,7 @@ func TestTaskNotifiesThenOkArriveInOrder(t *testing.T) {
 	if _, ok := th.state.(*threadRound); !ok {
 		t.Fatalf("the round ended into %T with records stashed, want the next round", th.state)
 	}
-	records := taskRecords((*sent)[len(*sent)-1])
+	records := taskRecords(lastRequest(t, p))
 	want := []string{"first", "second", "third"}
 	if len(records) != len(want) {
 		t.Fatalf("the last request carries %q, want %d task records", records, len(want))

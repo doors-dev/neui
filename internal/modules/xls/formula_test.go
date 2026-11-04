@@ -7,6 +7,7 @@ import (
 
 	"github.com/xuri/excelize/v2"
 	"neui.dev/api"
+	"neui.dev/internal/testkit"
 )
 
 func reopen(t *testing.T, fs api.FS, name string) *excelize.File {
@@ -24,9 +25,10 @@ func reopen(t *testing.T, fs api.FS, name string) *excelize.File {
 }
 
 func TestColumn(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	res, err := columnTool(threadCtx(fs), columnArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:D4", Header: "Triple", Formula: "=B{row}*3"})
+	res, err := columnTool(c.Ctx(), columnArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:D4", Header: "Triple", Formula: "=B{row}*3"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,18 +54,20 @@ func TestColumn(t *testing.T) {
 }
 
 func TestColumnNoPlaceholder(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	_, err := columnTool(threadCtx(fs), columnArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:D4", Header: "X", Formula: "=B2*3"})
+	_, err := columnTool(c.Ctx(), columnArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:D4", Header: "X", Formula: "=B2*3"})
 	if err == nil || !strings.Contains(err.Error(), "{row}") {
 		t.Fatalf("err = %v", err)
 	}
 }
 
 func TestTotal(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	res, err := totalTool(threadCtx(fs), totalArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:B4", Aggs: []aggSpec{{Column: "B", Fn: "sum"}}})
+	res, err := totalTool(c.Ctx(), totalArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:B4", Aggs: []aggSpec{{Column: "B", Fn: "sum"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,18 +99,20 @@ func TestTotal(t *testing.T) {
 }
 
 func TestTotalBadFn(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	_, err := totalTool(threadCtx(fs), totalArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:B4", Aggs: []aggSpec{{Column: "B", Fn: "median"}}})
+	_, err := totalTool(c.Ctx(), totalArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:B4", Aggs: []aggSpec{{Column: "B", Fn: "median"}}})
 	if err == nil || !strings.Contains(err.Error(), "median") {
 		t.Fatalf("err = %v", err)
 	}
 }
 
 func TestCheck(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	ctx := threadCtx(fs)
+	ctx := c.Ctx()
 	res, err := checkTool(ctx, checkArg{Path: "book.xlsx"})
 	if err != nil {
 		t.Fatal(err)

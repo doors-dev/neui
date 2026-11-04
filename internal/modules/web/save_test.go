@@ -1,70 +1,21 @@
 package web
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
-	"iter"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"neui.dev/api"
-	"neui.dev/internal/common"
-	"neui.dev/internal/filesystem"
-	"neui.dev/internal/storage/local"
+	"neui.dev/internal/testkit"
 )
 
-type testThread struct {
-	fs api.FS
-}
-
-func (testThread) ID() api.ThreadID { return "thread" }
-
-func (testThread) Context() context.Context { return context.Background() }
-
-func (testThread) PageContext() context.Context { return context.Background() }
-
-func (testThread) Modules() iter.Seq[common.Module] {
-	return func(func(common.Module) bool) {}
-}
-
-func (t testThread) FS() api.FS               { return t.fs }
-func (t testThread) Model() api.Model         { return api.Model{} }
-func (t testThread) Config() api.ThreadConfig { return api.ThreadConfig{} }
-
-func (testThread) FilesConfig() api.FilesConfig {
-	return common.FilesConfigDefaults(api.FilesConfig{})
-}
-
-func (testThread) Task(string, map[string]any, context.CancelCauseFunc) (common.Task, error) {
-	return nil, errors.New("no tasks in tests")
-}
-
-func (testThread) Ask(api.ChatAsk) (func(context.Context), error) {
-	return nil, errors.New("no asks in tests")
-}
-
-func (testThread) Rename(context.Context, string) error {
-	return errors.New("no renames in tests")
-}
-
 func TestFetchSaveAsStreamsToWorkspace(t *testing.T) {
-	store, err := local.NewFileStorage()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Remove() })
-	ws, err := store.WorkspaceOpen("thread")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { ws.Close() })
-	fs := filesystem.New("thread", ws, store, api.FilesConfig{})
-	ctx := context.WithValue(context.Background(), common.KeyController, common.Controller(testThread{fs: fs}))
+	c := testkit.NewController(t, testkit.Setup{})
+	fs, ctx := c.FS(), c.Ctx()
 	body := "%PDF-1.7\x00 binary-ish payload"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/pdf")
@@ -103,18 +54,8 @@ func TestFetchSaveAsStreamsToWorkspace(t *testing.T) {
 }
 
 func TestFetchSaveAsOverTheCapKeepsNothing(t *testing.T) {
-	store, err := local.NewFileStorage()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Remove() })
-	ws, err := store.WorkspaceOpen("thread")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { ws.Close() })
-	fs := filesystem.New("thread", ws, store, api.FilesConfig{})
-	ctx := context.WithValue(context.Background(), common.KeyController, common.Controller(testThread{fs: fs}))
+	c := testkit.NewController(t, testkit.Setup{})
+	fs, ctx := c.FS(), c.Ctx()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/pdf")
 		if r.URL.Path == "/sized" {

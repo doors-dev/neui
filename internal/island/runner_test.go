@@ -7,53 +7,16 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/doors-dev/doors"
 	"neui.dev/api"
 	"neui.dev/internal/common"
-	"neui.dev/internal/filesystem"
 	"neui.dev/internal/schema"
-	"neui.dev/internal/storage/local"
+	"neui.dev/internal/testkit"
 	"neui.dev/internal/tools"
 )
-
-type callTestTask struct {
-	mu      sync.Mutex
-	notices []map[string]any
-}
-
-func (t *callTestTask) ID() uint           { return 1 }
-func (t *callTestTask) Ok(json.RawMessage) {}
-func (t *callTestTask) Err(error)          {}
-func (t *callTestTask) Notify(data json.RawMessage, meta map[string]any) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	meta["data"] = string(data)
-	t.notices = append(t.notices, meta)
-}
-
-func (t *callTestTask) list() []map[string]any {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	return append([]map[string]any(nil), t.notices...)
-}
-
-func (t *callTestTask) wait(tb testing.TB, n int) []map[string]any {
-	tb.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for len(t.list()) < n && time.Now().Before(deadline) {
-		time.Sleep(5 * time.Millisecond)
-	}
-	time.Sleep(30 * time.Millisecond)
-	notices := t.list()
-	if len(notices) != n {
-		tb.Fatalf("want %d notices, got %d: %v", n, len(notices), notices)
-	}
-	return notices
-}
 
 type callTestRow struct {
 	SKU string `json:"sku"`
@@ -64,25 +27,18 @@ type callTestParams struct {
 	Total Call[callTestRow, float64] `json:"total" description:"the row's total"`
 }
 
-func newCallTestRun(t *testing.T, config api.IslandConfig, lib Library) (*run, *callTestTask, context.Context) {
+func newCallTestRun(t *testing.T, config api.IslandConfig, lib Library) (*run, *testkit.Task, context.Context) {
 	t.Helper()
-	storage, err := local.NewFileStorage()
-	if err != nil {
+	c := testkit.NewController(t, testkit.Setup{})
+	if _, err := c.Task("", nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { storage.Remove() })
-	ws, err := storage.WorkspaceOpen("thread")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { ws.Close() })
-	fs := filesystem.New("thread", ws, storage, api.FilesConfig{})
+	task := c.Tasks()[0]
 	ctx, cancel := context.WithCancelCause(context.Background())
-	task := &callTestTask{}
 	r := &run{
 		island: &island{lib: lib},
 		config: common.IslandConfigDefaults(config),
-		fs:     fs,
+		fs:     c.FS(),
 		log:    logFile("app"),
 		task:   task,
 		ctx:    ctx,
@@ -101,6 +57,12 @@ func newCallTestRun(t *testing.T, config api.IslandConfig, lib Library) (*run, *
 		<-stopped
 	})
 	return r, task, context.WithValue(context.Background(), common.KeyIslandStore, r.store)
+}
+
+func reported(r *run) int {
+	r.runner.mu.Lock()
+	defer r.runner.mu.Unlock()
+	return len(r.runner.reported)
 }
 
 func callFrom[I, O any](t *testing.T, src string) Call[I, O] {
@@ -222,7 +184,10 @@ func TestCallSuccess(t *testing.T) {
 	if log := readLog(t, r); !strings.Contains(log, "INFO row a") {
 		t.Fatalf("log: %s", log)
 	}
-	task.wait(t, 0)
+	task.WaitNotes(t, 0)
+	if n := reported(r); n != 0 {
+		t.Fatalf("%d reports for calls that did not fail by their function", n)
+	}
 }
 
 func TestCallThrow(t *testing.T) {
@@ -233,13 +198,16 @@ func TestCallThrow(t *testing.T) {
 			t.Fatalf("throw: %v", err)
 		}
 	}
-	notices := task.wait(t, 1)
+	notes := task.WaitNotes(t, 1)
+	if n := reported(r); n != 1 {
+		t.Fatalf("%d reports for one repeated failure", n)
+	}
 	var data map[string]string
-	if err := json.Unmarshal([]byte(notices[0]["data"].(string)), &data); err != nil {
+	if err := json.Unmarshal(notes[0].Data, &data); err != nil {
 		t.Fatal(err)
 	}
-	if notices[0]["kind"] != "call_error" || !strings.Contains(data["error"], "boom 7") || data["src"] != string(throws) {
-		t.Fatalf("notice: %v", notices[0])
+	if notes[0].Meta["kind"] != "call_error" || !strings.Contains(data["error"], "boom 7") || data["src"] != string(throws) {
+		t.Fatalf("note: %v", notes[0])
 	}
 	if log := readLog(t, r); strings.Count(log, "ERROR function: ") != 3 || !strings.Contains(log, "boom 7") {
 		t.Fatalf("log: %s", log)
@@ -249,7 +217,7 @@ func TestCallThrow(t *testing.T) {
 	if _, err := throws.Call(ctx, 7); err == nil {
 		t.Fatal("no error after reset")
 	}
-	task.wait(t, 2)
+	task.WaitNotes(t, 2)
 
 	r.runner.reset()
 	for i := range fnReportsCap + 4 {
@@ -258,12 +226,15 @@ func TestCallThrow(t *testing.T) {
 			t.Fatalf("cap %d: no error", i)
 		}
 	}
-	task.wait(t, 2+fnReportsCap)
+	task.WaitNotes(t, 2+fnReportsCap)
+	if n := reported(r); n != fnReportsCap {
+		t.Fatalf("%d reports past the cap of %d", n, fnReportsCap)
+	}
 	r.runner.reset()
 	if _, err := throws.Call(ctx, 1); err == nil {
 		t.Fatal("no error after cap reset")
 	}
-	task.wait(t, 3+fnReportsCap)
+	task.WaitNotes(t, 3+fnReportsCap)
 }
 
 func TestCallFailures(t *testing.T) {
@@ -297,10 +268,9 @@ func TestCallFailures(t *testing.T) {
 			t.Fatalf("%s: took %s", c.src, time.Since(start))
 		}
 	}
-	notices := task.wait(t, len(cases))
-	for _, n := range notices {
-		if n["kind"] != "call_error" {
-			t.Fatalf("notice: %v", n)
+	for _, n := range task.WaitNotes(t, len(cases)) {
+		if n.Meta["kind"] != "call_error" {
+			t.Fatalf("note: %v", n)
 		}
 	}
 }
@@ -322,7 +292,7 @@ func TestCallAppFunctionTime(t *testing.T) {
 	if took := time.Since(start); took > 2*time.Second {
 		t.Fatalf("took %s", took)
 	}
-	task.wait(t, 1)
+	task.WaitNotes(t, 1)
 }
 
 func TestCallCallerCancel(t *testing.T) {
@@ -335,7 +305,7 @@ func TestCallCallerCancel(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	_, task, ctx := newCallTestRun(t, api.IslandConfig{}, lib)
+	r, task, ctx := newCallTestRun(t, api.IslandConfig{}, lib)
 	call := callFrom[int, int](t, "(a) => app.wait()")
 
 	canceled, cancel := context.WithCancel(ctx)
@@ -357,7 +327,10 @@ func TestCallCallerCancel(t *testing.T) {
 	if got, err := quick.Call(ctx, 1); err != nil || got != 2 {
 		t.Fatalf("after cancel: %v, %v", got, err)
 	}
-	task.wait(t, 0)
+	task.WaitNotes(t, 0)
+	if n := reported(r); n != 0 {
+		t.Fatalf("%d reports for calls that did not fail by their function", n)
+	}
 }
 
 func TestCallAppEnded(t *testing.T) {
@@ -382,7 +355,10 @@ func TestCallAppEnded(t *testing.T) {
 	if _, err := quick.Call(ctx, 1); !errors.Is(err, errStopped) {
 		t.Fatalf("after end: %v", err)
 	}
-	task.wait(t, 0)
+	task.WaitNotes(t, 0)
+	if n := reported(r); n != 0 {
+		t.Fatalf("%d reports for calls that did not fail by their function", n)
+	}
 }
 
 func TestCallAppGlobalsHidden(t *testing.T) {

@@ -3,11 +3,14 @@ package xls
 import (
 	"strings"
 	"testing"
+
+	"neui.dev/internal/testkit"
 )
 
 func TestTable(t *testing.T) {
-	fs, _ := newFSStore(t)
-	ctx := threadCtx(fs)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
+	ctx := c.Ctx()
 	res, err := tableTool(ctx, tableArg{
 		Path:  "report.xlsx",
 		Sheet: "Report",
@@ -87,8 +90,9 @@ func TestTable(t *testing.T) {
 }
 
 func TestTableSecondSheet(t *testing.T) {
-	fs, _ := newFSStore(t)
-	ctx := threadCtx(fs)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
+	ctx := c.Ctx()
 	cols := []columnSpec{{Header: "K"}, {Header: "V", Format: "number"}}
 	if _, err := tableTool(ctx, tableArg{Path: "multi.xlsx", Sheet: "First", Columns: cols, Rows: [][]any{{"a", 1}}}); err != nil {
 		t.Fatal(err)
@@ -126,9 +130,10 @@ func TestTableSecondSheet(t *testing.T) {
 }
 
 func TestFormat(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	ctx := threadCtx(fs)
+	ctx := c.Ctx()
 	if _, err := formatTool(ctx, formatArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:B1", Bold: true, Fill: "yellow"}); err != nil {
 		t.Fatal(err)
 	}
