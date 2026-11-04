@@ -8,6 +8,6 @@ import (
 	"neui.dev/internal/testkit"
 )
 
-func TestMessageStorage(t *testing.T) {
+func TestLocalMessageStorage(t *testing.T) {
 	testkit.MessageStorage(t, func(*testing.T) api.MessageStorage { return local.NewMessageStorage() })
 }

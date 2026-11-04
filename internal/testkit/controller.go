@@ -118,17 +118,13 @@ func (t *Task) Notify(data json.RawMessage, meta map[string]any) {
 	}
 }
 
-func (t *Task) Notes() []Note {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	return append([]Note(nil), t.notes...)
-}
-
 func (t *Task) WaitNotes(tb testing.TB, n int) []Note {
 	tb.Helper()
 	guard := time.After(5 * time.Second)
 	for {
-		notes := t.Notes()
+		t.mu.Lock()
+		notes := append([]Note(nil), t.notes...)
+		t.mu.Unlock()
 		if len(notes) > n {
 			tb.Fatalf("task %d: want %d notes, got %d: %v", t.id, n, len(notes), notes)
 		}
