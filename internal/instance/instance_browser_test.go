@@ -71,7 +71,6 @@ func TestInstanceLinksAThread(t *testing.T) {
 }
 
 func TestInstanceLocationIsBrowserZone(t *testing.T) {
-	t.Skip("bug: instance.run (internal/instance/instance.go:85) reads only the scheduled value of the ActionTime call, before Into writes the reading, so the session zone is the zero time's UTC")
 	c := stack.Browser(t, stack.Host{Provider: testkit.NewProvider(api.Model{})})
 	_, offset := time.Now().Zone()
 	if _, got := time.Now().In(c.Instance().Location()).Zone(); got != offset {

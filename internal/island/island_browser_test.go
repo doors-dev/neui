@@ -107,7 +107,6 @@ func TestIslandSubmitAnswersDraw(t *testing.T) {
 }
 
 func TestIslandControlClickSubmits(t *testing.T) {
-	t.Skip("bug: neui.Input.Proxy (page.go:180) renders the input's script before its modifier has run when the widget renders inside an island, so the button has no client handler and page__click fails with \"handler ... not found\"")
 	marks := make(chan int, 1)
 	shown := make(chan string, 1)
 	p := pressScript(t, shown, func(seq uint, input uint) testkit.Turn {
