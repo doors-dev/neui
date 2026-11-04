@@ -1,0 +1,15 @@
+{
+  "asOf": "2026-11-05",
+  "sources": {
+    "context": "https://api-docs.deepseek.com/quick_start/pricing",
+    "imagePixels": "https://api-docs.deepseek.com/guides/vision/",
+    "imageBytes": "https://api-docs.deepseek.com/guides/vision/",
+    "imagesPerRequest": "https://api-docs.deepseek.com/guides/vision/",
+    "requestBytes": "https://api-docs.deepseek.com/guides/files_api/",
+    "maxOutput": "https://api-docs.deepseek.com/api/create-chat-completion"
+  },
+  "models": {
+    "deepseek-flash": {"context": 1048576, "imagePixels": 0, "imageBytes": 0, "imagesPerRequest": 0, "requestBytes": 50331648, "maxOutput": 393216, "note": "image fields are zero because the adapter sends text only; the docs give 32 MiB per image, 600 per request and about 1300x1300 px for flash"},
+    "deepseek-v4-pro": {"context": 1048576, "imagePixels": 0, "imageBytes": 0, "imagesPerRequest": 0, "requestBytes": 50331648, "maxOutput": 393216, "note": "no vision"}
+  }
+}

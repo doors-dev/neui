@@ -1,0 +1,20 @@
+{
+  "model": "deepseek-flash",
+  "messages": [
+    {
+      "role": "system",
+      "content": "Answer in one word."
+    },
+    {
+      "role": "user",
+      "content": "hi"
+    }
+  ],
+  "stream": true,
+  "stream_options": {
+    "include_usage": true
+  },
+  "thinking": {
+    "type": "enabled"
+  }
+}

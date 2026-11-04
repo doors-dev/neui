@@ -1,0 +1,48 @@
+{
+  "model": "claude-fable-5-1",
+  "max_tokens": 16384,
+  "stream": true,
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "describe these"
+        },
+        {
+          "type": "image",
+          "source": {
+            "type": "base64",
+            "media_type": "image/jpeg",
+            "data": "/9j/4AAQSkZJRgA="
+          }
+        },
+        {
+          "type": "image",
+          "source": {
+            "type": "base64",
+            "media_type": "image/png",
+            "data": "iVBORw0KGgoAAAANSUhEUg=="
+          }
+        },
+        {
+          "type": "image",
+          "source": {
+            "type": "base64",
+            "media_type": "image/gif",
+            "data": "R0lGODlhAQABAA=="
+          }
+        },
+        {
+          "type": "image",
+          "source": {
+            "type": "base64",
+            "media_type": "image/webp",
+            "data": "UklGRhoAAABXRUJQVlA4IA=="
+          }
+        }
+      ]
+    }
+  ]
+}

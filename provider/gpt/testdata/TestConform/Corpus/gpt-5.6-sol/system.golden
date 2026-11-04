@@ -1,0 +1,23 @@
+{
+  "model": "gpt-5.6-sol",
+  "stream": true,
+  "stream_options": {
+    "include_obfuscation": false
+  },
+  "store": false,
+  "include": [
+    "reasoning.encrypted_content"
+  ],
+  "instructions": "Answer in one word.",
+  "input": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "input_text",
+          "text": "hi"
+        }
+      ]
+    }
+  ]
+}

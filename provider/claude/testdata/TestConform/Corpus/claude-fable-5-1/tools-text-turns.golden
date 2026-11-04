@@ -1,0 +1,63 @@
+{
+  "model": "claude-fable-5-1",
+  "max_tokens": 16384,
+  "stream": true,
+  "tools": [
+    {
+      "name": "lookup",
+      "description": "Look a word up.",
+      "input_schema": {
+        "properties": {
+          "q": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "q"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "clock",
+      "description": "Read the time.",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ],
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "hi"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "[reasoning omitted]"
+        },
+        {
+          "type": "text",
+          "text": "hello"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "look up cat"
+        }
+      ]
+    }
+  ]
+}

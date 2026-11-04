@@ -1,0 +1,22 @@
+{
+  "model": "claude-fable-5-1",
+  "max_tokens": 16384,
+  "stream": true,
+  "system": [
+    {
+      "type": "text",
+      "text": "Answer in one word."
+    }
+  ],
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "hi"
+        }
+      ]
+    }
+  ]
+}

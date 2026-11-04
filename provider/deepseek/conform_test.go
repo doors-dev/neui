@@ -1,0 +1,170 @@
+package deepseek
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strings"
+	"testing"
+
+	"neui.dev/api"
+	"neui.dev/internal/testkit/conform"
+)
+
+const (
+	docCreate   = "https://api-docs.deepseek.com/api/create-chat-completion"
+	docThinking = "https://api-docs.deepseek.com/guides/thinking_mode"
+	docErrors   = "https://api-docs.deepseek.com/quick_start/error_codes"
+)
+
+func TestConform(t *testing.T) {
+	conform.Run(t, conformAdapter())
+}
+
+func conformAdapter() conform.Adapter {
+	thinking := conform.Params.Thinking
+	off := func(p conform.Params) bool { return !p.Thinking() }
+	return conform.Adapter{
+		Name:   Name,
+		Models: []api.Model{Flash, V4Pro},
+		New: func(base string, m api.Model, p conform.Params) api.Provider {
+			key := p.Key
+			if key == "" {
+				key = "test-key"
+			}
+			opts := []Option{WithAPIKey(key), WithBaseURL(base)}
+			switch p.Effort {
+			case "":
+			case conform.EffortOff:
+				opts = append(opts, WithThinking(false))
+			default:
+				opts = append(opts, WithReasoningEffort(Effort(p.Effort)))
+			}
+			if p.Temperature != 0 {
+				opts = append(opts, WithTemperature(p.Temperature))
+			}
+			if p.TopP != 0 {
+				opts = append(opts, WithTopP(p.TopP))
+			}
+			if p.MaxTokens != 0 {
+				opts = append(opts, WithMaxTokens(p.MaxTokens))
+			}
+			return New(Conf{Model: m}, opts...)
+		},
+		Wire: map[string]string{
+			"effort":      "/reasoning_effort",
+			"off":         "/thinking/type",
+			"choice":      "/tool_choice",
+			"temperature": "/temperature",
+			"top_p":       "/top_p",
+			"max_tokens":  "/max_tokens",
+		},
+		Spec: conform.Spec{
+			File:         "openai.json.gz",
+			Request:      "/components/schemas/CreateChatCompletionRequest",
+			Event:        "/components/schemas/CreateChatCompletionStreamResponse",
+			Error:        "/components/schemas/ErrorResponse",
+			Private:      []string{"/thinking", "/user_id", "/messages/*/reasoning_content"},
+			EventPrivate: []string{"/choices/*/delta/reasoning_content", "/choices/*/finish_reason", "/usage/prompt_cache_hit_tokens", "/usage/prompt_cache_miss_tokens"},
+			LooseOneOf:   true,
+		},
+		Render:   renderDeepSeek,
+		Errors:   deepseekErrors(),
+		Unframed: true,
+		Rules: []conform.Rule{
+			{When: func(p conform.Params) bool { return p.Thinking() && p.Forced() }, Want: conform.RefuseLocal, Source: docCreate},
+			{When: thinking, Carry: map[string]any{"/thinking": map[string]any{"type": "enabled"}}, Source: docThinking},
+			{When: off, Carry: map[string]any{"/thinking": map[string]any{"type": "disabled"}}, Omit: []string{"/reasoning_effort"}, Source: docThinking},
+			{Omit: []string{"/thinking/reasoning_effort"}, Source: docCreate},
+			{When: func(p conform.Params) bool { return p.Thinking() && p.Temperature != 0 }, Omit: []string{"/temperature"}, Source: docThinking},
+			{Model: "flash", When: func(p conform.Params) bool { return !p.Thinking() && p.TopP != 0 }, Omit: []string{"/top_p"}, Source: docCreate},
+			{Model: "v4-pro", When: func(p conform.Params) bool { return p.Thinking() && p.TopP != 0 }, Omit: []string{"/top_p"}, Source: docCreate},
+			{When: func(p conform.Params) bool { return p.MaxTokens > maxOutputTokens }, Omit: []string{"/max_tokens"}, Source: docCreate},
+			{When: func(p conform.Params) bool { return p.Choice == api.ToolChoiceAny }, Carry: map[string]any{"/tool_choice": "required"}, Source: docCreate},
+			{When: func(p conform.Params) bool { return p.Choice == conform.ChoiceNamed }, Carry: map[string]any{"/tool_choice": map[string]any{"type": "function", "function": map[string]any{"name": "lookup"}}}, Source: docCreate},
+			{Carry: map[string]any{"/stream_options": map[string]any{"include_usage": true}}, Source: docCreate},
+			{Entry: "tools-text-turns", Carry: map[string]any{"/messages/1/reasoning_content": "greet back"}, Source: docThinking},
+			{Entry: "reasoning-unsigned", Omit: []string{"/messages/1/reasoning_content"}, Source: docThinking},
+			{Entry: "tool-error", Carry: map[string]any{"/messages/2/role": "tool", "/messages/2/content": "Error: lookup is down"}, Source: docCreate},
+		},
+		Live: conform.Live{
+			Env:    "DEEPSEEK_API_KEY",
+			Model:  Flash,
+			Params: conform.Params{MaxTokens: 64, Effort: conform.EffortLow},
+			Base:   defaultBaseURL,
+			Auth: func(r *http.Request, key string) {
+				r.Header.Set("Authorization", "Bearer "+key)
+			},
+		},
+	}
+}
+
+func renderDeepSeek(m api.Model, s conform.Script) (string, bool) {
+	var b strings.Builder
+	chunk := func(delta map[string]any, finish any, usage any) {
+		data, err := json.Marshal(map[string]any{
+			"id": "chatcmpl-01", "object": "chat.completion.chunk", "created": 1, "model": m.Name,
+			"choices": []any{map[string]any{"index": 0, "delta": delta, "finish_reason": finish, "logprobs": nil}},
+			"usage":   usage,
+		})
+		if err != nil {
+			panic(err)
+		}
+		fmt.Fprintf(&b, "data: %s\n\n", data)
+	}
+	chunk(map[string]any{"role": "assistant", "content": ""}, nil, nil)
+	finish := "stop"
+	calls := 0
+	for _, blk := range s.Blocks {
+		switch blk.Kind {
+		case conform.KindText:
+			chunk(map[string]any{"content": blk.Text}, nil, nil)
+		case conform.KindThinking:
+			chunk(map[string]any{"reasoning_content": blk.Text}, nil, nil)
+		case conform.KindTool:
+			finish = "tool_calls"
+			chunk(map[string]any{"tool_calls": []any{map[string]any{"index": calls, "id": blk.ID, "type": "function", "function": map[string]any{"name": blk.Name, "arguments": ""}}}}, nil, nil)
+			chunk(map[string]any{"tool_calls": []any{map[string]any{"index": calls, "function": map[string]any{"arguments": blk.Args}}}}, nil, nil)
+			calls++
+		default:
+			return "", false
+		}
+	}
+	switch s.Stop {
+	case "":
+	case api.CodeCapped:
+		finish = "length"
+	case api.CodeRefused:
+		finish = "content_filter"
+	case api.CodeNetwork:
+		finish = "aborted"
+	case api.CodeBusy:
+		finish = "insufficient_system_resource"
+	default:
+		return "", false
+	}
+	chunk(map[string]any{}, finish, map[string]any{
+		"prompt_tokens": conform.UsageInput, "completion_tokens": conform.UsageOutput, "total_tokens": conform.UsageInput + conform.UsageOutput,
+		"prompt_cache_hit_tokens": 0, "prompt_cache_miss_tokens": conform.UsageInput,
+	})
+	b.WriteString("data: [DONE]\n\n")
+	return b.String(), true
+}
+
+func deepseekErrors() []conform.ErrorCase {
+	body := func(kind, message string) string {
+		return fmt.Sprintf(`{"error":{"message":%q,"type":%q,"param":null,"code":%q}}`, message, kind, kind)
+	}
+	return []conform.ErrorCase{
+		{Name: "invalid-format", Status: 400, Body: body("invalid_request_error", "Invalid request body format."), Want: api.CodeInvalid, Source: docErrors},
+		{Name: "context-length", Status: 400, Body: body("invalid_request_error", "This model's maximum context length is 1048576 tokens. However, you requested 1200000 tokens (1200000 in the messages, 0 in the completion). Please reduce the length of the messages or completion."), Want: api.CodeContextLength, Source: docErrors},
+		{Name: "authentication", Status: 401, Body: body("authentication_error", "Authentication Fails, Your api key is invalid."), Want: api.CodeAccess, Source: docErrors},
+		{Name: "insufficient-balance", Status: 402, Body: body("invalid_request_error", "Insufficient Balance"), Want: api.CodeAccess, Source: docErrors},
+		{Name: "invalid-parameters", Status: 422, Body: body("invalid_request_error", "Invalid parameters."), Want: api.CodeInvalid, Source: docErrors},
+		{Name: "rate-limit", Status: 429, Body: body("rate_limit_error", "Rate limit reached."), Want: api.CodeBusy, Source: docErrors},
+		{Name: "server-error", Status: 500, Body: body("server_error", "Server error."), Want: api.CodeNetwork, Source: docErrors},
+		{Name: "overloaded", Status: 503, Body: body("server_error", "Server overloaded."), Want: api.CodeBusy, Source: docErrors},
+		{Name: "too-large", Status: 413, Body: "payload too large", Want: api.CodeTooLarge, Source: docErrors},
+		{Name: "in-stream-error", Stream: "data: {\"error\":{\"message\":\"Rate limit reached.\",\"type\":\"rate_limit_error\",\"code\":\"rate_limit_exceeded\"}}\n\n", Want: api.CodeBusy, Source: docErrors},
+	}
+}
