@@ -135,6 +135,9 @@ type wireUsage struct {
 type wireError struct {
 	Type    string `json:"type"`
 	Message string `json:"message"`
+	Details *struct {
+		ErrorCode string `json:"error_code"`
+	} `json:"details"`
 }
 
 // errorEnvelope is the body of a non 200 response. The same inner object

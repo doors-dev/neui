@@ -20,16 +20,18 @@ import (
 //
 // Two things go out in neither form, and both are parts of a reasoning block
 // rather than blocks: a stored summary, because reasoning_content is the
-// thinking and this wire has no second field a paraphrase could go in, and the
-// thinking of a turn that called no tool, because the server ignores it there
-// and bills for it. Neither leaves a note. A note stands in for a block that is
-// gone, and the block is still there carrying everything this wire takes of it.
-// Both are stated at encodeAssistant.
+// thinking and this wire has no second field a paraphrase could go in, and all
+// earlier thinking in a request without tools, because the server ignores it
+// there. Neither leaves a note. A note stands in for a block that is gone, and
+// the block is still there carrying everything this wire takes of it. Both are
+// stated at encodeAssistant.
 //
-// Sampling only reaches the model with thinking off, and thinking is on unless
-// the caller said otherwise, so it is sent only then. Sending it anyway is
-// documented as harmless, but an inert field in the body is a field a reader has
-// to work out, and it perturbs the cached prefix for nothing.
+// Effort, temperature and top_p are each sent only where the model honors
+// them. Sending them anyway is documented as harmless, but an inert field in
+// the body is a field a reader has to work out, and it perturbs the cached
+// prefix for nothing. Temperature and effort depend on thinking alone; top_p
+// depends on the model too, because deepseek-flash honors it only with thinking
+// on and deepseek-v4-pro only with it off.
 func (p *Provider) encode(req api.Request) (*chatRequest, error) {
 	if p.model.Name == "" {
 		return nil, &RequestError{Reason: "provider has no model, set Conf.Model"}
@@ -52,36 +54,37 @@ func (p *Provider) encode(req api.Request) (*chatRequest, error) {
 	if p.maxTokens > 0 {
 		out.MaxTokens = p.maxTokens
 	}
-	th := &thinking{Type: "disabled"}
+	flash := strings.Contains(p.model.Name, "flash")
 	if p.thinking {
-		th.Type = "enabled"
-	}
-	out.Thinking = th
-	if p.effort != "" {
-		if p.effortTopLevel {
-			out.ReasoningEffort = string(p.effort)
-		} else {
-			th.Effort = string(p.effort)
+		out.Thinking = &thinking{Type: "enabled"}
+		out.ReasoningEffort = string(p.effort)
+		if flash {
+			out.TopP = p.topP
 		}
-	}
-	if !p.thinking {
+	} else {
+		out.Thinking = &thinking{Type: "disabled"}
 		out.Temperature = p.temperature
-		out.TopP = p.topP
+		if !flash {
+			out.TopP = p.topP
+		}
 	}
 	return out, nil
 }
 
 // encodeTools declares the tools and the choice. An unset choice means let the
 // server decide, which is not the same as "auto" on every host, so the field
-// stays off the wire.
+// stays off the wire. A forced choice is refused while thinking is on, which is
+// what the server answers it with a 400 for.
 func (p *Provider) encodeTools(out *chatRequest, req api.Request) error {
-	if len(req.Tools) > maxTools {
-		return reqErrf("%d tools, DeepSeek takes at most %d", len(req.Tools), maxTools)
-	}
+	seen := make(map[string]bool, len(req.Tools))
 	for _, t := range req.Tools {
 		if err := checkToolName(t.Name); err != nil {
 			return err
 		}
+		if seen[t.Name] {
+			return reqErrf("tool name %q is declared twice, DeepSeek requires unique names", t.Name)
+		}
+		seen[t.Name] = true
 		out.Tools = append(out.Tools, tool{
 			Type: "function",
 			Function: toolFunction{
@@ -91,7 +94,11 @@ func (p *Provider) encodeTools(out *chatRequest, req api.Request) error {
 			},
 		})
 	}
-	if name, ok := req.ToolChoice.Tool(); ok {
+	name, named := req.ToolChoice.Tool()
+	if p.thinking && (named || req.ToolChoice == api.ToolChoiceAny) {
+		return reqErrf("tool choice %q forces a tool call, which DeepSeek refuses in thinking mode; pass WithThinking(false) to force one", req.ToolChoice)
+	}
+	if named {
 		out.ToolChoice = namedToolChoice{
 			Type:     "function",
 			Function: namedToolFunction{Name: name},
@@ -159,7 +166,7 @@ func (p *Provider) encodeMessages(req api.Request) ([]message, error) {
 		case api.RoleUser:
 			msgs, err = p.encodeUser(msgs, m, i)
 		case api.RoleAssistant:
-			msgs, err = p.encodeAssistant(msgs, m, i, discarded)
+			msgs, err = p.encodeAssistant(msgs, m, i, discarded, len(req.Tools) > 0)
 		default:
 			err = reqErrf("message %d has role %q, which is neither user nor assistant", i, m.Role)
 		}
@@ -212,12 +219,9 @@ func (p *Provider) encodeUser(msgs []message, m api.Message, at int) ([]message,
 // object rather than blocks, so a turn that thought, spoke and called two tools
 // is one message with three fields set.
 //
-// Reasoning is collected rather than decided on where it is read: whether it
-// goes back turns on whether this same message called a tool, and that is not
-// known until every block of it has been read. Meta is not read, and this
-// adapter writes none, because DeepSeek's reasoning is plain readable text in a
-// field of its own, sealed behind nothing, so there is no encoding of it to
-// replay verbatim and Thoughts is the whole of it. A stored summary is dropped:
+// Meta is not read, and this adapter writes none, because DeepSeek's reasoning
+// is plain readable text in a field of its own, sealed behind nothing, so there
+// is no encoding of it to replay verbatim and Thoughts is the whole of it. A stored summary is dropped:
 // reasoning_content is the thinking, this adapter never produces a summary to
 // put in it, and there is no second field on this wire a paraphrase could go in.
 //
@@ -237,12 +241,12 @@ func (p *Provider) encodeUser(msgs []message, m api.Message, at int) ([]message,
 // is refused rather than flattened to {}, which would replay as a legitimate
 // call that takes none.
 //
-// Reasoning goes back exactly when the turn called a tool, which is the case the
-// server requires it in: a replayed tool call whose reasoning_content is missing
-// is a 400 saying so by name. On every other turn the server ignores the field,
-// so sending it there would buy nothing and be billed for. No model decides
-// this, because there are two models, no snapshots and no aliases, so a
-// comparison against the model being asked for separates nothing. Several blocks
+// Reasoning goes back on every assistant turn exactly when the request declares
+// tools, which is the case the server requires it in: with tools, every earlier
+// turn's reasoning_content has to come back, including turns that called none,
+// or the request is a 400. Without tools the server ignores the field and keeps
+// none of it in the context, so sending it there would buy nothing. No model
+// decides this, because both models follow the same rule. Several blocks
 // join into one field: one turn produces one reasoning block, however often v4
 // breaks off to speak, so several mean a caller merged turns, and the wire has
 // one reasoning_content per message either way.
@@ -254,7 +258,7 @@ func (p *Provider) encodeUser(msgs []message, m api.Message, at int) ([]message,
 //
 // content is documented as string or null, and null is what a turn that only
 // called tools has to send.
-func (p *Provider) encodeAssistant(msgs []message, m api.Message, at int, discarded map[string]bool) ([]message, error) {
+func (p *Provider) encodeAssistant(msgs []message, m api.Message, at int, discarded map[string]bool, tools bool) ([]message, error) {
 	var text, reasoning []string
 	var calls []toolCall
 	for _, c := range m.Content {
@@ -294,7 +298,7 @@ func (p *Provider) encodeAssistant(msgs []message, m api.Message, at int, discar
 		}
 	}
 	msg := message{Role: "assistant", ToolCalls: calls}
-	if len(calls) > 0 {
+	if tools {
 		msg.ReasoningContent = strings.Join(reasoning, "")
 	}
 	switch {

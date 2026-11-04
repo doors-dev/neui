@@ -56,15 +56,29 @@ const (
 	ThinkingAdaptive ThinkingType = "adaptive" // the model decides how much to think; 4.6 and later
 	ThinkingEnabled  ThinkingType = "enabled"  // extended thinking with Thinking.Budget; before 4.7
 	ThinkingDisabled ThinkingType = "disabled" // no thinking, where the model allows it
+	// ThinkingBetweenTools turns off up-front thinking and keeps the progress
+	// updates between tool calls. Sonnet 5.5 only, at effort high or below,
+	// and it takes no Budget or Display.
+	ThinkingBetweenTools ThinkingType = "between_tools"
 )
 
 // ThinkingDisplay is how thinking streams back. As with ThinkingType, the
 // const is the documented value and custom strings pass through.
 type ThinkingDisplay string
 
-// DisplaySummarized streams a summary of the thinking rather than the thinking
-// itself.
-const DisplaySummarized ThinkingDisplay = "summarized"
+// The documented display values.
+const (
+	// DisplaySummarized streams a summary of the thinking rather than the
+	// thinking itself.
+	DisplaySummarized ThinkingDisplay = "summarized"
+	// DisplayOmitted streams thinking blocks with no text, only their
+	// signatures; the default on Claude 5 and later.
+	DisplayOmitted ThinkingDisplay = "omitted"
+	// DisplayUpdates streams reasoning as DisplayOmitted does and the progress
+	// updates between tool calls as text. It is in beta and refused unless
+	// the request carries the thinking-display-updates-2026-08-18 beta header.
+	DisplayUpdates ThinkingDisplay = "updates"
+)
 
 // Thinking is the thinking configuration sent verbatim. It is a passthrough
 // rather than a normalization because which values a model accepts changes with
@@ -74,9 +88,9 @@ const DisplaySummarized ThinkingDisplay = "summarized"
 // value sends no thinking field at all, which is not the same as disabling it:
 // on the newest models thinking is on by default.
 type Thinking struct {
-	Type    ThinkingType    // adaptive, enabled or disabled; empty sends nothing
+	Type    ThinkingType    // adaptive, enabled, disabled or between_tools; empty sends nothing
 	Budget  int             // budget_tokens, extended thinking only
-	Display ThinkingDisplay // summarized or omitted; empty leaves the model default
+	Display ThinkingDisplay // summarized, omitted or updates; empty leaves the model default
 }
 
 func (t Thinking) active() bool {
@@ -233,11 +247,13 @@ func WithMaxTokens(n int) Option {
 }
 
 // WithTemperature sets temperature. A turn that carries temperature, top_p or
-// top_k fails with api.CodeInvalid before anything is sent when the model id
-// matches one known to refuse sampling (Fable 5, Mythos 5 and preview, Opus 5,
-// Opus 4.8, Opus 4.7, Sonnet 5) or WithThinking enables thinking; for any
-// other model the request is sent and the API decides. The same holds for
-// WithTopP and WithTopK.
+// top_k fails with api.CodeInvalid before anything is sent when WithVersion is
+// 2026-10-21 or later, or the model id matches one known to refuse sampling
+// (Fable 5 and 5.1, Mythos 5, 5.1 and preview, Opus 5 and 5.5, Opus 4.8,
+// Opus 4.7, Sonnet 5 and 5.5, Haiku 5.5). On any other model, while WithThinking
+// enables thinking, temperature and top_k are refused the same way and top_p is
+// taken only from 0.95 to 1; otherwise the request is sent and the API decides.
+// The same holds for WithTopP and WithTopK.
 func WithTemperature(t float64) Option {
 	return func(p *Provider) error {
 		p.temperature = &t

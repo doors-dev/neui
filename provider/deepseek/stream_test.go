@@ -281,8 +281,8 @@ func TestStreamToolCallIdentityArrivesInPieces(t *testing.T) {
 // field. So replay hands back exactly what the model emitted, character for
 // character, with nothing inserted where the two streams took turns.
 //
-// A tool call is added to the folded turn, because that is the turn whose
-// reasoning goes back at all.
+// The request declares a tool, because that is the request whose reasoning
+// goes back at all.
 func TestReplayReproducesTheTurnByteForByte(t *testing.T) {
 	p := serve(t, stringHandler(
 		chunkFrame(openingFrame, ""),
@@ -296,11 +296,11 @@ func TestReplayReproducesTheTurnByteForByte(t *testing.T) {
 	events := collect(t, p, turn("9.11 or 9.8?"))
 	checkGrammar(t, events)
 
-	replayed := append(fold(t, events), api.ContentToolUse{ID: "call_a", Name: "note", Input: json.RawMessage(`{}`)})
 	body := encodeBody(t, New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), api.Request{
+		Tools: []api.Tool{{Name: "note"}},
 		Messages: []api.Message{
 			{Role: api.RoleUser, Content: text("9.11 or 9.8?")},
-			{Role: api.RoleAssistant, Content: replayed},
+			{Role: api.RoleAssistant, Content: fold(t, events)},
 		},
 	})
 	m := body.Messages[1]
@@ -387,8 +387,9 @@ func TestStreamToolArgumentsThatNeverParse(t *testing.T) {
 	}
 }
 
-// The usage frame is documented to carry an empty choices array, so a decoder
-// that reaches for the first choice fails on the one frame that prices the turn.
+// A host may send usage in a frame of its own with an empty choices array, so a
+// decoder that reaches for the first choice fails on the one frame that prices
+// the turn.
 func TestStreamUsageFrameHasNoChoices(t *testing.T) {
 	p := serve(t, stringHandler(
 		chunkFrame(openingFrame, ""),
@@ -508,6 +509,9 @@ func TestFinishReasons(t *testing.T) {
 		// committed. The blocks already emitted are real, but the turn is not
 		// one to store, and CodeBusy is what says it is worth retrying.
 		{"insufficient_system_resource", "err busy"},
+		// An interrupted generation with nothing wrong in the request: send it
+		// again as sent.
+		{"aborted", "err network"},
 		// A value this adapter has not seen is never rounded to a completion:
 		// it arrives unclassified so it cannot pass as a turn that finished.
 		{"something_new", "err unknown"},

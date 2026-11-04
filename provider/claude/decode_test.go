@@ -867,6 +867,9 @@ func TestHTTPErrorBeforeStream(t *testing.T) {
 		// whole phrase: a 400 that merely mentions the prompt is not this.
 		{"prompt over the window", 400, `{"type":"error","error":{"type":"invalid_request_error","message":"prompt is too long: 1210970 tokens > 1048576 maximum"}}`, api.CodeContextLength},
 		{"a 400 that only mentions the prompt", 400, `{"type":"error","error":{"type":"invalid_request_error","message":"prompt caching is not supported for this model"}}`, api.CodeInvalid},
+		{"tier spend cap", 429, `{"type":"error","error":{"type":"rate_limit_error","message":"You have reached your API usage limits: your organization has crossed its monthly API usage threshold, set based on your organization's API tier. You will regain access on 2026-09-01 at 00:00 UTC.","details":{"error_code":"enforced_spend_limit_reached"}}}`, api.CodeAccess},
+		{"organization spend limit", 400, `{"type":"error","error":{"type":"invalid_request_error","message":"You have reached your specified API usage limits. You will regain access on 2026-12-01 at 00:00 UTC."}}`, api.CodeAccess},
+		{"workspace spend limit", 400, `{"type":"error","error":{"type":"invalid_request_error","message":"You have reached your specified workspace API usage limits. You will regain access on 2026-12-01 at 00:00 UTC."}}`, api.CodeAccess},
 		{"missing model", 404, `{"type":"error","error":{"type":"not_found_error","message":"no such model"}}`, api.CodeInvalid},
 		{"overloaded", 529, `{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}`, api.CodeBusy},
 		{"unavailable", 503, `{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}`, api.CodeBusy},

@@ -1045,3 +1045,31 @@ func TestCompactionInstructionHasMarker(t *testing.T) {
 		t.Fatalf("testkit.IsCompaction takes a round request for a compaction")
 	}
 }
+
+func TestImageBytesCountsRawBytes(t *testing.T) {
+	const limit = 1000
+	model := api.Model{ImageBytes: limit}
+	at := api.ContentImage{Data: make([]byte, limit), Mime: "image/png"}
+	if reason := imageReason(at, model); reason != "" {
+		t.Fatalf("a %d byte image on a model taking %d raw bytes was refused: %s", limit, limit, reason)
+	}
+	over := api.ContentImage{Data: make([]byte, limit+1), Mime: "image/png"}
+	if reason := imageReason(over, model); reason == "" {
+		t.Fatalf("a %d byte image on a model taking %d raw bytes went through", limit+1, limit)
+	}
+	if reason := imageReason(over, api.Model{}); reason != "" {
+		t.Fatalf("an image was refused on a model with no declared limits: %s", reason)
+	}
+}
+
+func TestRequestBytesBudgetUndoesBase64(t *testing.T) {
+	const declared = 64 << 20
+	config := api.ThreadConfig{ThreadMemoryLimit: 1 << 40}
+	want := int64(declared)*3/4 - api.ReplayHeadroom
+	if got := memoryLimit(config, api.Model{RequestBytes: declared}, 1); got != want {
+		t.Fatalf("budget for a %d byte wire limit: got %d, want three quarters less headroom, %d", declared, got, want)
+	}
+	if got := memoryLimit(config, api.Model{}, 1); got != config.ThreadMemoryLimit {
+		t.Fatalf("budget with RequestBytes unknown: got %d, want ThreadMemoryLimit %d", got, config.ThreadMemoryLimit)
+	}
+}

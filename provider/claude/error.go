@@ -29,6 +29,9 @@ type APIError struct {
 	// empty gets "unparseable <status> response". It can be empty for an
 	// in-stream error.
 	Message string
+	// ErrorCode is the error's details.error_code, such as
+	// "enforced_spend_limit_reached"; empty when the error carries none.
+	ErrorCode string
 	// RequestID is Anthropic's request id, to quote to their support; empty
 	// for an in-stream error.
 	RequestID string
@@ -132,6 +135,17 @@ func contextOverflow(message string) bool {
 	return strings.Contains(message, "prompt is too long")
 }
 
+func spendLimited(e *APIError) bool {
+	switch e.Status {
+	case http.StatusTooManyRequests:
+		return e.ErrorCode == "enforced_spend_limit_reached"
+	case http.StatusBadRequest:
+		return strings.HasPrefix(e.Message, "You have reached your specified API usage limits") ||
+			strings.HasPrefix(e.Message, "You have reached your specified workspace API usage limits")
+	}
+	return false
+}
+
 // inbandCode maps an error frame, which arrives with no status to branch on.
 // api_error is the in band spelling of a 500 and takes the same code for the
 // same reason: it says the attempt failed, not that the service is full.
@@ -195,6 +209,9 @@ func newAPIError(status int, h http.Header, env *errorEnvelope) *APIError {
 		if env.Error != nil {
 			e.Type = env.Error.Type
 			e.Message = env.Error.Message
+			if env.Error.Details != nil {
+				e.ErrorCode = env.Error.Details.ErrorCode
+			}
 		}
 		if env.RequestID != "" {
 			e.RequestID = env.RequestID

@@ -53,9 +53,10 @@ type inputItem struct {
 // include value is still accepted, still documented and still what older models
 // need. Sending it costs a string.
 //
-// Sampling is dropped on reasoning models rather than forwarded. They answer 400
-// to the parameter whatever its value, including the default, so there is
-// nothing to send that would work.
+// Sampling is dropped on reasoning models rather than forwarded, unless the
+// effort is none. At any other effort they answer 400 to the parameter whatever
+// its value, including the default, so there is nothing to send that would
+// work; at none the docs keep it.
 func encodeRequest(model string, set settings, req api.Request) (*requestBody, error) {
 	if model == "" {
 		return nil, errors.New("gpt: provider has no model, set Conf.Model")
@@ -99,7 +100,7 @@ func encodeRequest(model string, set settings, req api.Request) (*requestBody, e
 	if set.verbosity != "" {
 		b.Text = &textConfig{Verbosity: set.verbosity}
 	}
-	if !reasoner || set.forceSampling {
+	if !reasoner || set.forceSampling || set.effort == string(EffortNone) {
 		b.Temperature = set.temperature
 		b.TopP = set.topP
 	}

@@ -58,36 +58,46 @@ func (p *Provider) encode(req api.Request) ([]byte, error) {
 // Matched by substring because the same model is addressed as claude-opus-5 on
 // the first party API, anthropic.claude-opus-5 on Bedrock and with an @ version
 // suffix on Vertex. Every one of them also thinks by default, which is why the
-// older per model rule below only has to look at explicit configuration.
+// older per model rule below only has to look at explicit configuration: there
+// temperature and top_k are refused while thinking is on and top_p is taken from
+// 0.95 to 1. From API version 2026-10-21 all three are refused on every model.
 var samplingRefused = []string{
 	"fable-5", "mythos-5", "mythos-preview",
-	"opus-5", "opus-4-8", "opus-4-7", "sonnet-5",
+	"opus-5", "opus-4-8", "opus-4-7", "sonnet-5", "haiku-5-5",
 }
+
+const samplingRemovedVersion = "2026-10-21"
 
 func (p *Provider) encodeSampling(w *request) error {
 	if p.temperature == nil && p.topP == nil && p.topK == nil {
 		return nil
 	}
-	if refusesSampling(p.model.Name, p.thinking.active()) {
-		return fmt.Errorf("claude: model %q refuses temperature, top_p and top_k; steer it by prompt or configure a provider without them", p.model.Name)
+	if p.version >= samplingRemovedVersion {
+		return fmt.Errorf("claude: API version %s refuses temperature, top_p and top_k on every model; steer the model by prompt or configure a provider without them", p.version)
+	}
+	for _, m := range samplingRefused {
+		if strings.Contains(p.model.Name, m) {
+			return fmt.Errorf("claude: model %q refuses temperature, top_p and top_k; steer it by prompt or configure a provider without them", p.model.Name)
+		}
+	}
+	if p.thinking.active() {
+		if p.temperature != nil || p.topK != nil {
+			return fmt.Errorf("claude: temperature and top_k are not accepted while thinking is on; disable thinking or configure a provider without them")
+		}
+		if *p.topP < 0.95 || *p.topP > 1 {
+			return fmt.Errorf("claude: top_p %v is not accepted while thinking is on; this API takes 0.95 to 1 then", *p.topP)
+		}
 	}
 	w.Temperature, w.TopP, w.TopK = p.temperature, p.topP, p.topK
 	return nil
 }
 
-func refusesSampling(model string, thinking bool) bool {
-	for _, m := range samplingRefused {
-		if strings.Contains(model, m) {
-			return true
-		}
-	}
-	return thinking
-}
+var forcedToolRefused = []string{"opus-5-5", "sonnet-5-5", "fable-5-1", "mythos-5-1"}
 
-// encodeToolChoice maps the choice onto this API's, and refuses the one
-// combination the API refuses: forcing a tool alongside manual extended
-// thinking, and only that mode, because adaptive thinking accepts it, including
-// on models that think by default.
+// encodeToolChoice maps the choice onto this API's, and refuses the two cases
+// the API refuses forcing a tool in: on the forcedToolRefused models on every
+// request, and alongside manual extended thinking on any other, because adaptive
+// thinking accepts it there, including on models that think by default.
 func (p *Provider) encodeToolChoice(choice api.ToolChoice) (*toolChoice, error) {
 	var tc *toolChoice
 	if name, forced := choice.Tool(); forced {
@@ -104,7 +114,15 @@ func (p *Provider) encodeToolChoice(choice api.ToolChoice) (*toolChoice, error) 
 			tc = &toolChoice{Type: "any"}
 		}
 	}
-	if p.thinking.Type == ThinkingEnabled && (tc.Type == "any" || tc.Type == "tool") {
+	if tc.Type != "any" && tc.Type != "tool" {
+		return tc, nil
+	}
+	for _, m := range forcedToolRefused {
+		if strings.Contains(p.model.Name, m) {
+			return nil, fmt.Errorf("claude: model %q refuses tool choice %q; use auto with strict tools, or structured outputs", p.model.Name, choice)
+		}
+	}
+	if p.thinking.Type == ThinkingEnabled {
 		return nil, fmt.Errorf("claude: tool choice %q is not accepted with extended thinking; use adaptive thinking or leave the choice to the model", choice)
 	}
 	return tc, nil
@@ -308,8 +326,8 @@ func (p *Provider) encodeContent(c api.Content, role string, replay bool, discar
 		if len(c.Data) == 0 {
 			return omitted(c, at, "an image source with no bytes in it is refused by this API, and the block is stored, so it would be refused again on every later turn of the thread")
 		}
-		if c.Mime == "" {
-			return nil, false, fmt.Errorf("image has no mime type")
+		if !api.ImageMime(c.Mime).IsValid() {
+			return nil, false, fmt.Errorf("image type %q is not accepted; this API takes image/jpeg, image/png, image/gif and image/webp", c.Mime)
 		}
 		raw, err := json.Marshal(imageBlock{
 			Type: "image",
@@ -388,10 +406,10 @@ func encodeDocument(c api.ContentDocument) (json.RawMessage, error) {
 
 // encodeToolResult carries the text and images this API takes in a result, and
 // leaves the note omitted returns in place of anything else: a text block with
-// no non whitespace content in it, an image that arrived with no bytes in it, a
-// document today, and whatever kind a later version of this protocol adds to the
-// subset. The substitution is the one every other block gets, for the same
-// reason. Refusing the block costs the whole request and still does not deliver
+// no non whitespace content in it, an image that arrived with no bytes in it or
+// with a type this API does not take, a document today, and whatever kind a
+// later version of this protocol adds to the subset. The substitution is the
+// one every other block gets, for the same reason. Refusing the block costs the whole request and still does not deliver
 // it, where the note leaves the call answered and the drop reported.
 //
 // A result that carried no blocks at all takes the note too, so content is never
@@ -420,6 +438,10 @@ func encodeToolResult(c api.ContentToolResult, at int) (json.RawMessage, error) 
 		case api.ContentImage:
 			if len(rc.Data) == 0 {
 				raw, _, err = omitted(rc, at, "an image source with no bytes in it is refused by this API, and the result is stored, so it would be refused again on every later turn of the thread")
+				break
+			}
+			if !api.ImageMime(rc.Mime).IsValid() {
+				raw, _, err = omitted(rc, at, fmt.Sprintf("an image of type %q is refused by this API, which takes image/jpeg, image/png, image/gif and image/webp, and the result is stored, so it would be refused again on every later turn of the thread", rc.Mime))
 				break
 			}
 			raw, err = json.Marshal(imageBlock{

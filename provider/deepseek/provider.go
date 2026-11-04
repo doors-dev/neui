@@ -5,7 +5,7 @@
 // takes precedence over WithProvider if any:
 //
 //	p := deepseek.New(deepseek.Conf{Model: deepseek.Flash},
-//		deepseek.WithReasoningEffort(deepseek.EffortHigh))
+//		deepseek.WithReasoningEffort(deepseek.EffortMax))
 //
 // The key comes from DEEPSEEK_API_KEY unless WithAPIKey sets it. A provider
 // serves one model with one set of options; build two for two settings.
@@ -44,19 +44,23 @@ const (
 	// maxOutputTokens is the documented ceiling for both v4 models, against a
 	// 1M context. A request above it is rejected, so WithMaxTokens refuses the
 	// value rather than letting the turn fail at the server.
-	maxOutputTokens = 384_000
-	// maxTools and maxToolNameLen are documented request limits. Checking them
-	// here turns an opaque 400 into a sentence naming the tool.
-	maxTools       = 128
-	maxToolNameLen = 64
+	maxOutputTokens = 393_216
+	// maxToolNameLen is a documented request limit. Checking it here turns an
+	// opaque 400 into a sentence naming the tool.
+	maxToolNameLen = 128
+	maxUserIDBytes = 512
 )
 
-// Effort is DeepSeek's reasoning_effort. Only two levels exist; the server
-// folds low and medium into high and xhigh into max.
+// Effort is DeepSeek's reasoning_effort, the depth of thinking. The server
+// defaults to high, takes minimal as low, medium and xhigh as high, and ultra
+// as max. It does nothing with thinking off, and it does not turn thinking
+// off: the server's none level is overridden by the thinking field this
+// adapter always sends, so use WithThinking(false) for that.
 type Effort string
 
-// The two reasoning_effort levels DeepSeek accepts.
+// The reasoning_effort levels DeepSeek documents, other than none.
 const (
+	EffortLow  Effort = "low"
 	EffortHigh Effort = "high"
 	EffortMax  Effort = "max"
 )
@@ -65,19 +69,18 @@ const (
 // api.Request leaves out (thinking, effort, sampling, stop sequences, response
 // cap). It is safe for concurrent use and holds no per turn state.
 type Provider struct {
-	key            string
-	base           string
-	model          api.Model
-	client         *http.Client
-	thinking       bool
-	effort         Effort
-	effortTopLevel bool
-	temperature    *float64
-	topP           *float64
-	stop           []string
-	userID         string
-	maxTokens      int
-	transport      lib.Options
+	key         string
+	base        string
+	model       api.Model
+	client      *http.Client
+	thinking    bool
+	effort      Effort
+	temperature *float64
+	topP        *float64
+	stop        []string
+	userID      string
+	maxTokens   int
+	transport   lib.Options
 }
 
 // Option configures a Provider at New. An option that returns an error is
@@ -163,7 +166,10 @@ func WithHTTPClient(client *http.Client) Option {
 }
 
 // WithThinking turns reasoning on or off; it is on by default and always sent
-// explicitly. WithTemperature and WithTopP take effect only with it off.
+// explicitly. WithTemperature takes effect only with it off, and WithTopP as
+// WithTopP says. With it on, DeepSeek refuses a forced tool choice, so a
+// request whose ToolChoice is api.ToolChoiceAny or names a tool fails with a
+// *RequestError until it is turned off.
 func WithThinking(on bool) Option {
 	return func(p *Provider) error {
 		p.thinking = on
@@ -171,23 +177,11 @@ func WithThinking(on bool) Option {
 	}
 }
 
-// WithReasoningEffort sets reasoning_effort inside the thinking object, where
-// the API reference puts it. DeepSeek's guides show it as a top level field
-// instead, and a misplaced field is silently ignored, so if this one has no
-// visible effect switch to WithTopLevelReasoningEffort. The last of the two
-// options given wins.
+// WithReasoningEffort sets reasoning_effort. It is sent only while thinking is
+// on; unset, the server's default of high applies.
 func WithReasoningEffort(e Effort) Option {
 	return func(p *Provider) error {
-		p.effort, p.effortTopLevel = e, false
-		return nil
-	}
-}
-
-// WithTopLevelReasoningEffort sets reasoning_effort as a top level field. See
-// WithReasoningEffort for why both spellings exist.
-func WithTopLevelReasoningEffort(e Effort) Option {
-	return func(p *Provider) error {
-		p.effort, p.effortTopLevel = e, true
+		p.effort = e
 		return nil
 	}
 }
@@ -202,8 +196,11 @@ func WithTemperature(t float64) Option {
 	}
 }
 
-// WithTopP sets top_p, under the same thinking mode restriction as
-// WithTemperature.
+// WithTopP sets top_p. It is sent only where the model honors it: on
+// deepseek-v4-pro with thinking off, and on deepseek-flash (any id containing
+// "flash") with thinking on, where the server raises values below 0.95 to
+// 0.95. Elsewhere DeepSeek fixes top_p and ignores the value, so it is left
+// out.
 func WithTopP(t float64) Option {
 	return func(p *Provider) error {
 		p.topP = &t
@@ -222,7 +219,7 @@ func WithStop(stop ...string) Option {
 
 // WithMaxTokens caps the response; a turn that hits it ends with
 // api.CodeCapped. By default, and for a value of 0 or below, no cap is sent.
-// A value over the documented 384,000 ceiling is logged at New and the
+// A value over the documented 393,216 ceiling is logged at New and the
 // previous setting stays.
 func WithMaxTokens(n int) Option {
 	return func(p *Provider) error {
@@ -236,9 +233,14 @@ func WithMaxTokens(n int) Option {
 
 // WithUserID sets user_id, which partitions DeepSeek's cache and concurrency
 // allowance by user. Requests with different ids share no cache, so leave it
-// unset unless that isolation is wanted, and keep it fixed per provider.
+// unset unless that isolation is wanted, and keep it fixed per provider. An id
+// over 512 bytes, the documented limit, is logged at New and the previous
+// setting stays.
 func WithUserID(id string) Option {
 	return func(p *Provider) error {
+		if len(id) > maxUserIDBytes {
+			return fmt.Errorf("deepseek: user id is %d bytes, over the documented limit of %d", len(id), maxUserIDBytes)
+		}
 		p.userID = id
 		return nil
 	}

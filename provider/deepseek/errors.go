@@ -19,12 +19,12 @@ var errNoKey = errors.New("deepseek: no API key, set DEEPSEEK_API_KEY or pass Wi
 var errTooLarge = errors.New("deepseek: request too large")
 
 // RequestError is a turn this adapter refused to send because DeepSeek would
-// reject it or it cannot be encoded faithfully: no model in Conf, more than
-// 128 tools, a tool name that is empty, over 64 characters or has characters
-// other than letters, digits, _ and -, an unknown message role, or a replayed
-// tool call with no name or whose arguments were discarded with no failed
-// result answering it. It arrives as the Err of an api.EventErr with
-// api.CodeInvalid, before anything is sent.
+// reject it or it cannot be encoded faithfully: no model in Conf, a tool name
+// that is empty, over 128 characters, has characters other than letters,
+// digits, _ and - or is declared twice, a forced tool choice while thinking is
+// on, an unknown message role, or a replayed tool call with no name or whose
+// arguments were discarded with no failed result answering it. It arrives as
+// the Err of an api.EventErr with api.CodeInvalid, before anything is sent.
 type RequestError struct {
 	// Reason says what was refused and names the tool or message.
 	Reason string
@@ -42,8 +42,8 @@ func reqErrf(format string, args ...any) *RequestError {
 // FinishError is a finish_reason that ended the turn without a reply worth
 // keeping. It arrives as the Err of an api.EventErr: "length" as
 // api.CodeCapped, "content_filter" as api.CodeRefused,
-// "insufficient_system_resource" as api.CodeBusy, and any other value as
-// api.CodeUnknown.
+// "insufficient_system_resource" as api.CodeBusy, "aborted" as
+// api.CodeNetwork, and any other value as api.CodeUnknown.
 type FinishError struct {
 	// Reason is the finish_reason exactly as the server sent it.
 	Reason string

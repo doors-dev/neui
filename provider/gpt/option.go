@@ -194,7 +194,9 @@ const maxOutputTokensFloor = 16
 
 // WithMaxTokens caps the response, reasoning included, so on a reasoning model
 // a small cap can leave no room for the answer. Zero, the default, sends no cap.
-// Values from 1 to 15 are below the API minimum and are rejected.
+// Values from 1 to 15 are below the API minimum and are rejected, and so is a
+// value over 128,000 when Conf.Model is one of the models declared in this
+// package, which take no more.
 func WithMaxTokens(n int) Option {
 	return func(p *Provider) error {
 		if n < 0 {
@@ -203,15 +205,21 @@ func WithMaxTokens(n int) Option {
 		if n > 0 && n < maxOutputTokensFloor {
 			return fmt.Errorf("gpt: WithMaxTokens is %d or more, the schema minimum, or zero for no cap", maxOutputTokensFloor)
 		}
+		switch baseModel(p.model.Name) {
+		case GPT56Sol.Name, GPT56Luna.Name, GPT6Astra.Name, GPT6Sol.Name, GPT6Luna.Name:
+			if n > maxOutputTokensCeiling {
+				return fmt.Errorf("gpt: WithMaxTokens is %d, over the %d output tokens %s takes", n, maxOutputTokensCeiling, p.model.Name)
+			}
+		}
 		p.set.maxTokens = n
 		return nil
 	}
 }
 
 // WithTemperature sets the sampling temperature, 0 to 2. It is not sent to
-// a model this provider classifies as reasoning (an id in the gpt-5, o1, o3,
-// o4 or codex families, other than *-chat-latest), unless WithForcedSampling
-// is set.
+// a model this provider classifies as reasoning (an id in the gpt-5, gpt-6,
+// o1, o3, o4 or codex families, other than *-chat-latest), unless the
+// reasoning effort is EffortNone or WithForcedSampling is set.
 func WithTemperature(v float64) Option {
 	return func(p *Provider) error {
 		if v < 0 || v > 2 {
@@ -223,7 +231,8 @@ func WithTemperature(v float64) Option {
 }
 
 // WithTopP sets nucleus sampling, 0 to 1. Like WithTemperature it is not
-// sent to models classified as reasoning unless WithForcedSampling is set.
+// sent to models classified as reasoning unless the reasoning effort is
+// EffortNone or WithForcedSampling is set.
 func WithTopP(v float64) Option {
 	return func(p *Provider) error {
 		if v < 0 || v > 1 {
@@ -258,12 +267,20 @@ const (
 	EffortMax     Effort = "max"
 )
 
-// WithReasoningEffort sets reasoning.effort. Accepted values differ per model
-// and are not checked here; an unsupported one fails the turn with a 400. It
-// is sent only to models this provider classifies as reasoning (see
-// WithTemperature).
+// WithReasoningEffort sets reasoning.effort. Accepted values differ per model.
+// When Conf.Model is one of the models declared in this package, the values
+// its docs leave out are rejected: EffortMinimal on all of them, and EffortNone
+// on gpt-6-astra. For any other model nothing is checked, and an unsupported
+// value fails the turn with a 400. It is sent only to models this provider
+// classifies as reasoning (see WithTemperature).
 func WithReasoningEffort(effort Effort) Option {
 	return func(p *Provider) error {
+		switch m := baseModel(p.model.Name); m {
+		case GPT56Sol.Name, GPT56Luna.Name, GPT6Astra.Name, GPT6Sol.Name, GPT6Luna.Name:
+			if effort == EffortMinimal || effort == EffortNone && m == GPT6Astra.Name {
+				return fmt.Errorf("gpt: %s does not take reasoning effort %q", p.model.Name, effort)
+			}
+		}
 		p.set.effort = string(effort)
 		return nil
 	}
@@ -302,9 +319,9 @@ const (
 	ReasoningPro      ReasoningMode = "pro"
 )
 
-// WithReasoningMode sets reasoning.mode, standard or pro, for the gpt-5.6
-// family. Like WithReasoningEffort, it is sent only to models classified as
-// reasoning.
+// WithReasoningMode sets reasoning.mode, standard or pro, for the gpt-5.6 and
+// gpt-6 families. Like WithReasoningEffort, it is sent only to models
+// classified as reasoning.
 func WithReasoningMode(mode ReasoningMode) Option {
 	return func(p *Provider) error {
 		p.set.reasoningMode = string(mode)
@@ -434,8 +451,12 @@ const (
 // Any string passes through.
 type CacheTTL string
 
-// CacheTTL30M keeps a cached prefix for 30 minutes, currently the only value.
-const CacheTTL30M CacheTTL = "30m"
+// CacheTTL values, the least time a cached prefix is kept. CacheTTL30M is the
+// service default.
+const (
+	CacheTTL30M CacheTTL = "30m"
+	CacheTTL12H CacheTTL = "12h"
+)
 
 // WithPromptCacheOptions sets prompt_cache_options. Use it only with gpt-5.6
 // and later; earlier models answer 400. Prefer CacheImplicit: CacheExplicit
@@ -453,13 +474,17 @@ func WithPromptCacheOptions(mode CacheMode, ttl CacheTTL) Option {
 type ServiceTier string
 
 // ServiceTier values. TierFlex is cheaper and slower; TierPriority is faster
-// and costs more.
+// and costs more, and TierFast asks for the same processing, which the
+// response reports as priority. TierUltrafast is access-controlled and, as of
+// 2026-11-05, offered only on gpt-5.6-sol.
 const (
-	TierAuto     ServiceTier = "auto"
-	TierDefault  ServiceTier = "default"
-	TierFlex     ServiceTier = "flex"
-	TierScale    ServiceTier = "scale"
-	TierPriority ServiceTier = "priority"
+	TierAuto      ServiceTier = "auto"
+	TierDefault   ServiceTier = "default"
+	TierFlex      ServiceTier = "flex"
+	TierScale     ServiceTier = "scale"
+	TierPriority  ServiceTier = "priority"
+	TierFast      ServiceTier = "fast"
+	TierUltrafast ServiceTier = "ultrafast"
 )
 
 // WithServiceTier sets service_tier. Under TierFlex a turn fails with CodeBusy
