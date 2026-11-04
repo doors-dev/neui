@@ -12,8 +12,8 @@ import (
 	"neui.dev/api"
 )
 
-// Converter is the whole of an adapter that Drive needs: the wire format, and
-// what a failure means in it. Drive itself constructs no event.
+// Converter is the whole of an adapter that Stream needs: the wire format, and
+// what a failure means in it. Stream itself constructs no event.
 //
 // Both methods run on the driving goroutine and are never called concurrently,
 // so a converter may keep whatever state its wire format forces on it — an
@@ -25,10 +25,12 @@ type Converter interface {
 	// called after it: the converter has already said how the turn ended.
 	Convert(Frame) ([]api.Event, bool)
 
-	// End is every other ending. err is nil for a body that simply ran out, and
-	// otherwise is what stopped the turn: an *HTTPError for a request the API
-	// refused, ErrIdle for the deadline, or whatever the connection failed
-	// with. Only the adapter can classify any of them, so only the adapter
+	// End is every other ending, never called with nil: io.EOF for a body that
+	// ended between events, io.ErrUnexpectedEOF for one cut mid event, an
+	// *HTTPError for a non-200 response, ErrIdle (or the read error it caused)
+	// for the idle deadline, the cancellation error when parentCtx is
+	// cancelled, or whatever reading failed with, including an oversized
+	// frame. Only the adapter can classify any of them, so only the adapter
 	// builds the event; returning nothing ends the turn with no terminal event,
 	// which says the reply is incomplete.
 	End(err error) []api.Event
@@ -38,18 +40,20 @@ type Converter interface {
 // provider's WithTransport option, which hands them here unread; the zero value
 // takes both defaults.
 type Options struct {
-	// Idle ends a turn whose wire has sent nothing, keepalives included, for
-	// this long, counting the wait for response headers. A slow consumer does
-	// not count. Zero or less is DefaultIdle.
+	// Idle ends a turn when no complete frame or keepalive has arrived for
+	// this long, counting from the request until response headers and then
+	// from each frame; a frame that takes longer than Idle to arrive in full
+	// trips it even while bytes flow. A slow consumer does not count. Zero or
+	// less is DefaultIdle.
 	Idle time.Duration
-	// Max caps the bytes one frame may hold; a larger frame ends the turn
-	// with an error. Zero or less is DefaultMaxFrame.
+	// Max caps the bytes of one frame's data and of any single line; going
+	// over ends the reading and End receives an error. Zero or less is
+	// DefaultMaxFrame.
 	Max int
 }
 
-// DefaultIdle is the idle deadline when Options.Idle is unset. Every supported
-// API sends keepalives while a request waits, so two silent minutes is a dead
-// socket. There is no "never" value; pass a long duration instead.
+// DefaultIdle is the idle deadline when Options.Idle is unset. There is no
+// "never" value; pass a long duration instead.
 const DefaultIdle = 2 * time.Minute
 
 // DefaultMaxFrame is the frame cap when Options.Max is unset. It is generous
@@ -58,7 +62,9 @@ const DefaultIdle = 2 * time.Minute
 // value; pass a larger number instead.
 const DefaultMaxFrame = 64 << 20
 
-// ErrIdle is what End is handed when Options.Idle elapsed.
+// ErrIdle is the cancellation cause Stream sets when Options.Idle elapses,
+// and what End is usually handed then; a read that fails from the same
+// cancellation can reach End first with its own error.
 var ErrIdle = errors.New("neui: stream went idle")
 
 // maxErrorBody bounds what is read off a response that was not 200. At a
@@ -70,7 +76,7 @@ const maxErrorBody = 1 << 20
 // material rather than as a verdict: the status classifies, the headers carry
 // retry-after and whatever request id the API uses, and the body is the API's
 // own account of it. Every one of those is spelled differently per API, so the
-// adapter decodes it and Drive does not look inside.
+// adapter decodes it and Stream does not look inside.
 type HTTPError struct {
 	Status int         // HTTP status code, never 200
 	Header http.Header // response headers, for retry-after and request ids
@@ -96,10 +102,11 @@ func Drain(events ...api.Event) <-chan api.Event {
 }
 
 // Stream sends req with client and returns the turn's events as conv produces
-// them from the response, applying the opt defaults. The channel closes once
-// Convert returns false or End has run and its events are delivered. Cancelling
-// parentCtx ends the turn and drops events not yet taken; otherwise the caller
-// must read the channel until it closes.
+// them from the response, applying the opt defaults. The channel closes after
+// Convert returns false or End has run, once their events are delivered.
+// Cancelling parentCtx ends the turn, and the channel closes without waiting
+// for queued events to be read; otherwise the caller must read the channel
+// until it closes, or the streaming goroutine leaks.
 func Stream(parentCtx context.Context, client *http.Client, req *http.Request, conv Converter, opt Options) <-chan api.Event {
 	ctx, cancel := context.WithCancelCause(parentCtx)
 	if opt.Idle <= 0 {

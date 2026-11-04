@@ -58,11 +58,11 @@ type ChatState struct {
 	Usage EventUsage
 	// Compaction reports a compaction of the history running in the background.
 	Compaction bool
-	// Meta is the value the Open that switched to this thread passed along,
-	// nil for every other way a chat comes up. It is never interpreted here:
-	// it travels from the caller of Open to the first chat initialised for
-	// that open and is consumed there, so a later reload of the same thread
-	// sees nil and it does not survive a page reload.
+	// Meta is the meta that the Instance.ThreadOpen which switched to this
+	// thread passed, nil for every other way a chat comes up. It is never
+	// interpreted here: it reaches only the first chat initialised for that
+	// open, so a later reload of the same thread sees nil and it does not
+	// survive a page reload.
 	Meta any
 }
 

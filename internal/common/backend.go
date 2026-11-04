@@ -8,10 +8,11 @@ import (
 	"neui.dev/api"
 )
 
-// ModuleFactory builds one module per thread. The runtime calls it each time
-// a thread opens, with a context that lasts while the thread stays open; that
-// context carries no tool call. When two modules of a thread share a name,
-// the later one is skipped and an error is logged.
+// ModuleFactory returns the module a thread uses: a fresh one or a shared
+// one. The runtime calls it each time a thread opens, with a context that
+// lasts while the thread stays open and carries no tool call. When two
+// modules of a thread share a name, the later one is skipped and an error is
+// logged; the built-in chat, time and files modules come first.
 type ModuleFactory = func(ctx context.Context) Module
 
 // Tool is one tool as the runtime sees it, the result of a Tool or Ask
@@ -52,7 +53,9 @@ type Answer[O any] interface {
 }
 
 // Module is what a ModuleFactory returns: a named set of tools. A host
-// implements it directly only to serve tools it builds itself.
+// implements it directly only to serve tools it builds itself. The runtime
+// calls its methods from several goroutines and reads Desc and List again for
+// every request, so a change shows up at the next one.
 type Module interface {
 	// Name is the module's name; its tools reach the agent as name__tool.
 	Name() string

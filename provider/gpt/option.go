@@ -27,9 +27,9 @@ const (
 	// ReplayToolTurns replays a reasoning item only when a tool call followed
 	// it, the case the service requires. Default.
 	ReplayToolTurns ReplayMode = iota
-	// ReplayAlways replays every reasoning item, including those before a text
-	// answer. If the service rejects that pairing, every multi-turn
-	// conversation fails with a 400.
+	// ReplayAlways replays every reasoning item that has an item after it in
+	// the same message, including one before a text answer. If the service
+	// rejects that pairing, every multi-turn conversation fails with a 400.
 	ReplayAlways
 	// ReplayNever sends no reasoning items back; tool calls and results still
 	// travel. Use it for a model or gateway that rejects reasoning input
@@ -79,17 +79,19 @@ func defaultSettings() settings {
 // Option configures a Provider in New. Every option has a working default.
 type Option func(*Provider) error
 
-// Conf holds what every Provider needs. Model is required; use one of the
-// models in this package, such as GPT56Luna, or an api.Model of your own for a
-// gateway or a newer id.
+// Conf holds what every Provider needs. Without Model.Name every turn fails
+// with CodeInvalid. Use one of the models in this package, such as GPT56Luna,
+// or an api.Model of your own for a gateway or a newer id.
 type Conf struct {
 	Model api.Model // the one model this provider streams with, spelled as it goes on the wire
 }
 
-// New builds a Provider. It never fails: an option with an invalid value is
-// logged and skipped, a missing key is only warned about (the first turn then
-// fails with an auth error), and an empty Conf.Model fails each turn with
-// CodeInvalid. The key comes from OPENAI_API_KEY unless WithAPIKey sets one.
+// New builds a Provider. It never fails: a nil option is skipped, an option
+// with an invalid value is logged and has no effect, and an empty
+// Conf.Model.Name fails each turn with CodeInvalid. Without WithAPIKey, New
+// reads the key from OPENAI_API_KEY once. If that is empty, it logs a warning
+// and requests carry no Authorization header, which api.openai.com refuses
+// with CodeAccess.
 func New(conf Conf, opts ...Option) *Provider {
 	p := &Provider{
 		baseURL: defaultBaseURL,
@@ -114,9 +116,9 @@ func New(conf Conf, opts ...Option) *Provider {
 	return p
 }
 
-// WithAPIKey sets the key. An empty string means send no Authorization header
-// at all, which is how a gateway that authenticates some other way is reached
-// without inventing a placeholder credential.
+// WithAPIKey sets the key, and OPENAI_API_KEY is then not read. An empty key
+// sends no Authorization header, for a gateway that authenticates some other
+// way.
 func WithAPIKey(key string) Option {
 	return func(p *Provider) error {
 		p.apiKey = key
@@ -207,8 +209,9 @@ func WithMaxTokens(n int) Option {
 }
 
 // WithTemperature sets the sampling temperature, 0 to 2. It is not sent to
-// reasoning models (the gpt-5, o1, o3, o4 and codex families), which reject
-// it, unless WithForcedSampling is set.
+// a model this provider classifies as reasoning (an id in the gpt-5, o1, o3,
+// o4 or codex families, other than *-chat-latest), unless WithForcedSampling
+// is set.
 func WithTemperature(v float64) Option {
 	return func(p *Provider) error {
 		if v < 0 || v > 2 {
@@ -220,7 +223,7 @@ func WithTemperature(v float64) Option {
 }
 
 // WithTopP sets nucleus sampling, 0 to 1. Like WithTemperature it is not
-// sent to reasoning models unless WithForcedSampling is set.
+// sent to models classified as reasoning unless WithForcedSampling is set.
 func WithTopP(v float64) Option {
 	return func(p *Provider) error {
 		if v < 0 || v > 1 {
@@ -256,8 +259,9 @@ const (
 )
 
 // WithReasoningEffort sets reasoning.effort. Accepted values differ per model
-// and are not checked here; an unsupported one fails the turn with a 400. It is
-// not sent to non-reasoning models.
+// and are not checked here; an unsupported one fails the turn with a 400. It
+// is sent only to models this provider classifies as reasoning (see
+// WithTemperature).
 func WithReasoningEffort(effort Effort) Option {
 	return func(p *Provider) error {
 		p.set.effort = string(effort)
@@ -276,9 +280,11 @@ const (
 	SummaryDetailed Summary = "detailed"
 )
 
-// WithReasoningSummary asks for readable reasoning summaries, shown in the
-// chat as thinking. Off by default, so ContentReasoning.Summary stays empty;
-// recent models require a verified organization and answer 400 otherwise.
+// WithReasoningSummary asks for readable reasoning summaries, which arrive
+// as EventSummary and fill ContentReasoning.Summary. Off by default, so
+// Summary stays empty. Recent models require a verified organization and
+// answer 400 otherwise. Like WithReasoningEffort, it is sent only to models
+// classified as reasoning.
 func WithReasoningSummary(summary Summary) Option {
 	return func(p *Provider) error {
 		p.set.summary = string(summary)
@@ -296,7 +302,9 @@ const (
 	ReasoningPro      ReasoningMode = "pro"
 )
 
-// WithReasoningMode sets reasoning.mode, standard or pro. gpt-5.6 family only.
+// WithReasoningMode sets reasoning.mode, standard or pro, for the gpt-5.6
+// family. Like WithReasoningEffort, it is sent only to models classified as
+// reasoning.
 func WithReasoningMode(mode ReasoningMode) Option {
 	return func(p *Provider) error {
 		p.set.reasoningMode = string(mode)
@@ -320,7 +328,8 @@ const (
 
 // WithReasoningContext sets reasoning.context: auto, current_turn or all_turns.
 // all_turns only does anything if the earlier reasoning items are actually in
-// the request, which here means WithReasoningReplay is not ReplayNever.
+// the request, which here means WithReasoningReplay is not ReplayNever. Like
+// WithReasoningEffort, it is sent only to models classified as reasoning.
 func WithReasoningContext(context ReasoningContext) Option {
 	return func(p *Provider) error {
 		p.set.reasoningContext = string(context)
@@ -380,8 +389,9 @@ func WithStrictTools(strict bool) Option {
 	}
 }
 
-// WithStore turns server-side retention of responses on. Off by default; this
-// provider resends the whole thread each turn and needs nothing stored.
+// WithStore sets whether the service retains responses server-side. Off by
+// default; this provider resends the whole thread each turn and needs nothing
+// stored.
 func WithStore(store bool) Option {
 	return func(p *Provider) error {
 		p.set.store = store
@@ -389,9 +399,10 @@ func WithStore(store bool) Option {
 	}
 }
 
-// WithInclude replaces the include list. Unset, reasoning models are sent
-// "reasoning.encrypted_content", which reasoning replay needs; keep it in a
-// list of your own.
+// WithInclude replaces the include list. Without it, or with a nil list as
+// WithInclude() gives, models classified as reasoning are sent
+// "reasoning.encrypted_content", which older models need for reasoning
+// replay; keep it in a list of your own.
 func WithInclude(values ...string) Option {
 	return func(p *Provider) error {
 		p.set.include = values
@@ -460,7 +471,9 @@ func WithServiceTier(tier ServiceTier) Option {
 	}
 }
 
-// WithMetadata attaches up to sixteen string pairs to the turn.
+// WithMetadata sends m as metadata on every turn. The service takes up to
+// sixteen pairs; the count is not checked here. m is kept, not copied, so do
+// not change it afterwards.
 func WithMetadata(m map[string]string) Option {
 	return func(p *Provider) error {
 		p.set.metadata = m
@@ -468,9 +481,9 @@ func WithMetadata(m map[string]string) Option {
 	}
 }
 
-// WithObfuscation keeps the random padding field the service adds to delta
-// events to even out packet sizes. Dropped by default because the decoder
-// ignores it and it is bandwidth.
+// WithObfuscation sets whether the service adds its random padding field to
+// delta events to even out packet sizes. Off by default: the decoder ignores
+// the field, so it only costs bandwidth.
 func WithObfuscation(on bool) Option {
 	return func(p *Provider) error {
 		p.set.obfuscation = on

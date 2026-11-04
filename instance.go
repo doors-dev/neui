@@ -10,13 +10,15 @@ import (
 )
 
 // Enable turns neui on for the doors session ctx belongs to, typically from an
-// auth hook or handler once the user is known, and every open tab of the
-// session links its chat to it. It runs on the app's WithProvider unless
-// OptionProvider sets another, and returns api.ErrNoProvider when neither
-// does. Without OptionMessageStorage and OptionFileStorage, threads are kept
-// in memory and files in a per-session temporary directory; neither is
-// reachable after the session ends, and the directory is not removed. Once
-// enabled, later calls do nothing unless OptionForce is passed.
+// auth hook or handler once the user is known; ctx must be a doors context of
+// that session. Every tab of the session, open now or later, links its chat to
+// it. The session's provider is the one OptionProvider sets, else the app's
+// WithProvider; when there is neither, Enable returns api.ErrNoProvider and
+// leaves the session as it was. Without OptionMessageStorage and
+// OptionFileStorage, threads are kept in memory and files in a per-session
+// temporary directory; neither is reachable after the session ends, and the
+// directory is not removed. Once enabled, later calls do nothing unless
+// OptionForce is passed.
 func Enable(ctx context.Context, opts ...Option) error {
 	return instance.GetSession(ctx).Enable(opts)
 }
@@ -42,13 +44,16 @@ func Instance(ctx context.Context) api.Instance {
 // the app-wide With* values.
 type Option = common.Option
 
-// WithProvider sets the provider every session the app serves runs on, as an
-// app option for doors.NewApp. OptionProvider replaces it for one session.
+// WithProvider sets the app-wide provider, as an app option for doors.NewApp.
+// It is optional: a session enabled with OptionProvider runs on that
+// provider instead, and Enable returns api.ErrNoProvider when neither is set.
 func WithProvider(p api.Provider) doors.With {
 	return doors.WithValue(common.ProviderKey{}, p)
 }
 
-// OptionProvider replaces the app's provider for one session.
+// OptionProvider sets the session's provider, taking precedence over the
+// app's WithProvider if there is one. A nil p leaves the session without a
+// provider, and Enable returns api.ErrNoProvider.
 func OptionProvider(p api.Provider) Option {
 	return common.OptionProvider(p)
 }
@@ -59,9 +64,10 @@ func WithThreadConfig(c api.ThreadConfig) doors.With {
 	return doors.WithValue(common.ConfigKey{}, common.ConfigDefaults(c))
 }
 
-// WithFilesConfig sets the workspace filesystem and files module limits every
-// session the app serves runs on, as an app option for doors.NewApp.
-// OptionFilesConfig replaces them for one session.
+// WithFilesConfig sets the workspace filesystem and files module limits of
+// every session the app serves, as an app option for doors.NewApp; without
+// it every limit takes its default. OptionFilesConfig takes precedence for
+// one session.
 func WithFilesConfig(c api.FilesConfig) doors.With {
 	return doors.WithValue(common.FilesConfigKey{}, common.FilesConfigDefaults(c))
 }
@@ -72,8 +78,10 @@ func WithIslandConfig(c api.IslandConfig) doors.With {
 	return doors.WithValue(common.IslandConfigKey{}, common.IslandConfigDefaults(c))
 }
 
-// OptionFilesConfig replaces the app's workspace filesystem and files module
-// limits for one session.
+// OptionFilesConfig sets the session's workspace filesystem and files
+// module limits, taking precedence over the app's WithFilesConfig if there
+// is one. It is not merged with the app's config: a zero field takes the
+// built-in default.
 func OptionFilesConfig(c api.FilesConfig) Option {
 	return common.OptionFilesConfig(c)
 }
@@ -84,15 +92,18 @@ func OptionMessageStorage(s api.MessageStorage) Option {
 	return common.OptionMessageStorage(s)
 }
 
-// OptionFileStorage sets where the files users upload into the session's
-// chats are stored, replacing the default temporary directory. Thread
-// workspaces stay in the temporary directory.
+// OptionFileStorage sets where the session's uploaded files are stored, both
+// the user's (api.UserUploadsDir) and the agent's (api.AgentUploadsDir),
+// replacing the default temporary directory. Thread workspaces stay in the
+// temporary directory.
 func OptionFileStorage(s api.FileStorage) Option {
 	return common.OptionFileStorage(s)
 }
 
-// WithSystemPrompt sets the system prompt every session the app serves starts
-// with, as an app option for doors.NewApp. OptionSystemPrompt appends to it.
+// WithSystemPrompt adds text to the system prompt of every session the app
+// serves, as an app option for doors.NewApp. Its parts are joined by blank
+// lines after neui's own runtime note and before the modules' guidance.
+// OptionSystemPrompt adds more after it for one session.
 func WithSystemPrompt(prompt ...string) doors.With {
 	return doors.WithValue(common.SystemKey{}, prompt)
 }
@@ -102,9 +113,10 @@ func OptionSystemPrompt(prompt ...string) Option {
 	return common.OptionSystem(prompt)
 }
 
-// OptionForce makes Enable apply its options to a session that is already
-// enabled, instead of doing nothing. Every open tab then relinks its chat to
-// the new configuration; use it to switch provider or storage mid-session.
+// OptionForce makes Enable rebuild the configuration of a session that is
+// already enabled, instead of doing nothing. The new configuration starts
+// from the app-wide values again, so options passed to an earlier Enable do
+// not carry over. Every open tab then relinks its chat to it.
 func OptionForce() Option {
 	return common.OptionForce()
 }

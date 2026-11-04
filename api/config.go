@@ -6,48 +6,48 @@ import "time"
 // or a module. A zero field takes its default; a caller sets only what it wants
 // to change.
 type ThreadConfig struct {
-	// CompactionTrigger is the share of the model's context window at which a
-	// round is preceded by compaction. Above 1 it never fires, leaving the
-	// API's over-length error as the only trigger. Default 0.8.
+	// CompactionTrigger is the share of Model.Context that the thread's token
+	// usage must reach, when a round ends, for the thread to start compacting.
+	// It has no effect when Model.Context is zero, and above 1 it never fires;
+	// the ThreadMemoryLimit byte budget and the API's over-length error still
+	// start compaction either way. Default 0.8.
 	CompactionTrigger float32
-	// CompactionAllowed is the share of the model's context window the
-	// conversation must fill before a compaction requested by the user is
-	// accepted. Default 0.2.
+	// CompactionAllowed is the share of Model.Context the thread's token usage
+	// must reach before a compaction the user requests is accepted; below it
+	// the request fails with ErrWrongState. When Model.Context is zero the
+	// share is not checked. Default 0.2.
 	CompactionAllowed float32
 	// CompactionPreserve is the share of the conversation kept verbatim after
 	// the summary. Default 0.1.
 	CompactionPreserve float32
-	// ReplayResultsShare is the share of the model's context window, measured
-	// in bytes, that all tool results of one round may occupy together. The
-	// byte cap itself is derived where it is used, as
-	// Model.Context * 4 * ReplayResultsShare / ToolCallLimit — four bytes per
-	// token is this codebase's standing estimate — falling back to 32 KiB when
-	// Model.Context is zero, so nothing caches it and a model with another
-	// window changes the cap on the next round. Negative replays every result
-	// whole. The same cap also sizes an island's ui.notify values between draws,
-	// where a negative value counts as a full share. Default 0.25.
+	// ReplayResultsShare sets how much text each tool result keeps on replay:
+	// its text blocks together are cut to
+	// Model.Context * 4 * ReplayResultsShare / ToolCallLimit bytes (four bytes
+	// per token; a non-positive ToolCallLimit divides by 1), or to 32 KiB when
+	// Model.Context is zero. Media blocks are not cut. Negative replays every
+	// result whole. The same cap bounds an island's ui.notify values between
+	// draws, where a negative value counts as 1. Default 0.25.
 	ReplayResultsShare float32
 	// ThreadMemoryLimit is the byte budget over everything a thread holds for
-	// replay: media counted raw, text counted as it stands. The effective limit
-	// is min(ThreadMemoryLimit, Model.RequestBytes*3/4 - ReplayHeadroom), where
-	// the three quarters invert the base64 inflation media takes on the wire
-	// and the headroom covers what the replay layer never sees. Negative means
-	// no byte budget. Default 18 MiB.
+	// replay: media counted raw, text counted as it stands. When
+	// Model.RequestBytes is known the budget is at most
+	// Model.RequestBytes*3/4 - ReplayHeadroom (the three quarters undo the
+	// base64 inflation media takes on the wire). The first time the provider
+	// refuses a request as too large without ErrMeasuredTooLarge, the budget
+	// is cut to 80% and the round is retried. Going over the budget starts
+	// compaction. Negative means no byte budget. Default 18 MiB.
 	ThreadMemoryLimit int64
 	// ToolCallLimit is how many tool calls of one round are executed; a call
 	// past it is answered with an error result naming the limit, so every
 	// tool_use still gets a matching tool_result. Negative runs every call a
 	// round asks for. Default 32.
 	ToolCallLimit int
-	// InputBytes is the byte ceiling on one submitted Input: its Text plus the
-	// file links its Attachments turn into, counted as Input.Content() renders
-	// them. An input over it is refused with ErrInputTooLarge where it is
-	// submitted, so nothing is drafted, stored or sent. The ceiling exists
-	// because a single message too large for the model's context cannot be
-	// recovered further down: compaction summarizes the history and keeps the
-	// latest input whole, so it has nothing to shrink. Unlike the other byte
-	// budgets here there is nothing downstream to fall back on and no way to
-	// turn this one off, so a non-positive value takes the default, 256 KiB.
+	// InputBytes is the byte ceiling on one submitted Input: the length of the
+	// text blocks Input.Content() renders, which are its Text plus the file
+	// links its Attachments turn into. An input over it is refused with
+	// ErrInputTooLarge where it is submitted, drafted or rewound to, so nothing
+	// of it is drafted, stored or sent. It cannot be turned off: a
+	// non-positive value takes the default, 256 KiB.
 	InputBytes int
 }
 
@@ -70,9 +70,10 @@ type FilesConfig struct {
 	// MaxBytes is how many bytes the workspace may hold; a write crossing it is
 	// refused with ErrQuota, at open or mid-write. Default 1 GiB.
 	MaxBytes int64
-	// ReadLimit is how many bytes one file read returns to the model; a longer
-	// read stops there and reports where to continue from, leaving the file
-	// untouched. Default 50 KiB.
+	// ReadLimit is the byte budget of one file read: lines are returned until
+	// their lengths add up to it, the line that crosses it included, and the
+	// read then reports where to continue from. Negative returns every
+	// requested line. Default 50 KiB.
 	ReadLimit int
 	// EditLimit is how many bytes of a file an edit may read into memory to
 	// rewrite it; a bigger file is refused rather than loaded, since an edit
@@ -92,8 +93,9 @@ type FilesConfig struct {
 	// so an archive cannot fill the workspace by what it decompresses to.
 	// Default 512 MiB.
 	UnzipLimit int64
-	// UnzipFiles is how many entries one archive may hold; extraction is
-	// refused past it. Default 10000.
+	// UnzipFiles is how many entries one extraction writes; at the next entry
+	// it stops with an error, and the entries already written stay in the
+	// workspace. Default 10000.
 	UnzipFiles int
 }
 
@@ -107,8 +109,9 @@ type IslandConfig struct {
 	// MaxOps is how many sets, updates and notifies a script may queue before its
 	// next ui.draw applies them; the call past it is refused. Default 512.
 	MaxOps int
-	// TurnTime is how long a script may run between ui.draw calls, fetch and
-	// tool calls included, before it is stopped and its app ends. Default 30s.
+	// TurnTime is how long a script may run between ui.draw calls, fetch, app
+	// function and tool calls included, before it is stopped. The app stays
+	// up; the scripts still queued behind it are dropped. Default 30s.
 	TurnTime time.Duration
 	// Memory is the JS runtime's memory limit in bytes, at least 4 MiB.
 	// Default 16 MiB.

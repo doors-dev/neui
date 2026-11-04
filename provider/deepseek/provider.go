@@ -1,7 +1,8 @@
 // Package deepseek is the api.Provider for DeepSeek's Chat Completions API.
 //
-// Build one with New and hand it to neui.WithProvider for the whole app or
-// neui.OptionProvider for one session:
+// Build one with New and pass it to neui.WithProvider as the app-wide
+// provider, or to neui.OptionProvider to set one session's provider, which
+// takes precedence over WithProvider if any:
 //
 //	p := deepseek.New(deepseek.Conf{Model: deepseek.Flash},
 //		deepseek.WithReasoningEffort(deepseek.EffortHigh))
@@ -12,8 +13,11 @@
 // carries text only, so images and documents in a request reach the model as
 // a short note in their place. Caching is automatic and needs no options:
 // keep the tools, system prompt and history stable between turns to hit it.
-// Failures reach the thread as api.EventErr with an api.ErrCode and one of
-// this package's error types as Err.
+// Failures reach the thread as api.EventErr with an api.ErrCode. Its Err is an
+// *APIError for a non 200 response, a *RequestError for a request this adapter
+// refused to encode, a *FinishError for a finish_reason that ended the turn
+// without a reply, and a *StreamError for an error frame in the stream; read
+// them with errors.As.
 package deepseek
 
 import (
@@ -80,10 +84,11 @@ type Provider struct {
 // logged and skipped.
 type Option func(*Provider) error
 
-// Conf is what a Provider cannot be built without.
+// Conf holds the provider's model.
 type Conf struct {
-	// Model is the model every turn is sent to, usually Flash or V4Pro.
-	// There is no default.
+	// Model is the model every turn is sent to, such as Flash or V4Pro. There
+	// is no default: an empty Model.Name fails every turn with a *RequestError
+	// under api.CodeInvalid.
 	Model api.Model `json:"model"`
 }
 
@@ -148,8 +153,8 @@ func WithBaseURL(base string) Option {
 }
 
 // WithHTTPClient replaces the default client, for a proxy, middleware or a
-// test server. Leave its Timeout at zero: it caps the whole streamed turn. Use
-// WithTransport to bound a dead connection.
+// test server; it must not be nil. Leave its Timeout at zero: it caps the
+// whole streamed turn. Use WithTransport to bound a dead connection.
 func WithHTTPClient(client *http.Client) Option {
 	return func(p *Provider) error {
 		p.client = client
@@ -206,8 +211,8 @@ func WithTopP(t float64) Option {
 	}
 }
 
-// WithStop sets stop sequences, replacing any set before; DeepSeek takes up
-// to sixteen.
+// WithStop sets stop sequences, replacing any set before. DeepSeek takes up
+// to sixteen; more are not checked here and are left to the server.
 func WithStop(stop ...string) Option {
 	return func(p *Provider) error {
 		p.stop = stop
@@ -216,8 +221,9 @@ func WithStop(stop ...string) Option {
 }
 
 // WithMaxTokens caps the response; a turn that hits it ends with
-// api.CodeCapped. By default no cap is sent. A value over the documented
-// 384,000 ceiling is rejected at New and the previous setting stays.
+// api.CodeCapped. By default, and for a value of 0 or below, no cap is sent.
+// A value over the documented 384,000 ceiling is logged at New and the
+// previous setting stays.
 func WithMaxTokens(n int) Option {
 	return func(p *Provider) error {
 		if n > maxOutputTokens {
@@ -240,10 +246,11 @@ func WithUserID(id string) Option {
 
 // WithTransport sets the stream limits documented on lib.Options: how long the
 // wire may stay silent and how large one event may grow. A zero field keeps
-// lib's default. Every line received resets the idle deadline, including the
-// keep-alive comments DeepSeek sends while a request is queued, so it catches
-// a dead connection rather than a slow turn; a turn that crosses it ends with
-// api.CodeNetwork.
+// lib's default. The idle deadline covers the wait for response headers and
+// resets on every complete event and on every comment or blank line between
+// events, including the keep-alive comments DeepSeek sends while a request is
+// queued, so it catches a dead connection rather than a slow turn; a turn that
+// crosses it ends with api.CodeNetwork.
 func WithTransport(opt lib.Options) Option {
 	return func(p *Provider) error {
 		p.transport = opt
@@ -264,9 +271,10 @@ func (p *Provider) Model() api.Model {
 }
 
 // Stream runs one turn on its own goroutine and returns its events. A turn that
-// finishes ends in exactly one EventOk or EventErr, then the channel closes; a
-// cancelled ctx or a connection that just stops closes it with neither. A
-// missing key, a request this wire cannot carry, or one over
+// finishes ends in exactly one EventOk or EventErr, then the channel closes. A
+// cancelled ctx closes it with neither, and so does a connection that stops
+// before any finish_reason arrived; one that stops after it ends as that
+// finish_reason does. A missing key, a request this wire cannot carry, or one over
 // Model.RequestBytes ends at once in EventErr with api.CodeAccess,
 // api.CodeInvalid or api.CodeTooLarge. The thread calls it; hosts normally do
 // not.

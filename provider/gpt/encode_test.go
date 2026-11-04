@@ -763,6 +763,7 @@ func TestModelClassification(t *testing.T) {
 		"gpt-5.6-sol", "gpt-5.6", "gpt-5", "gpt-5-mini", "gpt-5.1-codex-max",
 		"gpt-5.4-2026-01-01", "o1", "o1-pro", "o3-mini", "o4-mini",
 		"codex-mini-latest", "openai/gpt-5.6-terra", "GPT-5.6-LUNA",
+		"gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "openai/gpt-6-sol",
 	}
 	for _, m := range reasoning {
 		if !isReasoningModel(m) {
@@ -771,7 +772,7 @@ func TestModelClassification(t *testing.T) {
 	}
 	plain := []string{
 		"gpt-4o", "gpt-4o-mini", "gpt-4.1", "gpt-4-turbo", "gpt-3.5-turbo",
-		"chatgpt-4o-latest", "gpt-5-chat-latest", "gpt-5.3-chat-latest", "",
+		"chatgpt-4o-latest", "gpt-5-chat-latest", "gpt-5.3-chat-latest", "gpt-60", "",
 	}
 	for _, m := range plain {
 		if isReasoningModel(m) {

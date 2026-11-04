@@ -46,7 +46,8 @@ type AskInput struct {
 type AskOutput struct {
 	// Picked holds the names of the chosen options, in option order.
 	Picked []string `json:"picked,omitempty" description:"names of the options marked"`
-	// Typed is the user's own answer, trimmed; empty when they typed nothing.
+	// Typed is the user's own answer, trimmed; empty unless the own row is
+	// selected and has text.
 	Typed string `json:"typed,omitempty" description:"what the user typed instead"`
 }
 
@@ -68,9 +69,10 @@ func ModuleAsk() common.ModuleFactory {
 const askOwnLimit = 256 * 1024
 
 // AskOptions is the Ask handler behind ModuleAsk. It builds the form and send
-// button for input and submits an AskOutput to answer when the user sends a
-// pick. Use it to add the same question to a module of your own with
-// neui.Module.Ask.
+// button for input. When the user sends with Enter or the button, it submits
+// an AskOutput to answer, but only if at least one option is picked or own
+// text is selected, and the own text is within 256 KiB. Use it to add the
+// same question to a module of your own with neui.Module.Ask.
 func AskOptions(input AskInput, answer common.Answer[AskOutput]) api.ChatAsk {
 	state := doors.NewSourceEqual(askState{
 		picked: make([]bool, len(input.Options)),

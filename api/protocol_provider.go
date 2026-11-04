@@ -41,8 +41,9 @@ type Model struct {
 	// Name is the id as it goes on the wire.
 	Name string `json:"name"`
 	// Context is how many tokens the model reads at once. Zero means unknown,
-	// not a window of zero; a caller reading zero skips proactive compaction and
-	// lets the API's own over-length error stop it.
+	// not a window of zero; a caller reading zero skips token-based compaction,
+	// leaving the ThreadMemoryLimit byte budget and the API's own over-length
+	// error to start it.
 	Context int `json:"context"`
 	// ImagePixels is the pixel area, width times height, worth sending in one
 	// image: past it the API either downscales or refuses, so the extra pixels

@@ -68,7 +68,8 @@ func (a Tool[I, O]) tool() (AnyTool, error) {
 }
 
 // Main adds the tool to the space it is rendered in, for as long as that
-// render lives. It renders nothing.
+// render lives, replacing a tool of the same name there. It renders nothing;
+// the render fails when I or O has no JSON schema.
 func (a Tool[I, O]) Main() gox.Elem {
 	return gox.Elem(func(cur gox.Cursor) error {
 		ctx := cur.Context()
@@ -161,47 +162,107 @@ type Input struct {
 	Rights Rights
 }
 
-// Proxy renders el and registers it. It fails on an unsupported tag and on
-// an element some Input already wraps.
+// Proxy renders el and registers its element. When el does not start with a
+// supported element, or the element is already wrapped by another Input, it
+// logs the error and renders el unregistered.
 func (u Input) Proxy(cur gox.Cursor, el gox.Elem) error {
-	var script gox.Elem
-	space := instance.GetSpace(cur.Context())
-	mod := gox.ModifyFunc(func(ctx context.Context, tag string, attrs gox.Attrs) error {
-		s, err := u.target(ctx, space, tag, attrs)
-		if err != nil {
-			return err
-		}
-		script = s
-		return nil
-	})
-	if err := doors.ProxyMod(mod).Proxy(cur, el); err != nil {
-		return err
+	printer := &inputPrinter{
+		input: u,
+		cur:   cur,
 	}
-	return cur.Comp(script)
+	return gox.NewCursor(cur.Context(), printer).Comp(el)
 }
 
-func (u Input) target(ctx context.Context, space page.Space, tag string, attrs gox.Attrs) (gox.Elem, error) {
+type inputPrinterState int
+
+const (
+	inputPrinterSeek inputPrinterState = iota
+	inputPrinterInject
+	inputPrinterDone
+)
+
+type inputPrinter struct {
+	state  inputPrinterState
+	input  Input
+	cur    gox.Cursor
+	script gox.Elem
+	id     uint64
+}
+
+func (p *inputPrinter) Send(j gox.Job) error {
+	switch p.state {
+	case inputPrinterDone:
+		return p.cur.Printer().Send(j)
+	case inputPrinterSeek:
+		open, ok := j.(*gox.JobOpen)
+		if !ok {
+			doors.Logger(j.Context()).Error("neui: Input must proxy an element directly", "desc", p.input.Desc)
+			p.state = inputPrinterDone
+			return p.cur.Printer().Send(j)
+		}
+		if open.Kind == gox.KindContainer {
+			return p.cur.Printer().Send(open)
+		}
+		if err := open.Attrs.ApplyMods(open.Ctx, open.Tag); err != nil {
+			return err
+		}
+		script, err := p.target(open)
+		if err != nil {
+			doors.Logger(open.Ctx).Error("neui: Input not registered", "desc", p.input.Desc, "err", err)
+			p.state = inputPrinterDone
+			return p.cur.Printer().Send(open)
+		}
+		if open.Kind == gox.KindVoid {
+			p.state = inputPrinterDone
+			if err := p.cur.Printer().Send(open); err != nil {
+				return err
+			}
+			return p.cur.Comp(script)
+		}
+		p.script = script
+		p.id = open.ID
+		p.state = inputPrinterInject
+		return p.cur.Printer().Send(open)
+	case inputPrinterInject:
+		close, ok := j.(*gox.JobClose)
+		if !ok || close.ID != p.id {
+			return p.cur.Printer().Send(j)
+		}
+		p.state = inputPrinterDone
+		if err := p.cur.Printer().Send(close); err != nil {
+			return err
+		}
+		return p.cur.Comp(p.script)
+	default:
+		panic("neui: unknown input printer state")
+	}
+}
+
+func (p *inputPrinter) target(open *gox.JobOpen) (gox.Elem, error) {
+	ctx, tag, attrs := open.Ctx, open.Tag, open.Attrs
+	rights, desc := p.input.Rights.rights(), p.input.Desc
+	space := instance.GetSpace(p.cur.Context())
 	switch {
 	case strings.EqualFold(tag, "button"):
-		return space.Button(ctx, u.Rights.rights(), u.Desc, attrs)
+		return space.Button(ctx, rights, desc, attrs)
 	case strings.EqualFold(tag, "a"):
-		return space.Link(ctx, u.Rights.rights(), u.Desc, attrs)
+		return space.Link(ctx, rights, desc, attrs)
 	case strings.EqualFold(tag, "input"):
 		switch t, _ := attrs.Get("type").Value().(string); {
 		case strings.EqualFold(t, "submit"), strings.EqualFold(t, "button"),
 			strings.EqualFold(t, "reset"), strings.EqualFold(t, "image"):
-			return space.Button(ctx, u.Rights.rights(), u.Desc, attrs)
+			return space.Button(ctx, rights, desc, attrs)
 		case strings.EqualFold(t, "radio"):
-			return space.Radio(ctx, u.Rights.rights(), u.Desc, attrs)
+			return space.Radio(ctx, rights, desc, attrs)
 		default:
-			return space.Input(ctx, u.Rights.rights(), u.Desc, attrs)
+			return space.Input(ctx, rights, desc, attrs)
 		}
 	case strings.EqualFold(tag, "textarea"):
-		return space.Textarea(ctx, u.Rights.rights(), u.Desc, attrs)
+		return space.Textarea(ctx, rights, desc, attrs)
 	case strings.EqualFold(tag, "select"):
-		return space.Select(ctx, u.Rights.rights(), u.Desc, attrs)
+		return space.Select(ctx, rights, desc, attrs)
 	default:
-		return nil, fmt.Errorf("unsupported tag %q for neui.Use", tag)
+		return nil, fmt.Errorf("unsupported tag %q for neui.Input", tag)
 	}
 }
 
@@ -307,8 +368,10 @@ type Library struct {
 }
 
 // Add adds the tool t defines as an app function, which scripts call as
-// app.<name>. The name must be a JavaScript identifier not used by another
-// app function, and an Ask fails with api.ErrAskInIsland.
+// app.<name>, with the name sanitized as NewModule does. It fails when that
+// name is empty, starts with a digit or is used by another app function,
+// when the input or output type has no JSON schema, and with
+// api.ErrAskInIsland for an Ask.
 func (l Library) Add(t Tooler) error {
 	if _, ok := t.(interface{ ask() }); ok {
 		return api.ErrAskInIsland

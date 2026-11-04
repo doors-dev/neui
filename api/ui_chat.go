@@ -8,13 +8,13 @@ import (
 	"github.com/doors-dev/gox"
 )
 
-// InstanceStatus is where the instance stands: InstanceDisabled with no
-// backend enabled, InstanceLoading once there is one but the tab's thread id
-// has yet to sync, InstanceEnabled with a thread to render.
+// InstanceStatus is where the instance stands: InstanceDisabled while neui is
+// not enabled for the session, InstanceLoading once it is but the tab's
+// thread id has yet to sync, InstanceEnabled with a thread to render.
 type InstanceStatus int
 
 const (
-	InstanceDisabled InstanceStatus = iota // no backend
+	InstanceDisabled InstanceStatus = iota // session not enabled
 	InstanceLoading                        // tab state not in yet
 	InstanceEnabled                        // linked to a thread
 )
@@ -26,20 +26,22 @@ type InstanceThread struct {
 	ID ThreadID
 	// Name is the chat title set by the agent; empty until named.
 	Name string
-	// New is true until the thread's first message creates it in storage, so
-	// it is not in Instance.ThreadList yet.
+	// New is true until the thread's first round or first app event
+	// (Instance.Emit) creates it in storage; until then Instance.ThreadList
+	// does not list it.
 	New bool
-	// Updated is when this tab last started a round on the thread, which is
-	// also when Instance.ThreadList last reordered it to the front. It is the
-	// zero time until the tab starts one, so a thread opened and left alone
-	// carries nothing newer than what ThreadList already reports.
+	// Updated is when this instance last saw a round start on the thread, by
+	// its own clock; the zero time until one starts after the thread was
+	// opened. It is not the stored Thread.Updated that Instance.ThreadList
+	// orders by.
 	Updated time.Time
 }
 
 // InstanceState is the instance's view of itself. Thread is the zero value
 // unless Status is InstanceEnabled.
 type InstanceState struct {
-	// Status is whether the instance has a backend and a thread yet.
+	// Status is whether the session is enabled and the instance has a thread
+	// yet.
 	Status InstanceStatus
 	// Thread is the thread the instance has open.
 	Thread InstanceThread
@@ -69,16 +71,19 @@ type Chat interface {
 // ChatFactory builds the views Instance.Render shows. kchat.Kchat is the
 // ready-made implementation.
 type ChatFactory interface {
-	// Chat builds the view for a thread the instance has just linked to: on
-	// first render, after ThreadOpen, ThreadNew or ThreadDelete, after
-	// ChatThread.Reload and after a critical error. state is the full snapshot
-	// to render from; every later change arrives through Chat.Update. thread
-	// is valid until the link drops, after which its methods return
-	// ErrUnlinked.
+	// Chat builds the view for the thread the instance has linked. It is
+	// called each time the element from Instance.Render renders while a
+	// thread is linked: on first render, whenever the instance switches
+	// threads (ThreadOpen, ThreadNew, a ThreadDelete of its own thread,
+	// Enable) and on ChatThread.Reload. A critical error alone builds no new
+	// Chat. state is the full snapshot to render from; every later change
+	// arrives through Chat.Update. thread is valid until the link drops, after
+	// which its methods return ErrUnlinked.
 	Chat(thread ChatThread, state ChatState) Chat
 	// Placeholder stands in whenever there is no thread to render. A true
-	// enabled means a backend is up and a thread is on its way, so the
-	// placeholder carries the loading state too; false means no backend.
+	// enabled means the session is enabled and a thread is on its way, so
+	// the placeholder carries the loading state too; false means it is not
+	// enabled.
 	Placeholder(enabled doors.Beam[bool]) gox.Elem
 }
 
@@ -97,29 +102,35 @@ type Instance interface {
 	// thread yet has no key, so it is absent; two tabs on one thread collapse
 	// into a single entry, and which of them it carries is unspecified.
 	Chats() doors.Beam[map[ThreadID]InstanceChat]
-	// Location is the session's time zone, a fixed UTC offset read once from
-	// the client clock while the first instance syncs. It is the server's own
-	// zone until that reading lands, which is before Status leaves
+	// Location is the session's time zone, a fixed UTC offset read from the
+	// client clock while an instance syncs and kept for the session once a
+	// reading succeeds; each instance that syncs before then tries again.
+	// Until then it is time.Local, the server's zone. When an instance's own
+	// reading succeeds, it is stored before that instance's Status leaves
 	// InstanceLoading.
 	Location() *time.Location
 	// ThreadOpen switches the instance to the thread, replacing whatever it
-	// had open. meta reaches the chat that initialises for this open as
-	// ChatState.Meta and is consumed there; pass nil when there is nothing
-	// to hand over.
+	// had open. A thread that is not in storage, a New one included, returns
+	// the storage's ErrNotFound. meta reaches the chat that initialises for
+	// this open as ChatState.Meta and is consumed there; pass nil when there
+	// is nothing to hand over.
 	ThreadOpen(ctx context.Context, id ThreadID, meta any) error
 	// ThreadNew switches the instance to a fresh, empty thread, replacing
-	// whatever it had open. The thread is not stored until its first message,
-	// so until then InstanceThread.New is true and ThreadList does not list
-	// it.
+	// whatever it had open. The thread is not stored until its first round or
+	// app event, so until then InstanceThread.New is true and ThreadList does
+	// not list it.
 	ThreadNew(ctx context.Context) error
 	// ThreadRename sets the thread's name, replacing whatever it was named
-	// before; an empty name leaves it unnamed again. The instance stays on the
-	// thread it has open, whichever thread was renamed, and a chat that has
-	// the renamed thread open sees the new name at once.
+	// before; an empty name leaves it unnamed again. A thread that is not in
+	// storage, a New one included, returns ErrNotFound. The instance stays on
+	// the thread it has open, whichever thread was renamed, and a chat that
+	// has the renamed thread open sees the new name at once.
 	ThreadRename(ctx context.Context, id ThreadID, name string) error
-	// ThreadClone copies the thread with all of its history into a new one and
-	// returns the new chat's id; the copy is listed and ready to ThreadOpen
-	// right away, and the instance stays on what it had open.
+	// ThreadClone copies the thread, with its name and all of its stored
+	// history, into a new one and returns the new thread's id. A source that
+	// is not in storage returns the storage's ErrNotFound. The copy is listed
+	// and ready to ThreadOpen right away, and the instance stays on what it
+	// had open.
 	ThreadClone(ctx context.Context, id ThreadID) (ThreadID, error)
 	// ThreadDelete removes the thread and everything in it; a thread that is
 	// not there is not an error. An instance holding the deleted thread loses
@@ -133,29 +144,31 @@ type Instance interface {
 	ThreadGet(ctx context.Context, id ThreadID) (Thread, error)
 	// ThreadList returns threads updated in [from, to), at most limit of them.
 	// A zero from or to drops that bound; limit <= 0 means no cap. A non-empty
-	// name keeps only threads whose name contains it, case-insensitively, and
-	// limit counts what is left. They come most recently updated first, ties
-	// broken by id descending, unless asc reverses both — so limit always cuts
-	// the far end of the range from the end the caller is reading toward.
+	// name keeps only threads whose name contains it, case-insensitively.
+	// They come most recently updated first, ties broken by id descending, or
+	// the reverse when asc is set, and limit keeps the first limit in that
+	// order.
 	ThreadList(ctx context.Context, from, to time.Time, asc bool, limit int, name string) ([]Thread, error)
 	// RoundSearch returns rounds whose input text or response text contains
-	// query, case-insensitively, at most limit of them. Reasoning, tool calls,
-	// tool results, attachments and errors are not searched. A zero thread
-	// searches every chat; a named thread restricts the search to it, or with
-	// exclude set, to every chat but it. An empty query matches nothing. Hits
-	// are ordered by (created, thread, round), ascending when asc and
-	// descending when not; a nil from starts at the end the direction runs
-	// from and inclusive says nothing there, otherwise the walk starts at
-	// from, taking the round it names when inclusive and starting past it when
-	// not. limit caps the result and 0 means no cap.
+	// query, case-insensitively, at most limit of them; limit <= 0 means no
+	// cap. Reasoning, tool calls, tool results, attachments and errors are not
+	// searched, and an empty query matches nothing. A zero thread searches
+	// every chat; a non-zero thread restricts the search to it, or, with
+	// exclude set, to every chat but it. Hits are ordered by (created, thread,
+	// round), ascending when asc and descending otherwise. A nil from starts
+	// at the first hit in that order and inclusive is ignored; otherwise the
+	// result starts at the round from names when inclusive, or just past it
+	// when not.
 	RoundSearch(ctx context.Context, thread ThreadID, exclude bool, query string, from *Cursor, inclusive bool, asc bool, limit int) ([]Hit, error)
 	// Emit sends an app event to the thread this instance has open. The agent
 	// reads it as an <app_event name="…"> element carrying attrs, with data as
 	// its body: a string is escaped text, json.RawMessage is passed as is,
-	// anything else is encoded as JSON. An idle agent starts a turn at once; a
-	// busy one reads it in its next turn. Returns ErrDisabled when neui is off
-	// for the session, and ErrUnlinked when the instance has no thread open or
-	// switched threads before the event landed.
+	// anything else is encoded as JSON. The event is stored in the thread,
+	// creating a New thread in storage. An idle agent starts a turn at once; a
+	// busy one reads it in its next turn. Returns ErrUnlinked when the
+	// instance has no thread open or switched threads before the event
+	// landed; a storage failure is returned and also ends the link with
+	// ChatEventCriticalError.
 	Emit(ctx context.Context, name string, attrs map[string]string, data any) error
 	// Render returns the element that shows this instance's chat. It renders
 	// factory.Placeholder while there is no thread to show and factory.Chat
@@ -173,7 +186,8 @@ type Instance interface {
 // Call the commands with the ctx of the Doors event that triggered them, such
 // as a click handler's: each blocks until the thread accepts or refuses it,
 // and the ChatEvent it causes reaches Chat.Update before that event settles. A
-// refused command changes nothing.
+// refused command changes nothing, except that a Send refused for empty input
+// still replaces the staged draft with it.
 type ChatThread interface {
 	// Input stages input as the thread's draft without sending it, so a
 	// reload or another tab on the thread picks it up as ChatState.Input.
@@ -200,9 +214,11 @@ type ChatThread interface {
 	// ChatEventRoundStart names the replaced one in Truncate. ErrWrongState
 	// otherwise, including after an ok or refused round.
 	Retry(ctx context.Context) error
-	// Compact starts a compaction of the history in the background;
-	// ErrWrongState when one is already running, the context is below
-	// Config().CompactionAllowed or there is nothing to compact yet.
+	// Compact starts a compaction of the history in the background. It
+	// returns ErrWrongState when one is already running, when the context's
+	// usage is below Config().CompactionAllowed times Model().Context (not
+	// checked when Model().Context is 0), or when there is nothing to compact
+	// yet; any other failure to start it is returned as is.
 	Compact(ctx context.Context) error
 	// Rewind deletes round and every round after it, then starts a new round
 	// with input in its place; it works in any state and stops whatever is
@@ -223,10 +239,11 @@ type ChatThread interface {
 	// first; NoRoundID returns the first ones. Results and record Data come
 	// back empty.
 	RoundAfter(ctx context.Context, start RoundID, limit int) ([]Round, error)
-	// Model is the model the linked backend streams with; the zero value when
-	// unlinked.
+	// Model is the provider's model of the Enable configuration this handle
+	// was linked with; it keeps returning it after the link drops.
 	Model() Model
-	// Config is the linked backend's tunables; the zero value when unlinked.
+	// Config is the thread configuration of the Enable configuration this
+	// handle was linked with; it keeps returning it after the link drops.
 	Config() ThreadConfig
 	// FS is the thread's file system, the workspace plus the uploads dirs, as
 	// the agent's tools see it; use it to list or attach files from the chat.

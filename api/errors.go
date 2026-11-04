@@ -6,18 +6,19 @@ import "errors"
 // from and the write it asked for, so nothing was written.
 var ErrDrift = errors.New("thread advanced")
 
-// ErrNotFound reports that no thread, message or record answers to the id the
-// caller named.
+// ErrNotFound reports that the thread, record, file or path the caller named
+// does not exist.
 var ErrNotFound = errors.New("not found")
 
-// ErrExists reports a create on an id already taken, with nothing written; ids
-// come from the caller, so a collision is a mistake upstream.
+// ErrExists reports a create on an id or name already taken; nothing is
+// written.
 var ErrExists = errors.New("id already taken")
 
-// ErrUnlinked reports a call from a chat view that no longer holds the thread:
-// the thread was reopened elsewhere, closed, or the session was re-enabled with
-// another backend. It is also the context.Cause of a running tool or task
-// cancelled for that reason. Reopen the thread to act on it again.
+// ErrUnlinked reports a call through an instance or chat that holds no thread,
+// or no longer holds the one it acted on: the thread was reopened elsewhere or
+// closed, including by Disable or a forced Enable. It is also the
+// context.Cause of a running tool or task cancelled for that reason. Reopen
+// the thread to act on it again.
 var ErrUnlinked = errors.New("instance was detached from the thread")
 
 // ErrDisabled is what Instance methods return while neui is not enabled for
@@ -29,13 +30,15 @@ var ErrDisabled = errors.New("neui for this session is disabled")
 // stopping when nothing runs. Nothing changed; retry once the state allows it.
 var ErrWrongState = errors.New("thread is in the wrong state to perform this action")
 
-// ErrNoProvider is what Enable returns when neither the app's WithProvider nor
-// the session's OptionProvider sets a provider; the session stays as it was.
+// ErrNoProvider is what Enable returns when the session would have no
+// provider: the app has no WithProvider and Enable gets no OptionProvider, or
+// the last OptionProvider is given nil. The session stays as it was.
 var ErrNoProvider = errors.New("no provider: set WithProvider on the app or pass OptionProvider to Enable")
 
 // ErrCanceledByUser is the cause a tool or task context carries when the user
 // stopped the round, cancelled the task from the UI, or rewound past it; read
-// it with context.Cause. Any other cancellation is the runtime's own.
+// it with context.Cause. An Ask the user dismisses returns it as its error.
+// Any other cancellation is the runtime's own.
 var ErrCanceledByUser = errors.New("canceled by user")
 
 // ErrMeasuredTooLarge marks the CodeTooLarge an adapter reports when the server
@@ -46,12 +49,12 @@ var ErrCanceledByUser = errors.New("canceled by user")
 // the error names both the size measured and the limit it was measured against.
 var ErrMeasuredTooLarge = errors.New("provider refused a request measured as fitting")
 
-// ErrInputTooLarge answers an input over ThreadConfig.InputBytes, counting its text
-// and the file links its attachments turn into. It is refused where it is
-// submitted and leaves no trace: no draft is kept, no round is created, nothing
-// is cut. Nothing downstream can rescue such a message — compaction summarizes
-// the history and keeps the latest input whole — so the error names the two
-// remedies a person has, and reaches them as written.
+// ErrInputTooLarge reports an input over ThreadConfig.InputBytes, counting its
+// text and the file links its attachments turn into. It is refused where it is
+// submitted, drafted or rewound to, and nothing of it is drafted, stored or
+// sent. Compaction keeps the latest input whole, so it cannot shrink such a
+// message; the error text tells the user to split it or attach the content as
+// a file.
 var ErrInputTooLarge = errors.New("message is too large to send, split it into smaller messages or attach the content as a file")
 
 // ErrToolNotFound reports a tool call naming no registered tool.
@@ -82,7 +85,8 @@ var ErrInvalidName = errors.New("invalid file name")
 // modules; it is not part of the workspace.
 var ErrReserved = errors.New("that name is reserved for module scratch space and is not part of the workspace; use a different name")
 
-// ErrOutOfRange reports a read offset at or past the end of the file.
+// ErrOutOfRange reports a read offset at or past the end of the file; reading
+// a whole empty file from offset 0 is not an error.
 var ErrOutOfRange = errors.New("read offset past end of file")
 
 // ErrAskInIsland reports an Ask added to an island Library: an app function

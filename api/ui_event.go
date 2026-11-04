@@ -123,8 +123,9 @@ type ChatEventCompacting struct {
 
 func (ChatEventCompacting) chatEvent() {}
 
-// ChatEventThreadCreated reports that the thread's first round created it in
-// storage; it fires once per thread, before that round's start event.
+// ChatEventThreadCreated reports that the thread's first round or first app
+// event created it in storage. It fires once per thread, before the start
+// event of the round that follows.
 type ChatEventThreadCreated struct{}
 
 func (ChatEventThreadCreated) chatEvent() {}
@@ -146,12 +147,13 @@ type ChatEventTasks struct {
 func (ChatEventTasks) chatEvent() {}
 
 // ChatEventCriticalError reports the thread failing beyond recovery. The link
-// is dropped with it, so every ChatThread call returns ErrUnlinked afterwards,
-// and the instance reopens the thread in a new Chat, or a fresh thread when
-// that fails.
+// is dropped with it, so this Chat receives no further events and every
+// ChatThread call returns ErrUnlinked afterwards. The instance relinks to the
+// thread, or to a fresh thread when that fails; a new Chat is built the next
+// time the element renders, for example after ChatThread.Reload.
 type ChatEventCriticalError struct {
-	// Err is the cause, typically a storage failure, or ErrNotFound when the
-	// thread was deleted from another tab.
+	// Err is the cause: a storage failure, or ErrNotFound when the thread was
+	// deleted through another instance's ThreadDelete.
 	Err error
 }
 

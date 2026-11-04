@@ -1,7 +1,8 @@
 // Package claude is the api.Provider for Anthropic's Messages API.
 //
-// Build one with New and hand it to neui.WithProvider for the whole app or
-// neui.OptionProvider for one session:
+// Build one with New and pass it to neui.WithProvider as the app-wide
+// provider, or to neui.OptionProvider to set one session's provider, which
+// takes precedence over WithProvider if any:
 //
 //	p := claude.New(claude.Conf{Model: claude.Opus55},
 //		claude.WithMaxTokens(32000),
@@ -10,8 +11,9 @@
 // The key comes from ANTHROPIC_API_KEY unless WithAPIKey sets it. A provider
 // serves one model with one set of options; build two for two settings.
 // Failures reach the thread as api.EventErr with an api.ErrCode, and an error
-// response from the API carries an *APIError, read with errors.As. The adapter talks to the wire directly,
-// without an SDK, so thinking blocks replay byte for byte.
+// response from the API carries an *APIError, read with errors.As. The
+// adapter talks to the wire directly, without an SDK, so thinking blocks
+// replay byte for byte.
 package claude
 
 import (
@@ -125,11 +127,9 @@ type Provider struct {
 // logged and skipped.
 type Option func(*Provider) error
 
-// Conf is what a provider cannot be built without. The model decides which
-// thinking and sampling settings are accepted and there is nothing sane to guess,
-// so it is an argument rather than an option and the compiler is what keeps a
-// half configured provider from existing. It is a struct so that a second
-// mandatory field later does not rewrite every call site.
+// Conf holds the provider's model. Model has no default: a provider whose
+// Model.Name is empty fails every turn with api.CodeInvalid
+// before anything is sent.
 type Conf struct {
 	Model api.Model // the one model this provider streams with
 }
@@ -190,9 +190,9 @@ func WithBaseURL(base string) Option {
 }
 
 // WithHTTPClient supplies the client, which is where connection reuse, proxies
-// and any overall request deadline come from. Do not set Timeout on a client
-// used for streaming: it bounds the whole response, so it cuts long turns
-// mid sentence. Use WithTransport instead.
+// and any overall request deadline come from; it must not be nil. Do not set
+// Timeout on a client used for streaming: it bounds the whole response, so it
+// cuts long turns mid sentence. Use WithTransport instead.
 func WithHTTPClient(c *http.Client) Option {
 	return func(p *Provider) error {
 		p.client = c
@@ -219,8 +219,9 @@ func WithBeta(flags ...string) Option {
 // WithMaxTokens sets max_tokens, the response cap sent on every request; the
 // default is 16384. It caps thinking too, which is on by default on the newest
 // models, so raise it for long answers. A turn that hits it ends with
-// api.CodeCapped. A value below 1 is logged and ignored at New, keeping the default; a value over the model's
-// ceiling is not checked here and fails each turn with api.CodeInvalid.
+// api.CodeCapped. A value below 1 is logged at New and the previous setting
+// stays; a value over the model's ceiling is not checked here and fails each
+// turn with api.CodeInvalid.
 func WithMaxTokens(n int) Option {
 	return func(p *Provider) error {
 		if n < 1 {
@@ -231,10 +232,12 @@ func WithMaxTokens(n int) Option {
 	}
 }
 
-// WithTemperature sets temperature. Current frontier models refuse any
-// sampling setting, and older ones refuse it while thinking is on, so with
-// such a model every turn fails with api.CodeInvalid before anything is sent.
-// The same holds for WithTopP and WithTopK.
+// WithTemperature sets temperature. A turn that carries temperature, top_p or
+// top_k fails with api.CodeInvalid before anything is sent when the model id
+// matches one known to refuse sampling (Fable 5, Mythos 5 and preview, Opus 5,
+// Opus 4.8, Opus 4.7, Sonnet 5) or WithThinking enables thinking; for any
+// other model the request is sent and the API decides. The same holds for
+// WithTopP and WithTopK.
 func WithTemperature(t float64) Option {
 	return func(p *Provider) error {
 		p.temperature = &t
@@ -258,9 +261,9 @@ func WithTopK(v int) Option {
 	}
 }
 
-// WithStopSequences sets stop_sequences. A turn that ends on one reports
-// stop_sequence, which is an ordinary completion: the turn is kept, and the
-// caller learns the sequence was hit from the text rather than from the code.
+// WithStopSequences adds to stop_sequences. A turn that ends on one ends as an
+// ordinary completion, api.CodeTurn, and nothing reports which sequence was
+// hit.
 func WithStopSequences(seqs ...string) Option {
 	return func(p *Provider) error {
 		p.stopSeqs = append(p.stopSeqs, seqs...)
@@ -326,8 +329,9 @@ const (
 	CacheTTL1H CacheTTL = "1h" // for threads idle longer than five minutes between turns
 )
 
-// WithCacheTTL sets the cache_control ttl, for example CacheTTL1H. Empty leaves
-// the five minute default.
+// WithCacheTTL sets the ttl of the cache_control markers, for example
+// CacheTTL1H. Empty leaves the five minute default. It has no effect without
+// WithCacheBreakpoints.
 func WithCacheTTL(ttl CacheTTL) Option {
 	return func(p *Provider) error {
 		p.cacheTTL = string(ttl)
@@ -337,9 +341,10 @@ func WithCacheTTL(ttl CacheTTL) Option {
 
 // WithTransport sets the stream limits documented on lib.Options: how long the
 // wire may stay silent and how large one event may grow. A zero field keeps
-// lib's default. The idle deadline is always on and resets on anything
-// received, ping frames included, so it catches a dead connection rather than
-// a slow turn; a turn that crosses it ends with api.CodeNetwork.
+// lib's default. The idle deadline is always on, covers the wait for response
+// headers, and resets on every complete event, ping events included, and on
+// every comment or blank line between events, so it catches a dead connection
+// rather than a slow turn; a turn that crosses it ends with api.CodeNetwork.
 func WithTransport(opt lib.Options) Option {
 	return func(p *Provider) error {
 		p.transport = opt

@@ -16,9 +16,9 @@ type MultiContainer interface {
 	Contents() []UserContent
 }
 
-// Document is a document a tool returns: raw bytes and a DocumentMime it has
-// validated, which Content turns into a ContentDocument block carrying the
-// mime as a plain string.
+// Document is a document a tool returns: raw bytes and their DocumentMime.
+// Content turns it into a ContentDocument with the mime as a plain string and
+// no Name. Nothing checks Mime; check it with IsValid before returning.
 type Document struct {
 	// Data is the raw file bytes.
 	Data []byte `json:"data"`
@@ -41,9 +41,9 @@ func (d Document) Content() UserContent {
 
 var _ Container = Document{}
 
-// Image is an image a tool returns: raw bytes and an ImageMime it has
-// validated, which Content turns into a ContentImage block carrying the mime
-// as a plain string.
+// Image is an image a tool returns: raw bytes and their ImageMime. Content
+// turns it into a ContentImage with the mime as a plain string. Nothing checks
+// Mime; check it with IsValid before returning.
 type Image struct {
 	// Data is the raw image bytes.
 	Data []byte `json:"data"`
@@ -66,9 +66,8 @@ func (i Image) ContentType() string {
 
 var _ Container = Image{}
 
-// ImageMime is an image type every current provider accepts; the set is the
-// full intersection, so an image that gets past this vocabulary is never the
-// thing an adapter has to refuse.
+// ImageMime is an image type the Claude and GPT adapters both accept. The
+// DeepSeek adapter takes no images and leaves a note in place of each.
 type ImageMime string
 
 // The accepted image types.
@@ -89,14 +88,15 @@ func (m ImageMime) IsValid() bool {
 	}
 }
 
-// DocumentMime is a document type at least one provider accepts. Only PDF and
-// plain text are portable: DeepSeek takes no documents at all, and Anthropic
-// takes nothing else as-is — everything below the first two is OpenAI-only,
-// where other adapters substitute a note for the block.
+// DocumentMime is a document type at least one provider accepts. The GPT
+// adapter takes them all. The Claude adapter takes DocumentPDF and
+// DocumentText in a message, fails the request on any other type there, and
+// leaves a note in place of every document in a tool result. The DeepSeek
+// adapter takes no documents and leaves a note in place of each.
 type DocumentMime string
 
-// The accepted document types. Only DocumentPDF and DocumentText are
-// portable across providers.
+// The accepted document types. Only DocumentPDF and DocumentText reach both
+// the Claude and GPT adapters.
 const (
 	DocumentPDF      DocumentMime = "application/pdf"
 	DocumentText     DocumentMime = "text/plain"

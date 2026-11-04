@@ -75,9 +75,9 @@ type Kchat struct {
 	Disable []Feature
 }
 
-// Main renders the widget for the current page instance. It runs on the
-// session neui.Enable set up: before Enable succeeds the chat shows as
-// disabled, and it comes alive once Enable succeeds.
+// Main renders the widget for the doors instance (browser tab) being
+// rendered. It shows a disabled chat until neui.Enable succeeds for the
+// session, and again after neui.Disable.
 func (k Kchat) Main() gox.Elem {
 	params := params.Params{
 		MaxAttachmentSize: k.MaxAttachmentSize,

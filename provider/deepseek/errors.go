@@ -19,10 +19,11 @@ var errNoKey = errors.New("deepseek: no API key, set DEEPSEEK_API_KEY or pass Wi
 var errTooLarge = errors.New("deepseek: request too large")
 
 // RequestError is a turn this adapter refused to send because DeepSeek would
-// reject it or it cannot be encoded faithfully: more than 128 tools, a tool
-// name over 64 characters or with characters other than letters, digits, _
-// and -, an unknown message role, or a replayed tool call with no name or
-// with lost arguments. It arrives as the Err of an api.EventErr with
+// reject it or it cannot be encoded faithfully: no model in Conf, more than
+// 128 tools, a tool name that is empty, over 64 characters or has characters
+// other than letters, digits, _ and -, an unknown message role, or a replayed
+// tool call with no name or whose arguments were discarded with no failed
+// result answering it. It arrives as the Err of an api.EventErr with
 // api.CodeInvalid, before anything is sent.
 type RequestError struct {
 	// Reason says what was refused and names the tool or message.
@@ -55,8 +56,9 @@ func (e *FinishError) Error() string {
 
 // APIError is a non 200 response. It arrives as the Err of an api.EventErr;
 // read it with errors.As. Branch on the event's Code, which follows the
-// status; DeepSeek does not reliably answer failures with JSON, so the other
-// fields are best effort and meant for logs.
+// status except that a 400 reporting the context limit is
+// api.CodeContextLength; DeepSeek does not reliably answer failures with
+// JSON, so the other fields are best effort and meant for logs.
 type APIError struct {
 	// Status is the HTTP status.
 	Status int
@@ -264,7 +266,8 @@ type StreamError struct {
 	Raw string
 }
 
-// Error returns "deepseek: stream error (<code>): <message>".
+// Error returns "deepseek: stream error (<code>): <message>", without the
+// parenthesised code when Code is empty.
 func (e *StreamError) Error() string {
 	if e.Code != "" {
 		return fmt.Sprintf("deepseek: stream error (%s): %s", e.Code, e.Message)

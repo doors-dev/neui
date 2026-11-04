@@ -36,10 +36,10 @@ type File struct {
 	Origin    Origin    `json:"origin"`     // which side stored it
 	Size      int64     `json:"size"`       // bytes, measured by storage
 	CreatedAt time.Time `json:"created_at"` // when FilePut committed it
-	// Draft marks a blob stored ahead of the message that will carry it.
-	// A draft is not part of the conversation: it is listed to whoever
-	// manages drafts, never to the model, and stays a draft until
-	// FileCommit clears it or the caller deletes it.
+	// Draft marks a blob stored ahead of the message that will carry it. A
+	// draft is not part of the conversation: FileStorage lists it like any
+	// file, but FS leaves it out of Stat and ReadDir. It stays a draft until
+	// FileCommit clears it or it is deleted.
 	Draft bool `json:"draft"`
 }
 
@@ -52,8 +52,9 @@ type FileStorage interface {
 	// FilePut streams r into a new blob and returns the record with Size
 	// and CreatedAt filled. Name is the key within the thread and origin:
 	// one path element, not empty, not "." or ".." and holding no
-	// separator — anything else is refused, so every stored name is
-	// addressable. It commits whole or not at all, and a name already
+	// separator — anything else is ErrInvalidName, so every stored name is
+	// addressable. An empty threadID or an origin that is not Valid is
+	// refused too. It commits whole or not at all, and a name already
 	// taken is ErrExists with nothing written: blobs are immutable, so the
 	// caller resolves a collision by choosing another name (on S3, a
 	// conditional If-None-Match put). draft stores the blob as a draft, see

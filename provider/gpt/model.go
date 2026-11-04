@@ -49,7 +49,7 @@ func isReasoningModel(model string) bool {
 		return false
 	}
 	switch {
-	case inFamily(m, "gpt-5"),
+	case inFamily(m, "gpt-5"), inFamily(m, "gpt-6"),
 		inFamily(m, "o1"), inFamily(m, "o3"), inFamily(m, "o4"),
 		inFamily(m, "codex"), strings.Contains(m, "-codex"):
 		return true

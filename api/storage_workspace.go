@@ -2,11 +2,12 @@ package api
 
 import "os"
 
-// Workspace is a thread's scratch directory. Every path a model or a tool
-// produces goes through Root, which cannot be escaped by .. or symlinks; Dir
-// exists to hand a cwd to an exec'd process.
+// Workspace is a thread's scratch directory. File access goes through
+// Root, which cannot be escaped by .. or symlinks; Dir is the absolute path,
+// for what needs a real path, such as a cwd or a library that opens files
+// itself.
 type Workspace struct {
-	Dir  string   // absolute path, for a cwd and nothing else
+	Dir  string   // absolute path; use Root for file access
 	Root *os.Root // confined handle every file access goes through
 }
 
@@ -18,8 +19,8 @@ func (w *Workspace) Close() error {
 }
 
 // WorkspaceStorage hands out per-thread scratch directories. A workspace is
-// created on first open and survives Close, so a thread finds its files again;
-// only WorkspaceDelete takes them away.
+// created on first open and survives Close, so a thread finds its files again
+// until the workspace is deleted.
 type WorkspaceStorage interface {
 	// WorkspaceOpen returns the thread's workspace, creating it on first use.
 	WorkspaceOpen(threadID ThreadID) (Workspace, error)

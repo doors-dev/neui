@@ -6,8 +6,9 @@ import (
 	"time"
 )
 
-// UserUploadsDir and AgentUploadsDir are the virtual dirs the FS serves
-// stored files under; everything else in the workspace is transient.
+// UserUploadsDir and AgentUploadsDir are the virtual directories under which FS
+// serves the thread's stored files (OriginUser and OriginAgent); every other
+// path is the workspace on disk.
 const (
 	UserUploadsDir  = "user_uploads"
 	AgentUploadsDir = "agent_uploads"
@@ -16,17 +17,19 @@ const (
 // FSEntry is one name in the merged filesystem view.
 type FSEntry struct {
 	Name    string    // workspace-relative path
-	Size    int64     // bytes; 0 for directories
+	Size    int64     // bytes; for directories whatever the OS reports (0 for the virtual dirs)
 	Dir     bool      // a directory rather than a file
 	ModTime time.Time // last write for local files, upload time for virtual ones
-	MIME    string    // manifest MIME for virtual entries, extension-derived for local files; "" when unknown
+	MIME    string    // File.MIME for virtual entries, extension-derived for local files; "" when unknown or a directory
 	Virtual bool      // served from file storage, not workspace disk: reads download, LocalPath refuses
 }
 
 // FS is the filesystem a thread's tools see: the workspace merged with the
-// thread's stored files, the latter read-only under the virtual
-// user_uploads/ and agent_uploads/ dirs and streamed straight from file
-// storage on read; nothing materializes locally.
+// thread's stored files, which appear under the virtual user_uploads/ and
+// agent_uploads/ dirs and are streamed straight from file storage on read;
+// nothing materializes locally. user_uploads/ is read-only; agent_uploads/
+// takes new files only through Copy and loses them only through Remove or
+// DeleteUpload. Stat and ReadDir leave out drafts; UploadStat reports them.
 type FS interface {
 	// ReadRange streams [off, off+n) of the named file; n < 0 means to EOF.
 	// Reading past EOF truncates silently; a negative off is refused and
@@ -36,9 +39,9 @@ type FS interface {
 	// ReadAll streams the whole file, wherever it lives.
 	ReadAll(ctx context.Context, name string) (io.ReadCloser, error)
 	// LocalPath returns the absolute local path of a workspace file, for
-	// libraries that need io.ReaderAt or a real path.
-	// Virtual entries have no local path and are refused; copy into the
-	// workspace first.
+	// libraries that need io.ReaderAt or a real path. A virtual path is
+	// ErrVirtual (copy it into the workspace first), and a missing one is
+	// ErrNotFound.
 	LocalPath(ctx context.Context, name string) (string, error)
 	// TempDir returns the absolute local path of a scratch directory
 	// reserved for libraries that do their own filesystem work and cannot
@@ -67,22 +70,24 @@ type FS interface {
 	// uploads dir returns ErrReadOnly.
 	Rename(oldname, newname string) error
 	// Remove deletes a local file or directory recursively, or an
-	// agent_uploads/ file from file storage, freeing its name — the agent
-	// owns that namespace. user_uploads/ returns ErrReadOnly. Missing dst
-	// is not an error (ensure-absent), but a TempDir path is refused like
-	// anywhere else: it exists and is not the caller's to delete.
+	// agent_uploads/ file from file storage, freeing its name. user_uploads/
+	// and the agent_uploads/ dir itself return ErrReadOnly, and a TempDir path
+	// ErrReserved. A missing name is not an error.
 	Remove(ctx context.Context, name string) error
-	// Stat reports metadata from the merged view (manifest ∪ local).
-	// Virtual entries carry manifest MIME, local files an
-	// extension-derived one; "" when unknown.
+	// Stat reports a name's entry from the merged view. Virtual entries carry
+	// File.MIME, local files an extension-derived one; "" when unknown. A
+	// missing name or a draft upload is ErrNotFound.
 	Stat(ctx context.Context, name string) (FSEntry, error)
-	// ReadDir lists a directory of the merged view, "." for root.
-	// Uploads entries show final (deduplicated) names.
+	// ReadDir lists a directory of the merged view, "." for root, which also
+	// lists both uploads dirs. Uploads entries show final (deduplicated) names
+	// and leave out drafts.
 	ReadDir(ctx context.Context, name string) ([]FSEntry, error)
-	// UserUpload streams r into file storage under the client-provided
-	// name, reduced to a safe base name and MIME sniffed from the content,
-	// and returns the entry as user_uploads/ lists it, dedup suffix
-	// included.
+	// UserUpload streams r into file storage as a user_uploads/ draft, named by
+	// the base name of the client-provided name ("unnamed" when that is empty,
+	// "/", "." or ".."), with a "(N)" suffix before the extension when the name
+	// is taken, and its MIME sniffed from the first 512 bytes. It returns the
+	// draft's entry; the draft stays hidden from Stat and ReadDir until it is
+	// committed with FileStorage.FileCommit.
 	UserUpload(ctx context.Context, name string, r io.Reader) (FSEntry, error)
 	// UploadStat returns an upload's entry whether or not it is still a
 	// draft; Stat hides drafts, this is for whoever manages them. The name

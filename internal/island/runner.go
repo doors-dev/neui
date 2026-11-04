@@ -63,13 +63,16 @@ type runnerKey struct{}
 var runnerJS string
 
 // Call runs the function with i and decodes its result into O. Calls of one
-// app run one at a time on a JS runtime separate from the island script. Its
-// globals are frozen, so no call leaves state for the next, and a call sees
-// only its argument, the app functions and console. Each call is limited by
-// IslandConfig.FnTime and IslandConfig.FnMemory. ctx must come from the
-// island (a widget's render, Update or event handlers); elsewhere Call
-// returns an error. A failure caused by the function is reported to the agent as a call_error
-// notification.
+// app run one at a time on a JS runtime separate from the island script,
+// limited by IslandConfig.FnMemory, with each call limited by
+// IslandConfig.FnTime and IslandConfig.MaxCallDepth. Its globals are frozen,
+// so no call leaves state for the next, and a call sees only its argument,
+// the app functions, console and the standard built-ins. ctx must come from
+// the island (a widget's render, Update or event handlers); elsewhere Call
+// returns an error. A failure caused by the function, including a result that
+// does not decode into O, is written to the app's log and, the first time for
+// each source during a script turn and for at most 16 sources, reported to
+// the agent as a call_error notification.
 func (c Call[I, O]) Call(ctx context.Context, i I) (O, error) {
 	json, err := json.Marshal(i)
 	if err != nil {
@@ -161,7 +164,6 @@ func (r *runner) newVM() (*quickjs.VM, error) {
 	}
 	vm.SetMemoryLimit(uintptr(config.FnMemory))
 	vm.SetMaxStackSize(uintptr(config.MaxCallDepth))
-	vm.SetEvalTimeout(config.FnTime)
 	if err := js.RegisterSerializers(vm); err != nil {
 		vm.Close()
 		return nil, err
@@ -178,6 +180,7 @@ func (r *runner) newVM() (*quickjs.VM, error) {
 		vm.Close()
 		return nil, err
 	}
+	vm.SetEvalTimeout(config.FnTime)
 	return vm, nil
 }
 

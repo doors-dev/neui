@@ -3,8 +3,7 @@ package api
 import "encoding/json"
 
 // Event is one step of a streamed reply, as Provider.Stream sends it. Folding
-// the whole sequence reconstructs the Message the turn produced. Events live in
-// the process and are never serialized.
+// the whole sequence reconstructs the Message the turn produced.
 //
 //	stream    := EventErr | EventStart body (EventOk | EventErr)?
 //	body      := any interleaving of block* and EventUsage*
@@ -82,9 +81,10 @@ func (e EventText) Offset(n int) IndexedEvent {
 // turn ends, and may still be invalid if a token limit cut them.
 //
 // ID pairs the call with its later ContentToolResult. Where the provider sends
-// none or a placeholder, the adapter mints one unique across the whole thread
-// (built from the provider's turn id, never a constant prefix) and replaces it
-// if the real one turns up.
+// none (or, on some adapters, a duplicate), the adapter mints one from the
+// provider's response id and the block position; without a response id the
+// minted id is unique only within the turn. A later EventTool with a non-empty
+// ID replaces it.
 type EventTool struct {
 	Index int    // block position in Message.Content
 	ID    string // replaces, when not empty
@@ -278,7 +278,7 @@ const (
 	CodeRefused       ErrCode = "refused"        // the model or the provider would not produce this reply; change the input
 	CodeCapped        ErrCode = "capped"         // output was cut at the provider's configured response cap; raise it or continue
 	CodeContextLength ErrCode = "context_length" // the conversation does not fit the model; compact it and retry
-	CodeTooLarge      ErrCode = "too_large"      // the request is over Model.RequestBytes; shed media and retry
+	CodeTooLarge      ErrCode = "too_large"      // the request is too large: over Model.RequestBytes, or refused by the service for its size; shed media and retry
 	CodeNetwork       ErrCode = "network"        // connection, stream or deadline failed; retry as sent
 	CodeBusy          ErrCode = "busy"           // rate limited or out of capacity; back off and retry
 	CodeInvalid       ErrCode = "invalid"        // the request was refused as written; fix the request

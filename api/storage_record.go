@@ -1,12 +1,11 @@
 package api
 
-// RecordID identifies a record within its thread; -1 stands for no record.
+// RecordID identifies a record within its thread.
 type RecordID int
 
 // Record is a thread-level entry produced by code: Origin is the round
-// whose action created it — a record with no distinct cause carries the
-// same round as its Pin; Pin is the round whose user message renders it
-// on replay (NoRoundID while unpinned).
+// whose action created it, and Pin is the round whose user message
+// renders it on replay (NoRoundID while unpinned).
 //
 // The model reads a record as an element named Kind with Attrs as attributes
 // and Data, escaped or JSON-encoded, as its body.

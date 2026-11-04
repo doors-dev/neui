@@ -21,7 +21,7 @@ const maxDelay = 24 * time.Hour
 const moduleDesc = `The clock. time__now is the server's clock, time__client the clock of the browser the user has open — they differ in offset and may differ in wall time; quote the client's when talking to the user. time__timer waits until a moment: short waits complete inside the call, longer ones return deferred and arrive later as a <task_result> element in the conversation, so use it to continue work at a chosen moment, not to pause a conversation. One timer at a time; time__cancel drops a deferred one.`
 const nowDesc = `Current time of the machine this runs on, in its own zone. Use it for anything timestamped by the server; for what the user's clock says, call time__client.`
 const clientDesc = `Current time of the browser the user has the page open in, with the user's UTC offset. Errors when the browser does not answer. The reading carries no zone name, only the offset.`
-const timerDesc = `Wait until a moment. Pass afterMs, or at as an RFC 3339 instant — exactly one; at is resolved against the server clock. A wait of up to 10 s blocks the call and returns when the moment arrives. A longer one returns at once with deferred: true; when the moment arrives a <task_result> element (module time, name timer, comment as given) carrying the firing details appears and starts a round. One timer per conversation: a second call errors while one is pending. time__cancel drops a deferred one. Not accessible from scripts.`
+const timerDesc = `Wait until a moment. Pass afterMs, or at as an RFC 3339 instant — exactly one; at is resolved against the server clock. A wait of up to 10 s blocks the call and returns when the moment arrives. A longer one returns at once with deferred: true; when the moment arrives a <task_result> element (module time, name timer, comment as given) carrying the firing details appears and starts a round. One timer per conversation: a second call errors while one is pending. time__cancel drops a deferred one. Called from a script, it always blocks until the moment arrives and never defers.`
 const cancelDesc = `Drop the pending deferred timer; its task_result element reports the cancellation. Errors when none is pending.`
 
 func Module(context.Context) common.Module {
@@ -91,18 +91,19 @@ func (m *module) client(ctx context.Context, _ struct{}) (ClientResult, error) {
 	var now time.Time
 	sent := time.Now()
 	ch := doors.Call(callCtx, doors.ActionTime{}.Into(&now))
-	select {
-	case <-ctx.Done():
-		return ClientResult{}, context.Cause(ctx)
-	case err, ok := <-ch:
-		if !ok {
-			if errors.Is(context.Cause(callCtx), context.DeadlineExceeded) {
+	for range 2 {
+		select {
+		case <-ctx.Done():
+			return ClientResult{}, context.Cause(ctx)
+		case err := <-ch:
+			switch {
+			case errors.Is(err, context.Canceled) && errors.Is(context.Cause(callCtx), context.DeadlineExceeded):
 				return ClientResult{}, errors.New("the browser did not answer in time: the page may be closed, hidden or offline; use time__now for the server clock")
+			case errors.Is(err, context.Canceled):
+				return ClientResult{}, errors.New("the page link is gone: retry, or use time__now for the server clock")
+			case err != nil:
+				return ClientResult{}, err
 			}
-			return ClientResult{}, errors.New("the page link is gone: retry, or use time__now for the server clock")
-		}
-		if err != nil {
-			return ClientResult{}, err
 		}
 	}
 	_, off := now.Zone()
@@ -127,9 +128,6 @@ type TimerResult struct {
 }
 
 func (m *module) timer(ctx context.Context, arg TimerArg) (TimerResult, error) {
-	if tools.FromJS(ctx) {
-		return TimerResult{}, errors.New("the time module's timer is not accessible from a script")
-	}
 	if (arg.After != 0) == (arg.At != "") {
 		return TimerResult{}, errors.New("pass exactly one of afterMs or at")
 	}
@@ -151,7 +149,7 @@ func (m *module) timer(ctx context.Context, arg TimerArg) (TimerResult, error) {
 	if delay > maxDelay {
 		return TimerResult{}, fmt.Errorf("at most %s from now", maxDelay)
 	}
-	if delay <= syncAfter {
+	if delay <= syncAfter || tools.FromJS(ctx) {
 		timer := time.NewTimer(delay)
 		defer timer.Stop()
 		select {

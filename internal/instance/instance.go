@@ -82,8 +82,11 @@ func (inst *instance) run() {
 	go func() {
 		if inst.session.zone.Load() == nil {
 			var now time.Time
-			if err := <-doors.Call(inst.ctx, doors.ActionTime{}.Into(&now)); err == nil {
-				inst.session.zone.Store(now.Location())
+			ch := doors.Call(inst.ctx, doors.ActionTime{}.Into(&now))
+			if err := <-ch; err == nil {
+				if err, ok := <-ch; ok && err == nil {
+					inst.session.zone.Store(now.Location())
+				}
 			}
 		}
 		select {

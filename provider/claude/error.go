@@ -24,18 +24,22 @@ type APIError struct {
 	// Type is the API's error type, such as "overloaded_error" or
 	// "invalid_request_error".
 	Type string
-	// Message is the API's explanation, or the raw body when it was not the
-	// documented JSON.
+	// Message is the API's explanation; for a body that was not the
+	// documented JSON it is the trimmed raw body. A response that leaves it
+	// empty gets "unparseable <status> response". It can be empty for an
+	// in-stream error.
 	Message string
 	// RequestID is Anthropic's request id, to quote to their support; empty
 	// for an in-stream error.
 	RequestID string
-	// RetryAfter is the Retry-After header's wait, zero when absent.
+	// RetryAfter is the Retry-After header's wait, zero when the header is
+	// absent or not a whole number of seconds.
 	RetryAfter time.Duration
 }
 
 // Error returns "claude: <status> <type>: <message> (request <id>)", leaving
-// out the parts that are empty.
+// out an empty status, type or request id and writing "no message" for an
+// empty message.
 func (e *APIError) Error() string {
 	var b []byte
 	b = append(b, "claude: "...)

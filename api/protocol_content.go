@@ -32,8 +32,10 @@ func (i Indexed[T]) Ordered() []T {
 	return slices.AppendSeq(make([]T, 0, len(i)), i.Iter())
 }
 
-// Content is one block of a message. The set is limited to what every provider
-// can express, plus ContentOpaque for what only one provider understands.
+// Content is one block of a message: ContentText, ContentImage,
+// ContentDocument, ContentToolUse, ContentToolResult, ContentReasoning, or
+// ContentOpaque for what only one provider understands. Not every adapter can
+// carry every block; see UserContent.
 //
 // Meta on ContentText, ContentToolUse and ContentReasoning is the issuing
 // adapter's own data, handed back to it unchanged on replay; folding a stream,
@@ -71,7 +73,7 @@ func (ContentText) contentType() string {
 
 // ContentImage is an image attachment.
 type ContentImage struct {
-	Data []byte          `json:"data"`           // base64 on wire
+	Data []byte          `json:"data"`           // raw bytes; base64 in JSON
 	Mime string          `json:"mimeType"`       // an ImageMime value
 	Meta json.RawMessage `json:"meta,omitempty"` // caller data; adapters ignore it
 }
@@ -91,7 +93,7 @@ func (ContentImage) contentType() string {
 
 // ContentDocument is a file attachment, such as a PDF.
 type ContentDocument struct {
-	Data []byte          `json:"data"`           // base64 on wire
+	Data []byte          `json:"data"`           // raw bytes; base64 in JSON
 	Mime string          `json:"mimeType"`       // a DocumentMime value
 	Name string          `json:"name"`           // file name or title, sent where the wire has one; may be empty
 	Meta json.RawMessage `json:"meta,omitempty"` // caller data; adapters ignore it
@@ -168,12 +170,11 @@ func (ContentToolUse) contentType() string {
 // trip is the ToolErrJSON on the result answering it.
 var DiscardedArguments = json.RawMessage("!discarded-arguments")
 
-// DiscardedArgumentsError reports a tool call whose arguments never formed valid
-// JSON, so the call was not made and the arguments were not stored. Answer the
-// call with it as a failed tool result, or the model waits on a call that never
-// ran.
-//
-// NewContentToolResult classifies it as ToolErrJSON.
+// DiscardedArgumentsError reports a tool call whose arguments never formed
+// valid JSON, so the call was not made and the arguments were not stored.
+// Answer the call with it through NewContentToolResult, which classifies it as
+// ToolErrJSON, the classification ContentToolUse requires of the result
+// answering a discarded call.
 type DiscardedArgumentsError struct {
 	// Raw is the invalid argument text, if the caller still holds it; empty
 	// asks the model to reissue the call with nothing quoted back.
@@ -202,8 +203,10 @@ func (e DiscardedArgumentsError) Error() string {
 //
 // Not every provider accepts the whole subset everywhere: some take only text
 // in a tool result, and one takes a document in a message but not in a result.
-// An adapter leaves a note in place of what it cannot carry and reports the
-// drop, so a result always answers the call it is matched to.
+// An adapter leaves a note in place of a block it cannot carry and logs the
+// drop, so a result always answers the call it is matched to. A block it does
+// carry but with a value its API rejects, such as an unsupported document
+// type, fails the request instead.
 type UserContent interface {
 	Content
 	userContent()
@@ -214,20 +217,20 @@ func (ContentImage) userContent()    {}
 func (ContentDocument) userContent() {}
 
 // ContentToolResult reports the outcome of the ContentToolUse with the same
-// ID. Build one with NewContentToolResult.
+// ID. NewContentToolResult builds one from a tool's output and error.
 //
 // Its position among the blocks of a message is kept only as far as the wire
-// allows. Error classifies the outcome for routing and goes on no wire; what
-// the model reads about a failure is in Content.
+// allows. What the model reads is Content, plus whatever failure marker the
+// adapter sends for an Error other than ToolOk.
 type ContentToolResult struct {
 	ID      string       `json:"toolUseId"` // ContentToolUse.ID this answers
 	Content UserContents `json:"content"`   // blocks the call produced, in order
 	Error   ToolError    `json:"error"`     // ToolOk on success
 }
 
-// ToolError says how a call turned out. It is a classification for whoever
-// routes the result and never text for the model, which reads
-// ContentToolResult.Content and nothing else.
+// ToolError says how a call turned out. Any value but ToolOk is sent as the
+// adapter's failure marker (an is_error flag or an "Error:" prefix); the
+// failure itself is described in ContentToolResult.Content.
 //
 // The three values are the whole set. A stored value that is none of them
 // decodes as ToolErrRuntime, so a vocabulary that grew reads as a call that
@@ -269,10 +272,10 @@ func (c ContentToolResult) Refused() ContentToolResult {
 	}
 }
 
-// NewContentToolResult builds a result from returned blocks and error. A
-// DiscardedArgumentsError classifies as ToolErrJSON, which is what the pairing
-// invariant ContentToolUse states requires of the result answering a discarded
-// call; every other error is the call's own.
+// NewContentToolResult builds the result answering call id. With a nil err it
+// carries content as ToolOk. Otherwise content is dropped and the result is
+// err.Error() as one text block, classified ToolErrJSON when err wraps a
+// DiscardedArgumentsError and ToolErrRuntime for any other error.
 func NewContentToolResult(id string, content UserContents, err error) ContentToolResult {
 	if err != nil {
 		failure := ToolErrRuntime
@@ -339,9 +342,11 @@ func (ContentReasoning) contentType() string {
 }
 
 // ContentOpaque carries a payload this protocol has no type for, such as the
-// output of a tool the provider ran itself. Only the issuing adapter reads it;
-// an adapter handed a Kind it never issued leaves the Data alone. Folding a
-// stream, Data replaces and Deltas append in arrival order.
+// output of a tool the provider ran itself. It is meant for the adapter that
+// issued it, but no field records the provider and adapters do not check
+// Kind, so whoever stores a thread hands an adapter only opaque blocks its
+// provider issued. Folding a stream, a non-empty Kind or Data replaces the one
+// before it and each Delta appends to Deltas in arrival order.
 type ContentOpaque struct {
 	Model  string          `json:"model"`  // configured model, as on ContentReasoning
 	Kind   string          `json:"kind"`   // issuing adapter's name for the payload

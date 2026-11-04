@@ -10,22 +10,24 @@ import (
 	"neui.dev/provider/lib"
 )
 
-// APIError is a failure the service reported, as an HTTP status before the
-// stream started or as an error frame inside it. It reaches the host as the Err
-// of an api.EventErr; branch on EventErr.Code and get the details with
+// APIError describes a failed turn: an HTTP status before the stream
+// started, an error or failed frame inside it, or a response the service
+// ended as incomplete, filtered, refused or cancelled. It is the Err of an
+// api.EventErr, or wrapped in it after a 413 measured against
+// Model.RequestBytes; branch on EventErr.Code and get the details with
 // errors.As, for logs and bug reports.
 type APIError struct {
 	Status    int    // HTTP status; 0 when the failure arrived inside the stream
-	NoRetry   bool   // the response said x-should-retry: false
+	NoRetry   bool   // the response said x-should-retry: false; HTTP failures only
 	Type      string // the service's error type, such as "invalid_request_error"
-	Code      string // the service's error code, or the reason a response ended incomplete
+	Code      string // the service's error code, or the incomplete_details reason
 	Param     string // the request parameter the error is about, if any
-	Message   string // the service's message, or the raw body when it was not JSON
-	RequestID string // the x-request-id header, which OpenAI support asks for
+	Message   string // the service's message; a non-JSON body trimmed to 512 runes; or this adapter's description when the service gave none
+	RequestID string // the x-request-id header, which OpenAI support asks for; HTTP failures only
 }
 
-// Error formats the status or "stream error", code, message, param and
-// request id, as far as they are set.
+// Error formats the HTTP status or "stream error", then the code (or the type
+// when there is no code), message, param and request id, each only when set.
 func (e *APIError) Error() string {
 	var sb strings.Builder
 	sb.WriteString("gpt: ")

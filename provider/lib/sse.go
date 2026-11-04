@@ -1,10 +1,10 @@
 // Package lib holds the parts of a Provider that do not depend on which API
 // answered: reading a server sent event stream, keeping a deadline on one, and
-// handing a caller events while the wire keeps moving. What is left in an
-// adapter is the wire format and nothing else.
+// handing a caller events while the wire keeps moving.
 //
-// Hosts meet it only as Options, passed to a provider's WithTransport to tune
-// the idle deadline and the frame size cap.
+// Hosts use Options, passed to a provider's WithTransport to tune the idle
+// deadline and the frame size cap; ErrIdle can reach them inside an
+// api.EventErr.
 package lib
 
 import (

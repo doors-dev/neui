@@ -4,7 +4,8 @@ import "context"
 
 // Config tunes the xls module; a zero field takes its default.
 type Config struct {
-	// MaxFileSize caps the size in bytes of one workbook. Default 50 MiB.
+	// MaxFileSize is the largest workbook in bytes the module opens; a larger
+	// one is refused. Default 50 MiB.
 	MaxFileSize int64
 	// MaxReadRows caps the rows returned, or matches collected, by one call.
 	// Default 200.

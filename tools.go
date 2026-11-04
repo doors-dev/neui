@@ -18,44 +18,50 @@ import (
 
 // ToolFS returns the thread's workspace filesystem, the same one the files
 // module and scripts read and write. A tool that produces a file writes it
-// here so the agent can open it by path. It panics outside a tool call's ctx.
+// here so the agent can open it by path. It panics when ctx comes from
+// neither a tool call nor ToolThreadContext.
 func ToolFS(ctx context.Context) api.FS {
 	return ctx.Value(common.KeyController).(common.Controller).FS()
 }
 
 // ToolThreadID returns the ID of the thread the tool call belongs to, e.g. to
-// key host-side state per conversation. It panics outside a tool call's ctx.
+// key host-side state per conversation. It panics when ctx comes from
+// neither a tool call nor ToolThreadContext.
 func ToolThreadID(ctx context.Context) api.ThreadID {
 	return ctx.Value(common.KeyController).(common.Controller).ID()
 }
 
-// ToolThreadContext returns a context that lives as long as the thread stays
-// open, not just the tool call, and still works with ToolFS, ToolTask and the
-// other controller-backed Tool* functions; ToolFromJS and ToolFromAgent
-// report false on it.
-// Start background work registered with ToolTask on it. It panics outside a
-// tool call's ctx.
+// ToolThreadContext returns a context that outlives the tool call: for a
+// module tool it ends when the thread closes, for a page tool when the thread
+// is no longer linked to the page that rendered it. ToolFS, ToolTask and the
+// other controller-backed Tool* functions work on it; ToolFromJS and
+// ToolFromAgent report false on it. Run background work registered with
+// ToolTask on it. It panics when ctx comes from neither a tool call nor
+// ToolThreadContext.
 func ToolThreadContext(ctx context.Context) context.Context {
 	return ctx.Value(common.KeyController).(common.Controller).Context()
 }
 
-// ToolConfig is the configuration the app serving this tool call runs on. It
-// panics outside a tool call's ctx.
+// ToolConfig returns the thread configuration of the session serving the
+// call: the app's WithThreadConfig with defaults filled in. It panics when ctx
+// comes from neither a tool call nor ToolThreadContext.
 func ToolConfig(ctx context.Context) api.ThreadConfig {
 	return ctx.Value(common.KeyController).(common.Controller).Config()
 }
 
-// ToolModel is the model the thread streams with, and the limits it reads at
-// once, accepts in one image and in one request. A zero field is a limit the
-// API does not document. It panics outside a tool call's ctx.
+// ToolModel returns the model of the session's provider, the one the thread
+// streams with: its name and its context, image and request limits, where a
+// zero limit means unknown. It panics when ctx comes from neither a tool call
+// nor ToolThreadContext.
 func ToolModel(ctx context.Context) api.Model {
 	return ctx.Value(common.KeyController).(common.Controller).Model()
 }
 
-// ToolFilesConfig is the file and workspace limits the app serving this tool
-// call runs on, resolved. A tool producing or reading files honours the same
-// caps the built-in file tools do by reading them here. It panics outside a
-// tool call's ctx.
+// ToolFilesConfig returns the file and workspace limits of the session
+// serving the call, with defaults filled in: OptionFilesConfig if Enable got
+// one, else the app's WithFilesConfig. A tool producing or reading files
+// honours the same caps the built-in file tools do by reading them here. It
+// panics when ctx comes from neither a tool call nor ToolThreadContext.
 func ToolFilesConfig(ctx context.Context) api.FilesConfig {
 	return ctx.Value(common.KeyController).(common.Controller).FilesConfig()
 }
@@ -65,14 +71,18 @@ func ToolFilesConfig(ctx context.Context) api.FilesConfig {
 // keeps running; it is dropped once the task has finished.
 type Task = common.Task
 
-// ToolTask registers a background task for the calling tool. comment is a
-// short description shown to the user while the task runs and stored with its
-// result. cancel is what the UI and a user stop invoke; the cause it receives,
-// [api.ErrCanceledByUser] for those, is what the task should report back.
-// The tool usually returns at once and the task delivers its result later;
-// run it on ToolThreadContext, not the call's ctx, which ends with the call.
-// It returns an error when the thread is closing, and panics outside a tool
-// call's ctx.
+// ToolTask registers a background task for the calling tool; the tool usually
+// returns at once and the task delivers its result later through the returned
+// Task. comment is a short description shown to the user while the task runs
+// and stored with its result; attrs become the task's meta, nil meaning none.
+// cancel is what a chat UI calls through api.Task.Cancel to stop the task
+// (kchat passes api.ErrCanceledByUser), and the cause it receives is what the
+// task should report with Err; the runtime does not call it, so the work must
+// also stop when ToolThreadContext ends. Run the work on ToolThreadContext,
+// not the call's ctx, which ends with the call. Call it before the tool
+// returns: it fails with context.Canceled when the thread is closed and with
+// an error when the thread is not running tool calls. It panics when ctx comes
+// from neither a tool call nor ToolThreadContext.
 func ToolTask(ctx context.Context, comment string, attrs map[string]any, cancel context.CancelCauseFunc) (Task, error) {
 	return ctx.Value(common.KeyController).(common.Controller).Task(comment, attrs, cancel)
 }
@@ -90,9 +100,12 @@ func ToolFromAgent(ctx context.Context) bool {
 	return tools.FromAgent(ctx)
 }
 
-// ModuleFactory builds one module per thread. The built-in modules are
-// factories of this shape, and a host's own module is registered by writing
-// one.
+// ModuleFactory returns the module a thread uses: a fresh one or a shared
+// one. The runtime calls it each time a thread opens, with a context that
+// lasts while the thread stays open and carries no tool call. When two
+// modules of a thread share a name, the later one is skipped and an error is
+// logged; the built-in chat, time and files modules come first. Register
+// factories with WithModules or OptionModules.
 type ModuleFactory = common.ModuleFactory
 
 // WithModules registers modules for every session the app serves, as an app
@@ -101,7 +114,8 @@ func WithModules(m ...ModuleFactory) doors.With {
 	return doors.WithValue(common.ModulesKey{}, m)
 }
 
-// OptionModules registers modules for one session, after the app's own.
+// OptionModules registers modules for one session, after the built-in and
+// the app's own; a module whose name is already taken is skipped.
 func OptionModules(m ...ModuleFactory) Option {
 	return common.OptionModules(m)
 }
@@ -120,18 +134,20 @@ func NewModule(name string, desc string) Module {
 }
 
 // ModuleJS is the js module: js__run lets the agent run a JavaScript file
-// from the workspace or inline code, with every other tool callable as a
-// synchronous function, and js__stop cancels a run that outlived its call.
-// Scripts run on QuickJS (plain ES2023: no Node, browser APIs or promises),
-// limited by WithJSConfig.
+// from the workspace or inline code, with the thread's tools callable as
+// synchronous functions (a tool can refuse script calls, as js's own tools
+// do), and js__stop cancels a run that outlived its call. Scripts run on
+// QuickJS (plain ES2023: no Node, browser APIs or promises), limited by
+// JSConfig.
 var ModuleJS ModuleFactory = js.Module
 
 // JSConfig tunes the js runtime; a zero field takes its default.
 type JSConfig = js.Config
 
-// WithJSConfig tunes the js runtime, as an app option for doors.NewApp. A
-// configured app schedules scripts against its own memory and worker limits;
-// without it the module runs on defaults.
+// WithJSConfig tunes the js runtime of ModuleJS, as an app option for
+// doors.NewApp: the app then schedules scripts against its own memory and
+// worker limits. Without it, the app runs on defaults and shares one set of
+// limits with every other app in the process that does not set it.
 func WithJSConfig(c JSConfig) doors.With {
 	return doors.WithFunc(func() doors.With {
 		return doors.WithValue(js.ConfigKey{}, js.NewSeed(c))
@@ -169,17 +185,22 @@ func ModuleWeb(c WebConfig) ModuleFactory {
 }
 
 // ModuleMCP is a module backed by a remote MCP server over streamable HTTP.
-// Its tools register under the module name, as name__tool, and follow the
-// server's list-changed notifications. The connection opens when the module
-// starts, retries with backoff, and closes after IdleTimeout without a call;
-// the next call reconnects and waits for it.
+// Its tools register under MCPConfig.Name, sanitized as NewModule does, as
+// name__tool, and follow the server's list-changed notifications. Each thread
+// gets its own connection, opened when the thread opens and retried with
+// backoff while it fails; a call made while it is failing fails at once. The
+// connection closes after IdleTimeout without a call, or after at most a
+// minute when no call has been made yet; the next call reconnects and waits
+// for it.
 func ModuleMCP(c MCPConfig) ModuleFactory {
 	return mcp.Module(mcp.Config(c))
 }
 
-// MCPConfig describes one MCP server; a zero field takes its default.
+// MCPConfig describes one MCP server. Name and URL must be set; any other
+// zero field takes its default.
 type MCPConfig struct {
-	// Name is the module name the server's tools register under.
+	// Name is the module name the server's tools register under, sanitized as
+	// NewModule does.
 	Name string
 	// URL is the server's streamable HTTP endpoint.
 	URL string
@@ -187,8 +208,8 @@ type MCPConfig struct {
 	Headers map[string]string
 	// Enable filters the server's tools by name; nil enables them all.
 	Enable func(toolName string) bool
-	// IdleTimeout closes the connection after this long without a tool call.
-	// Default 10m.
+	// IdleTimeout closes the connection after this long without a tool call,
+	// or after at most a minute when no call has been made yet. Default 10m.
 	IdleTimeout time.Duration
 	// Ping is the keepalive interval; a missed ping reconnects. Default 30s.
 	Ping time.Duration
@@ -199,7 +220,7 @@ type WebConfig struct {
 	// HTTPClient is the client every fetch uses. Supplying one replaces the
 	// module's own client and with it the whole redirect and address
 	// policy: the dialer hook that refuses loopback, private, link-local,
-	// unspecified and reserved addresses, the explicit 10-hop cap, the
+	// multicast, unspecified and reserved addresses, the explicit 10-hop cap, the
 	// per-hop http/https allowlist, and the stripping of credentials on a
 	// redirect all live on the default client only, so Go's own defaults
 	// apply instead. A host that passes its own client owns that policy and
@@ -285,7 +306,9 @@ func (b searchBackend) Search(ctx context.Context, q web.Query) ([]web.Result, e
 
 // AnyModule is what a ModuleFactory returns: a named set of tools. Module
 // implements it; a host implements it directly only to serve tools it builds
-// itself.
+// itself. The runtime calls its methods from several goroutines and reads
+// Desc and List again for every request, so a change shows up at the next
+// one.
 type AnyModule = common.Module
 
 // AnyTool is one tool as the runtime sees it, the result of a Tool or Ask

@@ -81,7 +81,6 @@ type submit struct {
 	id      uint
 	data    any
 	release func()
-	ctx     context.Context
 }
 
 type state struct {
@@ -201,7 +200,7 @@ func (s *state) toolCreate(ctx context.Context, arg createArg) (uint, error) {
 		}
 		hook := *s.hook
 		s.hook = nil
-		s.stash = &submit{id: id, data: output, release: doors.HoldSettle(ctx), ctx: ctx}
+		s.stash = &submit{id: id, data: output, release: doors.HoldSettle(ctx)}
 		close(hook)
 		s.mu.Unlock()
 		return true
@@ -443,18 +442,16 @@ func (s *state) FlushNotifications(idle bool) {
 }
 
 func (s *state) send(prevStash *submit, idle bool) {
-	ctx := s.run.PageContext()
-	if prevStash != nil {
-		ctx = prevStash.ctx
-	}
 	applied := make(chan struct{})
 	s.applied = applied
-	doors.OnBatch(ctx, func(context.Context) {
+	doors.OnBatch(s.run.PageContext(), func(context.Context) {
 		close(applied)
 	}, func(ctx context.Context) {
 		ctx = context.WithValue(ctx, common.KeyIslandStore, s.run.Store())
 		if prevStash != nil {
-			defer prevStash.release()
+			doors.OnSettle(ctx, func(context.Context) {
+				prevStash.release()
+			})
 		}
 		if !s.seeded {
 			s.seeded = true
