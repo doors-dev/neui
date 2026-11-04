@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"regexp"
 	"strings"
 
@@ -16,6 +17,7 @@ const (
 	grepDefaultLimit = 100
 	grepMaxLimit     = 1000
 	grepLineMax      = 400
+	grepMatchMax     = 1 << 20
 	globCap          = 100
 )
 
@@ -105,12 +107,17 @@ func grepFile(ctx context.Context, fs api.FS, name string, re *regexp.Regexp, li
 	if bytes.IndexByte(head, 0) >= 0 {
 		return nil
 	}
-	scanner := bufio.NewScanner(br)
-	scanner.Buffer(make([]byte, 1<<20), 1<<20)
 	var line uint
-	for scanner.Scan() {
+	for {
+		raw, _, err := readLine(br, grepMatchMax)
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
 		line++
-		text := scanner.Text()
+		text := string(raw)
 		if !re.MatchString(text) {
 			continue
 		}
@@ -123,7 +130,6 @@ func grepFile(ctx context.Context, fs api.FS, name string, re *regexp.Regexp, li
 		}
 		res.Matches = append(res.Matches, grepMatch{Path: name, Line: line, Text: text})
 	}
-	return scanner.Err()
 }
 
 func globTool(ctx context.Context, arg globArg) (globResult, error) {

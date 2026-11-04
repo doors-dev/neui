@@ -134,21 +134,21 @@ func (t *task) waitSync(ch chan<- Result) {
 	asyncAfter := time.After(t.asyncAfter)
 	select {
 	case <-t.ctx.Done():
+		t.task = Input{}
+		t.done()
 		ch <- Result{Err: context.Cause(t.ctx)}
-		t.task = Input{}
-		t.done()
 	case err := <-t.rej:
-		ch <- Result{Err: err}
 		t.task = Input{}
 		t.done()
+		ch <- Result{Err: err}
 	case f := <-t.interrupt:
 		t.executeSync(ch, asyncAfter, f)
 	case <-asyncAfter:
 		task, err := t.task.Controller.Task(t.task.Comment, nil, t.cancel)
 		if err != nil {
 			t.cancel(err)
-			ch <- Result{Err: err}
 			t.done()
+			ch <- Result{Err: err}
 			return
 		}
 		ch <- Result{Async: true}
@@ -159,18 +159,17 @@ func (t *task) waitSync(ch chan<- Result) {
 func (t *task) waitAsync(task common.Task) {
 	select {
 	case <-t.ctx.Done():
+		t.done()
 		task.Err(context.Cause(t.ctx))
-		t.done()
 	case err := <-t.rej:
-		task.Err(err)
 		t.done()
+		task.Err(err)
 	case f := <-t.interrupt:
 		t.executeAsync(f, task)
 	}
 }
 
 func (t *task) executeSync(ch chan<- Result, asyncAfter <-chan time.Time, interrupt func()) {
-	defer t.done()
 	done := t.ctx.Done()
 	var handle common.Task
 	canceled := false
@@ -201,6 +200,7 @@ repeat:
 		ch = nil
 		goto repeat
 	case ok := <-t.res:
+		t.done()
 		if ch != nil {
 			ch <- Result{Ok: ok}
 			return
@@ -209,27 +209,21 @@ repeat:
 			handle.Ok(json.RawMessage(ok))
 		}
 	case err := <-t.rej:
+		t.done()
+		if canceled {
+			err = context.Cause(t.ctx)
+		}
 		if ch != nil {
-			if canceled {
-				ch <- Result{Err: context.Cause(t.ctx)}
-				return
-			}
 			ch <- Result{Err: err}
 			return
 		}
-		if handle == nil {
-			return
+		if handle != nil {
+			handle.Err(err)
 		}
-		if canceled {
-			handle.Err(context.Cause(t.ctx))
-			return
-		}
-		handle.Err(err)
 	}
 }
 
 func (t *task) executeAsync(interrupt func(), task common.Task) {
-	defer t.done()
 	done := t.ctx.Done()
 	canceled := false
 	var interruptTick <-chan time.Time
@@ -245,11 +239,12 @@ repeat:
 		interrupt()
 		goto repeat
 	case output := <-t.res:
+		t.done()
 		task.Ok(json.RawMessage(output))
 	case err := <-t.rej:
+		t.done()
 		if canceled {
-			task.Err(context.Cause(t.ctx))
-			return
+			err = context.Cause(t.ctx)
 		}
 		task.Err(err)
 	}

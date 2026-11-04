@@ -49,12 +49,6 @@ func (s threadWait) on(cmd any) {
 			return
 		}
 		s.thread.disconnect()
-	case commandUnsend:
-		if s.thread.link != cmd.link {
-			cmd.Err(api.ErrUnlinked)
-			return
-		}
-		cmd.Err(api.ErrWrongState)
 	case commandRecord:
 		if s.thread.link != cmd.link {
 			cmd.Err(api.ErrUnlinked)

@@ -25,7 +25,7 @@ const acceptHeader = "text/markdown, text/html;q=0.9, text/plain;q=0.8, */*;q=0.
 const acceptLanguage = "en-US,en;q=0.9"
 const maxRedirects = 10
 
-const fetchModuleDesc = `The web, read-only. web__fetch gets one http or https URL and returns it as markdown (default), plain text or raw html. Nothing runs JavaScript, so a page that renders client-side comes back as an empty shell — fetch its API or a server-rendered URL instead. A long page arrives in line ranges: the content ends with a note naming the lines shown and the offset to continue with, and continuing costs no second request for about 15 minutes. Only text is returned; a PDF, an image or any other binary has to be fetched with saveAs into the workspace and read from there with the files tools.`
+const fetchModuleDesc = `The web, read-only. web__fetch gets one http or https URL and returns it as markdown (default), plain text or html stripped of scripts, styles, embeds, forms, meta and comments. Nothing runs JavaScript, so a page that renders client-side comes back as an empty shell — fetch its API or a server-rendered URL instead. A long page arrives in line ranges: the content ends with a note naming the lines shown and the offset to continue with, and continuing costs no second request for about 15 minutes. Only text is returned; a PDF, an image or any other binary has to be fetched with saveAs into the workspace and read from there with the files tools.`
 
 const searchModuleDesc = ` web__search asks a search backend for pages worth fetching, and returns links with extracts, not whole pages.`
 

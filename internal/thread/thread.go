@@ -117,6 +117,8 @@ func (t *thread) criticalErr(m *message, err error) {
 		return
 	}
 	t.link.send(newMessageEvent(m, api.ChatEventCriticalError{Err: err}))
+	t.pending = false
+	t.compaction.stop()
 	t.link.dispose()
 	t.link = nil
 	t.replay = nil
@@ -147,21 +149,25 @@ func (t *thread) taskResult(id uint, output any, err error) error {
 		slog.Error("thread: stray task result", "id", id, "err", removeErr)
 		return nil
 	}
-	maps.Copy(task.attrs, map[string]any{
+	attrs := maps.Clone(task.attrs)
+	if attrs == nil {
+		attrs = map[string]any{}
+	}
+	maps.Copy(attrs, map[string]any{
 		"task_id": task.id,
 		"module":  task.module,
 		"name":    task.name,
 	})
 	if task.comment != "" {
-		task.attrs["comment"] = task.comment
+		attrs["comment"] = task.comment
 	}
 	if err != nil {
-		task.attrs["error"] = err.Error()
+		attrs["error"] = err.Error()
 	}
 	if err := t.replay.Record(
 		task.origin,
 		"task_result",
-		task.attrs,
+		attrs,
 		output,
 	); err != nil {
 		return err
@@ -413,6 +419,7 @@ func (t *thread) connect(backend *common.Backend, page page.Page, load bool, met
 	replay := replay.NewReplay(backend.Context(), t.id, backend.Storage(), backend.Config(), backend.Provider().Model())
 	if load {
 		if err := replay.Load(); err != nil {
+			link.dispose()
 			return Link{}, err
 		}
 	}

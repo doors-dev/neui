@@ -413,3 +413,13 @@ func TestModelDeclarationsMatchTheWire(t *testing.T) {
 		t.Fatalf("an image went out as something other than a note: %s", raw)
 	}
 }
+
+func TestNilHTTPClientIsRefused(t *testing.T) {
+	p := &Provider{client: http.DefaultClient}
+	if err := WithHTTPClient(nil)(p); err == nil {
+		t.Fatalf("WithHTTPClient(nil) was accepted")
+	}
+	if p.client != http.DefaultClient {
+		t.Fatalf("a refused nil client replaced the one already set")
+	}
+}

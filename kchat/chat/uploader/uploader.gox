@@ -18,7 +18,7 @@ import (
 type Uploader = *uploader
 
 type Controller interface {
-	UpdateAttachments(ctx context.Context, files []string)
+	UpdateAttachments(ctx context.Context, seq int, files []string)
 	UploadStarted(ctx context.Context, seq int)
 	UploadFinished(ctx context.Context, seq int)
 }
@@ -67,7 +67,7 @@ func (u *uploader) add(ctx context.Context, filename string) {
 	u.uploads = append(u.uploads, filename)
 	uploads := slices.Clone(u.uploads)
 	u.mu.Unlock()
-	u.controller.UpdateAttachments(ctx, uploads)
+	u.controller.UpdateAttachments(ctx, u.seq, uploads)
 }
 
 func (u *uploader) remove(ctx context.Context, filename string) {
@@ -77,7 +77,7 @@ func (u *uploader) remove(ctx context.Context, filename string) {
 	})
 	uploads := slices.Clone(u.uploads)
 	u.mu.Unlock()
-	u.controller.UpdateAttachments(ctx, uploads)
+	u.controller.UpdateAttachments(ctx, u.seq, uploads)
 }
 
 func (u *uploader) append(ctx context.Context, row gox.Comp) {
@@ -91,10 +91,12 @@ func (u *uploader) append(ctx context.Context, row gox.Comp) {
 	</>)
 }
 
+const multipartOverhead = 64 << 10
+
 func (u *uploader) upload(ctx context.Context, r doors.RequestRawHook) bool {
 	u.controller.UploadStarted(ctx, u.seq)
 	defer u.controller.UploadFinished(ctx, u.seq)
-	r.SetRequestBodyLimit(u.params.MaxAttachmentSize)
+	r.SetRequestBodyLimit(u.params.MaxAttachmentSize + multipartOverhead)
 	reader, err := r.Reader()
 	if err != nil {
 		r.ResponseWriter().WriteHeader(http.StatusBadRequest)
@@ -111,7 +113,7 @@ func (u *uploader) upload(ctx context.Context, r doors.RequestRawHook) bool {
 		return false
 	}
 	total, _ := strconv.ParseInt(r.RequestHeader().Get("Content-Length"), 10, 64)
-	if total > int64(u.params.MaxAttachmentSize) {
+	if total > int64(u.params.MaxAttachmentSize + multipartOverhead) {
 		u.release()
 		u.refuse(ctx, r, name, http.StatusRequestEntityTooLarge, api.ErrTooLarge)
 		return false

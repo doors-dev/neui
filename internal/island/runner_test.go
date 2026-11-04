@@ -133,7 +133,7 @@ func TestCallDecode(t *testing.T) {
 	if err := json.Unmarshal([]byte(`{"total":"function (row) { return row.qty }"}`), &direct); err != nil {
 		t.Fatalf("function expression: %v", err)
 	}
-	for _, src := range []string{"(row) => {", "row) => row", "1; 2"} {
+	for _, src := range []string{"(row) => {", "row) => row", "1; 2", "(row) => { with (row) { return qty } }", "(row) => 010"} {
 		data, _ := json.Marshal(map[string]string{"total": src})
 		if _, err := s.Decode(data); err == nil || !strings.Contains(err.Error(), "line ") {
 			t.Fatalf("%q: %v", src, err)
@@ -331,6 +331,25 @@ func TestCallCallerCancel(t *testing.T) {
 	if n := reported(r); n != 0 {
 		t.Fatalf("%d reports for calls that did not fail by their function", n)
 	}
+}
+
+func TestCallCallerCancelBusyLoop(t *testing.T) {
+	_, task, ctx := newCallTestRun(t, api.IslandConfig{FnTime: 10 * time.Second}, NewLibrary())
+	loop := callFrom[int, int](t, "(a) => { for (;;) {} }")
+	mid, cancel := context.WithCancel(ctx)
+	time.AfterFunc(50*time.Millisecond, cancel)
+	start := time.Now()
+	if _, err := loop.Call(mid, 1); !errors.Is(err, context.Canceled) {
+		t.Fatalf("mid: %v", err)
+	}
+	quick := callFrom[int, int](t, "(a) => a + 1")
+	if got, err := quick.Call(ctx, 1); err != nil || got != 2 {
+		t.Fatalf("after cancel: %v, %v", got, err)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("runner stayed busy for %s after cancel", elapsed)
+	}
+	task.WaitNotes(t, 0)
 }
 
 func TestCallAppEnded(t *testing.T) {

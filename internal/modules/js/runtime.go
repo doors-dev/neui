@@ -225,5 +225,9 @@ func (r *runtime) execute(vm *quickjs.VM, input task.Input) (out string, err err
 	if err != nil {
 		return "", fmt.Errorf("%q: %v: %w", input.Name, err, errScript)
 	}
-	return res.(string), nil
+	s, ok := res.(string)
+	if !ok {
+		return "", fmt.Errorf("%q: the returned value does not serialize to JSON, such as a function, a symbol or a toJSON returning undefined: %w", input.Name, errScript)
+	}
+	return s, nil
 }

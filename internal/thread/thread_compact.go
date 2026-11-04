@@ -61,7 +61,11 @@ func (s *threadCompact) on(cmd any) {
 		}
 		cmd.NoMessage()
 		s.thread.compaction.stop()
+		wasPending := s.thread.pending
 		s.thread.pending = false
+		if wasPending {
+			s.thread.link.send(newMessageEvent(nil, api.ChatEventInputPending{Pending: false}))
+		}
 		s.thread.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}}))
 		s.abort()
 		s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundEnd{Round: s.round.ID, State: api.RoundAbort, Error: "", Usage: s.usage, Final: true}))

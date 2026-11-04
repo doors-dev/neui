@@ -300,7 +300,7 @@ func (w *WindowList) sync(ctx context.Context) (more bool) {
 			return
 		}
 		w.batch++
-		w.scrollState.newestReached = ended
+		w.scrollState.newestReached = ended || len(sections) == 0
 		fresh := make([]*slot, 0, len(sections))
 		for i, s := range slices.Backward(sections) {
 			var after any

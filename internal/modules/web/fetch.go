@@ -3,6 +3,7 @@ package web
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -36,7 +38,7 @@ const fetchDesc = `Fetch one http or https URL with a GET and return its content
 
 type FetchArg struct {
 	URL     string `json:"url" required:"true" description:"absolute http or https URL, credentials not allowed in it"`
-	Format  string `json:"format" enum:"markdown,text,html" description:"markdown (default) converts the document, text strips it to prose, html returns it unconverted"`
+	Format  string `json:"format" enum:"markdown,text,html" description:"markdown (default) converts the document, text strips it to prose, html returns the parsed page re-serialised, with scripts, styles, embeds, forms, meta, links and comments removed, and navigation, headers, footers and sidebars too unless full is set"`
 	Full    bool   `json:"full" description:"the page as a whole, including navigation, sidebars and comments; use it when the default came back missing something you saw referenced"`
 	Offset  uint   `json:"offset" description:"1-based line of the converted content to start from, for continuing a long page"`
 	Limit   uint   `json:"limit" description:"max lines to return, default 2000"`
@@ -125,7 +127,7 @@ func (m *module) fetch(ctx context.Context, arg FetchArg) (string, error) {
 			if errors.Is(err, context.DeadlineExceeded) {
 				return "", fmt.Errorf("fetching %s timed out after %s", u, timeout)
 			}
-			if errors.Is(err, context.Canceled) {
+			if errors.Is(err, context.Canceled) && ctx.Err() != nil {
 				return "", context.Cause(ctx)
 			}
 			return "", err
@@ -159,7 +161,8 @@ func (m *module) fetch(ctx context.Context, arg FetchArg) (string, error) {
 		if resp.ContentLength > m.conf.MaxBytes {
 			return "", fmt.Errorf("%s is over the %d-byte cap and was not saved", final, m.conf.MaxBytes)
 		}
-		w, err := fs.Create(arg.SaveAs)
+		partial := path.Join(path.Dir(arg.SaveAs), "."+path.Base(arg.SaveAs)+"."+rand.Text()+".part")
+		w, err := fs.Create(partial)
 		if err != nil {
 			return "", err
 		}
@@ -167,13 +170,15 @@ func (m *module) fetch(ctx context.Context, arg FetchArg) (string, error) {
 		if cerr := w.Close(); err == nil {
 			err = cerr
 		}
-		if err != nil {
-			fs.Remove(ctx, arg.SaveAs)
-			return "", err
+		if err == nil && n > m.conf.MaxBytes {
+			err = fmt.Errorf("%s is over the %d-byte cap and was not saved", final, m.conf.MaxBytes)
 		}
-		if n > m.conf.MaxBytes {
-			fs.Remove(ctx, arg.SaveAs)
-			return "", fmt.Errorf("%s is over the %d-byte cap and was not saved", final, m.conf.MaxBytes)
+		if err == nil {
+			err = fs.Rename(partial, arg.SaveAs)
+		}
+		if err != nil {
+			fs.Remove(context.WithoutCancel(ctx), partial)
+			return "", err
 		}
 		el := gox.Elem(func(cur gox.Cursor) error {
 			cur.InitVoid("fetched")
@@ -191,7 +196,7 @@ func (m *module) fetch(ctx context.Context, arg FetchArg) (string, error) {
 		return b.String(), nil
 	}
 	if resp.ContentLength > m.conf.MaxBytes {
-		return "", fmt.Errorf("%s is over the %dMB cap; pass saveAs to keep it in the workspace instead", final, m.conf.MaxBytes>>20)
+		return "", fmt.Errorf("%s is over the %d-byte cap", final, m.conf.MaxBytes)
 	}
 	media, _, err := mime.ParseMediaType(e.contentType)
 	if err != nil {
@@ -210,13 +215,13 @@ func (m *module) fetch(ctx context.Context, arg FetchArg) (string, error) {
 		if errors.Is(err, context.DeadlineExceeded) {
 			return "", fmt.Errorf("fetching %s timed out after %s", u, timeout)
 		}
-		if errors.Is(err, context.Canceled) {
+		if errors.Is(err, context.Canceled) && ctx.Err() != nil {
 			return "", context.Cause(ctx)
 		}
 		return "", err
 	}
 	if int64(len(raw)) > m.conf.MaxBytes {
-		return "", fmt.Errorf("%s is over the %dMB cap; pass saveAs to keep it in the workspace instead", final, m.conf.MaxBytes>>20)
+		return "", fmt.Errorf("%s is over the %d-byte cap", final, m.conf.MaxBytes)
 	}
 	if media == "" {
 		probe := raw
@@ -339,9 +344,14 @@ func page(e *entry, offset uint, limit uint) (string, error) {
 			continue
 		}
 		line = strings.TrimSuffix(line, "\r")
-		if len(line) > fetchLineMax {
-			line = line[:fetchLineMax] + "... (line truncated)"
-			cut = true
+		runes := 0
+		for i := range line {
+			if runes == fetchLineMax {
+				line = line[:i] + "... (line truncated)"
+				cut = true
+				break
+			}
+			runes++
 		}
 		b.WriteString(line)
 		b.WriteByte('\n')

@@ -342,3 +342,44 @@ func TestFileCancelledContext(t *testing.T) {
 		t.Fatal("FileList with cancelled ctx yielded no error")
 	}
 }
+
+func TestFileMethodsRejectInvalidNames(t *testing.T) {
+	s := newFileStore(t)
+	ctx := context.Background()
+	putText(t, s, "t1", "f1.txt", "hello")
+	for _, name := range []string{"", ".", "..", "/", "a/b"} {
+		if err := s.FileDelete(ctx, "t1", api.OriginUser, name); !errors.Is(err, api.ErrInvalidName) {
+			t.Fatalf("FileDelete(%q) = %v, want ErrInvalidName", name, err)
+		}
+		if _, err := s.FileStat(ctx, "t1", api.OriginUser, name); !errors.Is(err, api.ErrInvalidName) {
+			t.Fatalf("FileStat(%q) = %v, want ErrInvalidName", name, err)
+		}
+		if _, err := s.FileRead(ctx, "t1", api.OriginUser, name, 0, -1); !errors.Is(err, api.ErrInvalidName) {
+			t.Fatalf("FileRead(%q) = %v, want ErrInvalidName", name, err)
+		}
+		if err := s.FileCommit(ctx, "t1", api.OriginUser, name); !errors.Is(err, api.ErrInvalidName) {
+			t.Fatalf("FileCommit(%q) = %v, want ErrInvalidName", name, err)
+		}
+	}
+	for _, thread := range []api.ThreadID{"", ".", "..", "a/b"} {
+		if err := s.FileDelete(ctx, thread, api.OriginUser, "f1.txt"); !errors.Is(err, api.ErrInvalidName) {
+			t.Fatalf("FileDelete in thread %q = %v, want ErrInvalidName", thread, err)
+		}
+		if err := s.FileDeleteAll(ctx, thread); !errors.Is(err, api.ErrInvalidName) {
+			t.Fatalf("FileDeleteAll(%q) = %v, want ErrInvalidName", thread, err)
+		}
+	}
+	if err := s.FileDelete(ctx, "t1", api.Origin("smuggled"), "f1.txt"); err == nil {
+		t.Fatal("FileDelete with an unknown origin succeeded")
+	}
+	if got := readAll(t, must(s.FileRead(ctx, "t1", api.OriginUser, "f1.txt", 0, -1))); got != "hello" {
+		t.Fatalf("upload changed to %q", got)
+	}
+}
+
+func must[T any](v T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return v
+}

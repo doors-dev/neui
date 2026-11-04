@@ -244,6 +244,7 @@ func (s ComposerController) CancelRewind(ctx context.Context) {
 		}
 		s.rewind = invalidRewind
 		s.inputSeq += 1
+		s.uploading = 0
 		return s
 	})
 }
@@ -255,6 +256,7 @@ func (s ComposerController) InitRewind(ctx context.Context, round api.RoundID, i
 			input: input,
 		}
 		s.inputSeq += 1
+		s.uploading = 0
 		return s
 	})
 }
@@ -263,6 +265,7 @@ func (s ComposerController) Ask(ctx context.Context, ask api.ChatAsk) {
 	s.origin.Mutate(ctx, func(s state) state {
 		s.ask = &ask
 		s.inputSeq += 1
+		s.uploading = 0
 		return s
 	})
 }
@@ -376,6 +379,9 @@ func (s ComposerController) Escape(ctx context.Context) {
 
 func (s ComposerController) Send(ctx context.Context) {
 	state := s.origin.Get()
+	if state.uploading != 0 {
+		return
+	}
 	if state.rewind.isValid() {
 		if state.rewind.input.Len() == 0 {
 			return
@@ -418,10 +424,13 @@ func (s ComposerController) Compact(ctx context.Context) {
 	s.thread.Compact(ctx)
 }
 
-func (s ComposerController) UpdateAttachments(ctx context.Context, files []string) {
+func (s ComposerController) UpdateAttachments(ctx context.Context, seq int, files []string) {
 	send := false
 	var input api.Input
 	s.origin.Mutate(ctx, func(d state) state {
+		if d.inputSeq != seq {
+			return d
+		}
 		if d.rewind.isValid() {
 			d.rewind.input.Attachments = files
 		} else {

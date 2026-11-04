@@ -160,6 +160,9 @@ func WithBaseURL(base string) Option {
 // whole streamed turn. Use WithTransport to bound a dead connection.
 func WithHTTPClient(client *http.Client) Option {
 	return func(p *Provider) error {
+		if client == nil {
+			return errors.New("deepseek: WithHTTPClient needs a client")
+		}
 		p.client = client
 		return nil
 	}

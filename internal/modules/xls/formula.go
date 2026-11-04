@@ -94,11 +94,15 @@ func columnTool(ctx context.Context, arg columnArg) (columnResult, error) {
 			return columnResult{}, err
 		}
 		formula := strings.TrimPrefix(strings.ReplaceAll(arg.Formula, "{row}", strconv.Itoa(r)), "=")
+		if err := f.SetCellValue(arg.Sheet, cell, nil); err != nil {
+			return columnResult{}, err
+		}
 		if err := f.SetCellFormula(arg.Sheet, cell, formula); err != nil {
 			return columnResult{}, err
 		}
 	}
-	if err := f.UpdateLinkedValue(); err != nil {
+	recalc := true
+	if err := f.SetCalcProps(&excelize.CalcPropsOptions{FullCalcOnLoad: &recalc}); err != nil {
 		return columnResult{}, err
 	}
 	if err := save(ctx, fs, f, arg.Path); err != nil {
@@ -148,6 +152,9 @@ func totalTool(ctx context.Context, arg totalArg) (totalResult, error) {
 			return totalResult{}, err
 		}
 		formula := fmt.Sprintf("SUBTOTAL(%d,%s%d:%s%d)", fn, col, b.y1+1, col, b.y2)
+		if err := f.SetCellValue(arg.Sheet, cell, nil); err != nil {
+			return totalResult{}, err
+		}
 		if err := f.SetCellFormula(arg.Sheet, cell, formula); err != nil {
 			return totalResult{}, err
 		}
@@ -170,7 +177,8 @@ func totalTool(ctx context.Context, arg totalArg) (totalResult, error) {
 	if err := f.SetCellStyle(arg.Sheet, from, to, style); err != nil {
 		return totalResult{}, err
 	}
-	if err := f.UpdateLinkedValue(); err != nil {
+	recalc := true
+	if err := f.SetCalcProps(&excelize.CalcPropsOptions{FullCalcOnLoad: &recalc}); err != nil {
 		return totalResult{}, err
 	}
 	if err := save(ctx, fs, f, arg.Path); err != nil {

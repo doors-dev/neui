@@ -30,7 +30,7 @@ func (c *Call[I, O]) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &src); err != nil {
 		return err
 	}
-	if err := checkSyntax("(" + src + "\n)"); err != nil {
+	if err := checkSyntax("\"use strict\";(" + src + "\n)"); err != nil {
 		return err
 	}
 	*c = Call[I, O](src)
@@ -203,8 +203,12 @@ func (r *runner) evaluate(fn fn) {
 		fn.rej <- context.Cause(r.owner.ctx)
 		return
 	}
+	if fn.ctx.Err() != nil {
+		fn.rej <- context.Cause(fn.ctx)
+		return
+	}
 	interrupted := make(chan struct{})
-	stop := context.AfterFunc(r.owner.ctx, func() {
+	stop := context.AfterFunc(ctx, func() {
 		vm.Interrupt()
 		close(interrupted)
 	})

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"neui.dev/api"
@@ -333,11 +334,23 @@ func matchSnippet(text string, fold string) (string, bool) {
 	if i == -1 {
 		return "", false
 	}
-	lo := max(i-snippetLead, 0)
+	start, end := 0, len(text)
+	lowered := 0
+	for at, r := range text {
+		if lowered == i {
+			start = at
+		}
+		if lowered == i+len(fold) {
+			end = at
+			break
+		}
+		lowered += utf8.RuneLen(unicode.ToLower(r))
+	}
+	lo := max(start-snippetLead, 0)
 	for lo > 0 && !utf8.RuneStart(text[lo]) {
 		lo--
 	}
-	hi := min(i+len(fold)+snippetTrail, len(text))
+	hi := min(end+snippetTrail, len(text))
 	for hi < len(text) && !utf8.RuneStart(text[hi]) {
 		hi++
 	}

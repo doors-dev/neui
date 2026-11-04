@@ -43,18 +43,25 @@ func validName(name string) bool {
 	return name != "" && name != "." && name != ".." && !strings.ContainsRune(name, '/')
 }
 
+func checkFile(threadID api.ThreadID, origin api.Origin, name string) error {
+	if !validName(string(threadID)) {
+		return fmt.Errorf("%w: thread id %q", api.ErrInvalidName, threadID)
+	}
+	if !validName(name) {
+		return fmt.Errorf("%w %q", api.ErrInvalidName, name)
+	}
+	if !origin.Valid() {
+		return fmt.Errorf("unknown origin %q", origin)
+	}
+	return nil
+}
+
 func (l *FileStorage) FilePut(ctx context.Context, threadID api.ThreadID, origin api.Origin, name string, mime string, r io.Reader, draft bool) (api.File, error) {
 	if err := ctx.Err(); err != nil {
 		return api.File{}, err
 	}
-	if threadID == "" {
-		return api.File{}, errors.New("file needs a thread id")
-	}
-	if !validName(name) {
-		return api.File{}, fmt.Errorf("%w %q", api.ErrInvalidName, name)
-	}
-	if !origin.Valid() {
-		return api.File{}, fmt.Errorf("unknown origin %q", origin)
+	if err := checkFile(threadID, origin, name); err != nil {
+		return api.File{}, err
 	}
 	threadDir := filepath.Join(l.base, filesDirName, string(threadID))
 	originDir := filepath.Join(threadDir, string(origin))
@@ -166,6 +173,9 @@ func (l *FileStorage) FileCommit(ctx context.Context, threadID api.ThreadID, ori
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if err := checkFile(threadID, origin, name); err != nil {
+		return err
+	}
 	dir := filepath.Join(l.base, filesDirName, string(threadID), string(origin), name)
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -210,6 +220,9 @@ func (l *FileStorage) FileStat(ctx context.Context, threadID api.ThreadID, origi
 	if err := ctx.Err(); err != nil {
 		return api.File{}, err
 	}
+	if err := checkFile(threadID, origin, name); err != nil {
+		return api.File{}, err
+	}
 	dir := filepath.Join(l.base, filesDirName, string(threadID), string(origin), name)
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -218,6 +231,9 @@ func (l *FileStorage) FileStat(ctx context.Context, threadID api.ThreadID, origi
 
 func (l *FileStorage) FileRead(ctx context.Context, threadID api.ThreadID, origin api.Origin, name string, off int64, n int64) (io.ReadCloser, error) {
 	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := checkFile(threadID, origin, name); err != nil {
 		return nil, err
 	}
 	dir := filepath.Join(l.base, filesDirName, string(threadID), string(origin), name)
@@ -309,6 +325,9 @@ func (l *FileStorage) FileDelete(ctx context.Context, threadID api.ThreadID, ori
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if err := checkFile(threadID, origin, name); err != nil {
+		return err
+	}
 	dir := filepath.Join(l.base, filesDirName, string(threadID), string(origin), name)
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -318,6 +337,9 @@ func (l *FileStorage) FileDelete(ctx context.Context, threadID api.ThreadID, ori
 func (l *FileStorage) FileDeleteAll(ctx context.Context, threadID api.ThreadID) error {
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	if !validName(string(threadID)) {
+		return fmt.Errorf("%w: thread id %q", api.ErrInvalidName, threadID)
 	}
 	threadDir := filepath.Join(l.base, filesDirName, string(threadID))
 	workspaceDir := filepath.Join(l.base, workspacesDirName, string(threadID))

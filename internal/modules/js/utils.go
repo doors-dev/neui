@@ -142,8 +142,12 @@ func readScript(ctx context.Context, fs api.FS, file string, code string, arg js
 	if _, err := io.Copy(&b, src); err != nil {
 		return "", err
 	}
-	b.WriteString("\n})(")
-	b.Write(arg)
-	b.WriteString(");\nreturn JSON.stringify(res ?? null);\n} catch (e) { console.error(e); throw e; }\n})()")
+	quoted, err := json.Marshal(string(arg))
+	if err != nil {
+		return "", err
+	}
+	b.WriteString("\n})(JSON.parse(")
+	b.Write(quoted)
+	b.WriteString("));\nreturn JSON.stringify(res ?? null);\n} catch (e) { console.error(e); throw e; }\n})()")
 	return b.String(), nil
 }

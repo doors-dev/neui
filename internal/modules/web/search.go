@@ -60,7 +60,7 @@ func (m *module) search(ctx context.Context, arg SearchArg) ([]Result, error) {
 	defer cancel()
 	results, err := m.backend.Search(ctx, q)
 	if err != nil {
-		if errors.Is(err, context.Canceled) {
+		if errors.Is(err, context.Canceled) && ctx.Err() != nil {
 			return nil, context.Cause(ctx)
 		}
 		return nil, fmt.Errorf("the search backend is unavailable: %s. Use web__fetch on a URL you already know instead of retrying.", err)

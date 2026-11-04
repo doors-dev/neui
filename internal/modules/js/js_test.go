@@ -256,3 +256,59 @@ func TestRunFileXorCode(t *testing.T) {
 		t.Fatalf("neither set: err = %v", err)
 	}
 }
+
+func TestRunBackToBackNotBusy(t *testing.T) {
+	ctx := testkit.NewController(t, testkit.Setup{}).Ctx()
+	m := &module{runtime: getRuntime(context.Background())}
+	for range 200 {
+		if _, err := m.run(ctx, RunArg{Code: "return 1;"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestRunCanceledCall(t *testing.T) {
+	base := testkit.NewController(t, testkit.Setup{}).Ctx()
+	ctx, cancel := context.WithCancelCause(base)
+	m := &module{runtime: getRuntime(context.Background())}
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		cancel(api.ErrCanceledByUser)
+	}()
+	start := time.Now()
+	_, err := m.run(ctx, RunArg{Code: "while (true) {}"})
+	if !errors.Is(err, api.ErrCanceledByUser) {
+		t.Fatalf("err = %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("canceled run took %v", elapsed)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.running != nil {
+		t.Fatal("canceled run still marked running")
+	}
+}
+
+func TestRunUnserializableResult(t *testing.T) {
+	ctx := testkit.NewController(t, testkit.Setup{}).Ctx()
+	m := &module{runtime: getRuntime(context.Background())}
+	for _, code := range []string{"return () => 1;", "return Symbol('x');", "return {toJSON() {}};"} {
+		_, err := m.run(ctx, RunArg{Code: code})
+		if !errors.Is(err, errScript) || errors.Is(err, errRuntime) {
+			t.Fatalf("%s: err = %v", code, err)
+		}
+	}
+}
+
+func TestRunArgProtoKey(t *testing.T) {
+	ctx := testkit.NewController(t, testkit.Setup{}).Ctx()
+	m := &module{runtime: getRuntime(context.Background())}
+	res, err := m.run(ctx, RunArg{Code: "return Object.keys(arg);", Arg: json.RawMessage(`{"__proto__":{"x":1},"y":2}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(res.Output) != `["__proto__","y"]` {
+		t.Fatalf("output = %s", res.Output)
+	}
+}

@@ -82,8 +82,12 @@ func (m *module) stop(ctx context.Context, arg struct{}) (struct{}, error) {
 	running := m.running
 	m.mu.Unlock()
 	running.cancel(nil)
-	<-running.done
-	return struct{}{}, nil
+	select {
+	case <-running.done:
+		return struct{}{}, nil
+	case <-ctx.Done():
+		return struct{}{}, context.Cause(ctx)
+	}
 }
 
 func (m *module) run(ctx context.Context, arg RunArg) (RunResult, error) {
@@ -128,7 +132,13 @@ func (m *module) run(ctx context.Context, arg RunArg) (RunResult, error) {
 		cancel: cancel,
 	}
 	m.mu.Unlock()
-	res := <-ch
+	var res task.Result
+	select {
+	case res = <-ch:
+	case <-ctx.Done():
+		cancel(context.Cause(ctx))
+		res = <-ch
+	}
 	if errors.Is(res.Err, api.ErrCanceledByUser) {
 		return RunResult{}, fmt.Errorf("%q: %w", label, res.Err)
 	}

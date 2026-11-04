@@ -531,6 +531,10 @@ func resultOutput(c api.ContentToolResult, at int) (any, error) {
 				blocks = append(blocks, omitted(rc, at, "an image part with no bytes in it is refused by the service, and the result is stored, so it would be refused again on every later turn of the thread"))
 				continue
 			}
+			if !imageMediaTypes[strings.ToLower(strings.TrimSpace(rc.Mime))] {
+				blocks = append(blocks, omitted(rc, at, fmt.Sprintf("an image of type %q is refused by the service, which takes PNG, JPEG, WEBP and GIF, and the result is stored, so it would be refused again on every later turn of the thread", rc.Mime)))
+				continue
+			}
 			img, err := imageBlock(rc)
 			if err != nil {
 				return nil, err
@@ -539,6 +543,10 @@ func resultOutput(c api.ContentToolResult, at int) (any, error) {
 		case api.ContentDocument:
 			if len(rc.Data) == 0 {
 				blocks = append(blocks, omitted(rc, at, "a file part with no bytes in it is refused by the service, and the result is stored, so it would be refused again on every later turn of the thread"))
+				continue
+			}
+			if strings.TrimSpace(rc.Mime) == "" {
+				blocks = append(blocks, omitted(rc, at, "a file part with no media type is refused by the service, and the result is stored, so it would be refused again on every later turn of the thread"))
 				continue
 			}
 			f, err := documentBlock(rc)

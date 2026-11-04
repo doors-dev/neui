@@ -76,6 +76,9 @@ func (w *workFS) Copy(ctx context.Context, src string, dst string) error {
 		if err != nil {
 			return err
 		}
+		if srcInfo.IsDir() {
+			return fmt.Errorf("%q: is a directory", src)
+		}
 		if dstInfo, err := w.workspace.Root.Stat(dst); err == nil && os.SameFile(srcInfo, dstInfo) {
 			return nil
 		}

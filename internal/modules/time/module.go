@@ -51,6 +51,7 @@ type pending struct {
 	comment string
 	cancel  context.CancelCauseFunc
 	done    chan struct{}
+	fired   bool
 }
 
 type NowResult struct {
@@ -131,6 +132,9 @@ func (m *module) timer(ctx context.Context, arg TimerArg) (TimerResult, error) {
 	if (arg.After != 0) == (arg.At != "") {
 		return TimerResult{}, errors.New("pass exactly one of afterMs or at")
 	}
+	if arg.After > uint(maxDelay.Milliseconds()) {
+		return TimerResult{}, fmt.Errorf("at most %s from now", maxDelay)
+	}
 	now := time.Now()
 	fires := now.Add(time.Duration(arg.After) * time.Millisecond)
 	requested := fmt.Sprintf("afterMs=%d", arg.After)
@@ -191,6 +195,17 @@ func (m *module) wait(ctx context.Context, p *pending, task common.Task, fires t
 	case <-ctx.Done():
 		task.Err(context.Cause(ctx))
 	case <-timer.C:
+		m.mu.Lock()
+		claimed := m.pending == p
+		if claimed {
+			p.fired = true
+		}
+		m.mu.Unlock()
+		if !claimed {
+			<-ctx.Done()
+			task.Err(context.Cause(ctx))
+			return
+		}
 		fired := time.Now()
 		out, _ := json.Marshal(map[string]any{
 			"firesAt": fires.Format(layout),
@@ -213,10 +228,16 @@ func (m *module) clear(p *pending) {
 func (m *module) cancel(ctx context.Context, _ struct{}) (struct{}, error) {
 	m.mu.Lock()
 	p := m.pending
-	m.mu.Unlock()
 	if p == nil {
+		m.mu.Unlock()
 		return struct{}{}, errors.New("no timer is pending")
 	}
+	if p.fired {
+		m.mu.Unlock()
+		return struct{}{}, errors.New("the timer already fired: its task_result reports the firing")
+	}
+	m.pending = nil
+	m.mu.Unlock()
 	p.cancel(nil)
 	<-p.done
 	return struct{}{}, nil

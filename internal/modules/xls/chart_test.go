@@ -109,3 +109,11 @@ func TestHighlightColorScale(t *testing.T) {
 		t.Fatalf("formats = %+v", formats)
 	}
 }
+
+func TestSheetRefQuotes(t *testing.T) {
+	for in, want := range map[string]string{"Data": "'Data'", "Q1-2024": "'Q1-2024'", "2024": "'2024'", "A1": "'A1'", "Bob's": "'Bob''s'"} {
+		if got := sheetRef(in); got != want {
+			t.Fatalf("sheetRef(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

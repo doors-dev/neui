@@ -50,7 +50,7 @@ func (s *threadTools) on(cmd any) {
 		s.ask = nil
 		s.thread.link.send(newMessageEvent(cmd.intoMessage(), api.ChatEventAskDone{}))
 	case commandAsk:
-		if s.thread.link != cmd.link {
+		if s.thread.link.linkTasks != cmd.link.linkTasks {
 			cmd.Err(api.ErrUnlinked)
 			return
 		}
@@ -90,7 +90,11 @@ func (s *threadTools) on(cmd any) {
 		cmd.NoMessage()
 		s.cancel(api.ErrCanceledByUser)
 		s.stopped = true
+		wasPending := s.thread.pending
 		s.thread.pending = false
+		if wasPending {
+			s.thread.link.send(newMessageEvent(nil, api.ChatEventInputPending{Pending: false}))
+		}
 	case commandRewind:
 		if cmd.link != s.thread.link {
 			cmd.Err(api.ErrUnlinked)
@@ -135,7 +139,7 @@ func (s *threadTools) on(cmd any) {
 			cmd.Err(context.Canceled)
 			return
 		}
-		cmd.Ok(s.thread.link.taskAdd(s.round.ID, cmd.module, cmd.name, cmd.comment, cmd.attrs, cmd.cancel))
+		cmd.Ok(s.thread.link.taskAdd(cmd.origin, cmd.module, cmd.name, cmd.comment, cmd.attrs, cmd.cancel))
 		s.thread.link.send(newMessageEvent(nil, api.ChatEventTasks{Tasks: s.thread.link.taskList()}))
 	case commandApplyCompaction:
 		if cmd.seq != s.thread.compaction.seq {

@@ -30,10 +30,7 @@ var chartTypes = map[string]excelize.ChartType{
 }
 
 func sheetRef(sheet string) string {
-	if strings.ContainsAny(sheet, " '") {
-		return "'" + strings.ReplaceAll(sheet, "'", "''") + "'"
-	}
-	return sheet
+	return "'" + strings.ReplaceAll(sheet, "'", "''") + "'"
 }
 
 func absRange(sheet string, x1, y1, x2, y2 int) (string, error) {

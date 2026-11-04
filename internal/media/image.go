@@ -18,6 +18,7 @@ const (
 	maxImageDim     = 2000
 	fallbackByteCap = 4 << 20
 	retryArea       = 0.75
+	MaxDecodePixels = 50_000_000
 )
 
 func Shape(data []byte, mimeType api.ImageMime, model api.Model) (api.Image, error) {
@@ -30,6 +31,9 @@ func Shape(data []byte, mimeType api.ImageMime, model api.Model) (api.Image, err
 		byteCap = fallbackByteCap
 	}
 	w, h := cfg.Width, cfg.Height
+	if w <= 0 || h <= 0 || int64(w)*int64(h) > MaxDecodePixels {
+		return api.Image{}, fmt.Errorf("image is %dx%d, over the %d pixels that can be decoded", w, h, MaxDecodePixels)
+	}
 	fits := w <= maxImageDim && h <= maxImageDim
 	if model.ImagePixels > 0 {
 		fits = fits && w*h <= model.ImagePixels
