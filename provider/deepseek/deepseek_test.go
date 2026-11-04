@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"neui.dev/api"
+	"neui.dev/internal/testkit/conform"
 	"neui.dev/provider/lib"
 )
 
@@ -222,110 +223,6 @@ func wantTrace(t *testing.T, events []api.Event, want ...string) {
 	}
 }
 
-// walk enforces protocol/event.go's grammar on a sequence and reports whether
-// it ended in a terminal event.
-//
-//	stream    := EventStart? body (EventOk | EventErr)?
-//	body      := any interleaving of block* and EventUsage*
-//	block     := text | tool | reasoning | opaque
-//	text      := (EventText | EventMeta)+ EventClose?
-//	tool      := (EventTool | EventMeta)+ EventClose?
-//	reasoning := (EventThinking | EventSummary | EventMeta)+ EventClose?
-//	opaque    := EventOpaque+ EventClose?
-//
-// A block production is the events at one Index, not a contiguous run, so the
-// state here is per index. This adapter interleaves, because DeepSeek does: an
-// event for one block arriving between two events of another is ordinary here
-// and passes.
-//
-// The terminator is optional in the protocol and impossible here, so any
-// EventClose is a failure rather than a block that ended early. This wire
-// frames no block ends, the only way to produce one is to synthesize it from
-// finish_reason, and that draws per block boundaries the server never drew;
-// this is what stops the sweep being reintroduced as a helpful tidy up. A
-// terminal event of either kind closes whatever is still open, EventErr
-// included, so a failed turn needs no sweep either.
-//
-// EventMeta names no kind, so it opens a block and leaves the kind to whatever
-// fills it, and it is refused only on an opaque block, whose Data is already
-// entirely the adapter's.
-func walk(t *testing.T, events []api.Event) bool {
-	t.Helper()
-	var blocks []string // kind by index, allocated in order and without holes
-	ended := false
-	fail := func(i int, format string, args ...any) {
-		t.Helper()
-		t.Fatalf("event %d (%s): %s\nsequence %v", i, trace(events[i]), fmt.Sprintf(format, args...), traces(events))
-	}
-	fill := func(i int, kind string, idx int) {
-		t.Helper()
-		switch {
-		case idx == len(blocks):
-			blocks = append(blocks, kind)
-		case idx > len(blocks):
-			fail(i, "index %d leaves a hole, the next index is %d: the adapter counts its own indices and they are positions in the message", idx, len(blocks))
-		case blocks[idx] == "meta":
-			if kind == "opaque" {
-				fail(i, "opens opaque block %d, which already carries meta", idx)
-			}
-			blocks[idx] = kind
-		case kind == "meta":
-			if blocks[idx] == "opaque" {
-				fail(i, "attaches meta to opaque block %d, whose Data is already the adapter's", idx)
-			}
-		case blocks[idx] != kind:
-			fail(i, "fills %s block %d with a %s event", blocks[idx], idx, kind)
-		}
-	}
-	for i, e := range events {
-		if ended {
-			fail(i, "arrives after the stream already ended")
-		}
-		switch e := e.(type) {
-		case api.EventStart:
-			if i != 0 {
-				fail(i, "EventStart may only be the first event")
-			}
-		case api.EventText:
-			fill(i, "text", e.Index)
-		case api.EventTool:
-			fill(i, "tool", e.Index)
-		case api.EventThinking:
-			fill(i, "reasoning", e.Index)
-		case api.EventSummary:
-			fill(i, "reasoning", e.Index)
-		case api.EventMeta:
-			fill(i, "meta", e.Index)
-		case api.EventOpaque:
-			fill(i, "opaque", e.Index)
-		case api.EventClose:
-			fail(i, "closes block %d, on a wire that never says a block ended", e.Index)
-		case api.EventUsage:
-		case api.EventOk, api.EventErr:
-			ended = true
-		default:
-			fail(i, "unknown event type")
-		}
-	}
-	return ended
-}
-
-// checkGrammar walks a sequence against the grammar in protocol/event.go. The
-// terminal event is optional there and its absence is what says a reply was cut
-// off, so what this enforces is the block structure and that nothing follows a
-// terminal event. Every streaming test runs its sequence through this as well as
-// through its own expectations.
-func checkGrammar(t *testing.T, events []api.Event) {
-	t.Helper()
-	walk(t, events)
-}
-
-// checkPrefix is the same walk under a name that says the turn was cut short.
-func checkPrefix(t *testing.T, events []api.Event) {
-	t.Helper()
-	walk(t, events)
-}
-
 // Model answers from configuration alone, so it holds before any turn has run:
 // a listed model carries its window, a caller's own literal reads back as
 // written, and an unstated window reads as unknown rather than as no window.
@@ -441,7 +338,7 @@ func TestContextOverflowIsTheOne400ThatSaysSo(t *testing.T) {
 				io.WriteString(w, tc.body)
 			})
 			events := collect(t, p, turn("hi"))
-			checkGrammar(t, events)
+			conform.CheckUnframed(t, events)
 			wantTrace(t, events, "err "+string(tc.want))
 		})
 	}
@@ -477,7 +374,7 @@ func TestStreamDisconnectCarriesTheFinishReason(t *testing.T) {
 				drop(w)
 			})
 			events := collect(t, p, turn("hi"))
-			checkGrammar(t, events)
+			conform.CheckUnframed(t, events)
 			wantTrace(t, events,
 				"start chatcmpl-1 deepseek-v4-pro",
 				`text 0 "done"`,
