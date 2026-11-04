@@ -58,7 +58,7 @@ func TestResultShapesImage(t *testing.T) {
 	pixels := 1568 * 1568
 	out := result(modelCtx(api.Model{ImagePixels: pixels}), &mcp.CallToolResult{
 		Content: []mcp.Content{&mcp.ImageContent{MIMEType: "image/png", Data: buf.Bytes()}},
-	})
+	}, false)
 	contents, ok := out.(blocks)
 	if !ok {
 		t.Fatalf("got %T, want blocks", out)
@@ -85,7 +85,7 @@ func TestResultOmitsUnshapableImage(t *testing.T) {
 			&mcp.ImageContent{MIMEType: "image/png", Data: []byte("not an image")},
 			&mcp.ImageContent{MIMEType: "image/tiff", Data: []byte("nope")},
 		},
-	})
+	}, false)
 	contents, ok := out.(blocks)
 	if !ok {
 		t.Fatalf("got %T, want blocks", out)
@@ -101,5 +101,25 @@ func TestResultOmitsUnshapableImage(t *testing.T) {
 		if !bytes.Contains([]byte(text.Text), []byte("<omitted type=\"image\"")) {
 			t.Fatalf("block %d: %q", i, text.Text)
 		}
+	}
+}
+
+func TestResultUndeclaredStructuredIsBlocks(t *testing.T) {
+	res := &mcp.CallToolResult{
+		Content:           []mcp.Content{&mcp.TextContent{Text: "hello"}},
+		StructuredContent: map[string]any{"a": 1},
+	}
+	contents, ok := result(context.Background(), res, false).(blocks)
+	if !ok {
+		t.Fatal("undeclared structured content returned instead of blocks")
+	}
+	if len(contents) != 1 {
+		t.Fatalf("got %d blocks, want 1", len(contents))
+	}
+	if text, ok := contents[0].(api.ContentText); !ok || text.Text != "hello" {
+		t.Fatalf("got %v, want the text block", contents[0])
+	}
+	if _, ok := result(context.Background(), res, true).(map[string]any); !ok {
+		t.Fatal("declared structured content not returned")
 	}
 }

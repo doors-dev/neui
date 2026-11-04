@@ -38,8 +38,8 @@ func (c controller) Ask(ask api.ChatAsk) (func(ctx context.Context), error) {
 			select {
 			case <-c.link.thread.close:
 			case c.link.thread.ch <- cmd:
+				op.Receive()
 			}
-			op.Receive()
 		}, err
 	}
 }

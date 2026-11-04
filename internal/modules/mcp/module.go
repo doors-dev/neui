@@ -104,6 +104,7 @@ func (m *module) Desc() string {
 }
 
 func (m *module) Get(name string) (common.Tool, bool) {
+	m.waitInit()
 	type tool struct {
 		tool  common.Tool
 		found bool
@@ -175,9 +176,7 @@ func (m *module) on(cmd command) {
 		m.cancelConnection = nil
 		m.connErrored = false
 		m.client = cmd.client
-		if cmd.desc != "" {
-			m.desc.Store(&cmd.desc)
-		}
+		m.desc.Store(&cmd.desc)
 		m.module = m.buildModule(cmd.tools)
 		for _, w := range m.waiters {
 			if w.reply(cmd.client) {
@@ -284,9 +283,11 @@ func (m *module) buildModule(list []*mcp.Tool) tools.Module {
 			inputSchema = schema.ObjectRawSchema
 		}
 		outputSchema := schema.BlocksRawSchema
+		structured := false
 		if tool.OutputSchema != nil {
-			if outputSchema, err = schema.NewRawSchema(tool.OutputSchema); err != nil {
-				outputSchema = schema.BlocksRawSchema
+			if declared, err := schema.NewRawSchema(tool.OutputSchema); err == nil {
+				outputSchema = declared
+				structured = true
 			}
 		}
 		module.AddRaw(
@@ -331,7 +332,7 @@ func (m *module) buildModule(list []*mcp.Tool) tools.Module {
 				if res.NeedsInput() {
 					return nil, inputRequired(res.InputRequests)
 				}
-				return result(ctx, res), nil
+				return result(ctx, res, structured), nil
 			},
 		)
 	}

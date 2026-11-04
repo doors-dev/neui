@@ -146,13 +146,11 @@ func (m Marksman) Main() gox.Elem {
 		}
 		m.ctx = doors.DetachedContext(cur.Context())
 		m.cursor = new(doors.Door)
-		if len(initial) != 0 {
-			m.armTimer()
-			if partial, has := m.parser.Partial(); has {
-				m.cursor.Inner(cur.Context(), gox.Elem(func(cur gox.Cursor) error {
-					return cur.Bytes(partial)
-				}))
-			}
+		if partial, has := m.parser.Partial(); has {
+			m.partialPushed = true
+			m.cursor.Inner(cur.Context(), gox.Elem(func(cur gox.Cursor) error {
+				return cur.Bytes(partial)
+			}))
 		}
 		return cur.Comp(m.cursor)
 	})

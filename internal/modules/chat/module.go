@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"neui.dev/internal/common"
@@ -33,7 +34,7 @@ func nameTool(ctx context.Context, arg NameArg) (struct{}, error) {
 	if name == "" {
 		return struct{}{}, errors.New("name is empty: pass a short title naming the topic")
 	}
-	if strings.ContainsAny(name, "\n\r") {
+	if strings.ContainsFunc(name, func(r rune) bool { return unicode.IsControl(r) || r == '\u2028' || r == '\u2029' }) {
 		return struct{}{}, errors.New("name must be a single line")
 	}
 	if utf8.RuneCountInString(name) > nameLimit {

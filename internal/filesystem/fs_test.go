@@ -1080,3 +1080,25 @@ func TestTempWipeEmptiesScratch(t *testing.T) {
 		t.Fatalf("fresh scratch holds %+v, %v", left, err)
 	}
 }
+
+func TestCopyDirectorySourceKeepsDestination(t *testing.T) {
+	w, _ := newTestFS(t)
+	writeFile(t, w, "keep.txt", "precious")
+	if err := w.workspace.Root.Mkdir("folder", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	err := w.Copy(context.Background(), "folder", "keep.txt")
+	if err == nil || !strings.Contains(err.Error(), "is a directory") {
+		t.Fatalf("Copy from a directory = %v, want an is-a-directory error", err)
+	}
+	if strings.Contains(err.Error(), w.workspace.Dir) {
+		t.Fatalf("error leaks the host path: %v", err)
+	}
+	if got := readAll(t, w, "keep.txt"); got != "precious" {
+		t.Fatalf("destination changed to %q", got)
+	}
+	err = w.Copy(context.Background(), "folder", "agent_uploads/folder")
+	if err == nil || strings.Contains(err.Error(), w.workspace.Dir) {
+		t.Fatalf("Copy from a directory to agent_uploads = %v", err)
+	}
+}

@@ -137,6 +137,20 @@ func TestEncodeInput(t *testing.T) {
 				{"type":"input_text","text":"here"}]}]`,
 		},
 		{
+			name: "a result image the service refuses by type or a result document with no type leaves a note",
+			req: api.Request{Messages: []api.Message{
+				user(api.ContentToolResult{ID: "call_a", Content: api.UserContents{
+					api.ContentImage{Data: []byte("<svg/>"), Mime: "image/svg+xml"},
+					api.ContentDocument{Data: []byte("%PDF")},
+					api.ContentText{Text: "here"},
+				}}),
+			}},
+			want: `[{"type":"function_call_output","call_id":"call_a","output":[
+				{"type":"input_text","text":"[image omitted]"},
+				{"type":"input_text","text":"[document omitted]"},
+				{"type":"input_text","text":"here"}]}]`,
+		},
+		{
 			name: "assistant text goes back as a typed block array, the same as the user role",
 			req: api.Request{Messages: []api.Message{
 				user(api.ContentText{Text: "hi"}),

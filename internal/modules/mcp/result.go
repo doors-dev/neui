@@ -26,8 +26,8 @@ func (b blocks) MarshalJSON() ([]byte, error) {
 
 var _ api.MultiContainer = blocks{}
 
-func result(ctx context.Context, res *mcp.CallToolResult) any {
-	if res.StructuredContent != nil {
+func result(ctx context.Context, res *mcp.CallToolResult, structured bool) any {
+	if structured && res.StructuredContent != nil {
 		return res.StructuredContent
 	}
 	var model api.Model

@@ -59,16 +59,21 @@ func readTool(ctx context.Context, arg readArg) (string, error) {
 	var total, shown, last uint
 	budget := thread.FilesConfig().ReadLimit
 	capped := false
-	scanner := bufio.NewScanner(br)
-	scanner.Buffer(make([]byte, 1<<20), 1<<20)
-	for scanner.Scan() {
+	for {
+		raw, cut, err := readLine(br, readLineMax)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "", err
+		}
 		total++
 		if total < offset || shown == limit || capped {
 			continue
 		}
-		line := scanner.Text()
-		if len(line) > readLineMax {
-			line = line[:readLineMax] + "... (line truncated)"
+		line := string(raw)
+		if cut {
+			line += "... (line truncated)"
 		}
 		fmt.Fprintf(&b, "%d: %s\n", total, line)
 		if budget >= 0 {
@@ -79,9 +84,6 @@ func readTool(ctx context.Context, arg readArg) (string, error) {
 		}
 		shown++
 		last = total
-	}
-	if err := scanner.Err(); err != nil {
-		return "", err
 	}
 	if total == 0 {
 		return "(empty file)", nil
@@ -95,6 +97,30 @@ func readTool(ctx context.Context, arg readArg) (string, error) {
 		fmt.Fprintf(&b, "(showing lines %d-%d of %d, continue with offset=%d)", offset, last, total, last+1)
 	}
 	return b.String(), nil
+}
+
+func readLine(br *bufio.Reader, keep int) ([]byte, bool, error) {
+	var line []byte
+	cut := false
+	started := false
+	for {
+		chunk, more, err := br.ReadLine()
+		if err != nil {
+			if err == io.EOF && started {
+				return line, cut, nil
+			}
+			return nil, false, err
+		}
+		started = true
+		if room := keep - len(line); len(chunk) > room {
+			chunk = chunk[:room]
+			cut = true
+		}
+		line = append(line, chunk...)
+		if !more {
+			return line, cut, nil
+		}
+	}
 }
 
 func readBytesTool(ctx context.Context, arg readBytesArg) ([]byte, error) {

@@ -455,13 +455,13 @@ elem (c *Composer) overshoot(excess int) {
 			<span class="kchat-gauge-body">
 				<span class="kchat-gauge-val">too long</span>
 				<span class="kchat-gauge-sep">·</span>
-				<span class="kchat-gauge-meta">~(characters(excess) + " over")</span>
+				<span class="kchat-gauge-meta">~(byteCount(excess) + " over")</span>
 			</span>
 		</span>
 	})
 }
 
-func characters(n int) string {
+func byteCount(n int) string {
 	digits := fmt.Sprintf("%d", n)
 	var b strings.Builder
 	for i := range digits {
@@ -470,7 +470,7 @@ func characters(n int) string {
 		}
 		b.WriteByte(digits[i])
 	}
-	return b.String() + " characters"
+	return b.String() + " bytes"
 }
 
 func tokens(n int) string {

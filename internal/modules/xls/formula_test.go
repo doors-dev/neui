@@ -132,3 +132,48 @@ func TestCheck(t *testing.T) {
 		t.Fatalf("errors[0] = %+v", res.Errors[0])
 	}
 }
+
+func TestColumnKeepsOtherCachedValues(t *testing.T) {
+	fs, _ := newFSStore(t)
+	f := excelize.NewFile()
+	for cell, v := range map[string]any{"A1": "N", "B1": "Twice", "A2": 1, "A3": 2, "B2": 2, "B3": 4, "C2": 99, "C3": 98} {
+		if err := f.SetCellValue("Sheet1", cell, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := f.SetCellFormula("Sheet1", "B2", "A2*2"); err != nil {
+		t.Fatal(err)
+	}
+	w, err := fs.Create("book.xlsx")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Write(w); err != nil {
+		t.Fatal(err)
+	}
+	w.Close()
+	f.Close()
+	ctx := threadCtx(fs)
+	if _, err := columnTool(ctx, columnArg{Path: "book.xlsx", Sheet: "Sheet1", Range: "A1:B3", Header: "Thrice", Formula: "=A{row}*3"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := totalTool(ctx, totalArg{Path: "book.xlsx", Sheet: "Sheet1", Range: "A1:C3", Aggs: []aggSpec{{Column: "A", Fn: "sum"}}}); err != nil {
+		t.Fatal(err)
+	}
+	g := reopen(t, fs, "book.xlsx")
+	if v, _ := g.GetCellValue("Sheet1", "B2", excelize.Options{RawCellValue: true}); v != "2" {
+		t.Fatalf("unrelated cached value = %q, want 2", v)
+	}
+	for _, cell := range []string{"C2", "C3", "A4"} {
+		if v, _ := g.GetCellValue("Sheet1", cell, excelize.Options{RawCellValue: true}); v != "" {
+			t.Fatalf("%s stale cached value %q", cell, v)
+		}
+	}
+	calc, err := g.GetCalcProps()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calc.FullCalcOnLoad == nil || !*calc.FullCalcOnLoad {
+		t.Fatal("fullCalcOnLoad not set")
+	}
+}

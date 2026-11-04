@@ -130,3 +130,10 @@ func TestSearchRefusedFromScriptButFetchIsNot(t *testing.T) {
 		t.Errorf("script fetch returned %v", out)
 	}
 }
+
+func TestSearchForeignCancelIsUnavailable(t *testing.T) {
+	search, _ := searchTool(t, Config{Search: &fakeBackend{err: context.Canceled}})
+	if _, err := search(`{"query":"widgets"}`); err == nil || !strings.Contains(err.Error(), "unavailable") {
+		t.Errorf("a backend's own cancellation must be reported as a failure: %v", err)
+	}
+}

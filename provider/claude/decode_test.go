@@ -1196,3 +1196,32 @@ func TestStartCarriesTheConfiguredModel(t *testing.T) {
 		t.Fatalf("EventStart.Model %q, want the model the provider was configured with", model)
 	}
 }
+
+func TestInbandSpendLimitIsAccess(t *testing.T) {
+	p := testProvider(t, sseServer(sse(
+		"message_start", fixStart,
+		"error", `{"type":"error","error":{"type":"rate_limit_error","message":"spend limit","details":{"error_code":"enforced_spend_limit_reached"}}}`,
+	)))
+	events := collect(t, p, hello())
+	last, ok := events[len(events)-1].(api.EventErr)
+	if !ok {
+		t.Fatalf("the turn ended with %#v, want api.EventErr", events[len(events)-1])
+	}
+	if last.Code != api.CodeAccess {
+		t.Fatalf("code = %q, want %q: a spend limit is not lifted by retrying", last.Code, api.CodeAccess)
+	}
+	var apiErr *APIError
+	if !errors.As(last.Err, &apiErr) || apiErr.ErrorCode != "enforced_spend_limit_reached" {
+		t.Fatalf("error %#v does not carry the frame's error_code", last.Err)
+	}
+}
+
+func TestNilHTTPClientIsRefused(t *testing.T) {
+	p := &Provider{client: http.DefaultClient}
+	if err := WithHTTPClient(nil)(p); err == nil {
+		t.Fatalf("WithHTTPClient(nil) was accepted")
+	}
+	if p.client != http.DefaultClient {
+		t.Fatalf("a refused nil client replaced the one already set")
+	}
+}

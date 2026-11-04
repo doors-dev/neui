@@ -264,3 +264,35 @@ func TestOpenReadErrors(t *testing.T) {
 		t.Fatalf("virtual err = %v", err)
 	}
 }
+
+func TestFindEmptyQuery(t *testing.T) {
+	fs, _ := newFSStore(t)
+	buildBook(t, fs, "book.xlsx")
+	if _, err := findTool(threadCtx(fs), findArg{Path: "book.xlsx", Query: ""}); err == nil {
+		t.Fatal("empty query: no error")
+	}
+}
+
+func TestProfileBlankHeaderRow(t *testing.T) {
+	fs, _ := newFSStore(t)
+	f := excelize.NewFile()
+	if err := f.SetCellValue("Sheet1", "A2", "x"); err != nil {
+		t.Fatal(err)
+	}
+	w, err := fs.Create("book.xlsx")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Write(w); err != nil {
+		t.Fatal(err)
+	}
+	w.Close()
+	f.Close()
+	res, err := profileTool(threadCtx(fs), profileArg{Path: "book.xlsx", Sheet: "Sheet1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Headers == nil {
+		t.Fatal("headers = nil")
+	}
+}

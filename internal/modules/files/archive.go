@@ -49,6 +49,9 @@ func zipTool(ctx context.Context, arg zipArg) (Entry, error) {
 				return err
 			}
 			if !e.Dir {
+				if e.Name == dst {
+					continue
+				}
 				if err := zipAdd(ctx, fs, zw, e.Name); err != nil {
 					return err
 				}

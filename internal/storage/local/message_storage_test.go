@@ -1298,3 +1298,25 @@ func TestRoundReadsOmitResults(t *testing.T) {
 		t.Fatalf("RoundAfter must omit Results: %+v", after)
 	}
 }
+
+func TestRoundSearchSnippetAfterCaseChangingRunes(t *testing.T) {
+	s := newTestStore(t)
+	createThread(t, s, "a")
+	createThread(t, s, "b")
+	createThread(t, s, "c")
+	addInput(t, s, "a", 0, strings.Repeat("Ⱥ", 100)+"abc")
+	addInput(t, s, "b", 0, strings.Repeat("İ", 1000)+"abc")
+	addInput(t, s, "c", 0, strings.Repeat("\xff", 100)+"abc")
+	hits, err := s.RoundSearch(context.Background(), "", false, "ABC", nil, false, false, 0)
+	if err != nil {
+		t.Fatalf("RoundSearch: %v", err)
+	}
+	if len(hits) != 3 {
+		t.Fatalf("got %d hits: %+v", len(hits), hits)
+	}
+	for _, h := range hits {
+		if !strings.HasSuffix(h.Snippet, "abc") {
+			t.Fatalf("snippet in %s must end with the match: %q", h.Thread, h.Snippet)
+		}
+	}
+}

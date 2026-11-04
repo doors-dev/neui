@@ -141,3 +141,72 @@ func TestFetchSaveAsOverTheCapKeepsNothing(t *testing.T) {
 		}
 	}
 }
+
+func TestFetchSaveAsFailureKeepsExistingFile(t *testing.T) {
+	store, err := local.NewFileStorage()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Remove() })
+	ws, err := store.WorkspaceOpen("thread")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { ws.Close() })
+	fs := filesystem.New("thread", ws, store, api.FilesConfig{})
+	ctx := context.WithValue(context.Background(), common.KeyController, common.Controller(testThread{fs: fs}))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/pdf")
+		switch r.URL.Path {
+		case "/big":
+			w.Write([]byte(strings.Repeat("x", 4096)))
+		case "/reset":
+			w.Header().Set("Content-Length", "512")
+			w.Write([]byte(strings.Repeat("y", 100)))
+			w.(http.Flusher).Flush()
+			conn, _, _ := w.(http.Hijacker).Hijack()
+			conn.Close()
+		default:
+			w.Write([]byte("fresh"))
+		}
+	}))
+	defer srv.Close()
+	read := func() string {
+		rc, err := fs.ReadAll(ctx, "docs/spec.pdf")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rc.Close()
+		b, _ := io.ReadAll(rc)
+		return string(b)
+	}
+	put, err := fs.Create("docs/spec.pdf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	put.Write([]byte("good copy"))
+	put.Close()
+	m := Module(Config{HTTPClient: srv.Client(), MaxBytes: 1024})(ctx)
+	tool, _ := m.Get("fetch")
+	for _, p := range []string{"/big", "/reset"} {
+		if _, err := tool.Agent(ctx, json.RawMessage(fmt.Sprintf(`{"url":%q,"saveAs":"docs/spec.pdf"}`, srv.URL+p))); err == nil {
+			t.Fatalf("%s: want an error", p)
+		}
+		if got := read(); got != "good copy" {
+			t.Errorf("%s: a failed fetch replaced the existing file with %q", p, got)
+		}
+	}
+	entries, err := fs.ReadDir(ctx, "docs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Errorf("partial downloads were left behind: %+v", entries)
+	}
+	if _, err := tool.Agent(ctx, json.RawMessage(fmt.Sprintf(`{"url":%q,"saveAs":"docs/spec.pdf"}`, srv.URL+"/ok"))); err != nil {
+		t.Fatal(err)
+	}
+	if got := read(); got != "fresh" {
+		t.Errorf("a successful fetch must replace the file, got %q", got)
+	}
+}

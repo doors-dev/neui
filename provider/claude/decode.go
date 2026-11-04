@@ -106,12 +106,18 @@ func (c *converter) Convert(f lib.Frame) ([]api.Event, bool) {
 	case "message_stop":
 		return []api.Event{stopEvent(c.stop)}, false
 	case "error":
-		var kind, msg string
+		var kind, msg, errorCode string
 		if ev.Error != nil {
 			kind, msg = ev.Error.Type, ev.Error.Message
+			if ev.Error.Details != nil {
+				errorCode = ev.Error.Details.ErrorCode
+			}
 		}
 		code := inbandCode(kind)
-		var err error = &APIError{Type: kind, Message: msg}
+		if kind == "rate_limit_error" && errorCode == "enforced_spend_limit_reached" {
+			code = api.CodeAccess
+		}
+		var err error = &APIError{Type: kind, Message: msg, ErrorCode: errorCode}
 		if code == api.CodeTooLarge {
 			err = measuredTooLarge(c.model, c.sent, c.declared, err)
 		}

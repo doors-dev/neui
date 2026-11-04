@@ -80,6 +80,7 @@ func (s Space) addSpace(ctx context.Context, name string, desc string, island is
 	index, found := s.search(name)
 	ctx = context.WithValue(ctx, common.KeySpace, space)
 	space.ctx = doors.DetachedContext(ctx)
+	s.deltaSeq = seq
 	if found {
 		s.children[index] = space
 		return ctx, nil

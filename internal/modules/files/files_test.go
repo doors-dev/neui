@@ -508,3 +508,53 @@ func TestCopyToAgentUploadsSurfacesExists(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestReadOverlongLine(t *testing.T) {
+	fs := newFS(t)
+	write(t, fs, "a.txt", "first\r\n"+strings.Repeat("x", 3<<20)+"\r\nthird\n")
+	out, err := readTool(threadCtx(fs), readArg{Path: "a.txt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "1: first\n2: " + strings.Repeat("x", readLineMax) + "... (line truncated)\n3: third\n(end of file, 3 lines)"
+	if out != want {
+		t.Fatalf("got %.200q", out)
+	}
+}
+
+func TestGrepOverlongLine(t *testing.T) {
+	fs := newFS(t)
+	write(t, fs, "a/big.txt", strings.Repeat("y", 3<<20)+"\nneedle one\n")
+	write(t, fs, "b/small.txt", "needle two\n")
+	res, err := grepTool(threadCtx(fs), grepArg{Pattern: "needle"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Matches) != 2 || res.Matches[0].Line != 2 {
+		t.Fatalf("got %+v", res.Matches)
+	}
+}
+
+func TestZipSkipsExplicitDst(t *testing.T) {
+	fs := newFS(t)
+	write(t, fs, "a.txt", "a")
+	write(t, fs, "out.zip", "old")
+	if _, err := zipTool(threadCtx(fs), zipArg{Paths: []string{"a.txt", "out.zip"}, Dst: "out.zip"}); err != nil {
+		t.Fatal(err)
+	}
+	if names := zipNames(t, fs, "out.zip"); len(names) != 1 || names[0] != "a.txt" {
+		t.Fatalf("got %v", names)
+	}
+}
+
+func TestReadImageRejectsOversizedGIF(t *testing.T) {
+	fs := newFS(t)
+	header := []byte("GIF89a\xff\xff\xff\xff\x00\x00\x00;")
+	if _, err := writeBytesTool(threadCtx(fs), writeBytesArg{Path: "huge.gif", Data: header}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := readImageTool(threadCtx(fs), PathArg{Path: "huge.gif"})
+	if err == nil || !strings.Contains(err.Error(), "65535x65535") {
+		t.Fatalf("err %v", err)
+	}
+}

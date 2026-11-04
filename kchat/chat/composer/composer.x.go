@@ -1354,7 +1354,7 @@ func (c *Composer) overshoot(excess int) gox.Elem {
 						__e = __c.Set("class", "kchat-gauge-meta"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 //line composer.gox:458
-						__e = __c.Any(characters(excess) + " over"); if __e != nil { return }
+						__e = __c.Any(byteCount(excess) + " over"); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
 				}
@@ -1366,7 +1366,7 @@ func (c *Composer) overshoot(excess int) gox.Elem {
 //line composer.gox:462
 }
 
-func characters(n int) string {
+func byteCount(n int) string {
 	digits := fmt.Sprintf("%d", n)
 	var b strings.Builder
 	for i := range digits {
@@ -1375,7 +1375,7 @@ func characters(n int) string {
 		}
 		b.WriteByte(digits[i])
 	}
-	return b.String() + " characters"
+	return b.String() + " bytes"
 }
 
 func tokens(n int) string {

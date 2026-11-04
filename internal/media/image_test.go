@@ -2,6 +2,7 @@ package media
 
 import (
 	"bytes"
+	"hash/crc32"
 	"image"
 	"image/jpeg"
 	"image/png"
@@ -215,5 +216,18 @@ func TestShapeHoldsImageBytesOnRawBytes(t *testing.T) {
 	}
 	if len(img.Data) > len(data)-1 {
 		t.Fatalf("a %d byte image under a %d byte cap came back at %d bytes", len(data), len(data)-1, len(img.Data))
+	}
+}
+
+func TestShapeRejectsOversizedDeclaredDimensions(t *testing.T) {
+	ihdr := []byte("IHDR\x00\x01\x86\xa0\x00\x01\x86\xa0\x08\x06\x00\x00\x00")
+	var data bytes.Buffer
+	data.WriteString("\x89PNG\r\n\x1a\n\x00\x00\x00\x0d")
+	data.Write(ihdr)
+	sum := crc32.ChecksumIEEE(ihdr)
+	data.Write([]byte{byte(sum >> 24), byte(sum >> 16), byte(sum >> 8), byte(sum)})
+	_, err := Shape(data.Bytes(), api.ImagePNG, api.Model{})
+	if err == nil || !strings.Contains(err.Error(), "100000x100000") {
+		t.Fatalf("Shape on a 100000x100000 header = %v, want a pixel cap error", err)
 	}
 }

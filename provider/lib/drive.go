@@ -183,8 +183,6 @@ func (s *streamer) run(req *http.Request) {
 func (s *streamer) read(body io.Reader) {
 	read := read(s.ctx, body, s.opt.Max)
 	for {
-		//<-time.After(time.Second / 10)
-
 		var ch chan api.Event
 		var event api.Event
 		if s.queue.Len() > 0 {

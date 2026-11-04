@@ -205,7 +205,9 @@ func profileTool(ctx context.Context, arg profileArg) (profileResult, error) {
 		}
 		w := b.window(v)
 		if num == b.y1 {
-			res.Headers = w
+			if w != nil {
+				res.Headers = w
+			}
 			continue
 		}
 		if empty(w) {
@@ -371,6 +373,9 @@ func readTool(ctx context.Context, arg readArg) (readResult, error) {
 }
 
 func findTool(ctx context.Context, arg findArg) (findResult, error) {
+	if arg.Query == "" {
+		return findResult{}, fmt.Errorf("query must not be empty")
+	}
 	c := cfg(ctx)
 	fs := common.GetController(ctx).FS()
 	f, err := openRead(ctx, fs, arg.Path)

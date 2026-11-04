@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/JohannesKaufmann/html-to-markdown/v2/converter"
 	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/base"
@@ -377,5 +378,54 @@ func TestFetchCacheAccountsForDisplacedEntries(t *testing.T) {
 	}
 	if m.held != reachable {
 		t.Errorf("cache holds %d bytes but only %d are reachable in %d entries under %d keys", m.held, reachable, len(live), len(m.cache))
+	}
+}
+
+func TestFetchCutsLongLinesByRune(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		fmt.Fprint(w, strings.Repeat("漢", 3000))
+	}))
+	defer srv.Close()
+	out, err := fetchTool(t, Config{HTTPClient: srv.Client()})(fmt.Sprintf(`{"url":%q}`, srv.URL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !utf8.ValidString(out) {
+		t.Errorf("a cut line split a rune")
+	}
+	if got := strings.Count(out, "漢"); got != fetchLineMax {
+		t.Errorf("kept %d characters of the long line, want %d", got, fetchLineMax)
+	}
+}
+
+func TestFetchOverCapErrorWithoutSaveAs(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		if r.URL.Path == "/sized" {
+			w.Header().Set("Content-Length", "4096")
+		}
+		w.Write([]byte(strings.Repeat("x", 4096)))
+	}))
+	defer srv.Close()
+	fetch := fetchTool(t, Config{HTTPClient: srv.Client(), MaxBytes: 1024})
+	for _, p := range []string{"/chunked", "/sized"} {
+		_, err := fetch(fmt.Sprintf(`{"url":%q}`, srv.URL+p))
+		if err == nil || !strings.Contains(err.Error(), "over the 1024-byte cap") || strings.Contains(err.Error(), "saveAs") {
+			t.Errorf("%s: %v", p, err)
+		}
+	}
+}
+
+type canceledTransport struct{}
+
+func (canceledTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, context.Canceled
+}
+
+func TestFetchForeignCancelIsAnError(t *testing.T) {
+	fetch := fetchTool(t, Config{HTTPClient: &http.Client{Transport: canceledTransport{}}})
+	if _, err := fetch(`{"url":"https://example.com/"}`); err == nil {
+		t.Error("a Canceled not caused by the call's context was reported as success")
 	}
 }

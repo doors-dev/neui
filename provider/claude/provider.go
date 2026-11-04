@@ -209,6 +209,9 @@ func WithBaseURL(base string) Option {
 // cuts long turns mid sentence. Use WithTransport instead.
 func WithHTTPClient(c *http.Client) Option {
 	return func(p *Provider) error {
+		if c == nil {
+			return errors.New("claude: WithHTTPClient needs a client")
+		}
 		p.client = c
 		return nil
 	}

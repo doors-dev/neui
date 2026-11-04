@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"path"
 
 	"neui.dev/api"
@@ -23,6 +24,15 @@ func (w *workFS) uploadCopy(ctx context.Context, dir *uploadsDir, src string, fi
 		return notFound(src, err)
 	}
 	defer srcFile.Close()
+	if f, ok := srcFile.(*os.File); ok {
+		info, err := f.Stat()
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return fmt.Errorf("%q: is a directory", src)
+		}
+	}
 	_, err = w.files.FilePut(ctx, w.threadID, dir.origin, fileName, detectMIME(fileName), srcFile, false)
 	if err != nil {
 		return fmt.Errorf("%q: %w", path.Join(dir.name, fileName), err)
