@@ -16,8 +16,6 @@ import (
 	"neui.dev/internal/thread"
 )
 
-const guard = 5 * time.Second
-
 type Host struct {
 	Provider *testkit.Provider
 	Config   api.ThreadConfig
@@ -26,10 +24,20 @@ type Host struct {
 }
 
 type Chat struct {
-	t      *testing.T
-	link   thread.Link
-	events chan api.ChatEvent
-	inits  chan api.ChatState
+	t       *testing.T
+	guard   time.Duration
+	link    thread.Link
+	send    func(api.Input) error
+	events  chan api.ChatEvent
+	inits   chan api.ChatState
+	current linked
+	links   chan linked
+}
+
+type linked struct {
+	thread   api.ChatThread
+	instance api.Instance
+	state    api.ChatState
 }
 
 func Headless(t *testing.T, h Host) *Chat {
@@ -49,9 +57,13 @@ func open(t *testing.T, h Host, ctx context.Context, p page.Page) *Chat {
 	backend := common.NewBackend(ctx, local.NewMessageStorage(), store, store, options)
 	c := &Chat{
 		t:      t,
+		guard:  5 * time.Second,
 		link:   thread.NewLink(backend, p),
 		events: make(chan api.ChatEvent, 256),
 		inits:  make(chan api.ChatState, 1),
+	}
+	c.send = func(input api.Input) error {
+		return c.Do(func(l thread.Link, op thread.Operation) thread.Command { return l.Send(op, input) })
 	}
 	t.Cleanup(c.Close)
 	receive, done := c.link.Receiver()
@@ -89,7 +101,7 @@ func (c *Chat) Do(command func(l thread.Link, op thread.Operation) thread.Comman
 
 func (c *Chat) Send(text string) {
 	c.t.Helper()
-	if err := c.Do(func(l thread.Link, op thread.Operation) thread.Command { return l.Send(op, api.Input{Text: text}) }); err != nil {
+	if err := c.send(api.Input{Text: text}); err != nil {
 		c.t.Fatalf("send %q: %v", text, err)
 	}
 }
@@ -123,8 +135,8 @@ func (c *Chat) State() api.ChatState {
 	select {
 	case state := <-c.inits:
 		return state
-	case <-time.After(guard):
-		c.t.Fatalf("no init after %v", guard)
+	case <-time.After(c.guard):
+		c.t.Fatalf("no init after %v", c.guard)
 		return api.ChatState{}
 	}
 }
@@ -140,7 +152,7 @@ func (c *Chat) Wait() []api.ChatEvent {
 func (c *Chat) Until(match func(api.ChatEvent) bool) []api.ChatEvent {
 	c.t.Helper()
 	var events []api.ChatEvent
-	timeout := time.After(guard)
+	timeout := time.After(c.guard)
 	for {
 		select {
 		case e := <-c.events:
@@ -149,7 +161,7 @@ func (c *Chat) Until(match func(api.ChatEvent) bool) []api.ChatEvent {
 				return events
 			}
 		case <-timeout:
-			c.t.Fatalf("no matching event after %v: %v", guard, Trace(events))
+			c.t.Fatalf("no matching event after %v: %v", c.guard, Trace(events))
 			return events
 		}
 	}

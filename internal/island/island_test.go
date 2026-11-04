@@ -2,11 +2,13 @@ package island_test
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
 	"neui.dev"
 	"neui.dev/api"
@@ -33,7 +35,68 @@ type started struct {
 	Script uint
 }
 
-func board(marks chan<- int) gox.Elem {
+type pressParams struct {
+	Label string
+	Value neui.IslandCall[int, int]
+}
+
+type press struct {
+	params pressParams
+	shown  chan<- string
+	submit func(ctx context.Context, n int) bool
+}
+
+func (p press) Update(context.Context, struct{}) {}
+
+func (p press) press(ctx context.Context) (int, error) {
+	n, err := p.params.Value.Call(ctx, 21)
+	if err != nil {
+		return 0, err
+	}
+	if !p.submit(ctx, n) {
+		return 0, errors.New("no draw took the press")
+	}
+	return n, nil
+}
+
+func (p press) Main() gox.Elem {
+	return func(cur gox.Cursor) error {
+		doors.OnBatch(cur.Context(), func(context.Context) {
+			select {
+			case p.shown <- p.params.Label:
+			default:
+			}
+		})
+		if err := cur.Comp(neui.Tool[struct{}, int]{Name: "press", Desc: "presses the button", Handler: func(ctx context.Context, _ struct{}) (int, error) {
+			return p.press(ctx)
+		}}); err != nil {
+			return err
+		}
+		return (neui.Input{Desc: p.params.Label, Rights: neui.W}).Proxy(cur, func(cur gox.Cursor) error {
+			if err := cur.Init("button"); err != nil {
+				return err
+			}
+			if err := cur.Set("name", "press"); err != nil {
+				return err
+			}
+			if err := cur.Modify(doors.AClick{On: func(ctx context.Context, _ doors.RequestPointer) bool {
+				p.press(ctx)
+				return false
+			}}); err != nil {
+				return err
+			}
+			if err := cur.Submit(); err != nil {
+				return err
+			}
+			if err := cur.Text(p.params.Label); err != nil {
+				return err
+			}
+			return cur.Close()
+		})
+	}
+}
+
+func board(marks chan<- int, shown chan<- string) gox.Elem {
 	return func(cur gox.Cursor) error {
 		return cur.Comp(neui.Island{
 			Name:        "board",
@@ -46,9 +109,14 @@ func board(marks chan<- int) gox.Elem {
 				if err := neui.IslandLayouts(l); err != nil {
 					return err
 				}
-				return l.Tool("mark", "marks a number", func(ctx context.Context, in struct{ N int }) (int, error) {
+				if err := l.Tool("mark", "marks a number", func(ctx context.Context, in struct{ N int }) (int, error) {
 					marks <- in.N
 					return in.N, nil
+				}); err != nil {
+					return err
+				}
+				return l.Control("press", "a button that answers with value(21)", func(p pressParams, submit func(ctx context.Context, n int) bool) api.Widget[struct{}] {
+					return press{params: p, shown: shown, submit: submit}
 				})
 			},
 		})
@@ -99,7 +167,7 @@ func TestIslandSpecListsLibrary(t *testing.T) {
 		}),
 		testkit.Say("done"),
 	)
-	c := stack.Page(t, stack.Host{Provider: p, Page: board(make(chan int, 1))})
+	c := stack.Page(t, stack.Host{Provider: p, Page: board(make(chan int, 1), nil)})
 	c.Send("open the board")
 	c.Wait()
 	var s spec
@@ -107,7 +175,7 @@ func TestIslandSpecListsLibrary(t *testing.T) {
 	if s.Seq != synced {
 		t.Fatalf("island_spec reports seq %d, sync reported %d", s.Seq, synced)
 	}
-	for _, name := range []string{"mark", "column", "row", "grid"} {
+	for _, name := range []string{"mark", "press", "column", "row", "grid"} {
 		if !strings.Contains(s.Spec, name) {
 			t.Fatalf("the spec does not list %s:\n%s", name, s.Spec)
 		}
@@ -124,7 +192,7 @@ func TestIslandStartReturnsTask(t *testing.T) {
 		testkit.Say("started"),
 		testkit.Say("noted"),
 	)
-	c := stack.Page(t, stack.Host{Provider: p, Page: board(marks)})
+	c := stack.Page(t, stack.Host{Provider: p, Page: board(marks, nil)})
 	c.Send("open the board")
 	events := c.Wait()
 	if !slices.Contains(stack.Trace(events), "Tasks") {
@@ -161,7 +229,7 @@ func TestIslandScriptThrowReportsError(t *testing.T) {
 		testkit.Say("started"),
 		testkit.Say("seen"),
 	)
-	c := stack.Page(t, stack.Host{Provider: p, Page: board(make(chan int, 1))})
+	c := stack.Page(t, stack.Host{Provider: p, Page: board(make(chan int, 1), nil)})
 	c.Send("open the board")
 	c.Wait()
 	c.Wait()
@@ -181,7 +249,7 @@ func TestIslandStartStaleSeqRefused(t *testing.T) {
 		}),
 		testkit.Say("done"),
 	)
-	c := stack.Page(t, stack.Host{Provider: p, Page: board(make(chan int, 1))})
+	c := stack.Page(t, stack.Host{Provider: p, Page: board(make(chan int, 1), nil)})
 	c.Send("open the board")
 	events := c.Wait()
 	refused(t, testkit.Results(p.Request(t, 2))[0], "the island space's seq does not match")
@@ -198,7 +266,7 @@ func TestIslandStartSyntaxErrorRefused(t *testing.T) {
 		}),
 		testkit.Say("done"),
 	)
-	c := stack.Page(t, stack.Host{Provider: p, Page: board(make(chan int, 1))})
+	c := stack.Page(t, stack.Host{Provider: p, Page: board(make(chan int, 1), nil)})
 	c.Send("open the board")
 	events := c.Wait()
 	refused(t, testkit.Results(p.Request(t, 2))[0], "SyntaxError")
