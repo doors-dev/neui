@@ -1,0 +1,570 @@
+package composer
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"time"
+	
+	"github.com/doors-dev/doors"
+	"github.com/doors-dev/gox"
+	"neui.dev/api"
+	"neui.dev/kchat/chat/composer/controller"
+	"neui.dev/kchat/pops"
+	"neui.dev/kchat/icons"
+	"neui.dev/kchat/params"
+	"neui.dev/kchat/chat/uploader"
+)
+
+type Composer struct {
+	Controller controller.ComposerController
+	Params params.Params
+	Pops pops.Popup[string]
+	scope *doors.ScopeFrame
+}
+
+func (c Composer) id() string {
+	return c.Params.ID
+}
+
+elem (c Composer) Main() {
+	~~
+	c.scope = new(doors.ScopeFrame)
+	~~
+	~(c.Controller.Input().Bind(elem(s controller.InputState) {
+		~(c.composer(s))
+	}))
+}
+
+elem (c *Composer) composer(state controller.InputState) {
+	~~
+	var up uploader.Uploader
+	if state.Ask == nil {
+		up = uploader.NewUploader(
+			state.Input.Attachments,
+			c.Controller.FS(),
+			c.Controller,
+			state.Seq,
+			c.Params,
+		)
+	}
+	~~
+	<div id=("composer" + c.id()) class="kchat-composer">
+		~(if state.Ask == nil && !c.Params.Off(params.Attachments) {
+			~(up.List())
+		})
+		~(if state.Ask == nil {
+			~(c.textarea(state.Input))
+		} else {
+			<div class="kchat-panel">
+				~(state.Ask.Form)
+			</div>
+		})
+		<div class="kchat-barrow">
+			<div class="kchat-barrow-left">
+				~(if state.Ask == nil && !c.Params.Off(params.Attachments) {
+					~(up.Form(c.Controller.Pending()))
+				})
+			</div>
+			<div class="kchat-barrow-center">
+				~(if state.Rewind {
+					~(c.Controller.Active().Bind(c.activity))
+					~(c.rewind())
+					~(c.Controller.ExcessBytes().Bind(c.overshoot))
+				} else if state.Ask != nil {
+					~(if !c.Params.Off(params.Tasks) {
+						~(c.Controller.HasTasks().Bind(c.tasks))
+					})
+					~(c.asking(state.Ask))
+					~(if state.Ask.Error != nil {
+						~(state.Ask.Error.Bind(c.askError))
+					})
+				} else {
+					~(if c.Params.Off(params.Tokens) {
+						~(doors.DeriveBeam(c.Controller.Bar(), func(b controller.Bar) bool {
+							return b.Compaction
+						}).Bind(elem(compacting bool) {
+							~(if compacting {
+								<span class="kchat-gauge">
+									<span class="kchat-gauge-body"><span class="kchat-gauge-val">compacting</span></span>
+								</span>
+							})
+						}))
+					} else {
+						~(c.Controller.HasContext().Bind(c.context))
+					})
+					~(c.Controller.Active().Bind(c.activity))
+					~(if c.Params.Off(params.Tasks) {
+						~(c.Controller.Active().Bind(elem(active bool) {
+							~(if !active {
+								~(c.Controller.HasTasks().Bind(elem(has bool) {
+									~(if has {
+										<span class="kchat-gauge">
+											<span class="kchat-gauge-body"><span class="kchat-gauge-val">working</span></span>
+										</span>
+									})
+								}))
+							})
+						}))
+					} else {
+						~(c.Controller.HasTasks().Bind(c.tasks))
+					})
+					~(c.Controller.Pending().Bind(c.queued))
+					~(c.Controller.ExcessBytes().Bind(c.overshoot))
+				})
+			</div>
+			<div class="kchat-barrow-right">
+				~(if state.Ask != nil {
+					~(state.Ask.Button)
+				} else {
+					~(c.Controller.BindSend(c.send))
+				})
+			</div>
+		</div>
+		<script>
+			const composer = document.currentScript.parentElement
+			const input = composer.querySelector(".kchat-draft")
+			composer.addEventListener("click", (e) => {
+				if (e.target.closest("button, a, select, label")) return
+				input?.focus()
+			})
+			composer.addEventListener("pointerdown", (e) => {
+				if (!e.target.closest(".kchat-gauge_opens")) return
+				e.preventDefault()
+			})
+		</script>
+	</div>
+}
+
+elem (c *Composer) rewind() {
+	<span class="kchat-gauge">
+		<span class="kchat-gauge-lead">~>(doors.Class("kchat-ic")) ~(icons.Pencil())</span>
+		<span class="kchat-gauge-body"><span class="kchat-gauge-val">edit</span></span>
+		<span class="kchat-gauge-trail">
+			~>doors.AClick{
+				Scope: new(doors.ScopeBlocking),
+				On: func(ctx context.Context, rp doors.RequestPointer) bool {
+					c.Controller.CancelRewind(ctx)
+					return false
+				},
+			} <button type="button" class="kchat-ctl" title="Cancel edit">
+				~>(doors.Class("kchat-ic")) ~(icons.Close())
+			</button>
+		</span>
+	</span>
+}
+
+elem (c *Composer) asking(ask *api.ChatAsk) {
+	<span class="kchat-gauge">
+		<span class="kchat-gauge-lead">~>(doors.Class("kchat-ic")) ~(icons.CheckSquareFill())</span>
+		<span class="kchat-gauge-body"><span class="kchat-gauge-val">asking</span></span>
+		<span class="kchat-gauge-trail">
+			~>doors.AClick{
+				Scope: new(doors.ScopeBlocking),
+				On: func(ctx context.Context, rp doors.RequestPointer) bool {
+					ask.Cancel(ctx)
+					return false
+				},
+			} <button type="button" class="kchat-ctl" title="Dismiss question">
+				~>(doors.Class("kchat-ic")) ~(icons.Close())
+			</button>
+		</span>
+	</span>
+}
+
+elem (c *Composer) askError(message string) {
+	~(if message != "" {
+		<span class="kchat-gauge kchat-gauge_err">
+			<span class="kchat-gauge-lead">~>(doors.Class("kchat-ic")) ~(icons.WarningFill())</span>
+			<span class="kchat-gauge-body">
+				<span class="kchat-gauge-val">~(message)</span>
+			</span>
+		</span>
+	})
+}
+
+elem (c *Composer) activity(active bool) {
+	~(if active {
+		~(c.running())
+	})
+}
+
+elem (c *Composer) context(has bool) {
+	~~
+	window := c.Controller.Model().Context
+	config := c.Controller.Config()
+	~~
+	~(if has {
+		<span class="kchat-pops">
+			~(c.Pops.BindControls("context",
+				elem(show func(ctx context.Context)) {
+					~(c.contextChip(show, false))
+				},
+				elem(hide func(ctx context.Context)) {
+					~(c.contextChip(hide, true))
+				},
+			))
+			~(c.Pops.BindPop("context", elem(hide func(context.Context)) {
+				<span class="kchat-pop">
+					~(c.Controller.Context().Bind(elem(s controller.Context) {
+						~~
+						settled := s.Usage.Total()
+						~~
+						<span class="kchat-pop-group">
+							<span class="kchat-pop-stat">
+								<span class="kchat-pop-label">Context</span>
+								<span>~(tokens(settled))</span>
+								~(if window != 0 {
+									<span class="kchat-gauge-meta">~(fmt.Sprintf("%s · %d%%", tokens(window), settled * 100 / window))</span>
+								})
+							</span>
+							~(if window != 0 && config.CompactionTrigger <= 1 {
+								<span class="kchat-pop-stat">
+									<span class="kchat-pop-label">Auto-compaction</span>
+									<span>~(fmt.Sprintf("%.0f%%", config.CompactionTrigger * 100))</span>
+								</span>
+							})
+						</span>
+						<span class="kchat-pop-group">
+							~(stat("Input", s.Usage.Input))
+							~(stat("Cache read", s.Usage.CacheRead))
+							~(stat("Cache write", s.Usage.CacheWrite))
+							~(stat("Output", s.Usage.Output))
+							~(if !c.Params.Off(params.Thinking) {
+								~(stat("Reasoning", s.Usage.Reasoning))
+							})
+						</span>
+						~(if s.Compaction {
+							<span class="kchat-pop-foot"><button type="button" class="kchat-btn" disabled>compacting…</button></span>
+						} else if window == 0 || float32(settled) >= config.CompactionAllowed * float32(window) {
+							<span class="kchat-pop-foot">
+								~>doors.AClick{
+									Scope: new(doors.ScopeBlocking),
+									On: func(ctx context.Context, rp doors.RequestPointer) bool {
+										c.Controller.Compact(ctx)
+										hide(ctx)
+										return false
+									},
+								} <button type="button" class="kchat-btn">Compact now</button>
+							</span>
+						})
+					}))
+				</span>
+			}))
+		</span>
+	})
+}
+
+elem (c *Composer) contextChip(toggle func(ctx context.Context), open bool) {
+	~~
+	window := c.Controller.Model().Context
+	config := c.Controller.Config()
+	class := "kchat-gauge kchat-gauge_opens"
+	if open {
+		class = "kchat-gauge kchat-gauge_opens kchat-gauge_open"
+	}
+	~~
+	~>doors.AClick{
+		Scope: new(doors.ScopeBlocking),
+		On: func(ctx context.Context, rp doors.RequestPointer) bool {
+			toggle(ctx)
+			return false
+		},
+	} <button type="button" class=(class) title="Context size">
+		~(if window != 0 {
+			<span class="kchat-gauge-lead">
+				~(c.Controller.Bar().Bind(elem(b controller.Bar) {
+					<svg class="kchat-ring" data-compacting=(b.Compaction) viewBox="0 0 16 16" aria-hidden="true">
+						<circle class="kchat-ring-track" cx="8" cy="8" r="6" pathLength="100" stroke-dasharray=(fmt.Sprintf("%.1f 100", min(config.CompactionTrigger, 1) * 100)) transform="rotate(-90 8 8)"></circle>
+						<circle class="kchat-ring-fill" cx="8" cy="8" r="6" pathLength="100" stroke-dasharray=(fmt.Sprintf("%d 100", min((b.Settled + b.Unsettled) * 100 / window, 100))) transform="rotate(-90 8 8)"></circle>
+					</svg>
+				}))
+			</span>
+		})
+		<span class="kchat-gauge-body">
+			~(c.Controller.Bar().Bind(elem(b controller.Bar) {
+				~(if b.Compaction {
+					<span class="kchat-gauge-val">compacting</span>
+				} else {
+					<span class="kchat-gauge-val">~(tokens(b.Settled))</span>
+				})
+			}))
+		</span>
+	</button>
+}
+
+elem stat(label string, n int) {
+	~(if n != 0 {
+		<span class="kchat-pop-stat">
+			<span class="kchat-pop-label">~(label)</span>
+			<span>~(tokens(n))</span>
+		</span>
+	})
+}
+
+elem (c *Composer) generated(b controller.Bar) {
+	~(if b.Unsettled != 0 {
+		<span class="kchat-gauge-val" title="Tokens generated">~(tokens(b.Unsettled))</span>
+		<span class="kchat-gauge-sep">·</span>
+	})
+}
+
+elem (c *Composer) queued(pending bool) {
+	~(if pending {
+		<span class="kchat-gauge">
+			<span class="kchat-gauge-lead">~>(doors.Class("kchat-ic")) ~(icons.Clock())</span>
+			<span class="kchat-gauge-body"><span class="kchat-gauge-val">queued</span></span>
+			<span class="kchat-gauge-trail">
+				~>doors.AClick{
+					Scope: new(doors.ScopeBlocking),
+					On: func(ctx context.Context, rp doors.RequestPointer) bool {
+						c.Controller.Unsend(ctx)
+						return false
+					},
+				} <button type="button" class="kchat-ctl" title="Cancel queued message">
+					~>(doors.Class("kchat-ic")) ~(icons.Close())
+				</button>
+			</span>
+		</span>
+	})
+}
+
+elem (c *Composer) tasks(has bool) {
+	~(if has {
+		<span class="kchat-pops">
+			~(c.Pops.BindControls("tasks",
+				elem(show func(ctx context.Context)) {
+					~(c.tasksChip(show, false))
+				},
+				elem(hide func(ctx context.Context)) {
+					~(c.tasksChip(hide, true))
+				},
+			))
+			~(c.Pops.BindPop("tasks", elem(hide func(context.Context)) {
+				<span class="kchat-pop">
+					<span class="kchat-pop-group">
+						~(c.Controller.Tasks().Bind(c.taskRows))
+					</span>
+					<span class="kchat-pop-foot">
+						~>doors.AClick{
+							Scope: new(doors.ScopeBlocking),
+							On: func(ctx context.Context, rp doors.RequestPointer) bool {
+								c.Controller.CancelTasks()
+								hide(ctx)
+								return false
+							},
+						} <button type="button" class="kchat-btn">Cancel all</button>
+					</span>
+				</span>
+			}))
+		</span>
+	})
+}
+
+elem (c *Composer) tasksChip(toggle func(ctx context.Context), open bool) {
+	~~
+	class := "kchat-gauge kchat-gauge_opens"
+	if open {
+		class = "kchat-gauge kchat-gauge_opens kchat-gauge_open"
+	}
+	~~
+	~>doors.AClick{
+		Scope: new(doors.ScopeBlocking),
+		On: func(ctx context.Context, rp doors.RequestPointer) bool {
+			toggle(ctx)
+			return false
+		},
+	} <button type="button" class=(class)>
+		<span class="kchat-gauge-lead">~>(doors.Class("kchat-ic kchat-ic_line kchat-ic_beams")) ~(icons.Beams())</span>
+		<span class="kchat-gauge-body">
+			~(c.Controller.TaskCount().Bind(elem(n int) {
+				~(if n == 1 {
+					<span class="kchat-gauge-val">1 task</span>
+				} else {
+					<span class="kchat-gauge-val">~(fmt.Sprintf("%d tasks", n))</span>
+				})
+			}))
+		</span>
+	</button>
+}
+
+elem (c *Composer) taskRows(tasks []api.Task) {
+	~(for _, t := range tasks {
+		<span class="kchat-task">
+			<span class="kchat-task-body">
+				~(if t.Comment != "" {
+					<span class="kchat-task-comment" title=(t.Comment)>~(t.Comment)</span>
+				} else {
+					<span class="kchat-task-comment">~(t.Name)</span>
+				})
+				<span class="kchat-task-detail">~(t.Module)</span>
+			</span>
+			~>doors.AClick{
+				Scope: new(doors.ScopeBlocking),
+				On: func(ctx context.Context, rp doors.RequestPointer) bool {
+					c.Controller.CancelTask(t.ID)
+					return false
+				},
+			} <button type="button" class="kchat-ctl" title="Cancel task" aria-label=("Cancel " + t.Module + " task")>
+				~>(doors.Class("kchat-ic")) ~(icons.Close())
+			</button>
+		</span>
+	})
+}
+
+elem (c *Composer) running() {
+	~~
+	start := time.Now()
+	~~
+	<span class="kchat-gauge">
+		<span class="kchat-gauge-lead">
+			~>doors.AClick{
+				Scope: new(doors.ScopeBlocking),
+				On: func(ctx context.Context, rp doors.RequestPointer) bool {
+					c.Controller.Stop(ctx)
+					return false
+				},
+			} <button type="button" class="kchat-ctl" title="Stop">
+				~>(doors.Class("kchat-ic kchat-icon_breathe")) ~(icons.Stop())
+			</button>
+		</span>
+		<span class="kchat-gauge-body">
+			~(if !c.Params.Off(params.Tokens) {
+				~(c.Controller.Bar().Bind(c.generated))
+			})
+			<span class="kchat-gauge-meta">~(fmt.Sprintf("%.1fs", time.Since(start).Seconds()))</span>
+		</span>
+	</span>
+	<script data:start=(start.UnixMilli())>
+		const el =
+			document.currentScript.previousElementSibling.querySelector(
+				".kchat-gauge-meta",
+			)
+		const start = $data("start")
+		const t = setInterval(() => {
+			el.textContent = ((Date.now() - start) / 1000).toFixed(1) + "s"
+		}, 50)
+		$sys.clean(() => clearInterval(t))
+	</script>
+}
+
+elem (c *Composer) overshoot(excess int) {
+	~(if excess > 0 {
+		<span class="kchat-gauge kchat-gauge_err" title="Message too long to send; text past the limit is not kept">
+			<span class="kchat-gauge-lead">~>(doors.Class("kchat-ic")) ~(icons.WarningFill())</span>
+			<span class="kchat-gauge-body">
+				<span class="kchat-gauge-val">too long</span>
+				<span class="kchat-gauge-sep">·</span>
+				<span class="kchat-gauge-meta">~(characters(excess) + " over")</span>
+			</span>
+		</span>
+	})
+}
+
+func characters(n int) string {
+	digits := fmt.Sprintf("%d", n)
+	var b strings.Builder
+	for i := range digits {
+		if i > 0 && (len(digits) - i) % 3 == 0 {
+			b.WriteByte(',')
+		}
+		b.WriteByte(digits[i])
+	}
+	return b.String() + " characters"
+}
+
+func tokens(n int) string {
+	if n < 10000 {
+		return fmt.Sprintf("%.1fk", float64(n) / 1000)
+	}
+	if n < 1000000 {
+		return fmt.Sprintf("%dk", n / 1000)
+	}
+	return fmt.Sprintf("%.1fM", float64(n) / 1000000)
+}
+
+elem (c *Composer) send(enabled bool) {
+	~(if enabled {
+		~>doors.AClick{
+			Scope: c.scope.Scope(true),
+			Indicator: c.sendIndication(),
+			On: func(ctx context.Context, rp doors.RequestPointer) bool {
+				c.Controller.Send(ctx)
+				return false
+			},
+		} <button type="button" id=("send" + c.id()) class="kchat-iconbtn" aria-label="Send">
+			~>(doors.Class("kchat-ic kchat-icon_idle")) ~(icons.Submit())
+			~>(doors.Class("kchat-ic kchat-icon_busy")) ~(icons.Spinner())
+		</button>
+	} else {
+		<button type="button" class="kchat-iconbtn" aria-label="Send" disabled>
+			~>(doors.Class("kchat-ic")) ~(icons.Submit())
+		</button>
+	})
+}
+
+elem (c *Composer) textarea(input api.Input) {
+	~~
+	s := new(doors.Setter)
+	pending, _ := c.Controller.Pending().ReadAndSub(ctx, func(ctx context.Context, b bool) bool {
+		value := "false"
+		if b {
+			value = "true"
+		}
+		doors.Call(ctx, s.Set("aria-busy", value))
+		doors.Call(ctx, s.Set("readonly", b))
+		return false
+	})
+	~~
+	~>doors.AKeyDown{
+		Key: doors.Key{
+			Key: "Enter",
+			ShiftMod: doors.ModOff,
+		},
+		PreventDefault: true,
+		Scope: c.scope.Scope(true),
+		Indicator: c.sendIndication(),
+		On: func(ctx context.Context, rk doors.RequestKeyboard) bool {
+			c.Controller.Send(ctx)
+			return false
+		},
+	} ~>doors.AInput{
+		Scope: c.scope.Scope(false).And(&doors.ScopeRate{
+			Tick: 100 * time.Millisecond,
+		}).And(&doors.ScopeSerial{}),
+		On: func(ctx context.Context, ri doors.RequestInput) bool {
+			value := strings.TrimSpace(ri.Event().Value)
+			c.Controller.UpdateInputText(ctx, value)
+			return false
+		},
+	} <textarea
+		id=("text" + c.id())
+		class="kchat-draft"
+		rows="2"
+		(s)
+		readonly=(pending)
+		aria-busy=({
+			if pending {
+				return "true"
+			}
+			return "false"
+		})>
+		~(input.Text)
+	</textarea>
+	~(c.Controller.Pending().Bind(elem(pending bool) {
+		~(if !pending {
+			<script data:id=("text" + c.id())>
+				const el = document.getElementById($data("id"))
+				el.focus()
+				el.setSelectionRange(el.value.length, el.value.length)
+			</script>
+		})
+	}))
+}
+
+func (c *Composer) sendIndication() doors.Indicators {
+	return doors.JoinIndicators(
+		doors.IndicateAttrQuery("#composer" + c.id(), "aria-busy", "true"),
+		doors.IndicateAttrQuery("#send" + c.id(), "aria-busy", "true"),
+	)
+}

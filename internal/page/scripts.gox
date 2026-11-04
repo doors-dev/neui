@@ -1,0 +1,139 @@
+package page
+
+import "github.com/doors-dev/gox"
+
+elem element(id string) {
+	<script data:id=(id)>
+		const id = $data("id")
+		$on(id, async ({ action, value }) => {
+			const el = document.querySelector('[data-kid="' + id + '"]')
+			if (!el) {
+				throw "element is not rendered"
+			}
+			const tag = el.tagName.toLowerCase()
+			const type = (el.getAttribute("type") || "").toLowerCase()
+			switch (action) {
+				case "click":
+					return {
+						hooks: await $sys.emit(
+							el,
+							new PointerEvent("click", { bubbles: true }),
+						),
+					}
+				case "focus":
+					el.focus({ preventScroll: true })
+					el.scrollIntoView({ behavior: "smooth", block: "nearest" })
+					return {}
+				case "read": {
+					const label =
+						el.labels && el.labels[0] ? el.labels[0].textContent.trim() : ""
+					if (tag === "a") {
+						return { label: el.textContent.trim(), href: el.getAttribute("href") }
+					}
+					if (tag === "button") {
+						return {
+							...(el.value ? { value: el.value } : {}),
+							label: el.textContent.trim(),
+						}
+					}
+					if (["submit", "button", "reset"].includes(type)) {
+						return { value: el.value, label: el.value }
+					}
+					if (type === "image") {
+						return { value: el.value, label: el.alt || "" }
+					}
+					if (type === "checkbox") {
+						return { value: el.checked, label }
+					}
+					if (tag === "select") {
+						const options = Array.from(el.options).map((o) => ({
+							value: o.value,
+							label: o.label,
+							selected: o.selected,
+						}))
+						const value = el.multiple
+							? Array.from(el.selectedOptions).map((o) => o.value)
+							: el.value
+						return { value, options, label }
+					}
+					return { value: el.value, label }
+				}
+				case "input": {
+					if (
+						tag === "a" ||
+						tag === "button" ||
+						["submit", "button", "reset", "image"].includes(type)
+					) {
+						throw "not an input"
+					}
+					if (type === "checkbox") {
+						el.checked = !!value
+						return {
+							hooks: await $sys.emit(el, new Event("change", { bubbles: true })),
+						}
+					}
+					if (tag === "select") {
+						if (el.multiple) {
+							const values = Array.isArray(value) ? value : [value]
+							for (const o of el.options) {
+								o.selected = values.includes(o.value)
+							}
+						} else {
+							el.value = value
+						}
+						return {
+							hooks: await $sys.emit(el, new Event("change", { bubbles: true })),
+						}
+					}
+					el.value = value
+					const n = await $sys.emit(el, new Event("input", { bubbles: true }))
+					return {
+						hooks:
+							n + (await $sys.emit(el, new Event("change", { bubbles: true }))),
+					}
+				}
+			}
+			throw "unknown action " + action
+		})
+	</script>
+}
+
+elem radioGroup(id string) {
+	<script data:id=(id)>
+		const id = $data("id")
+		$on(id, async ({ action, value }) => {
+			const els = Array.from(document.querySelectorAll('[data-kid="' + id + '"]'))
+			if (els.length === 0) {
+				throw "element is not rendered"
+			}
+			switch (action) {
+				case "focus": {
+					const el = els.find((el) => el.checked) || els[0]
+					el.focus({ preventScroll: true })
+					el.scrollIntoView({ behavior: "smooth", block: "nearest" })
+					return {}
+				}
+				case "read": {
+					const options = els.map((el) => ({
+						value: el.value,
+						label: el.labels && el.labels[0] ? el.labels[0].textContent.trim() : "",
+						selected: el.checked,
+					}))
+					const checked = els.find((el) => el.checked)
+					return { value: checked ? checked.value : null, options }
+				}
+				case "input": {
+					const el = els.find((el) => el.value === value)
+					if (!el) {
+						throw "no option with value " + JSON.stringify(value)
+					}
+					el.checked = true
+					return {
+						hooks: await $sys.emit(el, new Event("change", { bubbles: true })),
+					}
+				}
+			}
+			throw "unknown action " + action
+		})
+	</script>
+}

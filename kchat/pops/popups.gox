@@ -1,0 +1,69 @@
+package pops
+
+import (
+	"context"
+	
+	"github.com/doors-dev/doors"
+	"github.com/doors-dev/gox"
+)
+
+type popState struct {
+	seq int
+	id any
+}
+
+func NewPopups() Popups {
+	return Popups{
+		state: doors.NewSourceEqual(popState{}, func(old, new popState) bool {
+			return old.seq == new.seq
+		}),
+	}
+}
+
+type Popups struct {
+	state doors.Source[popState]
+}
+
+func (p Popups) Script() gox.Elem {
+	return p.state.Bind(elem(s popState) {
+		~(if s.id != nil {
+			~(p.script(s.seq))
+		})
+	})
+}
+
+elem (p Popups) script(seq int) {
+	~>doors.AHook[int]{
+		Name: "hide",
+		Batch: true,
+		On: func(ctx context.Context, r doors.RequestHook[int]) (any, bool) {
+			p.state.Mutate(ctx, func(ps popState) popState {
+				if ps.seq != r.Data() {
+					return ps
+				}
+				ps.id = nil
+				ps.seq += 1
+				return ps
+			})
+			return nil, true
+		},
+	} <script data:seq=(seq)>
+		const root = document.currentScript.closest(".kchat-widget")
+		const seq = $data("seq")
+		const hide = (e) => {
+			const pop = e.target.closest?.("[data-kchat-pop]")
+			if (pop && root.contains(pop)) return
+			$hook("hide", seq)
+		}
+		const escape = (e) => {
+			if (e.key !== "Escape") return
+			$hook("hide", seq)
+		}
+		document.addEventListener("pointerdown", hide)
+		document.addEventListener("keydown", escape)
+		$sys.clean(() => {
+			document.removeEventListener("pointerdown", hide)
+			document.removeEventListener("keydown", escape)
+		})
+	</script>
+}

@@ -1,0 +1,2738 @@
+/*! tailwindcss v4.3.3 | MIT License | https://tailwindcss.com */
+@layer properties;
+@keyframes kchat-blink {
+  0%, 49% {
+    opacity: 1;
+  }
+  50%, 100% {
+    opacity: 0;
+  }
+}
+@keyframes kchat-breathe {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: .6;
+  }
+}
+@keyframes kchat-beam {
+  0% {
+    opacity: 0;
+  }
+  12.5%, 100% {
+    opacity: 1;
+  }
+}
+@keyframes kchat-build {
+  0% {
+    opacity: 0;
+  }
+  12%, 80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@layer kchat {
+  .kchat-widget {
+    --app-bg: var(--kchat-dark-app-bg, oklch(14.1% 0.005 285.823));
+    --app-border: var(--kchat-dark-app-border, oklch(37% 0.013 285.805));
+    --app-ink: var(--kchat-dark-app-ink, oklch(96.7% 0.001 286.375));
+    --app-ink-quiet: var(--kchat-dark-app-ink-quiet, oklch(70.5% 0.015 286.067));
+    --panel-bg: var(--kchat-dark-panel-bg, oklch(27.4% 0.006 286.033));
+    --panel-border: var(--app-border);
+    --panel-border-focus: var(--kchat-dark-panel-border-focus, oklch(55.2% 0.016 285.938));
+    --button-border: var(--kchat-dark-button-border, oklch(44.2% 0.017 285.786));
+    --button-ink: var(--kchat-dark-button-ink, oklch(87.1% 0.006 286.286));
+    --button-bg-hover: var(--secondary-bg-hover);
+    --button-ink-hover: var(--app-ink);
+    --button-bg-active: var(--panel-border-focus);
+    --button-border-off: var(--app-border);
+    --button-ink-off: var(--kchat-dark-button-ink-off, oklch(55.2% 0.016 285.938));
+    --secondary-bg: var(--kchat-dark-secondary-bg, oklch(21% 0.006 285.885));
+    --secondary-ink: var(--app-ink-quiet);
+    --secondary-bg-hover: var(--app-border);
+    --secondary-ink-hover: var(--app-ink);
+    --secondary-bg-active: var(--button-border);
+    --secondary-bg-selected: var(--secondary-bg-hover);
+    --secondary-ink-off: var(--button-ink-off);
+    --danger-ink: var(--kchat-dark-danger-ink, oklch(63.7% 0.237 25.331));
+    --danger-bg-active: var(--kchat-dark-danger-bg-active, oklch(57.7% 0.245 27.325));
+    --danger-ink-on-fill: var(--kchat-dark-danger-ink-on-fill, #fff);
+    --figure-value: var(--app-ink);
+    --figure-track: transparent;
+    @supports (color: color-mix(in lab, red, red)) {
+      --figure-track: color-mix(in srgb, transparent, currentColor 35%);
+    }
+    accent-color: var(--app-ink-quiet);
+    color-scheme: dark;
+  }
+  @media (prefers-color-scheme: light) {
+    .kchat-widget:not([data-theme="dark"], [data-theme="dark"] *) {
+      --app-bg: var(--kchat-light-app-bg, oklch(98.5% 0 none));
+      --app-border: var(--kchat-light-app-border, oklch(87.1% 0.006 286.286));
+      --app-ink: var(--kchat-light-app-ink, oklch(21% 0.006 285.885));
+      --app-ink-quiet: var(--kchat-light-app-ink-quiet, oklch(44.2% 0.017 285.786));
+      --panel-bg: var(--kchat-light-panel-bg, oklch(96.7% 0.001 286.375));
+      --panel-border: var(--app-border);
+      --panel-border-focus: var(--kchat-light-panel-border-focus, oklch(55.2% 0.016 285.938));
+      --button-border: var(--kchat-light-button-border, oklch(70.5% 0.015 286.067));
+      --button-ink: var(--kchat-light-button-ink, oklch(37% 0.013 285.805));
+      --button-bg-hover: var(--secondary-bg-hover);
+      --button-ink-hover: var(--app-ink);
+      --button-bg-active: var(--panel-border-focus);
+      --button-border-off: var(--app-border);
+      --button-ink-off: var(--kchat-light-button-ink-off, oklch(55.2% 0.016 285.938));
+      --secondary-bg: var(--kchat-light-secondary-bg, oklch(92% 0.004 286.32));
+      --secondary-ink: var(--app-ink-quiet);
+      --secondary-bg-hover: var(--app-border);
+      --secondary-ink-hover: var(--app-ink);
+      --secondary-bg-active: var(--button-border);
+      --secondary-bg-selected: var(--secondary-bg-hover);
+      --secondary-ink-off: var(--button-ink-off);
+      --danger-ink: var(--kchat-light-danger-ink, oklch(57.7% 0.245 27.325));
+      --danger-bg-active: var(--kchat-light-danger-bg-active, oklch(50.5% 0.213 27.518));
+      --danger-ink-on-fill: var(--kchat-light-danger-ink-on-fill, #fff);
+      --figure-value: var(--app-ink);
+      --figure-track: transparent;
+      @supports (color: color-mix(in lab, red, red)) {
+        --figure-track: color-mix(in srgb, transparent, currentColor 35%);
+      }
+      accent-color: var(--app-ink-quiet);
+      color-scheme: light;
+    }
+  }
+  [data-theme="light"] .kchat-widget:not([data-theme="dark"]),	.kchat-widget[data-theme="light"] {
+    --app-bg: var(--kchat-light-app-bg, oklch(98.5% 0 none));
+    --app-border: var(--kchat-light-app-border, oklch(87.1% 0.006 286.286));
+    --app-ink: var(--kchat-light-app-ink, oklch(21% 0.006 285.885));
+    --app-ink-quiet: var(--kchat-light-app-ink-quiet, oklch(44.2% 0.017 285.786));
+    --panel-bg: var(--kchat-light-panel-bg, oklch(96.7% 0.001 286.375));
+    --panel-border: var(--app-border);
+    --panel-border-focus: var(--kchat-light-panel-border-focus, oklch(55.2% 0.016 285.938));
+    --button-border: var(--kchat-light-button-border, oklch(70.5% 0.015 286.067));
+    --button-ink: var(--kchat-light-button-ink, oklch(37% 0.013 285.805));
+    --button-bg-hover: var(--secondary-bg-hover);
+    --button-ink-hover: var(--app-ink);
+    --button-bg-active: var(--panel-border-focus);
+    --button-border-off: var(--app-border);
+    --button-ink-off: var(--kchat-light-button-ink-off, oklch(55.2% 0.016 285.938));
+    --secondary-bg: var(--kchat-light-secondary-bg, oklch(92% 0.004 286.32));
+    --secondary-ink: var(--app-ink-quiet);
+    --secondary-bg-hover: var(--app-border);
+    --secondary-ink-hover: var(--app-ink);
+    --secondary-bg-active: var(--button-border);
+    --secondary-bg-selected: var(--secondary-bg-hover);
+    --secondary-ink-off: var(--button-ink-off);
+    --danger-ink: var(--kchat-light-danger-ink, oklch(57.7% 0.245 27.325));
+    --danger-bg-active: var(--kchat-light-danger-bg-active, oklch(50.5% 0.213 27.518));
+    --danger-ink-on-fill: var(--kchat-light-danger-ink-on-fill, #fff);
+    --figure-value: var(--app-ink);
+    --figure-track: transparent;
+    @supports (color: color-mix(in lab, red, red)) {
+      --figure-track: color-mix(in srgb, transparent, currentColor 35%);
+    }
+    accent-color: var(--app-ink-quiet);
+    color-scheme: light;
+  }
+  .kchat-widget {
+    --_kchat-radius-sm: var(--kchat-radius-sm, 0.25rem);
+    --_kchat-radius-control: var(--kchat-radius-control, 0.375rem);
+    --_kchat-radius-surface: var(--kchat-radius-surface, 0.5rem);
+    container-type: inline-size;
+    position: relative;
+    display: flex;
+    height: 100%;
+    min-width: 0px;
+    flex-direction: column;
+    overflow: hidden;
+    background-color: var(--app-bg);
+    color: var(--app-ink);
+  }
+  .kchat-widget_frame {
+    border-radius: var(--_kchat-radius-surface);
+    border-style: var(--kchat-tw-border-style);
+    border-width: 1px;
+    border-color: var(--panel-border);
+  }
+  .kchat-widget_split {
+    flex-direction: row;
+  }
+  .kchat-widget.kchat-widget_aside-right {
+    flex-direction: row-reverse;
+  }
+  .kchat-pane {
+    display: flex;
+    min-width: 0px;
+    flex: 1;
+    flex-direction: column;
+  }
+  .kchat-pane > .kchat-log {
+    min-height: 0px;
+    flex: 1;
+  }
+  .kchat-widget_off .kchat-composer {
+    pointer-events: none;
+    opacity: 50%;
+  }
+  .kchat-top {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: calc(var(--spacing, 0.25rem) * 2);
+    padding-inline-start: calc(var(--spacing, 0.25rem) * 10);
+    padding-inline-end: calc(var(--spacing, 0.25rem) * 3);
+    padding-top: calc(var(--spacing, 0.25rem) * 3);
+  }
+  .kchat-widget_aside-right .kchat-top {
+    flex-direction: row-reverse;
+    padding-inline-start: calc(var(--spacing, 0.25rem) * 3);
+    padding-inline-end: calc(var(--spacing, 0.25rem) * 10);
+  }
+  .kchat-widget_noside .kchat-top {
+    padding-inline-start: calc(var(--spacing, 0.25rem) * 3);
+  }
+  .kchat-aside > .kchat-top {
+    padding-block: calc(var(--spacing, 0.25rem) * 3);
+    padding-inline-start: calc(var(--spacing, 0.25rem) * 9);
+    padding-inline-end: 0px;
+  }
+  .kchat-widget_aside-right .kchat-aside > .kchat-top {
+    padding-inline-start: 0px;
+    padding-inline-end: calc(var(--spacing, 0.25rem) * 9);
+  }
+  .kchat-top-title {
+    min-width: 0px;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding-inline: var(--spacing, 0.25rem);
+    text-align: center;
+    font-size: var(--text-sm, 0.875rem);
+    line-height: var(--kchat-tw-leading, var(--text-sm--line-height, calc(1.25 / 0.875)));
+    --kchat-tw-font-weight: var(--font-weight-medium, 500);
+    font-weight: var(--font-weight-medium, 500);
+    color: var(--app-ink);
+  }
+  .kchat-top-title_quiet {
+    --kchat-tw-font-weight: var(--font-weight-normal, 400);
+    font-weight: var(--font-weight-normal, 400);
+    color: var(--app-ink-quiet);
+  }
+  .kchat-ic {
+    height: calc(var(--spacing, 0.25rem) * 4);
+    width: calc(var(--spacing, 0.25rem) * 4);
+    fill: currentcolor;
+  }
+  .kchat-ic-sm {
+    height: calc(var(--spacing, 0.25rem) * 3);
+    width: calc(var(--spacing, 0.25rem) * 3);
+    fill: currentcolor;
+  }
+  .kchat-ring {
+    height: calc(var(--spacing, 0.25rem) * 4);
+    width: calc(var(--spacing, 0.25rem) * 4);
+    fill: none;
+    stroke-width: 2;
+  }
+  .kchat-ring-track {
+    stroke: var(--figure-track);
+  }
+  .kchat-ring-fill {
+    stroke: var(--figure-value);
+  }
+  .kchat-ring[data-compacting] .kchat-ring-fill {
+    animation: kchat-breathe 1.4s ease-in-out infinite;
+  }
+  .kchat-ic_line {
+    height: calc(var(--spacing, 0.25rem) * 4);
+    width: calc(var(--spacing, 0.25rem) * 4);
+    fill: none;
+  }
+  .kchat-blink {
+    display: grid;
+    height: calc(var(--spacing, 0.25rem) * 4);
+    width: calc(var(--spacing, 0.25rem) * 4);
+  }
+  .kchat-blink > * {
+    grid-area: 1/1;
+  }
+  .kchat-blink > :last-child {
+    animation: kchat-blink 1.2s steps(1) infinite;
+  }
+  .kchat-pulse > .line:last-of-type {
+    animation: kchat-blink 1.2s steps(1) infinite;
+  }
+  .kchat-build > line {
+    animation: kchat-build 1.6s ease-out infinite;
+  }
+  .kchat-build > line:nth-child(2) {
+    animation-delay: 0.15s;
+  }
+  .kchat-build > line:nth-child(3) {
+    animation-delay: 0.3s;
+  }
+  .kchat-build > line:nth-child(4) {
+    animation-delay: 0.45s;
+  }
+  .kchat-ic_beams > line {
+    animation: kchat-beam 2s steps(1,end) infinite;
+  }
+  .kchat-ic_beams > line:nth-child(2) {
+    animation-delay: 0.25s;
+  }
+  .kchat-ic_beams > line:nth-child(3) {
+    animation-delay: 0.5s;
+  }
+  .kchat-ic_beams > line:nth-child(4) {
+    animation-delay: 0.75s;
+  }
+  .kchat-ic_beams > line:nth-child(5) {
+    animation-delay: 1s;
+  }
+  .kchat-ic_beams > line:nth-child(6) {
+    animation-delay: 1.25s;
+  }
+  .kchat-ic_beams > line:nth-child(7) {
+    animation-delay: 1.5s;
+  }
+  .kchat-ic_beams > line:nth-child(8) {
+    animation-delay: 1.75s;
+  }
+  .kchat-ic_spin {
+    animation: var(--animate-spin, spin 1s linear infinite);
+  }
+  .kchat-icon_busy {
+    display: none;
+    animation: var(--animate-spin, spin 1s linear infinite);
+  }
+  [aria-busy="true"] > .kchat-icon_idle {
+    display: none;
+  }
+  [aria-busy="true"] > .kchat-icon_busy {
+    display: block;
+  }
+  .kchat-icon_breathe {
+    animation: kchat-breathe 1.4s ease-in-out infinite;
+  }
+  .kchat-btn {
+    box-sizing: border-box;
+    display: inline-flex;
+    height: calc(var(--spacing, 0.25rem) * 7);
+    flex: none;
+    appearance: none;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--_kchat-radius-control);
+    border-style: var(--kchat-tw-border-style);
+    border-width: 1px;
+    border-color: var(--button-border);
+    background-color: transparent;
+    padding-inline: calc(var(--spacing, 0.25rem) * 3);
+    font: inherit;
+    cursor: pointer;
+    font-size: var(--text-sm, 0.875rem);
+    line-height: var(--kchat-tw-leading, var(--text-sm--line-height, calc(1.25 / 0.875)));
+    --kchat-tw-leading: 1;
+    line-height: 1;
+    --kchat-tw-font-weight: var(--font-weight-medium, 500);
+    font-weight: var(--font-weight-medium, 500);
+    white-space: nowrap;
+    color: var(--button-ink);
+    --kchat-tw-outline-style: none;
+    outline-style: none;
+  }
+  .kchat-iconbtn {
+    box-sizing: border-box;
+    display: inline-flex;
+    height: calc(var(--spacing, 0.25rem) * 7);
+    width: calc(var(--spacing, 0.25rem) * 7);
+    flex: none;
+    cursor: pointer;
+    appearance: none;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--_kchat-radius-control);
+    border-style: var(--kchat-tw-border-style);
+    border-width: 1px;
+    border-color: var(--button-border);
+    background-color: transparent;
+    padding: 0px;
+    color: var(--button-ink);
+    --kchat-tw-outline-style: none;
+    outline-style: none;
+    font: inherit;
+  }
+  .kchat-btn:hover, .kchat-iconbtn:hover {
+    border-color: var(--panel-border-focus);
+    background-color: var(--button-bg-hover);
+    color: var(--button-ink-hover);
+  }
+  .kchat-btn:active, .kchat-iconbtn:active {
+    border-color: var(--panel-border-focus);
+    background-color: var(--button-bg-active);
+    color: var(--button-ink-hover);
+  }
+  .kchat-iconbtn_open {
+    background-color: var(--secondary-bg-selected);
+    color: var(--secondary-ink-hover);
+  }
+  .kchat-btn:focus-visible, .kchat-iconbtn:focus-visible {
+    border-color: var(--panel-border-focus);
+  }
+  .kchat-btn_del {
+    border-color: var(--danger-ink);
+    color: var(--danger-ink);
+  }
+  .kchat-btn_del:hover {
+    border-color: var(--danger-ink);
+    background-color: var(--danger-ink);
+    color: var(--danger-ink-on-fill);
+  }
+  .kchat-btn_del:active {
+    border-color: var(--danger-bg-active);
+    background-color: var(--danger-bg-active);
+    color: var(--danger-ink-on-fill);
+  }
+  .kchat-btn_del:focus-visible {
+    border-color: var(--danger-bg-active);
+    color: var(--danger-bg-active);
+  }
+  .kchat-btn_2nd {
+    border-color: transparent;
+    background-color: var(--secondary-bg);
+    color: var(--secondary-ink);
+  }
+  .kchat-btn_2nd:hover {
+    border-color: transparent;
+    background-color: var(--secondary-bg-hover);
+    color: var(--secondary-ink-hover);
+  }
+  .kchat-btn_2nd:active {
+    border-color: transparent;
+    background-color: var(--secondary-bg-active);
+    color: var(--secondary-ink-hover);
+  }
+  .kchat-btn_2nd:focus-visible {
+    border-color: var(--panel-border-focus);
+  }
+  .kchat-btn:disabled, .kchat-iconbtn:disabled {
+    cursor: default;
+    border-color: var(--button-border-off);
+    background-color: transparent;
+    color: var(--button-ink-off);
+  }
+  .kchat-ctl {
+    box-sizing: border-box;
+    display: inline-flex;
+    height: calc(var(--spacing, 0.25rem) * 5);
+    width: calc(var(--spacing, 0.25rem) * 5);
+    flex: none;
+    cursor: pointer;
+    appearance: none;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--_kchat-radius-sm);
+    border-style: var(--kchat-tw-border-style);
+    border-width: 1px;
+    border-color: transparent;
+    background-color: transparent;
+    padding: 0px;
+    color: var(--app-ink-quiet);
+    --kchat-tw-outline-style: none;
+    outline-style: none;
+    font: inherit;
+  }
+  .kchat-ctl > .kchat-ic {
+    height: calc(var(--spacing, 0.25rem) * 3);
+    width: calc(var(--spacing, 0.25rem) * 3);
+  }
+  .kchat-file .kchat-ctl {
+    height: calc(var(--spacing, 0.25rem) * 4);
+    width: calc(var(--spacing, 0.25rem) * 4);
+  }
+  .kchat-ctl:hover {
+    background-color: var(--secondary-bg-hover);
+    color: var(--secondary-ink-hover);
+  }
+  .kchat-ctl:active {
+    background-color: var(--secondary-bg-active);
+    color: var(--secondary-ink-hover);
+  }
+  .kchat-ctl:focus-visible {
+    border-color: var(--panel-border-focus);
+  }
+  .kchat-gauge-lead > .kchat-ctl:hover > .kchat-ic {
+    animation: none;
+  }
+  .kchat-act {
+    box-sizing: border-box;
+    display: flex;
+    height: calc(var(--spacing, 0.25rem) * 7);
+    width: 100%;
+    appearance: none;
+    align-items: center;
+    gap: calc(var(--spacing, 0.25rem) * 2);
+    border-style: var(--kchat-tw-border-style);
+    border-width: 1px;
+    border-color: transparent;
+    background-color: transparent;
+    padding-inline: calc(var(--spacing, 0.25rem) * 2);
+    font: inherit;
+    cursor: pointer;
+    border-radius: var(--_kchat-radius-control);
+    text-align: left;
+    font-size: var(--text-sm, 0.875rem);
+    line-height: var(--kchat-tw-leading, var(--text-sm--line-height, calc(1.25 / 0.875)));
+    --kchat-tw-font-weight: var(--font-weight-medium, 500);
+    font-weight: var(--font-weight-medium, 500);
+    color: var(--secondary-ink);
+    --kchat-tw-outline-style: none;
+    outline-style: none;
+  }
+  .kchat-act:hover {
+    background-color: var(--secondary-bg-hover);
+    color: var(--secondary-ink-hover);
+  }
+  .kchat-act:active {
+    background-color: var(--secondary-bg-active);
+    color: var(--secondary-ink-hover);
+  }
+  .kchat-act:focus-visible {
+    border-color: var(--panel-border-focus);
+  }
+  .kchat-field {
+    box-sizing: border-box;
+    display: flex;
+    height: calc(var(--spacing, 0.25rem) * 7);
+    width: 100%;
+    min-width: 0px;
+    flex: auto;
+    cursor: text;
+    align-items: center;
+    gap: calc(var(--spacing, 0.25rem) * 1.5);
+    border-radius: var(--_kchat-radius-control);
+    border-style: var(--kchat-tw-border-style);
+    border-width: 1px;
+    border-color: var(--panel-border);
+    background-color: var(--panel-bg);
+    padding-inline: calc(var(--spacing, 0.25rem) * 2);
+  }
+  .kchat-text {
+    margin: 0px;
+    min-width: 0px;
+    flex: 1;
+    appearance: none;
+    border-style: var(--kchat-tw-border-style);
+    border-width: 0px;
+    border-color: currentcolor;
+    background-color: transparent;
+    padding: 0px;
+    font-family: inherit;
+    font-size: var(--text-sm, 0.875rem);
+    line-height: var(--kchat-tw-leading, var(--text-sm--line-height, calc(1.25 / 0.875)));
+    --kchat-tw-leading: 1;
+    line-height: 1;
+    --kchat-tw-font-weight: var(--font-weight-medium, 500);
+    font-weight: var(--font-weight-medium, 500);
+    color: var(--app-ink);
+    caret-color: currentcolor;
+    --kchat-tw-outline-style: none;
+    outline-style: none;
+    &::-webkit-search-cancel-button {
+      display: none;
+    }
+  }
+  .kchat-text::placeholder {
+    --kchat-tw-font-weight: var(--font-weight-normal, 400);
+    font-weight: var(--font-weight-normal, 400);
+    color: var(--app-ink-quiet);
+    opacity: 100%;
+  }
+  .kchat-field:focus-within {
+    border-color: var(--panel-border-focus);
+  }
+  .kchat-field > .kchat-ic-sm {
+    color: var(--app-ink-quiet);
+  }
+  .kchat-form {
+    box-sizing: border-box;
+    display: flex;
+    width: 100%;
+    flex-direction: column;
+    gap: var(--spacing, 0.25rem);
+    border-radius: var(--_kchat-radius-surface);
+    border-style: var(--kchat-tw-border-style);
+    border-width: 1px;
+    border-color: var(--panel-border);
+    background-color: var(--panel-bg);
+    padding-inline: var(--spacing, 0.25rem);
+    padding-top: calc(var(--spacing, 0.25rem) * 2);
+    padding-bottom: var(--spacing, 0.25rem);
+  }
+  .kchat-popbody .kchat-form {
+    border-style: var(--kchat-tw-border-style);
+    border-width: 0px;
+  }
+  .kchat-form-field {
+    box-sizing: border-box;
+    display: flex;
+    height: calc(var(--spacing, 0.25rem) * 7);
+    align-items: center;
+    gap: calc(var(--spacing, 0.25rem) * 1.5);
+    border-style: var(--kchat-tw-border-style);
+    border-width: 0px;
+    background-color: transparent;
+    padding-inline: calc(var(--spacing, 0.25rem) * 2);
+  }
+  .kchat-form:focus-within {
+    border-color: var(--panel-border-focus);
+  }
+  .kchat-form-text {
+    height: calc(var(--spacing, 0.25rem) * 7);
+    overflow: hidden;
+    padding-inline: calc(var(--spacing, 0.25rem) * 2);
+    font-size: var(--text-sm, 0.875rem);
+    line-height: var(--kchat-tw-leading, var(--text-sm--line-height, calc(1.25 / 0.875)));
+    --kchat-tw-leading: calc(var(--spacing, 0.25rem) * 7);
+    line-height: calc(var(--spacing, 0.25rem) * 7);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--app-ink-quiet);
+  }
+  .kchat-form-text b {
+    --kchat-tw-font-weight: var(--font-weight-medium, 500);
+    font-weight: var(--font-weight-medium, 500);
+    color: var(--app-ink);
+  }
+  .kchat-form-actions {
+    display: flex;
+    height: calc(var(--spacing, 0.25rem) * 7);
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--spacing, 0.25rem);
+  }
+  .kchat-rule {
+    height: 1px;
+    flex: auto;
+    background-color: var(--app-border);
+  }
+  .kchat-aside {
+    box-sizing: border-box;
+    display: flex;
+    width: calc(var(--spacing, 0.25rem) * 60);
+    max-width: 45%;
+    min-width: 0px;
+    flex: none;
+    flex-direction: column;
+    border-inline-end-style: var(--kchat-tw-border-style);
+    border-inline-end-width: 1px;
+    border-inline-end-color: var(--panel-border);
+    background-color: var(--app-bg);
+    padding-inline: calc(var(--spacing, 0.25rem) * 3);
+    padding-top: 0px;
+    padding-bottom: calc(var(--spacing, 0.25rem) * 3);
+  }
+  .kchat-widget_aside-right > .kchat-aside {
+    border-inline-start-style: var(--kchat-tw-border-style);
+    border-inline-start-width: 1px;
+    border-inline-end-style: var(--kchat-tw-border-style);
+    border-inline-end-width: 0px;
+    border-inline-start-color: var(--panel-border);
+  }
+  @container (width < 36rem) {
+    .kchat-aside,	.kchat-widget_aside-right .kchat-aside {
+      position: absolute;
+      inset: 0px;
+      z-index: 10;
+      width: 100%;
+      max-width: 100%;
+      border-inline: 0;
+    }
+  }
+  .kchat-side-body {
+    display: flex;
+    min-height: 0px;
+    flex: 1;
+    flex-direction: column;
+    gap: calc(var(--spacing, 0.25rem) * 0.5);
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+  }
+  .kchat-day {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: calc(var(--spacing, 0.25rem) * 0.5);
+  }
+  .kchat-day[data-pending] {
+    display: none;
+  }
+  .kchat-side-label {
+    display: flex;
+    height: calc(var(--spacing, 0.25rem) * 7);
+    flex: none;
+    align-items: center;
+    margin-block-start: 0.75rem;
+    padding-inline: calc(var(--spacing, 0.25rem) * 2);
+    color: var(--app-ink-quiet);
+  }
+  .kchat-side-empty {
+    margin: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing, 0.25rem);
+    padding-inline: calc(var(--spacing, 0.25rem) * 4);
+    padding-block: calc(var(--spacing, 0.25rem) * 6);
+    text-align: center;
+    color: var(--app-ink);
+  }
+  .kchat-side-empty-hint {
+    font-size: var(--text-xs, 0.75rem);
+    line-height: var(--kchat-tw-leading, var(--text-xs--line-height, calc(1 / 0.75)));
+    color: var(--app-ink-quiet);
+  }
+  .kchat-row {
+    position: relative;
+    display: flex;
+    min-width: 0px;
+    align-items: center;
+    gap: var(--spacing, 0.25rem);
+  }
+  .kchat-rowmenu {
+    position: absolute;
+    inset-inline-end: calc(var(--spacing, 0.25rem) * 0);
+    inset-block-start: calc(100% + 0.25rem);
+    z-index: 20;
+  }
+  .kchat-thread {
+    box-sizing: border-box;
+    display: flex;
+    height: calc(var(--spacing, 0.25rem) * 7);
+    width: 100%;
+    min-width: 0px;
+    flex-grow: 1;
+    appearance: none;
+    align-items: center;
+    gap: calc(var(--spacing, 0.25rem) * 2);
+    border-style: var(--kchat-tw-border-style);
+    border-width: 1px;
+    border-color: transparent;
+    background-color: transparent;
+    padding-inline: calc(var(--spacing, 0.25rem) * 2);
+    font: inherit;
+    cursor: pointer;
+    border-radius: var(--_kchat-radius-control);
+    text-align: left;
+    font-size: var(--text-sm, 0.875rem);
+    line-height: var(--kchat-tw-leading, var(--text-sm--line-height, calc(1.25 / 0.875)));
+    color: var(--app-ink-quiet);
+    --kchat-tw-outline-style: none;
+    outline-style: none;
+  }
+  .kchat-thread-name {
+    min-width: 0px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .kchat-thread:hover {
+    background-color: var(--secondary-bg-hover);
+    color: var(--secondary-ink-hover);
+  }
+  .kchat-thread:focus-visible {
+    border-color: var(--panel-border-focus);
+  }
+  .kchat-thread_active {
+    cursor: default;
+    background-color: var(--secondary-bg-selected);
+    color: var(--secondary-ink-hover);
+  }
+  .kchat-thread_new {
+    color: var(--secondary-ink-off);
+  }
+  .kchat-thread_new:hover {
+    background-color: transparent;
+    color: var(--app-ink-quiet);
+  }
+  .kchat-dot {
+    display: flex;
+    height: calc(var(--spacing, 0.25rem) * 4);
+    width: calc(var(--spacing, 0.25rem) * 4);
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    color: var(--app-ink-quiet);
+  }
+  .kchat-dot::before {
+    height: calc(var(--spacing, 0.25rem) * 1.5);
+    width: calc(var(--spacing, 0.25rem) * 1.5);
+    border-radius: calc(infinity * 1px);
+    background-color: currentcolor;
+    --kchat-tw-content: '';
+    content: var(--kchat-tw-content);
+  }
+  .kchat-dot_off::before {
+    background-color: transparent;
+    --kchat-tw-inset-ring-shadow: inset 0 0 0 1px var(--kchat-tw-inset-ring-color, currentcolor);
+    box-shadow: var(--kchat-tw-inset-shadow), var(--kchat-tw-inset-ring-shadow), var(--kchat-tw-ring-offset-shadow), var(--kchat-tw-ring-shadow), var(--kchat-tw-shadow);
+    --kchat-tw-inset-ring-color: currentcolor;
+  }
+  .kchat-thread_active > .kchat-dot {
+    color: var(--secondary-ink-hover);
+  }
+  .kchat-row > .kchat-iconbtn {
+    display: none;
+  }
+  .kchat-row:hover > .kchat-iconbtn, .kchat-row:focus-within > .kchat-iconbtn {
+    display: inline-flex;
+  }
+  .kchat-row:has(.kchat-form) > :is(.kchat-thread, .kchat-iconbtn) {
+    display: none;
+  }
+  .kchat-burger {
+    position: absolute;
+    top: calc(var(--spacing, 0.25rem) * 3);
+    left: calc(var(--spacing, 0.25rem) * 3);
+    z-index: 20;
+  }
+  .kchat-widget_aside-right .kchat-burger {
+    right: calc(var(--spacing, 0.25rem) * 3);
+    left: auto;
+  }
+  .kchat-hit {
+    position: relative;
+    margin-top: calc(var(--spacing, 0.25rem) * 1.5);
+    box-sizing: border-box;
+    display: block;
+    width: 100%;
+    flex: none;
+    appearance: none;
+    border-radius: var(--_kchat-radius-control);
+    border-style: var(--kchat-tw-border-style);
+    border-width: 1px;
+    border-color: transparent;
+    background-color: transparent;
+    padding-inline: calc(var(--spacing, 0.25rem) * 3);
+    padding-block: calc(var(--spacing, 0.25rem) * 2.5);
+    font: inherit;
+    cursor: pointer;
+    text-align: left;
+    --kchat-tw-leading: var(--leading-snug, 1.375);
+    line-height: var(--leading-snug, 1.375);
+    color: var(--secondary-ink);
+    --kchat-tw-outline-style: none;
+    outline-style: none;
+  }
+  .kchat-hit:hover {
+    background-color: var(--secondary-bg-hover);
+  }
+  .kchat-hit:focus-visible {
+    border-color: var(--panel-border-focus);
+  }
+  .kchat-hit-head {
+    display: flex;
+    min-width: 0px;
+    align-items: baseline;
+  }
+  .kchat-hit-name {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 1.75rem), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 1.75rem), transparent);
+    margin-bottom: calc(var(--spacing, 0.25rem) * 0.5);
+    min-width: 0px;
+    flex: 1;
+    overflow: hidden;
+    --kchat-tw-font-weight: var(--font-weight-medium, 500);
+    font-weight: var(--font-weight-medium, 500);
+    white-space: nowrap;
+    color: var(--app-ink-quiet);
+  }
+  .kchat-hit-snippet {
+    margin-top: calc(var(--spacing, 0.25rem) * 0.5);
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    color: var(--app-ink);
+  }
+  .kchat-hit-snippet_under {
+    margin-top: 0px;
+  }
+  .kchat-date {
+    margin-inline-start: auto;
+    flex: none;
+    color: var(--app-ink-quiet);
+    --kchat-tw-numeric-spacing: tabular-nums;
+    font-variant-numeric: var(--kchat-tw-ordinal,) var(--kchat-tw-slashed-zero,) var(--kchat-tw-numeric-figure,) var(--kchat-tw-numeric-spacing,) var(--kchat-tw-numeric-fraction,);
+  }
+  .kchat-date_over {
+    background: linear-gradient(to right, transparent, var(--app-bg) 1.5rem);
+    position: absolute;
+    top: calc(var(--spacing, 0.25rem) * 2.5);
+    right: calc(var(--spacing, 0.25rem) * 3);
+    padding-left: calc(var(--spacing, 0.25rem) * 6);
+  }
+  .kchat-hit:hover .kchat-date,	.kchat-thread:hover .kchat-date {
+    display: none;
+  }
+  .kchat-composer {
+    container-type: inline-size;
+    position: relative;
+    margin-inline: calc(var(--spacing, 0.25rem) * 3);
+    margin-bottom: calc(var(--spacing, 0.25rem) * 3);
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    border-radius: var(--_kchat-radius-surface);
+    border-style: var(--kchat-tw-border-style);
+    border-width: 1px;
+    border-color: var(--panel-border);
+    background-color: var(--panel-bg);
+  }
+  .kchat-composer:focus-within {
+    border-color: var(--panel-border-focus);
+  }
+  .kchat-composer[aria-busy="true"] {
+    pointer-events: none;
+  }
+  .kchat-tray {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: calc(var(--spacing, 0.25rem) * 2);
+    padding-inline: calc(var(--spacing, 0.25rem) * 2);
+    padding-top: calc(var(--spacing, 0.25rem) * 2);
+    padding-bottom: 0px;
+  }
+  .kchat-tray:not(:has(.kchat-file)) {
+    display: none;
+  }
+  .kchat-panel {
+    box-sizing: border-box;
+    min-height: 0px;
+    min-width: 0px;
+    flex: auto;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    background-color: transparent;
+  }
+  .kchat-draft {
+    padding-inline: calc(var(--spacing, 0.25rem) * 3);
+    padding-top: calc(var(--spacing, 0.25rem) * 2);
+    padding-bottom: calc(var(--spacing, 0.25rem) * 0.5);
+    font-size: var(--text-base, 1rem);
+    line-height: var(--kchat-tw-leading, var(--text-base--line-height, calc(1.5 / 1)));
+    --kchat-tw-leading: 1.6;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    color: var(--app-ink);
+  }
+  textarea.kchat-draft {
+    box-sizing: border-box;
+    display: block;
+    field-sizing: content;
+    max-height: 10lh;
+    min-height: 1lh;
+    width: 100%;
+    resize: none;
+    appearance: none;
+    overscroll-behavior-y: contain;
+    border-radius: 0;
+    border-style: var(--kchat-tw-border-style);
+    border-width: 0px;
+    border-color: currentcolor;
+    background-color: transparent;
+    font-family: inherit;
+    font-size: var(--text-base, 1rem);
+    line-height: var(--kchat-tw-leading, var(--text-base--line-height, calc(1.5 / 1)));
+    --kchat-tw-leading: 1.6;
+    line-height: 1.6;
+    color: var(--app-ink);
+    caret-color: var(--app-ink);
+    --kchat-tw-outline-style: none;
+    outline-style: none;
+  }
+  textarea.kchat-draft::placeholder {
+    color: var(--app-ink-quiet);
+  }
+  textarea.kchat-draft[readonly] {
+    cursor: default;
+  }
+  textarea.kchat-draft[aria-busy="true"] {
+    color: var(--app-ink-quiet);
+  }
+  .kchat-ask {
+    display: flex;
+    flex-direction: column;
+    padding-inline: var(--spacing, 0.25rem);
+    padding-top: calc(var(--spacing, 0.25rem) * 2);
+    padding-bottom: var(--spacing, 0.25rem);
+  }
+  .kchat-ask-q {
+    margin: 0px;
+    padding-inline: calc(var(--spacing, 0.25rem) * 2);
+    padding-top: 0px;
+    padding-bottom: calc(var(--spacing, 0.25rem) * 2);
+    font-size: var(--text-base, 1rem);
+    line-height: var(--kchat-tw-leading, var(--text-base--line-height, calc(1.5 / 1)));
+    --kchat-tw-font-weight: var(--font-weight-semibold, 600);
+    font-weight: var(--font-weight-semibold, 600);
+    color: var(--app-ink);
+  }
+  .kchat-pick + .kchat-pick {
+    margin-top: var(--spacing, 0.25rem);
+  }
+  .kchat-pick {
+    box-sizing: border-box;
+    display: flex;
+    width: 100%;
+    align-items: flex-start;
+    gap: calc(var(--spacing, 0.25rem) * 2);
+    border-radius: var(--_kchat-radius-control);
+    border-style: var(--kchat-tw-border-style);
+    border-width: 1px;
+    border-color: transparent;
+    background-color: transparent;
+    padding: calc(var(--spacing, 0.25rem) * 2);
+    font: inherit;
+    cursor: pointer;
+    text-align: left;
+    font-size: var(--text-sm, 0.875rem);
+    line-height: var(--kchat-tw-leading, var(--text-sm--line-height, calc(1.25 / 0.875)));
+    color: var(--app-ink);
+    --kchat-tw-outline-style: none;
+    outline-style: none;
+  }
+  .kchat-pick > input {
+    pointer-events: none;
+    position: absolute;
+    height: 1px;
+    width: 1px;
+    opacity: 0%;
+  }
+  .kchat-pick:hover {
+    background-color: var(--secondary-bg-hover);
+  }
+  .kchat-pick:active {
+    background-color: var(--secondary-bg-active);
+  }
+  .kchat-pick:focus-within {
+    border-color: var(--panel-border-focus);
+  }
+  .kchat-pick:has(> input:checked) {
+    background-color: var(--secondary-bg-selected);
+  }
+  .kchat-mark {
+    box-sizing: border-box;
+    display: flex;
+    height: calc(var(--spacing, 0.25rem) * 4);
+    width: calc(var(--spacing, 0.25rem) * 4);
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    margin-block-start: calc((1lh - 1rem) / 2);
+    border-style: var(--kchat-tw-border-style);
+    border-width: 1px;
+    border-color: var(--button-border);
+    color: transparent;
+  }
+  .kchat-mark_radio {
+    border-radius: calc(infinity * 1px);
+  }
+  .kchat-mark_check {
+    border-radius: var(--_kchat-radius-sm);
+  }
+  .kchat-mark > svg {
+    height: calc(var(--spacing, 0.25rem) * 2.5);
+    width: calc(var(--spacing, 0.25rem) * 2.5);
+    fill: currentcolor;
+  }
+  .kchat-mark_radio > span {
+    height: calc(var(--spacing, 0.25rem) * 2);
+    width: calc(var(--spacing, 0.25rem) * 2);
+    border-radius: calc(infinity * 1px);
+    background-color: currentcolor;
+  }
+  .kchat-pick:hover > .kchat-mark {
+    border-color: var(--app-ink-quiet);
+  }
+  .kchat-pick:has(> input:checked) > .kchat-mark {
+    border-color: var(--app-ink);
+    color: var(--app-ink);
+  }
+  .kchat-pick-label {
+    display: flex;
+    min-width: 0px;
+    flex-direction: column;
+    gap: calc(var(--spacing, 0.25rem) * 0.5);
+  }
+  .kchat-pick-name {
+    --kchat-tw-font-weight: var(--font-weight-medium, 500);
+    font-weight: var(--font-weight-medium, 500);
+  }
+  .kchat-pick-desc {
+    --kchat-tw-font-weight: var(--font-weight-normal, 400);
+    font-weight: var(--font-weight-normal, 400);
+    color: var(--app-ink-quiet);
+  }
+  .kchat-pick_own textarea {
+    margin: 0px;
+    min-width: 0px;
+    flex: 1;
+    resize: none;
+    appearance: none;
+    border-style: var(--kchat-tw-border-style);
+    border-width: 0px;
+    background-color: transparent;
+    padding: 0px;
+    color: var(--app-ink);
+    font: inherit;
+    field-sizing: content;
+    max-height: 6lh;
+    min-height: 1lh;
+    --kchat-tw-outline-style: none;
+    outline-style: none;
+  }
+  .kchat-pick_own textarea::placeholder {
+    color: var(--app-ink-quiet);
+  }
+  .kchat-barrow {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: calc(var(--spacing, 0.25rem) * 2);
+    padding: calc(var(--spacing, 0.25rem) * 2);
+  }
+  .kchat-barrow-left, .kchat-barrow-right {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: calc(var(--spacing, 0.25rem) * 2);
+  }
+  .kchat-barrow-center {
+    display: flex;
+    min-width: 0px;
+    flex: 1;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: calc(var(--spacing, 0.25rem) * 2);
+    padding-inline: calc(var(--spacing, 0.25rem) * 2);
+  }
+  .kchat-gauge {
+    position: relative;
+    isolation: isolate;
+    box-sizing: border-box;
+    display: inline-flex;
+    height: calc(var(--spacing, 0.25rem) * 7);
+    max-width: 100%;
+    min-width: 0px;
+    align-items: center;
+    gap: calc(var(--spacing, 0.25rem) * 1.5);
+    border-radius: var(--_kchat-radius-control);
+    border-style: var(--kchat-tw-border-style);
+    border-width: 1px;
+    border-color: transparent;
+    background-color: var(--secondary-bg);
+    padding-inline: calc(var(--spacing, 0.25rem) * 3);
+    color: var(--app-ink-quiet);
+    font: inherit;
+    appearance: none;
+    overflow: hidden;
+    text-align: left;
+    font-size: var(--text-sm, 0.875rem);
+    line-height: var(--kchat-tw-leading, var(--text-sm--line-height, calc(1.25 / 0.875)));
+    --kchat-tw-leading: 1;
+    line-height: 1;
+    white-space: nowrap;
+    --kchat-tw-numeric-spacing: tabular-nums;
+    font-variant-numeric: var(--kchat-tw-ordinal,) var(--kchat-tw-slashed-zero,) var(--kchat-tw-numeric-figure,) var(--kchat-tw-numeric-spacing,) var(--kchat-tw-numeric-fraction,);
+    --kchat-tw-outline-style: none;
+    outline-style: none;
+  }
+  .kchat-gauge-lead, .kchat-gauge-trail {
+    display: flex;
+    flex: none;
+    align-items: center;
+  }
+  .kchat-gauge-body {
+    display: flex;
+    min-width: 0px;
+    align-items: center;
+    gap: calc(var(--spacing, 0.25rem) * 1.5);
+    overflow: hidden;
+  }
+  .kchat-gauge-val {
+    min-width: 0px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--app-ink);
+  }
+  .kchat-gauge-meta, .kchat-gauge-sep {
+    color: var(--app-ink-quiet);
+  }
+  .kchat-gauge:has(> .kchat-gauge-trail), .kchat-gauge_opens {
+    padding-inline-end: var(--spacing, 0.25rem);
+  }
+  .kchat-gauge:has(> .kchat-gauge-lead > .kchat-ctl) {
+    padding-inline-start: var(--spacing, 0.25rem);
+  }
+  .kchat-gauge_opens {
+    cursor: pointer;
+  }
+  .kchat-gauge_opens:hover {
+    background-color: var(--secondary-bg-hover);
+  }
+  .kchat-gauge_opens:active {
+    background-color: var(--secondary-bg-active);
+  }
+  .kchat-gauge_opens.kchat-gauge_open {
+    background-color: var(--secondary-bg-selected);
+    color: var(--secondary-ink-hover);
+  }
+  .kchat-gauge:focus-visible {
+    border-color: var(--panel-border-focus);
+  }
+  .kchat-gauge_opens > .kchat-gauge-body::after {
+    content: "";
+    border-inline: 0.25rem solid transparent;
+    border-block-end: 0.25rem solid currentColor;
+    transition: transform 120ms ease, opacity 120ms ease;
+    margin-inline: calc(var(--spacing, 0.25rem) * 1.5);
+    height: 0px;
+    width: 0px;
+    flex: none;
+    opacity: 55%;
+  }
+  .kchat-gauge_open > .kchat-gauge-body::after {
+    transform: rotate(180deg);
+    opacity: 90%;
+  }
+  .kchat-gauge_err > .kchat-gauge-lead {
+    color: var(--danger-ink);
+  }
+  .kchat-pop {
+    position: absolute;
+    inset-inline-start: calc(1/2 * 100%);
+    bottom: 100%;
+    z-index: 10;
+    margin-bottom: calc(var(--spacing, 0.25rem) * 0.5);
+    box-sizing: border-box;
+    display: flex;
+    width: calc(var(--spacing, 0.25rem) * 60);
+    max-width: 100cqw;
+    --kchat-tw-translate-x: calc(calc(1 / 2 * 100%) * -1);
+    translate: var(--kchat-tw-translate-x) var(--kchat-tw-translate-y);
+    flex-direction: column;
+    border-radius: var(--_kchat-radius-control);
+    border-style: var(--kchat-tw-border-style);
+    border-width: 1px;
+    border-color: var(--panel-border);
+    background-color: var(--panel-bg);
+    padding: var(--spacing, 0.25rem);
+    font-size: var(--text-sm, 0.875rem);
+    line-height: var(--kchat-tw-leading, var(--text-sm--line-height, calc(1.25 / 0.875)));
+    color: var(--app-ink);
+  }
+  .kchat-popbody {
+    box-sizing: border-box;
+    display: flex;
+    width: fit-content;
+    min-width: calc(var(--spacing, 0.25rem) * 44);
+    flex-direction: column;
+    border-radius: var(--_kchat-radius-control);
+    border-style: var(--kchat-tw-border-style);
+    border-width: 1px;
+    border-color: var(--panel-border);
+    background-color: var(--panel-bg);
+    padding: var(--spacing, 0.25rem);
+    font-size: var(--text-sm, 0.875rem);
+    line-height: var(--kchat-tw-leading, var(--text-sm--line-height, calc(1.25 / 0.875)));
+    color: var(--app-ink);
+  }
+  .kchat-pop-group {
+    display: flex;
+    flex-direction: column;
+  }
+  .kchat-pop-group + .kchat-pop-group {
+    margin-top: calc(var(--spacing, 0.25rem) * 2);
+    border-top-style: var(--kchat-tw-border-style);
+    border-top-width: 1px;
+    border-top-color: var(--panel-border);
+    padding-top: calc(var(--spacing, 0.25rem) * 2);
+  }
+  .kchat-pop-foot {
+    margin-top: calc(var(--spacing, 0.25rem) * 2);
+    display: flex;
+    justify-content: center;
+    padding-inline: var(--spacing, 0.25rem);
+  }
+  .kchat-pop-foot > .kchat-btn:disabled {
+    animation: kchat-breathe 1.4s ease-in-out infinite;
+  }
+  .kchat-task {
+    box-sizing: border-box;
+    display: flex;
+    min-width: 0px;
+    align-items: center;
+    gap: calc(var(--spacing, 0.25rem) * 2);
+    padding-block: calc(var(--spacing, 0.25rem) * 1.5);
+    padding-inline-start: calc(var(--spacing, 0.25rem) * 2);
+    padding-inline-end: var(--spacing, 0.25rem);
+  }
+  .kchat-task + .kchat-task {
+    border-top-style: var(--kchat-tw-border-style);
+    border-top-width: 1px;
+    border-color: var(--panel-border);
+  }
+  .kchat-task-body {
+    display: flex;
+    min-width: 0px;
+    flex: 1;
+    flex-direction: column;
+    --kchat-tw-leading: var(--leading-tight, 1.25);
+    line-height: var(--leading-tight, 1.25);
+  }
+  .kchat-task-comment {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow-wrap: anywhere;
+    color: var(--app-ink);
+  }
+  .kchat-task-detail {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--app-ink-quiet);
+    --kchat-tw-numeric-spacing: tabular-nums;
+    font-variant-numeric: var(--kchat-tw-ordinal,) var(--kchat-tw-slashed-zero,) var(--kchat-tw-numeric-figure,) var(--kchat-tw-numeric-spacing,) var(--kchat-tw-numeric-fraction,);
+  }
+  .kchat-pop-stat {
+    display: flex;
+    align-items: baseline;
+    gap: calc(var(--spacing, 0.25rem) * 3);
+    padding-inline: calc(var(--spacing, 0.25rem) * 2);
+    padding-block: var(--spacing, 0.25rem);
+    white-space: nowrap;
+    --kchat-tw-numeric-spacing: tabular-nums;
+    font-variant-numeric: var(--kchat-tw-ordinal,) var(--kchat-tw-slashed-zero,) var(--kchat-tw-numeric-figure,) var(--kchat-tw-numeric-spacing,) var(--kchat-tw-numeric-fraction,);
+  }
+  .kchat-pop-label {
+    margin-inline-end: auto;
+    min-width: 0px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--app-ink-quiet);
+  }
+  .kchat-pops {
+    position: static;
+    display: inline-flex;
+  }
+  @supports (justify-self: anchor-center) {
+    .kchat-pops {
+      anchor-scope: --kchat-gauge;
+    }
+    .kchat-pops > .kchat-gauge {
+      anchor-name: --kchat-gauge;
+    }
+    .kchat-pop {
+      inset-inline: calc(var(--spacing, 0.25rem) * 2);
+      max-width: calc(100cqw - 1rem);
+      translate: none;
+      justify-self: anchor-center;
+      position-anchor: --kchat-gauge;
+    }
+  }
+  .kchat-file {
+    position: relative;
+    isolation: isolate;
+    box-sizing: border-box;
+    display: inline-flex;
+    height: calc(var(--spacing, 0.25rem) * 6);
+    max-width: calc(var(--spacing, 0.25rem) * 64);
+    min-width: 0px;
+    align-items: center;
+    gap: calc(var(--spacing, 0.25rem) * 1.5);
+    border-radius: var(--_kchat-radius-control);
+    border-style: var(--kchat-tw-border-style);
+    border-width: 1px;
+    border-color: var(--secondary-bg);
+    background-color: transparent;
+    padding-inline: calc(var(--spacing, 0.25rem) * 2);
+    color: var(--app-ink);
+    font: inherit;
+    overflow: hidden;
+    font-size: var(--text-xs, 0.75rem);
+    line-height: var(--kchat-tw-leading, var(--text-xs--line-height, calc(1 / 0.75)));
+    --kchat-tw-leading: 1;
+    line-height: 1;
+    --kchat-tw-font-weight: var(--font-weight-normal, 400);
+    font-weight: var(--font-weight-normal, 400);
+    white-space: nowrap;
+    --kchat-tw-numeric-spacing: tabular-nums;
+    font-variant-numeric: var(--kchat-tw-ordinal,) var(--kchat-tw-slashed-zero,) var(--kchat-tw-numeric-figure,) var(--kchat-tw-numeric-spacing,) var(--kchat-tw-numeric-fraction,);
+    text-decoration-line: none;
+    --kchat-tw-outline-style: none;
+    outline-style: none;
+  }
+  .kchat-file > .kchat-ic {
+    height: calc(var(--spacing, 0.25rem) * 3);
+    width: calc(var(--spacing, 0.25rem) * 3);
+    flex: none;
+  }
+  .kchat-file-fill {
+    position: absolute;
+    inset-block: 0px;
+    inset-inline-start: calc(var(--spacing, 0.25rem) * 0);
+    z-index: calc(1 * -1);
+    background-color: var(--secondary-bg);
+  }
+  .kchat-file-name {
+    min-width: 0px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .kchat-file-meta {
+    flex: none;
+    color: var(--app-ink-quiet);
+  }
+  .kchat-file-trail {
+    display: flex;
+    flex: none;
+    align-items: center;
+  }
+  .kchat-file:has(> .kchat-file-trail) {
+    padding-inline-end: var(--spacing, 0.25rem);
+  }
+  .kchat-file_done {
+    border-color: transparent;
+    background-color: var(--secondary-bg);
+  }
+  a.kchat-file_done:hover {
+    background-color: var(--secondary-bg-hover);
+  }
+  .kchat-file:focus-visible {
+    border-color: var(--panel-border-focus);
+  }
+  .kchat-file_err {
+    border-color: var(--danger-ink);
+    background-color: transparent;
+  }
+  .kchat-file_err > .kchat-ic, .kchat-file_err .kchat-file-meta {
+    color: var(--danger-ink);
+  }
+  .kchat-top_menu {
+    position: relative;
+  }
+  .kchat-top_menu > .kchat-rowmenu {
+    inset-inline-end: calc(var(--spacing, 0.25rem) * 3);
+    max-width: calc(100% - 1.5rem);
+  }
+  .kchat-files {
+    width: calc(var(--spacing, 0.25rem) * 72);
+  }
+  .kchat-entry {
+    position: relative;
+    box-sizing: border-box;
+    display: flex;
+    min-width: 0px;
+    cursor: pointer;
+    align-items: center;
+    gap: calc(var(--spacing, 0.25rem) * 2);
+    border-radius: var(--_kchat-radius-control);
+    border-style: var(--kchat-tw-border-style);
+    border-width: 1px;
+    border-color: transparent;
+    background-color: transparent;
+    padding-inline: calc(var(--spacing, 0.25rem) * 2);
+    padding-block: calc(var(--spacing, 0.25rem) * 1.5);
+    white-space: nowrap;
+    color: var(--secondary-ink);
+  }
+  .kchat-entry > .kchat-ic {
+    flex: none;
+  }
+  .kchat-entry > .kchat-ctl {
+    position: relative;
+  }
+  .kchat-entry-name::after {
+    content: "";
+    position: absolute;
+    inset: 0px;
+  }
+  .kchat-entry:hover:not(:has(.kchat-ctl:hover)) {
+    background-color: var(--secondary-bg-hover);
+    color: var(--secondary-ink-hover);
+  }
+  .kchat-entry:has(.kchat-entry-name:focus-visible) {
+    border-color: var(--panel-border-focus);
+  }
+  .kchat-entry-body {
+    display: flex;
+    min-width: 0px;
+    flex: 1;
+    flex-direction: column;
+    --kchat-tw-leading: var(--leading-tight, 1.25);
+    line-height: var(--leading-tight, 1.25);
+  }
+  .kchat-entry-name {
+    min-width: 0px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--app-ink);
+    text-decoration-line: none;
+    --kchat-tw-outline-style: none;
+    outline-style: none;
+  }
+  .kchat-entry-detail {
+    color: var(--app-ink-quiet);
+    --kchat-tw-numeric-spacing: tabular-nums;
+    font-variant-numeric: var(--kchat-tw-ordinal,) var(--kchat-tw-slashed-zero,) var(--kchat-tw-numeric-figure,) var(--kchat-tw-numeric-spacing,) var(--kchat-tw-numeric-fraction,);
+  }
+  .kchat-log {
+    min-width: 0px;
+    scroll-behavior: smooth;
+    border-radius: var(--_kchat-radius-surface);
+    background-color: var(--app-bg);
+    padding-inline: calc(var(--spacing, 0.25rem) * 3);
+    padding-top: 0px;
+    padding-bottom: calc(var(--spacing, 0.25rem) * 4);
+    font-size: var(--text-base, 1rem);
+    line-height: var(--kchat-tw-leading, var(--text-base--line-height, calc(1.5 / 1)));
+    --kchat-tw-leading: 1.6;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+    color: var(--app-ink);
+  }
+  .kchat-log[data-seeding] {
+    visibility: hidden;
+  }
+  .kchat-log_scroll {
+    -webkit-mask-image: linear-gradient(to bottom, transparent, rgba(0,0,0,0.5) 0.5rem, #000 1.25rem, #000 calc(100% - 1.25rem), rgba(0,0,0,0.5) calc(100% - 0.5rem), transparent);
+    container-type: size;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    mask-image: linear-gradient(to bottom, transparent, rgba(0,0,0,0.5) 0.5rem, #000 1.25rem, #000 calc(100% - 1.25rem), rgba(0,0,0,0.5) calc(100% - 0.5rem), transparent);
+  }
+  .kchat-section[data-pending] {
+    display: none;
+  }
+  .kchat-span {
+    pointer-events: none;
+    position: absolute;
+    top: 0px;
+    z-index: calc(10 * -1);
+    height: 100cqh;
+    width: 100%;
+  }
+  .kchat-follow {
+    height: 0px;
+  }
+  .kchat-turn {
+    min-width: 0px;
+  }
+  .kchat-blk {
+    margin-top: calc(var(--spacing, 0.25rem) * 2);
+    display: grid;
+    min-width: 0px;
+    grid-template-columns: 1rem minmax(0,1fr);
+    column-gap: calc(var(--spacing, 0.25rem) * 2);
+  }
+  .kchat-user {
+    position: relative;
+    margin-top: calc(var(--spacing, 0.25rem) * 5);
+    margin-bottom: calc(var(--spacing, 0.25rem) * 3);
+    display: flex;
+    min-width: 0px;
+    align-items: center;
+    justify-content: flex-end;
+    gap: calc(var(--spacing, 0.25rem) * 2);
+  }
+  .kchat-user > .kchat-gut {
+    order: calc(1 * -1);
+    height: auto;
+    flex: none;
+    align-self: center;
+  }
+  .kchat-gut {
+    grid-column: 1;
+    grid-row: 1;
+    display: flex;
+    height: 1.6em;
+    align-items: center;
+    justify-content: flex-start;
+    align-self: start;
+    color: var(--app-ink-quiet);
+  }
+  .kchat-col {
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 0px;
+  }
+  .kchat-bubble {
+    box-sizing: border-box;
+    display: flex;
+    max-width: 80%;
+    min-width: 0px;
+    flex-direction: column;
+    gap: calc(var(--spacing, 0.25rem) * 2);
+    border-radius: var(--_kchat-radius-surface);
+    border-style: var(--kchat-tw-border-style);
+    border-width: 1px;
+    border-color: var(--panel-border);
+    background-color: var(--panel-bg);
+    padding-inline: calc(var(--spacing, 0.25rem) * 3);
+    padding-block: calc(var(--spacing, 0.25rem) * 2);
+  }
+  .kchat-bubble-text {
+    white-space: pre-wrap;
+  }
+  .kchat-bubble-files {
+    display: flex;
+    min-width: 0px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: calc(var(--spacing, 0.25rem) * 1.5);
+  }
+  .kchat-agent {
+    min-width: 0px;
+    font-family: var(--font-serif, ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif);
+  }
+  .kchat-turn > .kchat-blk {
+    font-family: var(--font-serif, ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif);
+  }
+  .kchat-records, .kchat-summary {
+    color: var(--app-ink-quiet);
+  }
+  .kchat-seam {
+    margin-top: calc(var(--spacing, 0.25rem) * 5);
+    margin-bottom: var(--spacing, 0.25rem);
+    display: flex;
+    align-items: center;
+    gap: calc(var(--spacing, 0.25rem) * 2.5);
+    font-size: 0.875em;
+    color: var(--app-ink-quiet);
+  }
+  .kchat-seam::before, .kchat-seam::after {
+    content: "";
+    height: 1px;
+    flex: 1;
+    background-color: var(--app-border);
+  }
+  .kchat-seam > span {
+    min-width: 0px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .kchat-turn:is([data-state="abort"],[data-state="error"],[data-state="refuse"]) > .kchat-user,	.kchat-turn:is([data-state="abort"],[data-state="error"],[data-state="refuse"]) > .kchat-agent {
+    opacity: 70%;
+    --kchat-tw-blur: blur(1px);
+    filter: var(--kchat-tw-blur,) var(--kchat-tw-brightness,) var(--kchat-tw-contrast,) var(--kchat-tw-grayscale,) var(--kchat-tw-hue-rotate,) var(--kchat-tw-invert,) var(--kchat-tw-saturate,) var(--kchat-tw-sepia,) var(--kchat-tw-drop-shadow,);
+  }
+  .kchat-turn[data-rewind="target"] > .kchat-user > .kchat-bubble {
+    background-color: var(--secondary-bg-hover);
+  }
+  .kchat-turn[data-rewind="target"] > .kchat-agent,	.kchat-turn[data-rewind="after"] > .kchat-user, .kchat-turn[data-rewind="after"] > .kchat-agent {
+    opacity: 70%;
+    --kchat-tw-blur: blur(1px);
+    filter: var(--kchat-tw-blur,) var(--kchat-tw-brightness,) var(--kchat-tw-contrast,) var(--kchat-tw-grayscale,) var(--kchat-tw-hue-rotate,) var(--kchat-tw-invert,) var(--kchat-tw-saturate,) var(--kchat-tw-sepia,) var(--kchat-tw-drop-shadow,);
+  }
+  .kchat-turn:hover > .kchat-user, .kchat-turn:hover > .kchat-agent {
+    opacity: 100%;
+    filter: none;
+  }
+  .kchat-status {
+    display: flex;
+    min-width: 0px;
+    align-items: center;
+    gap: calc(var(--spacing, 0.25rem) * 2);
+    color: var(--app-ink-quiet);
+  }
+  .kchat-status > span {
+    min-width: 0px;
+    flex: 0 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .kchat-tools-flat {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: calc(var(--spacing, 0.25rem) * 3);
+    color: var(--app-ink-quiet);
+  }
+  .kchat-tool-flat {
+    display: inline-flex;
+    gap: var(--spacing, 0.25rem);
+  }
+  .kchat-tool-flat:not(:last-child)::after {
+    --kchat-tw-content: ',';
+    content: var(--kchat-tw-content);
+  }
+  .kchat-tool-count {
+    color: var(--app-ink-quiet);
+    --kchat-tw-numeric-spacing: tabular-nums;
+    font-variant-numeric: var(--kchat-tw-ordinal,) var(--kchat-tw-slashed-zero,) var(--kchat-tw-numeric-figure,) var(--kchat-tw-numeric-spacing,) var(--kchat-tw-numeric-fraction,);
+  }
+  .kchat-think {
+    position: relative;
+    min-width: 0px;
+    color: var(--app-ink-quiet);
+  }
+  .kchat-think-head {
+    margin: 0px;
+    display: inline;
+    list-style-type: none;
+    appearance: none;
+    padding: 0px;
+    border: 0;
+    cursor: pointer;
+    background-color: transparent;
+    text-align: left;
+    color: var(--app-ink-quiet);
+    --kchat-tw-outline-style: none;
+    outline-style: none;
+    -webkit-user-select: none;
+    user-select: none;
+    font: inherit;
+    &::-webkit-details-marker {
+      display: none;
+    }
+  }
+  .kchat-think-head:hover {
+    color: var(--app-ink);
+  }
+  .kchat-think-head:focus-visible {
+    color: var(--app-ink);
+    text-decoration-line: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+  }
+  .kchat-think[open] > .kchat-think-head {
+    position: absolute;
+    inset: 0px;
+    opacity: 0%;
+  }
+  .kchat-think[open]:has(> .kchat-think-head:focus-visible) {
+    outline-style: var(--kchat-tw-outline-style);
+    outline-width: 1px;
+    outline-offset: 2px;
+    outline-color: var(--panel-border-focus);
+  }
+  .kchat-think-body .kchat-prose {
+    font-size: var(--text-sm, 0.875rem);
+    line-height: var(--kchat-tw-leading, var(--text-sm--line-height, calc(1.25 / 0.875)));
+  }
+  .kchat-prose {
+    --_kchat-radius-sm: var(--kchat-radius-sm, 0.25rem);
+    --_kchat-radius-control: var(--kchat-radius-control, 0.375rem);
+    --_kchat-radius-surface: var(--kchat-radius-surface, 0.5rem);
+    --_kchat-prose-rule: var(--kchat-prose-rule, var(--app-border));
+    --_kchat-prose-border: var(--kchat-prose-border, var(--button-border));
+    --_kchat-prose-muted: var(--kchat-prose-muted, var(--app-ink-quiet));
+    --_kchat-prose-link: var(--kchat-prose-link, currentColor);
+    --_kchat-prose-code-bg: var(--kchat-prose-code-bg, var(--panel-bg));
+    --_kchat-space: var(--kchat-space, 0.75em);
+    color: var(--kchat-tw-prose-body);
+    max-width: 65ch;
+    :where(p):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 1.25em;
+      margin-bottom: 1.25em;
+    }
+    :where([class~="lead"]):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      color: var(--kchat-tw-prose-lead);
+      font-size: 1.25em;
+      line-height: 1.6;
+      margin-top: 1.2em;
+      margin-bottom: 1.2em;
+    }
+    :where(a):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      color: var(--kchat-tw-prose-links);
+      text-decoration: underline;
+      font-weight: 500;
+    }
+    :where(strong):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      color: var(--kchat-tw-prose-bold);
+      font-weight: 600;
+    }
+    :where(a strong):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      color: inherit;
+    }
+    :where(blockquote strong):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      color: inherit;
+    }
+    :where(thead th strong):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      color: inherit;
+    }
+    :where(ol):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      list-style-type: decimal;
+      margin-top: 1.25em;
+      margin-bottom: 1.25em;
+      padding-inline-start: 1.625em;
+    }
+    :where(ol[type="A"]):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      list-style-type: upper-alpha;
+    }
+    :where(ol[type="a"]):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      list-style-type: lower-alpha;
+    }
+    :where(ol[type="A" s]):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      list-style-type: upper-alpha;
+    }
+    :where(ol[type="a" s]):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      list-style-type: lower-alpha;
+    }
+    :where(ol[type="I"]):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      list-style-type: upper-roman;
+    }
+    :where(ol[type="i"]):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      list-style-type: lower-roman;
+    }
+    :where(ol[type="I" s]):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      list-style-type: upper-roman;
+    }
+    :where(ol[type="i" s]):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      list-style-type: lower-roman;
+    }
+    :where(ol[type="1"]):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      list-style-type: decimal;
+    }
+    :where(ul):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      list-style-type: disc;
+      margin-top: 1.25em;
+      margin-bottom: 1.25em;
+      padding-inline-start: 1.625em;
+    }
+    :where(ol > li):not(:where([class~="not-prose"], [class~="not-prose"] *))::marker {
+      font-weight: 400;
+      color: var(--kchat-tw-prose-counters);
+    }
+    :where(ul > li):not(:where([class~="not-prose"], [class~="not-prose"] *))::marker {
+      color: var(--kchat-tw-prose-bullets);
+    }
+    :where(dt):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      color: var(--kchat-tw-prose-headings);
+      font-weight: 600;
+      margin-top: 1.25em;
+    }
+    :where(hr):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      border-color: var(--kchat-tw-prose-hr);
+      border-top-width: 1px;
+      margin-top: 3em;
+      margin-bottom: 3em;
+    }
+    :where(blockquote):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      font-weight: 500;
+      font-style: italic;
+      color: var(--kchat-tw-prose-quotes);
+      border-inline-start-width: 0.25rem;
+      border-inline-start-color: var(--kchat-tw-prose-quote-borders);
+      quotes: "\201C""\201D""\2018""\2019";
+      margin-top: 1.6em;
+      margin-bottom: 1.6em;
+      padding-inline-start: 1em;
+    }
+    :where(blockquote p:first-of-type):not(:where([class~="not-prose"], [class~="not-prose"] *))::before {
+      content: open-quote;
+    }
+    :where(blockquote p:last-of-type):not(:where([class~="not-prose"], [class~="not-prose"] *))::after {
+      content: close-quote;
+    }
+    :where(h1):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      color: var(--kchat-tw-prose-headings);
+      font-weight: 800;
+      font-size: 2.25em;
+      margin-top: 0;
+      margin-bottom: 0.8888889em;
+      line-height: 1.1111111;
+    }
+    :where(h1 strong):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      font-weight: 900;
+      color: inherit;
+    }
+    :where(h2):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      color: var(--kchat-tw-prose-headings);
+      font-weight: 700;
+      font-size: 1.5em;
+      margin-top: 2em;
+      margin-bottom: 1em;
+      line-height: 1.3333333;
+    }
+    :where(h2 strong):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      font-weight: 800;
+      color: inherit;
+    }
+    :where(h3):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      color: var(--kchat-tw-prose-headings);
+      font-weight: 600;
+      font-size: 1.25em;
+      margin-top: 1.6em;
+      margin-bottom: 0.6em;
+      line-height: 1.6;
+    }
+    :where(h3 strong):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      font-weight: 700;
+      color: inherit;
+    }
+    :where(h4):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      color: var(--kchat-tw-prose-headings);
+      font-weight: 600;
+      margin-top: 1.5em;
+      margin-bottom: 0.5em;
+      line-height: 1.5;
+    }
+    :where(h4 strong):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      font-weight: 700;
+      color: inherit;
+    }
+    :where(img):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 2em;
+      margin-bottom: 2em;
+    }
+    :where(picture):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      display: block;
+      margin-top: 2em;
+      margin-bottom: 2em;
+    }
+    :where(video):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 2em;
+      margin-bottom: 2em;
+    }
+    :where(kbd):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      font-weight: 500;
+      font-family: inherit;
+      color: var(--kchat-tw-prose-kbd);
+      box-shadow: 0 0 0 1px var(--kchat-tw-prose-kbd-shadows), 0 3px 0 var(--kchat-tw-prose-kbd-shadows);
+      font-size: 0.875em;
+      border-radius: 0.3125rem;
+      padding-top: 0.1875em;
+      padding-inline-end: 0.375em;
+      padding-bottom: 0.1875em;
+      padding-inline-start: 0.375em;
+    }
+    :where(code):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      color: var(--kchat-tw-prose-code);
+      font-weight: 600;
+      font-size: 0.875em;
+    }
+    :where(code):not(:where([class~="not-prose"], [class~="not-prose"] *))::before {
+      content: "`";
+    }
+    :where(code):not(:where([class~="not-prose"], [class~="not-prose"] *))::after {
+      content: "`";
+    }
+    :where(a code):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      color: inherit;
+    }
+    :where(h1 code):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      color: inherit;
+    }
+    :where(h2 code):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      color: inherit;
+      font-size: 0.875em;
+    }
+    :where(h3 code):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      color: inherit;
+      font-size: 0.9em;
+    }
+    :where(h4 code):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      color: inherit;
+    }
+    :where(blockquote code):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      color: inherit;
+    }
+    :where(thead th code):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      color: inherit;
+    }
+    :where(pre):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      color: var(--kchat-tw-prose-pre-code);
+      background-color: var(--kchat-tw-prose-pre-bg);
+      overflow-x: auto;
+      font-weight: 400;
+      font-size: 0.875em;
+      line-height: 1.7142857;
+      margin-top: 1.7142857em;
+      margin-bottom: 1.7142857em;
+      border-radius: 0.375rem;
+      padding-top: 0.8571429em;
+      padding-inline-end: 1.1428571em;
+      padding-bottom: 0.8571429em;
+      padding-inline-start: 1.1428571em;
+    }
+    :where(pre code):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      background-color: transparent;
+      border-width: 0;
+      border-radius: 0;
+      padding: 0;
+      font-weight: inherit;
+      color: inherit;
+      font-size: inherit;
+      font-family: inherit;
+      line-height: inherit;
+    }
+    :where(pre code):not(:where([class~="not-prose"], [class~="not-prose"] *))::before {
+      content: none;
+    }
+    :where(pre code):not(:where([class~="not-prose"], [class~="not-prose"] *))::after {
+      content: none;
+    }
+    :where(table):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      width: 100%;
+      table-layout: auto;
+      margin-top: 2em;
+      margin-bottom: 2em;
+      font-size: 0.875em;
+      line-height: 1.7142857;
+    }
+    :where(thead):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      border-bottom-width: 1px;
+      border-bottom-color: var(--kchat-tw-prose-th-borders);
+    }
+    :where(thead th):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      color: var(--kchat-tw-prose-headings);
+      font-weight: 600;
+      vertical-align: bottom;
+      padding-inline-end: 0.5714286em;
+      padding-bottom: 0.5714286em;
+      padding-inline-start: 0.5714286em;
+    }
+    :where(tbody tr):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      border-bottom-width: 1px;
+      border-bottom-color: var(--kchat-tw-prose-td-borders);
+    }
+    :where(tbody tr:last-child):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      border-bottom-width: 0;
+    }
+    :where(tbody td):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      vertical-align: baseline;
+    }
+    :where(tfoot):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      border-top-width: 1px;
+      border-top-color: var(--kchat-tw-prose-th-borders);
+    }
+    :where(tfoot td):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      vertical-align: top;
+    }
+    :where(th, td):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      text-align: start;
+    }
+    :where(figure > *):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 0;
+      margin-bottom: 0;
+    }
+    :where(figcaption):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      color: var(--kchat-tw-prose-captions);
+      font-size: 0.875em;
+      line-height: 1.4285714;
+      margin-top: 0.8571429em;
+    }
+    --kchat-tw-prose-body: oklch(37.3% 0.034 259.733);
+    --kchat-tw-prose-headings: oklch(21% 0.034 264.665);
+    --kchat-tw-prose-lead: oklch(44.6% 0.03 256.802);
+    --kchat-tw-prose-links: oklch(21% 0.034 264.665);
+    --kchat-tw-prose-bold: oklch(21% 0.034 264.665);
+    --kchat-tw-prose-counters: oklch(55.1% 0.027 264.364);
+    --kchat-tw-prose-bullets: oklch(87.2% 0.01 258.338);
+    --kchat-tw-prose-hr: oklch(92.8% 0.006 264.531);
+    --kchat-tw-prose-quotes: oklch(21% 0.034 264.665);
+    --kchat-tw-prose-quote-borders: oklch(92.8% 0.006 264.531);
+    --kchat-tw-prose-captions: oklch(55.1% 0.027 264.364);
+    --kchat-tw-prose-kbd: oklch(21% 0.034 264.665);
+    --kchat-tw-prose-kbd-shadows: color-mix(in oklab, oklch(21% 0.034 264.665) 10%, transparent);
+    --kchat-tw-prose-code: oklch(21% 0.034 264.665);
+    --kchat-tw-prose-pre-code: oklch(92.8% 0.006 264.531);
+    --kchat-tw-prose-pre-bg: oklch(27.8% 0.033 256.848);
+    --kchat-tw-prose-th-borders: oklch(87.2% 0.01 258.338);
+    --kchat-tw-prose-td-borders: oklch(92.8% 0.006 264.531);
+    --kchat-tw-prose-invert-body: oklch(87.2% 0.01 258.338);
+    --kchat-tw-prose-invert-headings: #fff;
+    --kchat-tw-prose-invert-lead: oklch(70.7% 0.022 261.325);
+    --kchat-tw-prose-invert-links: #fff;
+    --kchat-tw-prose-invert-bold: #fff;
+    --kchat-tw-prose-invert-counters: oklch(70.7% 0.022 261.325);
+    --kchat-tw-prose-invert-bullets: oklch(44.6% 0.03 256.802);
+    --kchat-tw-prose-invert-hr: oklch(37.3% 0.034 259.733);
+    --kchat-tw-prose-invert-quotes: oklch(96.7% 0.003 264.542);
+    --kchat-tw-prose-invert-quote-borders: oklch(37.3% 0.034 259.733);
+    --kchat-tw-prose-invert-captions: oklch(70.7% 0.022 261.325);
+    --kchat-tw-prose-invert-kbd: #fff;
+    --kchat-tw-prose-invert-kbd-shadows: rgb(255 255 255 / 10%);
+    --kchat-tw-prose-invert-code: #fff;
+    --kchat-tw-prose-invert-pre-code: oklch(87.2% 0.01 258.338);
+    --kchat-tw-prose-invert-pre-bg: rgb(0 0 0 / 50%);
+    --kchat-tw-prose-invert-th-borders: oklch(44.6% 0.03 256.802);
+    --kchat-tw-prose-invert-td-borders: oklch(37.3% 0.034 259.733);
+    font-size: 1rem;
+    line-height: 1.75;
+    :where(picture > img):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 0;
+      margin-bottom: 0;
+    }
+    :where(li):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 0.5em;
+      margin-bottom: 0.5em;
+    }
+    :where(ol > li):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      padding-inline-start: 0.375em;
+    }
+    :where(ul > li):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      padding-inline-start: 0.375em;
+    }
+    :where(.prose > ul > li p):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 0.75em;
+      margin-bottom: 0.75em;
+    }
+    :where(.prose > ul > li > p:first-child):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 1.25em;
+    }
+    :where(.prose > ul > li > p:last-child):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-bottom: 1.25em;
+    }
+    :where(.prose > ol > li > p:first-child):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 1.25em;
+    }
+    :where(.prose > ol > li > p:last-child):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-bottom: 1.25em;
+    }
+    :where(ul ul, ul ol, ol ul, ol ol):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 0.75em;
+      margin-bottom: 0.75em;
+    }
+    :where(dl):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 1.25em;
+      margin-bottom: 1.25em;
+    }
+    :where(dd):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 0.5em;
+      padding-inline-start: 1.625em;
+    }
+    :where(hr + *):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 0;
+    }
+    :where(h2 + *):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 0;
+    }
+    :where(h3 + *):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 0;
+    }
+    :where(h4 + *):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 0;
+    }
+    :where(thead th:first-child):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      padding-inline-start: 0;
+    }
+    :where(thead th:last-child):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      padding-inline-end: 0;
+    }
+    :where(tbody td, tfoot td):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      padding-top: 0.5714286em;
+      padding-inline-end: 0.5714286em;
+      padding-bottom: 0.5714286em;
+      padding-inline-start: 0.5714286em;
+    }
+    :where(tbody td:first-child, tfoot td:first-child):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      padding-inline-start: 0;
+    }
+    :where(tbody td:last-child, tfoot td:last-child):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      padding-inline-end: 0;
+    }
+    :where(figure):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 2em;
+      margin-bottom: 2em;
+    }
+    :where(.prose > :first-child):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 0;
+    }
+    :where(.prose > :last-child):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-bottom: 0;
+    }
+    font-size: 0.875rem;
+    line-height: 1.7142857;
+    :where(p):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 1.1428571em;
+      margin-bottom: 1.1428571em;
+    }
+    :where([class~="lead"]):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      font-size: 1.2857143em;
+      line-height: 1.5555556;
+      margin-top: 0.8888889em;
+      margin-bottom: 0.8888889em;
+    }
+    :where(blockquote):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 1.3333333em;
+      margin-bottom: 1.3333333em;
+      padding-inline-start: 1.1111111em;
+    }
+    :where(h1):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      font-size: 2.1428571em;
+      margin-top: 0;
+      margin-bottom: 0.8em;
+      line-height: 1.2;
+    }
+    :where(h2):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      font-size: 1.4285714em;
+      margin-top: 1.6em;
+      margin-bottom: 0.8em;
+      line-height: 1.4;
+    }
+    :where(h3):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      font-size: 1.2857143em;
+      margin-top: 1.5555556em;
+      margin-bottom: 0.4444444em;
+      line-height: 1.5555556;
+    }
+    :where(h4):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 1.4285714em;
+      margin-bottom: 0.5714286em;
+      line-height: 1.4285714;
+    }
+    :where(img):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 1.7142857em;
+      margin-bottom: 1.7142857em;
+    }
+    :where(picture):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 1.7142857em;
+      margin-bottom: 1.7142857em;
+    }
+    :where(picture > img):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 0;
+      margin-bottom: 0;
+    }
+    :where(video):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 1.7142857em;
+      margin-bottom: 1.7142857em;
+    }
+    :where(kbd):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      font-size: 0.8571429em;
+      border-radius: 0.3125rem;
+      padding-top: 0.1428571em;
+      padding-inline-end: 0.3571429em;
+      padding-bottom: 0.1428571em;
+      padding-inline-start: 0.3571429em;
+    }
+    :where(code):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      font-size: 0.8571429em;
+    }
+    :where(h2 code):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      font-size: 0.9em;
+    }
+    :where(h3 code):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      font-size: 0.8888889em;
+    }
+    :where(pre):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      font-size: 0.8571429em;
+      line-height: 1.6666667;
+      margin-top: 1.6666667em;
+      margin-bottom: 1.6666667em;
+      border-radius: 0.25rem;
+      padding-top: 0.6666667em;
+      padding-inline-end: 1em;
+      padding-bottom: 0.6666667em;
+      padding-inline-start: 1em;
+    }
+    :where(ol):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 1.1428571em;
+      margin-bottom: 1.1428571em;
+      padding-inline-start: 1.5714286em;
+    }
+    :where(ul):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 1.1428571em;
+      margin-bottom: 1.1428571em;
+      padding-inline-start: 1.5714286em;
+    }
+    :where(li):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 0.2857143em;
+      margin-bottom: 0.2857143em;
+    }
+    :where(ol > li):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      padding-inline-start: 0.4285714em;
+    }
+    :where(ul > li):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      padding-inline-start: 0.4285714em;
+    }
+    :where(.prose-sm > ul > li p):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 0.5714286em;
+      margin-bottom: 0.5714286em;
+    }
+    :where(.prose-sm > ul > li > p:first-child):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 1.1428571em;
+    }
+    :where(.prose-sm > ul > li > p:last-child):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-bottom: 1.1428571em;
+    }
+    :where(.prose-sm > ol > li > p:first-child):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 1.1428571em;
+    }
+    :where(.prose-sm > ol > li > p:last-child):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-bottom: 1.1428571em;
+    }
+    :where(ul ul, ul ol, ol ul, ol ol):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 0.5714286em;
+      margin-bottom: 0.5714286em;
+    }
+    :where(dl):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 1.1428571em;
+      margin-bottom: 1.1428571em;
+    }
+    :where(dt):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 1.1428571em;
+    }
+    :where(dd):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 0.2857143em;
+      padding-inline-start: 1.5714286em;
+    }
+    :where(hr):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 2.8571429em;
+      margin-bottom: 2.8571429em;
+    }
+    :where(hr + *):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 0;
+    }
+    :where(h2 + *):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 0;
+    }
+    :where(h3 + *):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 0;
+    }
+    :where(h4 + *):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 0;
+    }
+    :where(table):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      font-size: 0.8571429em;
+      line-height: 1.5;
+    }
+    :where(thead th):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      padding-inline-end: 1em;
+      padding-bottom: 0.6666667em;
+      padding-inline-start: 1em;
+    }
+    :where(thead th:first-child):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      padding-inline-start: 0;
+    }
+    :where(thead th:last-child):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      padding-inline-end: 0;
+    }
+    :where(tbody td, tfoot td):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      padding-top: 0.6666667em;
+      padding-inline-end: 1em;
+      padding-bottom: 0.6666667em;
+      padding-inline-start: 1em;
+    }
+    :where(tbody td:first-child, tfoot td:first-child):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      padding-inline-start: 0;
+    }
+    :where(tbody td:last-child, tfoot td:last-child):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      padding-inline-end: 0;
+    }
+    :where(figure):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 1.7142857em;
+      margin-bottom: 1.7142857em;
+    }
+    :where(figure > *):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 0;
+      margin-bottom: 0;
+    }
+    :where(figcaption):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      font-size: 0.8571429em;
+      line-height: 1.3333333;
+      margin-top: 0.6666667em;
+    }
+    :where(.prose-sm > :first-child):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-top: 0;
+    }
+    :where(.prose-sm > :last-child):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+      margin-bottom: 0;
+    }
+    max-width: none;
+    min-width: 0px;
+    font-size: var(--text-base, 1rem);
+    line-height: var(--kchat-tw-leading, var(--text-base--line-height, calc(1.5 / 1)));
+    --kchat-tw-prose-body: currentColor;
+    --kchat-tw-prose-headings: currentColor;
+    --kchat-tw-prose-lead: currentColor;
+    --kchat-tw-prose-links: var(--_kchat-prose-link);
+    --kchat-tw-prose-bold: currentColor;
+    --kchat-tw-prose-counters: var(--_kchat-prose-muted);
+    --kchat-tw-prose-bullets: var(--_kchat-prose-muted);
+    --kchat-tw-prose-hr: var(--_kchat-prose-rule);
+    --kchat-tw-prose-quotes: var(--_kchat-prose-muted);
+    --kchat-tw-prose-quote-borders: var(--_kchat-prose-border);
+    --kchat-tw-prose-captions: var(--_kchat-prose-muted);
+    --kchat-tw-prose-kbd: currentColor;
+    --kchat-tw-prose-kbd-shadows: currentColor;
+    --kchat-tw-prose-code: currentColor;
+    --kchat-tw-prose-pre-code: currentColor;
+    --kchat-tw-prose-pre-bg: var(--_kchat-prose-code-bg);
+    --kchat-tw-prose-th-borders: var(--_kchat-prose-border);
+    --kchat-tw-prose-td-borders: var(--_kchat-prose-rule);
+    blockquote {
+      margin-inline: 0px;
+      border-left-style: solid;
+      --kchat-tw-font-weight: var(--font-weight-normal, 400);
+      font-weight: var(--font-weight-normal, 400);
+      font-style: normal;
+      quotes: none;
+    }
+    hr {
+      border-top-style: solid;
+      color: inherit;
+    }
+    img {
+      max-width: 100%;
+    }
+    figure {
+      margin-inline: 0px;
+    }
+    table {
+      display: block;
+      width: max-content;
+      max-width: 100%;
+      border-collapse: collapse;
+      overflow-x: auto;
+    }
+    :is(th, td) {
+      border-style: var(--kchat-tw-border-style);
+      border-width: 1px;
+      border-color: var(--_kchat-prose-border);
+      padding-inline: var(--_kchat-space);
+      padding-block: calc(var(--_kchat-space) * 0.6);
+    }
+    :not(pre) > code {
+      border-radius: var(--_kchat-radius-control);
+      background-color: var(--_kchat-prose-code-bg);
+      padding-inline: 0.4em;
+      padding-block: 0.2em;
+      font-size: 0.9em;
+      --kchat-tw-font-weight: var(--font-weight-normal, 400);
+      font-weight: var(--font-weight-normal, 400);
+      white-space: break-spaces;
+    }
+    code::before, code::after {
+      --kchat-tw-content: none;
+      content: none;
+    }
+    pre {
+      overflow-x: auto;
+      border-radius: var(--_kchat-radius-surface);
+      background-color: var(--_kchat-prose-code-bg);
+      padding-inline: calc(var(--spacing, 0.25rem) * 3);
+      padding-block: calc(var(--spacing, 0.25rem) * 2.5);
+      font-size: 0.9em;
+      --kchat-tw-leading: 1.5;
+      line-height: 1.5;
+      white-space: pre;
+      tab-size: 4;
+    }
+    li:has(> input[type=checkbox], > p > input[type=checkbox]) {
+      list-style-type: none;
+    }
+    li input[type=checkbox] {
+      margin: 0 0.2em 0.25em -1.4em;
+      vertical-align: middle;
+    }
+    summary {
+      cursor: pointer;
+    }
+    :is(h1, h2, h3, h4, h5, h6) {
+      font-size: 1em;
+      --kchat-tw-leading: 1.4;
+      line-height: 1.4;
+      --kchat-tw-font-weight: var(--font-weight-semibold, 600);
+      font-weight: var(--font-weight-semibold, 600);
+      --kchat-tw-tracking: -0.005em;
+      letter-spacing: -0.005em;
+    }
+    h1 {
+      font-size: 1.125em;
+    }
+    :is(h5, h6) {
+      color: var(--app-ink-quiet);
+    }
+    a {
+      --kchat-tw-font-weight: var(--font-weight-medium, 500);
+      font-weight: var(--font-weight-medium, 500);
+      color: inherit;
+      text-decoration-line: underline;
+      text-decoration-color: currentcolor;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 2px;
+    }
+    a:hover {
+      text-decoration-thickness: 2px;
+    }
+    --kchat-tw-leading: 1.6;
+    line-height: 1.6;
+    :is(p, ul, ol, pre, table, blockquote, img, figure, details) {
+      margin-block: var(--_kchat-space);
+    }
+    :is(h1, h2, h3, h4, h5, h6) {
+      margin-top: calc(var(--_kchat-space) * 2);
+      margin-bottom: calc(var(--_kchat-space) * 0.5);
+    }
+    hr {
+      margin-block: calc(var(--_kchat-space) * 1.5);
+    }
+    li {
+      margin-block: calc(var(--_kchat-space) * 0.25);
+    }
+    li p, li > p:first-child, li > p:last-child {
+      margin-block: calc(var(--_kchat-space) * 0.5);
+    }
+    li > :is(ul, ol) {
+      margin-block: calc(var(--_kchat-space) * 0.25);
+    }
+    blockquote > :first-child {
+      margin-top: 0px;
+    }
+    blockquote > :last-child {
+      margin-bottom: 0px;
+    }
+    > :is(:first-child, d0-r:first-child + *), > :is(d0-r:first-child, d0-r:first-child + d0-r) > :first-child {
+      margin-top: 0px;
+    }
+    > :is(:nth-last-child(1 of :not(d0-r:empty))), > :is(d0-r:nth-last-child(1 of :not(d0-r:empty))) > :last-child {
+      margin-bottom: 0px;
+    }
+  }
+}
+@property --kchat-tw-border-style {
+  syntax: "*";
+  inherits: false;
+  initial-value: solid;
+}
+@property --kchat-tw-font-weight {
+  syntax: "*";
+  inherits: false;
+}
+@property --kchat-tw-leading {
+  syntax: "*";
+  inherits: false;
+}
+@property --kchat-tw-content {
+  syntax: "*";
+  inherits: false;
+  initial-value: "";
+}
+@property --kchat-tw-shadow {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0 0 #0000;
+}
+@property --kchat-tw-shadow-color {
+  syntax: "*";
+  inherits: false;
+}
+@property --kchat-tw-shadow-alpha {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 100%;
+}
+@property --kchat-tw-inset-shadow {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0 0 #0000;
+}
+@property --kchat-tw-inset-shadow-color {
+  syntax: "*";
+  inherits: false;
+}
+@property --kchat-tw-inset-shadow-alpha {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 100%;
+}
+@property --kchat-tw-ring-color {
+  syntax: "*";
+  inherits: false;
+}
+@property --kchat-tw-ring-shadow {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0 0 #0000;
+}
+@property --kchat-tw-inset-ring-color {
+  syntax: "*";
+  inherits: false;
+}
+@property --kchat-tw-inset-ring-shadow {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0 0 #0000;
+}
+@property --kchat-tw-ring-inset {
+  syntax: "*";
+  inherits: false;
+}
+@property --kchat-tw-ring-offset-width {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --kchat-tw-ring-offset-color {
+  syntax: "*";
+  inherits: false;
+  initial-value: #fff;
+}
+@property --kchat-tw-ring-offset-shadow {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0 0 #0000;
+}
+@property --kchat-tw-ordinal {
+  syntax: "*";
+  inherits: false;
+}
+@property --kchat-tw-slashed-zero {
+  syntax: "*";
+  inherits: false;
+}
+@property --kchat-tw-numeric-figure {
+  syntax: "*";
+  inherits: false;
+}
+@property --kchat-tw-numeric-spacing {
+  syntax: "*";
+  inherits: false;
+}
+@property --kchat-tw-numeric-fraction {
+  syntax: "*";
+  inherits: false;
+}
+@property --kchat-tw-translate-x {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0;
+}
+@property --kchat-tw-translate-y {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0;
+}
+@property --kchat-tw-translate-z {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0;
+}
+@property --kchat-tw-blur {
+  syntax: "*";
+  inherits: false;
+}
+@property --kchat-tw-brightness {
+  syntax: "*";
+  inherits: false;
+}
+@property --kchat-tw-contrast {
+  syntax: "*";
+  inherits: false;
+}
+@property --kchat-tw-grayscale {
+  syntax: "*";
+  inherits: false;
+}
+@property --kchat-tw-hue-rotate {
+  syntax: "*";
+  inherits: false;
+}
+@property --kchat-tw-invert {
+  syntax: "*";
+  inherits: false;
+}
+@property --kchat-tw-opacity {
+  syntax: "*";
+  inherits: false;
+}
+@property --kchat-tw-saturate {
+  syntax: "*";
+  inherits: false;
+}
+@property --kchat-tw-sepia {
+  syntax: "*";
+  inherits: false;
+}
+@property --kchat-tw-drop-shadow {
+  syntax: "*";
+  inherits: false;
+}
+@property --kchat-tw-drop-shadow-color {
+  syntax: "*";
+  inherits: false;
+}
+@property --kchat-tw-drop-shadow-alpha {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 100%;
+}
+@property --kchat-tw-drop-shadow-size {
+  syntax: "*";
+  inherits: false;
+}
+@property --kchat-tw-outline-style {
+  syntax: "*";
+  inherits: false;
+  initial-value: solid;
+}
+@property --kchat-tw-tracking {
+  syntax: "*";
+  inherits: false;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@layer properties {
+  @supports ((-webkit-hyphens: none) and (not (margin-trim: inline))) or ((-moz-orient: inline) and (not (color:rgb(from red r g b)))) {
+    *, ::before, ::after, ::backdrop {
+      --kchat-tw-border-style: solid;
+      --kchat-tw-font-weight: initial;
+      --kchat-tw-leading: initial;
+      --kchat-tw-content: "";
+      --kchat-tw-shadow: 0 0 #0000;
+      --kchat-tw-shadow-color: initial;
+      --kchat-tw-shadow-alpha: 100%;
+      --kchat-tw-inset-shadow: 0 0 #0000;
+      --kchat-tw-inset-shadow-color: initial;
+      --kchat-tw-inset-shadow-alpha: 100%;
+      --kchat-tw-ring-color: initial;
+      --kchat-tw-ring-shadow: 0 0 #0000;
+      --kchat-tw-inset-ring-color: initial;
+      --kchat-tw-inset-ring-shadow: 0 0 #0000;
+      --kchat-tw-ring-inset: initial;
+      --kchat-tw-ring-offset-width: 0px;
+      --kchat-tw-ring-offset-color: #fff;
+      --kchat-tw-ring-offset-shadow: 0 0 #0000;
+      --kchat-tw-ordinal: initial;
+      --kchat-tw-slashed-zero: initial;
+      --kchat-tw-numeric-figure: initial;
+      --kchat-tw-numeric-spacing: initial;
+      --kchat-tw-numeric-fraction: initial;
+      --kchat-tw-translate-x: 0;
+      --kchat-tw-translate-y: 0;
+      --kchat-tw-translate-z: 0;
+      --kchat-tw-blur: initial;
+      --kchat-tw-brightness: initial;
+      --kchat-tw-contrast: initial;
+      --kchat-tw-grayscale: initial;
+      --kchat-tw-hue-rotate: initial;
+      --kchat-tw-invert: initial;
+      --kchat-tw-opacity: initial;
+      --kchat-tw-saturate: initial;
+      --kchat-tw-sepia: initial;
+      --kchat-tw-drop-shadow: initial;
+      --kchat-tw-drop-shadow-color: initial;
+      --kchat-tw-drop-shadow-alpha: 100%;
+      --kchat-tw-drop-shadow-size: initial;
+      --kchat-tw-outline-style: solid;
+      --kchat-tw-tracking: initial;
+    }
+  }
+}

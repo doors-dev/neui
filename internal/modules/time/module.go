@@ -1,0 +1,225 @@
+package timemod
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"sync"
+	"time"
+
+	"github.com/doors-dev/doors"
+	"neui.dev/internal/common"
+	"neui.dev/internal/tools"
+)
+
+const layout = "2006-01-02T15:04:05.000Z07:00"
+const syncAfter = 10 * time.Second
+const clientTimeout = 10 * time.Second
+const maxDelay = 24 * time.Hour
+
+const moduleDesc = `The clock. time__now is the server's clock, time__client the clock of the browser the user has open — they differ in offset and may differ in wall time; quote the client's when talking to the user. time__timer waits until a moment: short waits complete inside the call, longer ones return deferred and arrive later as a <task_result> element in the conversation, so use it to continue work at a chosen moment, not to pause a conversation. One timer at a time; time__cancel drops a deferred one.`
+const nowDesc = `Current time of the machine this runs on, in its own zone. Use it for anything timestamped by the server; for what the user's clock says, call time__client.`
+const clientDesc = `Current time of the browser the user has the page open in, with the user's UTC offset. Errors when the browser does not answer. The reading carries no zone name, only the offset.`
+const timerDesc = `Wait until a moment. Pass afterMs, or at as an RFC 3339 instant — exactly one; at is resolved against the server clock. A wait of up to 10 s blocks the call and returns when the moment arrives. A longer one returns at once with deferred: true; when the moment arrives a <task_result> element (module time, name timer, comment as given) carrying the firing details appears and starts a round. One timer per conversation: a second call errors while one is pending. time__cancel drops a deferred one. Not accessible from scripts.`
+const cancelDesc = `Drop the pending deferred timer; its task_result element reports the cancellation. Errors when none is pending.`
+
+func Module(context.Context) common.Module {
+	m := tools.NewModule("time", moduleDesc)
+	t := &module{}
+	if _, err := m.Add("now", nowDesc, t.now); err != nil {
+		panic(err)
+	}
+	if _, err := m.Add("client", clientDesc, t.client); err != nil {
+		panic(err)
+	}
+	if _, err := m.Add("timer", timerDesc, t.timer); err != nil {
+		panic(err)
+	}
+	if _, err := m.Add("cancel", cancelDesc, t.cancel); err != nil {
+		panic(err)
+	}
+	return m
+}
+
+type module struct {
+	mu      sync.Mutex
+	pending *pending
+}
+
+type pending struct {
+	comment string
+	cancel  context.CancelCauseFunc
+	done    chan struct{}
+}
+
+type NowResult struct {
+	Time   string `json:"time" description:"RFC 3339 local date-time with numeric UTC offset, milliseconds, e.g. 2026-09-28T14:03:05.123+02:00"`
+	UTC    string `json:"utc" description:"the same instant in UTC"`
+	Zone   string `json:"zone" description:"IANA zone name of the host process when known, else the abbreviation or the offset"`
+	Offset int    `json:"offsetMinutes" description:"minutes the local time is ahead of UTC; negative west of Greenwich"`
+}
+
+func (m *module) now(ctx context.Context, _ struct{}) (NowResult, error) {
+	t := time.Now()
+	abbr, off := t.Zone()
+	zone := t.Location().String()
+	if zone == "Local" {
+		zone = abbr
+	}
+	if zone == "" {
+		zone = t.Format("-07:00")
+	}
+	return NowResult{
+		Time:   t.Format(layout),
+		UTC:    t.UTC().Format(layout),
+		Zone:   zone,
+		Offset: off / 60,
+	}, nil
+}
+
+type ClientResult struct {
+	Time   string `json:"time" description:"RFC 3339 local date-time with the client's numeric UTC offset, milliseconds"`
+	UTC    string `json:"utc" description:"the same instant in UTC"`
+	Offset int    `json:"offsetMinutes" description:"minutes the client is ahead of UTC; negative west of Greenwich"`
+	Skew   int64  `json:"skewMs" description:"client instant minus server instant at the moment of the reading, round trip included; large values mean the user's clock is off"`
+}
+
+func (m *module) client(ctx context.Context, _ struct{}) (ClientResult, error) {
+	callCtx, cancel := context.WithTimeout(common.GetController(ctx).PageContext(), clientTimeout)
+	defer cancel()
+	var now time.Time
+	sent := time.Now()
+	ch := doors.Call(callCtx, doors.ActionTime{}.Into(&now))
+	select {
+	case <-ctx.Done():
+		return ClientResult{}, context.Cause(ctx)
+	case err, ok := <-ch:
+		if !ok {
+			if errors.Is(context.Cause(callCtx), context.DeadlineExceeded) {
+				return ClientResult{}, errors.New("the browser did not answer in time: the page may be closed, hidden or offline; use time__now for the server clock")
+			}
+			return ClientResult{}, errors.New("the page link is gone: retry, or use time__now for the server clock")
+		}
+		if err != nil {
+			return ClientResult{}, err
+		}
+	}
+	_, off := now.Zone()
+	return ClientResult{
+		Time:   now.Format(layout),
+		UTC:    now.UTC().Format(layout),
+		Offset: off / 60,
+		Skew:   now.Sub(sent).Milliseconds(),
+	}, nil
+}
+
+type TimerArg struct {
+	After   uint   `json:"afterMs" description:"fire this many milliseconds from now; mutually exclusive with at"`
+	At      string `json:"at" description:"RFC 3339 instant to fire at, e.g. 2026-09-28T16:00:00+02:00; mutually exclusive with afterMs"`
+	Comment string `json:"comment" required:"true" description:"short description of why you are waiting; shown to the user while a deferred timer is pending and echoed in its task_result element"`
+}
+
+type TimerResult struct {
+	Async bool   `json:"deferred,omitempty" description:"the wait outlives the call: it continues in the background and its firing arrives as a <task_result> element (module time, name timer, comment as given) carrying the firing details; time__cancel drops it"`
+	Fires string `json:"firesAt" description:"server-clock instant the timer fires (or fired) at, RFC 3339 with milliseconds"`
+	Fired string `json:"firedAt,omitempty" description:"when the wait completed inside the call: the actual server-clock instant it returned"`
+}
+
+func (m *module) timer(ctx context.Context, arg TimerArg) (TimerResult, error) {
+	if tools.FromJS(ctx) {
+		return TimerResult{}, errors.New("the time module's timer is not accessible from a script")
+	}
+	if (arg.After != 0) == (arg.At != "") {
+		return TimerResult{}, errors.New("pass exactly one of afterMs or at")
+	}
+	now := time.Now()
+	fires := now.Add(time.Duration(arg.After) * time.Millisecond)
+	requested := fmt.Sprintf("afterMs=%d", arg.After)
+	if arg.At != "" {
+		at, err := time.Parse(time.RFC3339, arg.At)
+		if err != nil {
+			return TimerResult{}, errors.New("at must be an RFC 3339 instant, e.g. 2026-09-28T16:00:00+02:00")
+		}
+		fires = at
+		requested = "at=" + arg.At
+	}
+	delay := fires.Sub(now)
+	if delay <= 0 {
+		return TimerResult{}, errors.New("that moment has already passed")
+	}
+	if delay > maxDelay {
+		return TimerResult{}, fmt.Errorf("at most %s from now", maxDelay)
+	}
+	if delay <= syncAfter {
+		timer := time.NewTimer(delay)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return TimerResult{}, context.Cause(ctx)
+		case <-timer.C:
+			return TimerResult{Fires: fires.Format(layout), Fired: time.Now().Format(layout)}, nil
+		}
+	}
+	thread := common.GetController(ctx)
+	m.mu.Lock()
+	if m.pending != nil {
+		comment := m.pending.comment
+		m.mu.Unlock()
+		return TimerResult{}, fmt.Errorf("a timer is already pending (%s): time__cancel it or wait for it to fire", comment)
+	}
+	waitCtx, cancel := context.WithCancelCause(thread.Context())
+	p := &pending{comment: arg.Comment, cancel: cancel, done: make(chan struct{})}
+	m.pending = p
+	m.mu.Unlock()
+	task, err := thread.Task(arg.Comment, map[string]any{
+		"requested": requested,
+		"firesAt":   fires.Format(layout),
+	}, cancel)
+	if err != nil {
+		cancel(err)
+		m.clear(p)
+		return TimerResult{}, err
+	}
+	go m.wait(waitCtx, p, task, fires)
+	return TimerResult{Async: true, Fires: fires.Format(layout)}, nil
+}
+
+func (m *module) wait(ctx context.Context, p *pending, task common.Task, fires time.Time) {
+	defer m.clear(p)
+	timer := time.NewTimer(time.Until(fires))
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		task.Err(context.Cause(ctx))
+	case <-timer.C:
+		fired := time.Now()
+		out, _ := json.Marshal(map[string]any{
+			"firesAt": fires.Format(layout),
+			"firedAt": fired.Format(layout),
+			"lateMs":  fired.Sub(fires).Milliseconds(),
+		})
+		task.Ok(out)
+	}
+}
+
+func (m *module) clear(p *pending) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.pending == p {
+		m.pending = nil
+	}
+	close(p.done)
+}
+
+func (m *module) cancel(ctx context.Context, _ struct{}) (struct{}, error) {
+	m.mu.Lock()
+	p := m.pending
+	m.mu.Unlock()
+	if p == nil {
+		return struct{}{}, errors.New("no timer is pending")
+	}
+	p.cancel(nil)
+	<-p.done
+	return struct{}{}, nil
+}

@@ -1,0 +1,136 @@
+package tools
+
+import (
+	"context"
+	"encoding/json"
+	"slices"
+	"strings"
+
+	"neui.dev/api"
+	"neui.dev/internal/common"
+	"neui.dev/internal/schema"
+	"neui.dev/internal/utils"
+)
+
+type Module = *module
+
+type ToolID int
+
+func NewModule(name string, desc string) Module {
+	return &module{
+		name: utils.SanitizeName(name),
+		desc: desc,
+	}
+}
+
+type toolEntry struct {
+	id   ToolID
+	tool common.Tool
+}
+
+type module struct {
+	id    ToolID
+	name  string
+	desc  string
+	tools []toolEntry
+}
+
+func (m Module) Name() string {
+	return m.name
+}
+
+func (m Module) Desc() string {
+	return m.desc
+}
+
+func (m Module) List() []common.Tool {
+	tools := make([]common.Tool, len(m.tools))
+	for i, t := range m.tools {
+		tools[i] = t.tool
+	}
+	return tools
+}
+
+func (m Module) Get(name string) (common.Tool, bool) {
+	i, ok := m.search(utils.SanitizeName(name))
+	if !ok {
+		return tool{}, false
+	}
+	return m.tools[i].tool, true
+}
+
+func (m Module) Remove(id ToolID) {
+	for i, t := range m.tools {
+		if t.id != id {
+			continue
+		}
+		m.tools = slices.Delete(m.tools, i, i+1)
+		return
+	}
+}
+
+func (m *module) search(name string) (int, bool) {
+	return slices.BinarySearchFunc(m.tools, name, func(t toolEntry, name string) int {
+		return strings.Compare(t.tool.Name(), name)
+	})
+}
+
+func (m *module) add(id ToolID, tool common.Tool) {
+	i, ok := m.search(tool.Name())
+	if ok {
+		m.tools[i] = toolEntry{id, tool}
+		return
+	}
+	m.tools = slices.Insert(m.tools, i, toolEntry{id, tool})
+}
+
+func (m Module) AddTool(tool common.Tool) ToolID {
+	m.id += 1
+	m.add(m.id, tool)
+	return m.id
+}
+
+func (m Module) AddRaw(
+	name string,
+	desc string,
+	input schema.Schema[any],
+	output schema.Schema[any],
+	f func(ctx context.Context, input json.RawMessage) (any, error),
+) (ToolID, error) {
+	tool, err := NewRawTool(name, desc, input, output, f)
+	if err != nil {
+		return 0, err
+	}
+	return m.AddTool(tool), nil
+}
+
+const AskDesc = "\n\nThis shows the user something in the chat and waits for them to answer, which can take a long time. They can dismiss it instead of answering, and then the call fails. What they answer with is the result; an answer that declines or says no is still a result, not a failure. The user is looking at it, so do not restate it in your reply."
+
+func Asking[I any, O any](f func(input I, reply common.Answer[O]) api.ChatAsk) func(ctx context.Context, input I) (O, error) {
+	return func(ctx context.Context, input I) (O, error) {
+		ctrl := common.GetController(ctx)
+		answer := newAnswer[O](ctx)
+		ask := f(input, answer)
+		ask.Cancel = answer.cancel
+		done, err := ctrl.Ask(ask)
+		if err != nil {
+			var o O
+			return o, err
+		}
+		output, ctx, err := answer.receive()
+		done(ctx)
+		return output, err
+	}
+}
+
+func (m Module) Ask[I any, O any](name string, desc string, f func(input I, reply common.Answer[O]) api.ChatAsk) (ToolID, error) {
+	return m.Add(name, desc+AskDesc, Asking(f))
+}
+
+func (m Module) Add[I any, O any](name string, desc string, f func(ctx context.Context, input I) (O, error)) (ToolID, error) {
+	tool, err := NewTool(name, desc, f)
+	if err != nil {
+		return 0, err
+	}
+	return m.AddTool(tool), nil
+}

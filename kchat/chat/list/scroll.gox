@@ -1,0 +1,292 @@
+package list
+
+import (
+	"context"
+	"time"
+	
+	"github.com/doors-dev/doors"
+	"github.com/doors-dev/gox"
+	"neui.dev/api"
+)
+
+func (l *list) updateRange(ctx context.Context, first api.RoundID, last api.RoundID) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if first == l.scrollState.first && last == l.scrollState.last {
+		return
+	}
+	l.scrollState.first = first
+	l.scrollState.last = last
+	doors.Logger(ctx).Info("list: range", "first", first, "last", last, "top", l.scrollState.topReached, "bottom", l.scrollState.bottomReached, "history", l.history.Len())
+	l.scrollState.synced = false
+	if l.scrollState.spawned {
+		return
+	}
+	l.scrollState.spawned = true
+	go l.syncLoop()
+}
+
+func (l *list) syncLoop() {
+	for {
+		applied := make(chan struct{})
+		more := false
+		doors.OnBatch(l.ctx, func(context.Context) {
+			close(applied)
+		}, func(ctx context.Context) {
+			l.mu.Lock()
+			more = l.sync(ctx)
+			if !more {
+				l.scrollState.spawned = false
+			}
+			l.mu.Unlock()
+		})
+		if !more {
+			return
+		}
+		<-applied
+	}
+}
+
+func (l *list) sync(ctx context.Context) (more bool) {
+	if l.scrollState.synced {
+		return
+	}
+	first, last := l.scrollState.first, l.scrollState.last
+	if first == api.NoRoundID {
+		l.scrollState.synced = true
+		return
+	}
+	before, after := 0, 0
+	for e := range l.history.Iter() {
+		if e.id < first {
+			before++
+		}
+		if e.id > last {
+			after++
+		}
+	}
+	wantBefore, wantAfter := margin, margin
+	if l.scrollState.topReached && before < margin {
+		wantAfter += margin - before
+	}
+	if l.scrollState.bottomReached && after < margin {
+		wantBefore += margin - after
+	}
+	doors.Logger(ctx).Info("list: sync", "first", first, "last", last, "before", before, "after", after, "wantBefore", wantBefore, "wantAfter", wantAfter, "top", l.scrollState.topReached, "bottom", l.scrollState.bottomReached)
+	if before < wantBefore && !l.scrollState.topReached {
+		seq := l.seq
+		anchor, head := l.lastSection.entry.id, l.lastSection.entry.head
+		if l.history.Len() != 0 {
+			anchor, head = l.history.Front().id, l.history.Front().head
+		}
+		l.mu.Unlock()
+		sections, ended, err := l.loadBefore(ctx, anchor, wantBefore - before)
+		doors.Logger(ctx).Info("list: loadBefore", "anchor", anchor, "n", wantBefore - before, "got", len(sections), "ended", ended, "err", err)
+		l.mu.Lock()
+		if seq != l.seq {
+			return true
+		}
+		if err != nil {
+			l.scrollState.synced = true
+			return
+		}
+		l.seq++
+		l.batch++
+		l.scrollState.topReached = ended || len(sections) == 0
+		rounds := make([]entry, 0, len(sections))
+		for i, s := range sections {
+			var after any
+			if i == 0 {
+				after = restoreScroll(l.batch, "top")
+			}
+			next := head
+			if i + 1 < len(sections) {
+				next = sections[i + 1][0].Created
+			}
+			rounds = append(rounds, l.intoHistory(ctx, s, next, l.batch, after))
+		}
+		for i := len(rounds) - 1; i >= 0; i-- {
+			l.history.PushFront(rounds[i])
+		}
+		if len(rounds) != 0 {
+			old := l.historyPrepender
+			l.historyPrepender = new(doors.Door)
+			old.Static(ctx, doors.Once(&seed{
+				prepender: l.historyPrepender,
+				history: rounds,
+			}))
+		}
+		return true
+	}
+	if after < wantAfter && !l.scrollState.bottomReached && l.history.Len() != 0 {
+		seq := l.seq
+		anchor := l.history.Back().id
+		tail := l.lastSection.entry.id
+		l.mu.Unlock()
+		sections, ended, err := l.loadAfter(ctx, anchor, wantAfter - after, tail)
+		doors.Logger(ctx).Info("list: loadAfter", "anchor", anchor, "n", wantAfter - after, "tail", tail, "got", len(sections), "ended", ended, "err", err)
+		l.mu.Lock()
+		if seq != l.seq {
+			return true
+		}
+		if err != nil {
+			l.scrollState.synced = true
+			return
+		}
+		l.seq++
+		l.batch++
+		if ended || len(sections) == 0 {
+			l.scrollState.bottomReached = true
+			l.showTail(ctx)
+		}
+		rounds := make([]entry, 0, len(sections))
+		for i, s := range sections {
+			var after any
+			var next time.Time
+			if i == len(sections) - 1 {
+				after = restoreScroll(l.batch, "bottom")
+				if ended {
+					next = l.lastSection.entry.head
+				}
+			} else {
+				next = sections[i + 1][0].Created
+			}
+			rounds = append(rounds, l.intoHistory(ctx, s, next, l.batch, after))
+		}
+		for _, e := range rounds {
+			l.history.PushBack(e)
+		}
+		if len(rounds) != 0 {
+			old := l.historyAppender
+			l.historyAppender = new(doors.Door)
+			old.Static(ctx, doors.Once(&seed{
+				history: rounds,
+				appender: l.historyAppender,
+			}))
+		}
+		return true
+	}
+	for before > wantBefore {
+		l.history.PopFront().remove(ctx)
+		before--
+		l.scrollState.topReached = false
+	}
+	for after > wantAfter {
+		l.history.PopBack().remove(ctx)
+		after--
+		if l.scrollState.bottomReached {
+			l.scrollState.bottomReached = false
+			l.hideTail(ctx)
+		}
+	}
+	l.scrollState.synced = true
+	return
+}
+
+func (l *list) hideTail(ctx context.Context) {
+	l.lastSection.hidden = true
+	l.setTail(ctx, "hidden", true)
+}
+
+func (l *list) showTail(ctx context.Context) {
+	l.lastSection.hidden = false
+	l.setTail(ctx, "hidden", false)
+}
+
+func (l *list) setTail(ctx context.Context, name string, value any) {
+	if l.lastSection.setter == nil {
+		return
+	}
+	doors.Call(ctx, l.lastSection.setter.Set(name, value))
+}
+
+elem seedScroll(head api.RoundID) {
+	<script data:head=(int(head))>
+		const log = document.currentScript.closest(".kchat-log")
+		const target = log.querySelector(`.kchat-section[data-id="${$data("head")}"]`)
+		if (target) {
+			const base = log.scrollTop - log.getBoundingClientRect().top
+			log.scrollTo({
+				top: target.getBoundingClientRect().top + base,
+				behavior: "instant",
+			})
+		} else if (!log.querySelector(".kchat-span")) {
+			log.scrollTo({ top: log.scrollHeight, behavior: "instant" })
+		}
+		requestAnimationFrame(() => log.removeAttribute("data-seeding"))
+	</script>
+}
+
+elem restoreScroll(batch int, edge string) {
+	<script data:batch=(batch) data:edge=(edge)>
+		const script = document.currentScript
+		const log = script.closest(".kchat-log")
+		const top = log.scrollTop
+		const h0 = log.scrollHeight
+		for (const s of log.querySelectorAll(
+			`.kchat-section[data-batch="${$data("batch")}"]`,
+		)) {
+			s.removeAttribute("data-pending")
+		}
+		const grew = log.scrollHeight - h0
+		if ($data("edge") === "top") {
+			log.scrollTo({ top: top + grew, behavior: "instant" })
+		} else {
+			log.scrollTo({ top, behavior: "instant" })
+		}
+		log.dispatchEvent(new Event("scroll"))
+	</script>
+}
+
+elem scrollBottom() {
+	<script>
+		const log = document.currentScript.closest(".kchat-log")
+		log.scrollTo({ top: log.scrollHeight, behavior: "instant" })
+	</script>
+}
+
+type syncMsg struct {
+	First api.RoundID `json:"first"`
+	Last api.RoundID `json:"last"`
+}
+
+elem (l List) Script() {
+	~>doors.AHook[syncMsg]{
+		Name: "sync",
+		Scope: &doors.ScopeRate{Tick: 100 * time.Millisecond},
+		Race: doors.RaceStrict,
+		On: func(ctx context.Context, r doors.RequestHook[syncMsg]) (any, bool) {
+			msg := r.Data()
+			l.updateRange(ctx, msg.First, msg.Last)
+			return nil, false
+		},
+	} <script>
+		const script = document.currentScript
+		const log = script.closest(".kchat-log")
+		let sent = ""
+		const report = () => {
+			const b = log.getBoundingClientRect()
+			let first = Infinity
+			let last = -Infinity
+			for (const s of log.querySelectorAll(".kchat-section[data-id]")) {
+				const r = s.getBoundingClientRect()
+				if (r.height === 0 || r.bottom <= b.top || r.top >= b.bottom) continue
+				const id = Number(s.dataset.id)
+				first = Math.min(first, id)
+				last = Math.max(last, id)
+			}
+			if (first === Infinity) return
+			const key = `${first}:${last}`
+			if (key === sent) return
+			sent = key
+			$hook("sync", { first, last }).catch(() => {
+				sent = ""
+			})
+		}
+		await $sys.ready()
+		requestAnimationFrame(() => {
+			log.addEventListener("scroll", report, { passive: true })
+			report()
+		})
+	</script>
+}

@@ -1,0 +1,31 @@
+@reference "tailwindcss";
+
+@layer kisland {
+	.kisland-column { @apply flex flex-col min-w-0 }
+	.kisland-row { @apply flex flex-row flex-wrap min-w-0 }
+	.kisland-grid { @apply grid min-w-0 }
+	.kisland-grid-cell { @apply min-w-0 }
+
+	.kisland-gap-sm { @apply gap-(--kisland-gap-sm,0.5rem) }
+	.kisland-gap-md { @apply gap-(--kisland-gap-md,1rem) }
+	.kisland-gap-lg { @apply gap-(--kisland-gap-lg,1.5rem) }
+
+	.kisland-align-start { @apply items-start }
+	.kisland-align-center { @apply items-center }
+	.kisland-align-end { @apply items-end }
+
+	.kisland-justify-start { @apply justify-start }
+	.kisland-justify-end { @apply justify-end }
+	.kisland-justify-between { @apply justify-between }
+
+	.kisland-row > .kisland-fill-1 { @apply grow-1 basis-0 }
+	.kisland-row > .kisland-fill-2 { @apply grow-2 basis-0 }
+	.kisland-row > .kisland-fill-3 { @apply grow-3 basis-0 }
+	.kisland-row > .kisland-fill-4 { @apply grow-4 basis-0 }
+	.kisland-row > .kisland-fill-5 { @apply grow-5 basis-0 }
+	.kisland-row > .kisland-fill-6 { @apply grow-6 basis-0 }
+
+	.kisland-item-sm { @apply grid-cols-[repeat(auto-fill,minmax(min(100%,var(--kisland-item-sm,10rem)),1fr))] }
+	.kisland-item-md { @apply grid-cols-[repeat(auto-fill,minmax(min(100%,var(--kisland-item-md,14rem)),1fr))] }
+	.kisland-item-lg { @apply grid-cols-[repeat(auto-fill,minmax(min(100%,var(--kisland-item-lg,20rem)),1fr))] }
+}

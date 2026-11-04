@@ -1,0 +1,301 @@
+package js
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"iter"
+	"reflect"
+	"strings"
+	"testing"
+	"time"
+
+	"neui.dev/api"
+	"neui.dev/internal/common"
+	"neui.dev/internal/filesystem"
+	"neui.dev/internal/storage/local"
+)
+
+type testThread struct {
+	fs api.FS
+}
+
+func (testThread) Context() context.Context { return context.Background() }
+
+func (testThread) ID() api.ThreadID { return "thread" }
+
+func (testThread) PageContext() context.Context { return context.Background() }
+
+func (testThread) Task(string, map[string]any, context.CancelCauseFunc) (common.Task, error) {
+	return nil, errors.New("no tasks in tests")
+}
+
+func (testThread) Ask(api.ChatAsk) (func(context.Context), error) {
+	return nil, errors.New("no asks in tests")
+}
+
+func (testThread) Rename(context.Context, string) error { return nil }
+
+func (testThread) Modules() iter.Seq[common.Module] {
+	return func(func(common.Module) bool) {}
+}
+
+func (t testThread) FS() api.FS               { return t.fs }
+func (t testThread) Model() api.Model         { return api.Model{} }
+func (t testThread) Config() api.ThreadConfig { return api.ThreadConfig{} }
+
+func (testThread) FilesConfig() api.FilesConfig {
+	return common.FilesConfigDefaults(api.FilesConfig{})
+}
+
+func newCtx(t *testing.T) (context.Context, api.FS) {
+	t.Helper()
+	store, err := local.NewFileStorage()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Remove() })
+	ws, err := store.WorkspaceOpen("thread")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { ws.Close() })
+	fs := filesystem.New("thread", ws, store, api.FilesConfig{})
+	return context.WithValue(context.Background(), common.KeyController, testThread{fs: fs}), fs
+}
+
+func write(t *testing.T, fs api.FS, name, content string) {
+	t.Helper()
+	w, err := fs.Create(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.WriteString(w, content); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func read(t *testing.T, fs api.FS, name string) string {
+	t.Helper()
+	rc, err := fs.ReadAll(context.Background(), name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rc.Close()
+	b, err := io.ReadAll(rc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+func TestRun(t *testing.T) {
+	ctx, fs := newCtx(t)
+	write(t, fs, "calc.js", "console.log('hey');\nreturn 21 * 2;")
+	m := &module{runtime: getRuntime(context.Background())}
+	res, err := m.run(ctx, RunArg{File: "calc.js"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(res.Output) != "42" || res.Async || res.Log != "calc.js.log" {
+		t.Fatalf("res = %+v", res)
+	}
+	log := read(t, fs, "calc.js.log")
+	if !strings.Contains(log, "INFO hey") || strings.Count(log, "\n") != 1 {
+		t.Fatalf("log = %q", log)
+	}
+	res, err = m.run(ctx, RunArg{File: "calc.js"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if log := read(t, fs, "calc.js.log"); strings.Count(log, "\n") != 1 {
+		t.Fatalf("log not truncated: %q", log)
+	}
+	if _, err := m.run(ctx, RunArg{File: "calc.js", AppendLogs: true}); err != nil {
+		t.Fatal(err)
+	}
+	if log := read(t, fs, "calc.js.log"); strings.Count(log, "\n") != 2 {
+		t.Fatalf("log not appended: %q", log)
+	}
+}
+
+func TestRunThrow(t *testing.T) {
+	ctx, fs := newCtx(t)
+	write(t, fs, "bad.js", `throw new Error("boom");`)
+	m := &module{runtime: getRuntime(context.Background())}
+	if _, err := m.run(ctx, RunArg{File: "bad.js"}); !errors.Is(err, errScript) {
+		t.Fatalf("err = %v", err)
+	}
+	if log := read(t, fs, "bad.js.log"); !strings.Contains(log, "boom") {
+		t.Fatalf("log = %q", log)
+	}
+}
+
+func TestRunTimeout(t *testing.T) {
+	ctx, fs := newCtx(t)
+	write(t, fs, "spin.js", "while (true) {}")
+	m := &module{runtime: getRuntime(context.Background())}
+	if _, err := m.run(ctx, RunArg{File: "spin.js", Timeout: 200}); !errors.Is(err, errScript) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestRunMissing(t *testing.T) {
+	ctx, _ := newCtx(t)
+	m := &module{runtime: getRuntime(context.Background())}
+	if _, err := m.run(ctx, RunArg{File: "ghost.js"}); !errors.Is(err, api.ErrNotFound) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestStopIdle(t *testing.T) {
+	ctx, _ := newCtx(t)
+	m := &module{runtime: getRuntime(context.Background())}
+	if _, err := m.stop(ctx, struct{}{}); err == nil {
+		t.Fatal("stop with nothing running succeeded")
+	}
+}
+
+func TestRunWaitsForMemory(t *testing.T) {
+	ctx, fs := newCtx(t)
+	spin := "const end = Date.now() + 300;\nwhile (Date.now() < end) {}\nreturn 1;"
+	write(t, fs, "a.js", spin)
+	write(t, fs, "b.js", spin)
+	for _, c := range []struct {
+		total  int
+		serial bool
+	}{{4 << 20, true}, {8 << 20, false}} {
+		seed := NewSeed(Config{DefaultMemory: 4 << 20, WorkerMemory: 4 << 20, TotalMemory: c.total})
+		rt := getRuntime(context.WithValue(context.Background(), ConfigKey{}, seed))
+		start := time.Now()
+		errs := make(chan error, 2)
+		for _, name := range []string{"a.js", "b.js"} {
+			go func() {
+				m := &module{runtime: rt}
+				_, err := m.run(ctx, RunArg{File: name, Memory: 100})
+				errs <- err
+			}()
+		}
+		for range 2 {
+			if err := <-errs; err != nil {
+				t.Fatal(err)
+			}
+		}
+		elapsed := time.Since(start)
+		if c.serial && elapsed < 600*time.Millisecond || !c.serial && elapsed >= 500*time.Millisecond {
+			t.Fatalf("total %d MiB: both runs took %v", c.total>>20, elapsed)
+		}
+	}
+}
+
+func TestRunArg(t *testing.T) {
+	ctx, fs := newCtx(t)
+	write(t, fs, "echo.js", "return {arg, kind: typeof arg};")
+	m := &module{runtime: getRuntime(context.Background())}
+	for _, c := range []struct {
+		arg  string
+		want string
+	}{
+		{"", `{"arg":null,"kind":"object"}`},
+		{`{"a":[1,"x y"]}`, `{"arg":{"a":[1,"x y"]},"kind":"object"}`},
+		{`"hi"`, `{"arg":"hi","kind":"string"}`},
+	} {
+		res, err := m.run(ctx, RunArg{File: "echo.js", Arg: json.RawMessage(c.arg)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got, want any
+		if err := json.Unmarshal(res.Output, &got); err != nil {
+			t.Fatal(err)
+		}
+		json.Unmarshal([]byte(c.want), &want)
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("arg %s: output = %s", c.arg, res.Output)
+		}
+	}
+}
+
+func TestRunSkipsCanceledQueued(t *testing.T) {
+	ctx, fs := newCtx(t)
+	write(t, fs, "spin.js", "const end = Date.now() + 1000;\nwhile (Date.now() < end) {}\nreturn 1;")
+	write(t, fs, "quick.js", "return 2;")
+	seed := NewSeed(Config{DefaultMemory: 4 << 20, WorkerMemory: 8 << 20, TotalMemory: 8 << 20})
+	rt := getRuntime(context.WithValue(context.Background(), ConfigKey{}, seed))
+	spinner := &module{runtime: rt}
+	spun := make(chan error, 1)
+	go func() {
+		_, err := spinner.run(ctx, RunArg{File: "spin.js"})
+		spun <- err
+	}()
+	time.Sleep(100 * time.Millisecond)
+	big := &module{runtime: rt}
+	stopped := make(chan error, 1)
+	go func() {
+		_, err := big.run(ctx, RunArg{File: "quick.js", Memory: 8})
+		stopped <- err
+	}()
+	time.Sleep(100 * time.Millisecond)
+	if _, err := big.stop(ctx, struct{}{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-stopped; err == nil || !strings.Contains(err.Error(), "stopped before finishing") {
+		t.Fatalf("canceled run err = %v", err)
+	}
+	if big.running != nil {
+		t.Fatal("canceled run still marked running")
+	}
+	small := &module{runtime: rt}
+	res, err := small.run(ctx, RunArg{File: "quick.js"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(res.Output) != "2" {
+		t.Fatalf("res = %+v", res)
+	}
+	select {
+	case err := <-spun:
+		t.Fatalf("small run waited for the spinner to finish: %v", err)
+	default:
+	}
+	if err := <-spun; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRunCode(t *testing.T) {
+	ctx, fs := newCtx(t)
+	m := &module{runtime: getRuntime(context.Background())}
+	res, err := m.run(ctx, RunArg{Code: "console.log('hey');\nreturn 21 * 2;"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(res.Output) != "42" || res.Log != "inline.log" {
+		t.Fatalf("res = %+v", res)
+	}
+	if got := read(t, fs, "inline.log"); !strings.Contains(got, "INFO hey") {
+		t.Fatalf("log = %q", got)
+	}
+	res, err = m.run(ctx, RunArg{Code: "return arg.n + 1;", Arg: json.RawMessage(`{"n":1}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(res.Output) != "2" {
+		t.Fatalf("res = %+v", res)
+	}
+}
+
+func TestRunFileXorCode(t *testing.T) {
+	ctx, fs := newCtx(t)
+	write(t, fs, "calc.js", "return 1;")
+	m := &module{runtime: getRuntime(context.Background())}
+	if _, err := m.run(ctx, RunArg{File: "calc.js", Code: "return 1;"}); err == nil || !strings.Contains(err.Error(), "both") {
+		t.Fatalf("both set: err = %v", err)
+	}
+	if _, err := m.run(ctx, RunArg{}); err == nil || !strings.Contains(err.Error(), "neither") {
+		t.Fatalf("neither set: err = %v", err)
+	}
+}

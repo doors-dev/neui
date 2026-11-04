@@ -1,0 +1,171 @@
+package files
+
+import (
+	"archive/zip"
+	"context"
+	"fmt"
+	"io"
+	"os"
+	"path"
+	"strings"
+
+	"neui.dev/api"
+	"neui.dev/internal/common"
+)
+
+const unzipListCap = 100
+
+const zipDesc = `Zip files and directories into one archive. Paths inside the archive stay as given. Directory walks skip the uploads dirs; list them explicitly to include their files.`
+const unzipDesc = `Extract a zip archive into a directory. Copy an uploaded archive into the workspace first.`
+
+type zipArg struct {
+	Paths []string `json:"paths" required:"true" description:"files or directories to include"`
+	Dst   string   `json:"dst" required:"true" description:"path of the archive to create"`
+}
+
+type unzipArg struct {
+	Src string `json:"src" required:"true"`
+	Dst string `json:"dst" description:"directory to extract into, empty string is the workspace root"`
+}
+
+type unzipResult struct {
+	Count     int      `json:"count" description:"files extracted"`
+	Extracted []string `json:"extracted" description:"first 100 extracted paths"`
+	Truncated bool     `json:"truncated,omitempty"`
+}
+
+func zipTool(ctx context.Context, arg zipArg) (Entry, error) {
+	fs := common.GetController(ctx).FS()
+	dst := path.Clean(arg.Dst)
+	out, err := fs.Create(dst)
+	if err != nil {
+		return Entry{}, err
+	}
+	zw := zip.NewWriter(out)
+	err = func() error {
+		for _, p := range arg.Paths {
+			e, err := fs.Stat(ctx, p)
+			if err != nil {
+				return err
+			}
+			if !e.Dir {
+				if err := zipAdd(ctx, fs, zw, e.Name); err != nil {
+					return err
+				}
+				continue
+			}
+			err = walkFiles(ctx, fs, e.Name, false, func(f api.FSEntry) (bool, error) {
+				if f.Name == dst {
+					return true, nil
+				}
+				return true, zipAdd(ctx, fs, zw, f.Name)
+			})
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}()
+	if cerr := zw.Close(); err == nil {
+		err = cerr
+	}
+	if cerr := out.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		fs.Remove(ctx, dst)
+		return Entry{}, err
+	}
+	e, err := fs.Stat(ctx, dst)
+	if err != nil {
+		return Entry{}, err
+	}
+	return entry(e), nil
+}
+
+func zipAdd(ctx context.Context, fs api.FS, zw *zip.Writer, name string) error {
+	w, err := zw.Create(name)
+	if err != nil {
+		return err
+	}
+	rc, err := fs.ReadAll(ctx, name)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(w, rc)
+	if cerr := rc.Close(); err == nil {
+		err = cerr
+	}
+	return err
+}
+
+func unzipTool(ctx context.Context, arg unzipArg) (unzipResult, error) {
+	thread := common.GetController(ctx)
+	fs := thread.FS()
+	config := thread.FilesConfig()
+	total := config.UnzipLimit
+	local, err := fs.LocalPath(ctx, arg.Src)
+	if err != nil {
+		return unzipResult{}, err
+	}
+	zr, err := zip.OpenReader(local)
+	if err != nil {
+		return unzipResult{}, err
+	}
+	defer zr.Close()
+	var res unzipResult
+	var used int64
+	for _, f := range zr.File {
+		if f.FileInfo().IsDir() || f.Mode()&os.ModeSymlink != 0 {
+			continue
+		}
+		name := path.Clean(f.Name)
+		if path.IsAbs(name) || name == ".." || strings.HasPrefix(name, "../") {
+			return res, fmt.Errorf("unsafe entry path %q in %q", f.Name, arg.Src)
+		}
+		if config.UnzipFiles > 0 && res.Count == config.UnzipFiles {
+			return res, fmt.Errorf("%q holds over %d files", arg.Src, config.UnzipFiles)
+		}
+		budget := int64(-1)
+		if total >= 0 {
+			budget = total - used
+		}
+		n, err := unzipEntry(fs, f, path.Join(arg.Dst, name), budget)
+		if err != nil {
+			return res, err
+		}
+		used += n
+		if total >= 0 && used > total {
+			return res, fmt.Errorf("%q exceeds the %d-byte uncompressed cap", arg.Src, total)
+		}
+		res.Count++
+		if len(res.Extracted) < unzipListCap {
+			res.Extracted = append(res.Extracted, path.Join(arg.Dst, name))
+		} else {
+			res.Truncated = true
+		}
+	}
+	return res, nil
+}
+
+func unzipEntry(fs api.FS, f *zip.File, target string, budget int64) (int64, error) {
+	rc, err := f.Open()
+	if err != nil {
+		return 0, err
+	}
+	defer rc.Close()
+	w, err := fs.Create(target)
+	if err != nil {
+		return 0, err
+	}
+	var n int64
+	if budget < 0 {
+		n, err = io.Copy(w, rc)
+	} else {
+		n, err = io.Copy(w, io.LimitReader(rc, budget+1))
+	}
+	if cerr := w.Close(); err == nil {
+		err = cerr
+	}
+	return n, err
+}

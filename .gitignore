@@ -1,0 +1,7 @@
+/cmd/
+/.claude/
+/experiment
+/dev.sh
+*.db
+*.db-wal
+*.db-shm

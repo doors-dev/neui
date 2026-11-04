@@ -1,0 +1,205 @@
+package aside
+
+import (
+	"context"
+	"strings"
+	
+	"github.com/doors-dev/doors"
+	"github.com/doors-dev/gox"
+	"neui.dev/api"
+	"neui.dev/kchat/icons"
+	"neui.dev/kchat/params"
+)
+
+type renameForm struct {
+	Name string `form:"name"`
+}
+
+type row struct {
+	aside *Aside
+	thread api.Thread
+	instance string
+	day *doors.Door
+}
+
+elem (r *row) Main() {
+	<div class="kchat-row">
+		~(if !r.aside.Params.Off(params.ThreadEdit) {
+			~(r.aside.menu.BindPop(chatMenu{id: r.thread.ID, mode: chatMenuOpen}, elem(hide func(context.Context)) {
+				~(r.actions(hide))
+			}))
+			~(r.aside.menu.BindPop(chatMenu{id: r.thread.ID, mode: chatMenuRename}, elem(hide func(context.Context)) {
+				~(r.rename(hide))
+			}))
+			~(r.aside.menu.BindPop(chatMenu{id: r.thread.ID, mode: chatMenuDelete}, elem(hide func(context.Context)) {
+				~(r.confirm(hide))
+			}))
+		})
+		~(r.open())
+	</div>
+}
+
+elem (r *row) open() {
+	~(if r.instance == r.aside.Instance.ID() {
+		<div class="kchat-thread kchat-thread_active" aria-current="true">
+			<span class="kchat-dot" aria-hidden="true"></span>
+			~(name(r.thread.Name))
+		</div>
+	} else {
+		~>doors.AClick{
+			Scope: new(doors.ScopeBlocking),
+			On: func(ctx context.Context, rp doors.RequestPointer) bool {
+				r.aside.Instance.ThreadOpen(ctx, r.thread.ID, nil)
+				rp.After(doors.ActionEmit[any]{Name: "opened"})
+				return false
+			},
+		} <button class="kchat-thread">
+			~(if r.instance == "" {
+				<span class="kchat-dot kchat-dot_off" aria-hidden="true"></span>
+			} else {
+				<span class="kchat-dot" aria-hidden="true"></span>
+			})
+			~(name(r.thread.Name))
+		</button>
+	})
+	~(if !r.aside.Params.Off(params.ThreadEdit) {
+		~(r.aside.menu.BindControls(
+			chatMenu{id: r.thread.ID, mode: chatMenuOpen},
+			elem(show func(ctx context.Context)) {
+				~(r.kebab(show))
+			},
+			elem(hide func(ctx context.Context)) {
+				~(r.kebab(hide))
+			},
+		))
+	})
+}
+
+elem (r *row) kebab(toggle func(ctx context.Context)) {
+	~>doors.AClick{
+		Scope: new(doors.ScopeBlocking),
+		On: func(ctx context.Context, rp doors.RequestPointer) bool {
+			toggle(ctx)
+			return false
+		},
+	} <button class="kchat-iconbtn" aria-label="Chat actions">
+		~>(doors.Class("kchat-ic")) ~(icons.DotsThreeVertical())
+	</button>
+}
+
+elem (r *row) actions(hide func(ctx context.Context)) {
+	<div class="kchat-rowmenu kchat-popbody" role="menu">
+		~(r.action(icons.Pencil(), "Rename", func(ctx context.Context) {
+			r.aside.menu.Show(ctx, chatMenu{id: r.thread.ID, mode: chatMenuRename})
+		}))
+		~(r.action(icons.Copy(), "Clone", func(ctx context.Context) {
+			id, err := r.aside.Instance.ThreadClone(ctx, r.thread.ID)
+			if err != nil {
+				doors.Logger(ctx).Error("aside: clone", "thread", r.thread.ID, "err", err)
+				hide(ctx)
+				return
+			}
+			r.aside.Instance.ThreadOpen(ctx, id, nil)
+			hide(ctx)
+		}))
+		~(r.action(icons.Trash(), "Delete chat", func(ctx context.Context) {
+			r.aside.menu.Show(ctx, chatMenu{id: r.thread.ID, mode: chatMenuDelete})
+		}))
+	</div>
+}
+
+elem (r *row) action(icon gox.Elem, label string, on func(ctx context.Context)) {
+	~>doors.AClick{
+		Scope: new(doors.ScopeBlocking),
+		On: func(ctx context.Context, rp doors.RequestPointer) bool {
+			on(ctx)
+			return false
+		},
+	} <button class="kchat-act" role="menuitem">
+		~>(doors.Class("kchat-ic")) ~(icon)
+		<span>~(label)</span>
+	</button>
+}
+
+elem (r *row) rename(hide func(ctx context.Context)) {
+	~>doors.ASubmit[renameForm]{
+		Scope: new(doors.ScopeBlocking),
+		On: func(ctx context.Context, rf doors.RequestForm[renameForm]) bool {
+			n := strings.TrimSpace(rf.Data().Name)
+			if n != r.thread.Name {
+				if err := r.aside.Instance.ThreadRename(ctx, r.thread.ID, n); err != nil {
+					doors.Logger(ctx).Error("aside: rename", "thread", r.thread.ID, "err", err)
+				} else {
+					r.day.Reload(ctx)
+				}
+			}
+			hide(ctx)
+			return false
+		},
+	} <form class="kchat-form" aria-label="Rename chat">
+		<div class="kchat-form-field">
+			~>doors.AKeyDown{
+				Key: doors.Key{Key: "Escape"},
+				Scope: new(doors.ScopeBlocking),
+				On: func(ctx context.Context, rk doors.RequestKeyboard) bool {
+					hide(ctx)
+					return false
+				},
+			} <input
+				class="kchat-text"
+				name="name"
+				value=(r.thread.Name)
+				autofocus
+				autocomplete="off"
+				aria-label="Chat name"/>
+			<script>
+				const input = document.currentScript.previousElementSibling
+				input.focus()
+				input.setSelectionRange(input.value.length, input.value.length)
+			</script>
+		</div>
+		<div class="kchat-form-actions">
+			~>doors.AClick{
+				Scope: new(doors.ScopeBlocking),
+				On: func(ctx context.Context, rp doors.RequestPointer) bool {
+					hide(ctx)
+					return false
+				},
+			} <button type="button" class="kchat-btn kchat-btn_2nd">Cancel</button>
+			<button type="submit" class="kchat-btn">Save</button>
+		</div>
+	</form>
+}
+
+elem (r *row) confirm(hide func(ctx context.Context)) {
+	~~
+	label := r.thread.Name
+	if label == "" {
+		label = "New chat"
+	}
+	~~
+	<div class="kchat-form" role="group" aria-label="Delete chat">
+		<div class="kchat-form-text">Delete <b>~(label)</b>?</div>
+		<div class="kchat-form-actions">
+			~>doors.AClick{
+				Scope: new(doors.ScopeBlocking),
+				On: func(ctx context.Context, rp doors.RequestPointer) bool {
+					hide(ctx)
+					return false
+				},
+			} <button type="button" class="kchat-btn kchat-btn_2nd">Cancel</button>
+			~>doors.AClick{
+				Scope: new(doors.ScopeBlocking),
+				On: func(ctx context.Context, rp doors.RequestPointer) bool {
+					if err := r.aside.Instance.ThreadDelete(ctx, r.thread.ID); err != nil {
+						doors.Logger(ctx).Error("aside: delete", "thread", r.thread.ID, "err", err)
+					} else {
+						r.day.Reload(ctx)
+					}
+					hide(ctx)
+					return false
+				},
+			} <button type="button" class="kchat-btn kchat-btn_del">Delete</button>
+		</div>
+	</div>
+}

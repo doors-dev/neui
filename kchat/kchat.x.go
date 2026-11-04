@@ -1,0 +1,141 @@
+// Managed by GoX v0.3.3
+
+//line kchat.gox:1
+package kchat
+
+import (
+	"time"
+	
+	"github.com/doors-dev/gox"
+	"neui.dev/api"
+	"neui.dev/internal/instance"
+	"neui.dev/kchat/aside"
+	"neui.dev/kchat/chat"
+	"neui.dev/kchat/css"
+	"neui.dev/kchat/params"
+	"neui.dev/kchat/pops"
+)
+
+type Theme = css.Theme
+
+// Feature is a part of the chat UI that can be hidden from the user.
+type Feature = params.Feature
+
+const (
+	// Tokens hides the context gauge, token counts and the Compact now button; a plain "compacting" chip still shows while compaction runs.
+	Tokens = Feature(params.Tokens)
+	// Thinking hides reasoning and summary blocks and the Reasoning stat.
+	Thinking = Feature(params.Thinking)
+	// Tools hides tool call blocks and pinned record counts.
+	Tools = Feature(params.Tools)
+	// Tasks hides the background task chip and popover; the run chip shows "working" while only tasks run.
+	Tasks = Feature(params.Tasks)
+	// Edit hides the edit-and-resend button on user messages.
+	Edit = Feature(params.Edit)
+	// Retry hides the retry button on failed rounds.
+	Retry = Feature(params.Retry)
+	// Attachments hides the attach button and tray; large pastes stay in the draft as text.
+	Attachments = Feature(params.Attachments)
+	// Files hides the files popover in the top bar.
+	Files = Feature(params.Files)
+	// Sidebar hides the chat list sidebar and its menu button.
+	Sidebar = Feature(params.Sidebar)
+	// ThreadEdit hides rename, clone and delete in the chat list.
+	ThreadEdit = Feature(params.ThreadEdit)
+)
+
+// Simple is the preset for non-technical users. It grows as technical features are added.
+var Simple = []Feature{Tokens, Thinking, Tools, Tasks}
+
+type Kchat struct {
+	MaxAttachmentSize int
+	MaxAttachments int
+	AttachmentTimeout time.Duration
+	AsideRight bool
+	Framed bool
+	ThemeDark Theme
+	ThemeLight Theme
+	// Disable lists features hidden from the user; nil shows everything.
+	// Simple is the preset for non-technical users and grows with technical features added later.
+	Disable []Feature
+}
+
+func (k Kchat) Main() gox.Elem {
+	params := params.Params{
+		MaxAttachmentSize: k.MaxAttachmentSize,
+		MaxAttachments: k.MaxAttachments,
+		AttachmentTimeout: k.AttachmentTimeout,
+		AsideRight: k.AsideRight,
+		Framed: k.Framed,
+		ThemeDark: k.ThemeDark,
+		ThemeLight: k.ThemeLight,
+	}
+	params.InitDefault()
+	params.Disable(k.Disable)
+	return gox.Elem(func(cur gox.Cursor) error {
+		return cur.Comp(&kchat{
+			params: params,
+			inst: instance.GetInstance(cur.Context()),
+			pops: pops.NewPopups(),
+		})
+	})
+}
+
+type kchat struct {
+	params params.Params
+	inst api.Instance
+	pops pops.Popups
+}
+
+//line kchat.gox:87
+func (k *kchat) Main() gox.Elem {
+	return gox.Elem(func(__c gox.Cursor) (__e error) {
+		ctx := __c.Context(); _ = ctx
+//line kchat.gox:88
+		__e = __c.Any(css.Style(k.params.ThemeDark, k.params.ThemeLight)); if __e != nil { return }
+		__e = __c.Init("div"); if __e != nil { return }
+		{
+//line kchat.gox:90
+			__e = __c.Set("class", func() any {
+			class := "kchat-widget kchat-widget_split"
+			if k.params.Off(params.Sidebar) {
+				class += " kchat-widget_noside"
+			} else if k.params.AsideRight {
+				class += " kchat-widget_aside-right"
+			}
+			if k.params.Framed {
+				class += " kchat-widget_frame"
+			}
+			return class
+		}()); if __e != nil { return }
+//line kchat.gox:102
+			__e = __c.Set("data-kchat-theme", func() any {
+			key := css.FaceKey(k.params.ThemeDark, k.params.ThemeLight)
+			if key == "" {
+				return nil
+			}
+			return key
+		}()); if __e != nil { return }
+			__e = __c.Submit(); if __e != nil { return }
+//line kchat.gox:109
+			if !k.params.Off(params.Sidebar) {
+//line kchat.gox:110
+				__e = __c.Any(aside.Aside{
+				Params: k.params,
+				Instance: k.inst,
+				Pops: k.pops,
+			}); if __e != nil { return }
+			}
+//line kchat.gox:116
+			__e = __c.Any(chat.Chat{
+			Params: k.params,
+			Inst: k.inst,
+			Pops: k.pops.Popup[string](),
+		}); if __e != nil { return }
+//line kchat.gox:121
+			__e = __c.Any(k.pops.Script()); if __e != nil { return }
+		}
+		__e = __c.Close(); if __e != nil { return }
+	return })
+//line kchat.gox:123
+}

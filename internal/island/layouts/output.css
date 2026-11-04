@@ -1,0 +1,81 @@
+/*! tailwindcss v4.3.3 | MIT License | https://tailwindcss.com */
+@layer kisland {
+  .kisland-column {
+    display: flex;
+    min-width: 0px;
+    flex-direction: column;
+  }
+  .kisland-row {
+    display: flex;
+    min-width: 0px;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .kisland-grid {
+    display: grid;
+    min-width: 0px;
+  }
+  .kisland-grid-cell {
+    min-width: 0px;
+  }
+  .kisland-gap-sm {
+    gap: var(--kisland-gap-sm,0.5rem);
+  }
+  .kisland-gap-md {
+    gap: var(--kisland-gap-md,1rem);
+  }
+  .kisland-gap-lg {
+    gap: var(--kisland-gap-lg,1.5rem);
+  }
+  .kisland-align-start {
+    align-items: flex-start;
+  }
+  .kisland-align-center {
+    align-items: center;
+  }
+  .kisland-align-end {
+    align-items: flex-end;
+  }
+  .kisland-justify-start {
+    justify-content: flex-start;
+  }
+  .kisland-justify-end {
+    justify-content: flex-end;
+  }
+  .kisland-justify-between {
+    justify-content: space-between;
+  }
+  .kisland-row > .kisland-fill-1 {
+    flex-grow: 1;
+    flex-basis: 0px;
+  }
+  .kisland-row > .kisland-fill-2 {
+    flex-grow: 2;
+    flex-basis: 0px;
+  }
+  .kisland-row > .kisland-fill-3 {
+    flex-grow: 3;
+    flex-basis: 0px;
+  }
+  .kisland-row > .kisland-fill-4 {
+    flex-grow: 4;
+    flex-basis: 0px;
+  }
+  .kisland-row > .kisland-fill-5 {
+    flex-grow: 5;
+    flex-basis: 0px;
+  }
+  .kisland-row > .kisland-fill-6 {
+    flex-grow: 6;
+    flex-basis: 0px;
+  }
+  .kisland-item-sm {
+    grid-template-columns: repeat(auto-fill,minmax(min(100%, var(--kisland-item-sm,10rem)),1fr));
+  }
+  .kisland-item-md {
+    grid-template-columns: repeat(auto-fill,minmax(min(100%, var(--kisland-item-md,14rem)),1fr));
+  }
+  .kisland-item-lg {
+    grid-template-columns: repeat(auto-fill,minmax(min(100%, var(--kisland-item-lg,20rem)),1fr));
+  }
+}

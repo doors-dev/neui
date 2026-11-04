@@ -1,0 +1,201 @@
+package media
+
+import (
+	"bytes"
+	"image"
+	"image/jpeg"
+	"image/png"
+	"math/rand/v2"
+	"strings"
+	"testing"
+
+	"neui.dev/api"
+)
+
+func noise(t *testing.T, w, h int) *image.RGBA {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	r := rand.New(rand.NewPCG(1, 2))
+	for i := range img.Pix {
+		img.Pix[i] = uint8(r.UintN(256))
+	}
+	for i := 3; i < len(img.Pix); i += 4 {
+		img.Pix[i] = 0xff
+	}
+	return img
+}
+
+func noisePNG(t *testing.T, w, h int) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, noise(t, w, h)); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+func noiseJPEG(t *testing.T, w, h, quality int) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, noise(t, w, h), &jpeg.Options{Quality: quality}); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+func flatPNG(t *testing.T, w, h int) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, w, h))); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+func dims(t *testing.T, data []byte) (int, int) {
+	t.Helper()
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cfg.Width, cfg.Height
+}
+
+func TestShapeScalesByArea(t *testing.T) {
+	pixels := 1568 * 1568
+	img, err := Shape(flatPNG(t, 4000, 3000), api.ImagePNG, api.Model{ImagePixels: pixels})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, h := dims(t, img.Data)
+	if w*h > pixels {
+		t.Fatalf("%dx%d is %d pixels, over %d", w, h, w*h, pixels)
+	}
+	if w*h < pixels/2 {
+		t.Fatalf("%dx%d is %d pixels, needlessly far under %d", w, h, w*h, pixels)
+	}
+	if float64(w)/float64(h) < 1.3 || float64(w)/float64(h) > 1.37 {
+		t.Fatalf("%dx%d lost the 4:3 aspect", w, h)
+	}
+}
+
+func TestShapeKeepsFittingImage(t *testing.T) {
+	data := flatPNG(t, 1000, 1000)
+	img, err := Shape(data, api.ImagePNG, api.Model{ImagePixels: 1568 * 1568, ImageBytes: 4 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(img.Data, data) || img.Mime != api.ImagePNG {
+		t.Fatalf("re-encoded a fitting image: %s, %d bytes", img.Mime, len(img.Data))
+	}
+}
+
+func TestShapeCapsJPEGBytes(t *testing.T) {
+	data := noiseJPEG(t, 2000, 2000, 95)
+	byteCap := len(data) / 4
+	img, err := Shape(data, api.ImageJPEG, api.Model{ImagePixels: 1568 * 1568, ImageBytes: byteCap})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if img.Mime != api.ImageJPEG {
+		t.Fatalf("mime = %s", img.Mime)
+	}
+	if len(img.Data) > byteCap {
+		t.Fatalf("%d bytes over the %d cap", len(img.Data), byteCap)
+	}
+	w, h := dims(t, img.Data)
+	if w*h > 1568*1568 {
+		t.Fatalf("%dx%d is over %d pixels", w, h, 1568*1568)
+	}
+}
+
+func TestShapeCascadesQuality(t *testing.T) {
+	data := noiseJPEG(t, 1000, 1000, 95)
+	at85 := len(noiseJPEG(t, 1000, 1000, 85))
+	at55 := len(noiseJPEG(t, 1000, 1000, 55))
+	if at55 >= at85 {
+		t.Fatalf("quality 55 (%d bytes) did not beat 85 (%d bytes)", at55, at85)
+	}
+	byteCap := at55 + (at85-at55)/2
+	img, err := Shape(data, api.ImageJPEG, api.Model{ImagePixels: 1568 * 1568, ImageBytes: byteCap})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(img.Data) > byteCap {
+		t.Fatalf("%d bytes over the %d cap, quality never dropped", len(img.Data), byteCap)
+	}
+	if w, h := dims(t, img.Data); w != 1000 || h != 1000 {
+		t.Fatalf("%dx%d: downscaled although quality alone was enough", w, h)
+	}
+}
+
+func TestShapeBoundsBothDimensions(t *testing.T) {
+	const pixels = 2458624
+	model := api.Model{ImagePixels: pixels}
+	for _, size := range [][2]int{{20000, 100}, {200000, 1}, {1, 20000}} {
+		img, err := Shape(flatPNG(t, size[0], size[1]), api.ImagePNG, model)
+		if err != nil {
+			t.Fatalf("%dx%d: %v", size[0], size[1], err)
+		}
+		w, h := dims(t, img.Data)
+		if w > maxImageDim || h > maxImageDim {
+			t.Fatalf("%dx%d came back as %dx%d: neither dimension is bounded", size[0], size[1], w, h)
+		}
+		if w*h > pixels {
+			t.Fatalf("%dx%d came back as %dx%d, %d pixels, over the %d budget", size[0], size[1], w, h, w*h, pixels)
+		}
+	}
+}
+
+func TestShapeClampStaysUnderThePixelBudget(t *testing.T) {
+	const pixels = 2458624
+	img, err := Shape(flatPNG(t, 3000000, 1), api.ImagePNG, api.Model{ImagePixels: pixels})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, h := dims(t, img.Data)
+	if w*h > pixels {
+		t.Fatalf("%dx%d is %d pixels, over the %d budget: the one-pixel clamp pushed it past the limit", w, h, w*h, pixels)
+	}
+	if h < 1 {
+		t.Fatalf("%dx%d: the short side has to stay at least one pixel", w, h)
+	}
+}
+
+func TestShapeFallsBackWithoutModelLimits(t *testing.T) {
+	img, err := Shape(flatPNG(t, 4000, 100), api.ImagePNG, api.Model{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, h := dims(t, img.Data)
+	if want := 100 * maxImageDim / 4000; w != maxImageDim || h != want {
+		t.Fatalf("%dx%d, want %dx%d", w, h, maxImageDim, want)
+	}
+	big := noisePNG(t, 1600, 1600)
+	if len(big) <= fallbackByteCap {
+		t.Fatalf("%d bytes is not over the %d fallback cap", len(big), fallbackByteCap)
+	}
+	img, err = Shape(big, api.ImagePNG, api.Model{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(img.Data) > fallbackByteCap {
+		t.Fatalf("%d bytes over the %d fallback cap", len(img.Data), fallbackByteCap)
+	}
+	if img.Mime != api.ImageJPEG {
+		t.Fatalf("mime = %s, want JPEG after the PNG stayed over the cap", img.Mime)
+	}
+	if w, h := dims(t, img.Data); w != 1600 || h != 1600 {
+		t.Fatalf("%dx%d: downscaled although the dims fit", w, h)
+	}
+}
+
+func TestShapeErrorsWhenCapUnreachable(t *testing.T) {
+	_, err := Shape(noiseJPEG(t, 1000, 1000, 95), api.ImageJPEG, api.Model{ImageBytes: 500})
+	if err == nil {
+		t.Fatal("an image that cannot meet the cap was returned anyway")
+	}
+	if !strings.Contains(err.Error(), "500 bytes") {
+		t.Fatalf("err = %v", err)
+	}
+}

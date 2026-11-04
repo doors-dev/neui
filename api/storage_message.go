@@ -1,0 +1,275 @@
+package api
+
+import (
+	"context"
+	"fmt"
+	"iter"
+	"net/url"
+	"path"
+	"time"
+)
+
+// Seq is a per-thread write serial that acts as an optimistic concurrency
+// guard for MessageStorage writes.
+type Seq int
+
+type ThreadID string
+
+// RoundID is a thread-scoped, monotonically increasing round identifier;
+// NoRoundID (-1) is the none/open sentinel.
+type RoundID int
+
+// Thread is one conversation; Seq is its current write serial.
+type Thread struct {
+	ID      ThreadID  `json:"id"`
+	Name    string    `json:"name"`
+	Seq     Seq       `json:"seq"`
+	Created time.Time `json:"created"`
+	Updated time.Time `json:"updated"`
+}
+
+// Hit is one round matched by RoundSearch. Snippet is a bounded run of
+// the matched text taken verbatim from the round, cut at rune boundaries
+// and containing the match.
+type Hit struct {
+	Thread  ThreadID  `json:"thread"`
+	Round   RoundID   `json:"round"`
+	Created time.Time `json:"created"`
+	Snippet string    `json:"snippet"`
+}
+
+// Cursor positions a RoundSearch page. It names one round by the whole sort
+// key RoundSearch orders by, so a page resumes exactly where the last ended
+// even when several rounds share a creation time.
+type Cursor struct {
+	Created time.Time `json:"created"`
+	Thread  ThreadID  `json:"thread"`
+	Round   RoundID   `json:"round"`
+}
+
+// RoundState is a round's lifecycle and replay tag; the zero value ("")
+// is the input state (interrupted before a response).
+type RoundState string
+
+const (
+	// RoundInput marks a round that has only input, meaning it was
+	// interrupted before a response; skipped on replay, but has a retry
+	// button.
+	RoundInput = RoundState("")
+	// RoundOk marks a round where the agent responded without tool calls.
+	// When a response does carry tool calls, replay requires every tool
+	// use to have a result in the next message; a missing result is
+	// synthesized as omitted/lost/canceled.
+	RoundOk = RoundState("ok")
+	// RoundRefuse marks a round the model refused to answer; not
+	// replayed, and all tool results from the previous round are omitted
+	// on replay of the next message. Has retry.
+	RoundRefuse = RoundState("refuse")
+	// RoundAbort marks a round the user aborted during response
+	// streaming; not replayed, has a retry option.
+	RoundAbort = RoundState("abort")
+	// RoundError marks a round that hit a network or other error; skipped
+	// on replay, has retry.
+	RoundError = RoundState("error")
+)
+
+// Round is one full exchange — the user input plus the model's response,
+// tool results, and usage — and the unit the UI renders as a turn.
+type Round struct {
+	ID     RoundID    `json:"id"`
+	Thread ThreadID   `json:"thread"`
+	State  RoundState `json:"state"`
+	// Created is when the round was opened. It is the zero time on rounds
+	// written before storage recorded it.
+	Created  time.Time                    `json:"created"`
+	Input    Input                        `json:"input"`
+	Error    string                       `json:"error"`
+	Usage    EventUsage                   `json:"usage"`
+	Response Indexed[Content]             `json:"response"`
+	Results  map[string]ContentToolResult `json:"results"`
+	// PinnedRecords holds the records pinned to this round, hydrated on
+	// reads by RoundRange, RoundBefore, and RoundAfter; Data is carried
+	// only when the read asks for results.
+	PinnedRecords []Record `json:"records"`
+}
+
+// Input is the user-typed text plus attachment filenames given as
+// thread-relative paths.
+type Input struct {
+	Attachments []string `json:"attachments"`
+	Text        string   `json:"text"`
+}
+
+// Len returns the number of content parts the input may produce: one for
+// the text plus one per attachment.
+func (in Input) Len() int {
+	l := len(in.Attachments)
+	if in.Text != "" {
+		l += 1
+	}
+	return l
+}
+
+// Content renders the input as protocol content: a file link per
+// attachment followed by the text; nil when the input is empty.
+func (in Input) Content() []Content {
+	if in.Len() == 0 {
+		return nil
+	}
+	content := make([]Content, 0, 1+len(in.Attachments))
+	for _, a := range in.Attachments {
+		escaped := (&url.URL{Path: a}).EscapedPath()
+		content = append(content, ContentText{Text: fmt.Sprintf("[%s](file:///%s)", path.Base(a), escaped)})
+	}
+	if in.Text != "" {
+		content = append(content, ContentText{Text: in.Text})
+	}
+	return content
+}
+
+// NoCompaction is the none sentinel Compaction, returned when no
+// compaction exists.
+var NoCompaction = Compaction{
+	Target: NoRoundID,
+	Tail:   NoRoundID,
+}
+
+// Compaction is an additive summary row: Target is the round the summary
+// attaches to on replay (the first kept round), and Tail is the thread
+// head when the compaction was made — the boundary past which rewinds
+// and forks bypass it.
+//
+// Rounds up to Tail ran on the pre-compaction context, so their reported
+// usage says nothing about the compacted one. Until a round runs on the new
+// context, its size is estimated as Output + total(last tail round) - Base:
+// a lower bound, because the fixed prefix — system prompt and tool
+// definitions — is not part of the arithmetic.
+type Compaction struct {
+	Text   string  `json:"text"`
+	Target RoundID `json:"target"`
+	Tail   RoundID `json:"tail"`
+	// Output is the output token count of the compaction response — the
+	// summary's own size.
+	Output int `json:"output"`
+	// Base is the context total at round Target-1, what the summarized part
+	// of the conversation cost.
+	Base int `json:"base"`
+}
+
+// IsValid reports whether the compaction is set: both Target and Tail
+// differ from NoRoundID.
+func (c Compaction) IsValid() bool {
+	return c.Target != NoRoundID && c.Tail != NoRoundID
+}
+
+// NoRoundID is the none/open sentinel for RoundID parameters.
+const NoRoundID = RoundID(-1)
+
+// MessageStorage stores one user's threads and rounds; round ids are
+// thread-scoped and monotonically increasing. Writes are serialized per
+// thread via Seq: each write takes seq as an optimistic concurrency guard,
+// applies only if the thread is currently at that Seq, bumps it, and
+// returns the new Seq; a stale seq fails the write (drift). NoRoundID (-1)
+// is the open/none sentinel for RoundID parameters.
+type MessageStorage interface {
+	// ThreadList returns threads updated in [from, to), at most limit of
+	// them. A zero from or to drops that bound; limit <= 0 means no cap. A
+	// non-empty name keeps only threads whose name contains it,
+	// case-insensitively, and limit counts what is left. They come most
+	// recently updated first, ties broken by id descending, unless asc
+	// reverses both — so limit always cuts the far end of the range from
+	// the end the caller is reading toward.
+	ThreadList(ctx context.Context, from, to time.Time, asc bool, limit int, name string) ([]Thread, error)
+	// ThreadBump fetches the thread and bumps its Seq, taking the write
+	// serial without writing any content. Updated stays as it was, so a
+	// bump on its own does not reorder the thread in ThreadList.
+	ThreadBump(ctx context.Context, thread ThreadID) (Thread, error)
+	ThreadGet(ctx context.Context, thread ThreadID) (Thread, error)
+	// ThreadCreate creates a thread with the caller-supplied id.
+	ThreadCreate(ctx context.Context, id ThreadID) (Thread, error)
+	// ThreadCut removes all rounds starting with round, and all compactions
+	// whose Tail references a removed round (Tail >= round) — a rewind into a
+	// compaction's verbatim region thereby replays originals. NoRoundID means
+	// everything. Records with Origin >= round are removed; records with
+	// Pin >= round are unpinned and surface again in the current request.
+	ThreadCut(ctx context.Context, id ThreadID, seq Seq, round RoundID) (Seq, error)
+	// ThreadRename sets the thread's name, replacing whatever it was named
+	// before; an empty name leaves it unnamed again. Updated stays as it was,
+	// so a rename does not reorder the thread in ThreadList.
+	ThreadRename(ctx context.Context, id ThreadID, seq Seq, name string) (Seq, error)
+	// ThreadClone creates the target thread as a copy of source with all its
+	// rounds, compactions, and records.
+	ThreadClone(ctx context.Context, source ThreadID, target ThreadID) (Thread, error)
+	// ThreadDelete removes the thread and everything keyed to it — its
+	// rounds, compactions and records. It takes no seq: the thread is gone
+	// either way, and a thread that is not there is not an error.
+	ThreadDelete(ctx context.Context, id ThreadID) error
+
+	// CompactionCreate stores the compaction record: its Target is the round
+	// the summary attaches to on replay (the first kept round), its Tail the
+	// last round completed when the compaction was applied, and Output with
+	// Base size the context it leaves behind.
+	CompactionCreate(ctx context.Context, thread ThreadID, seq Seq, compaction Compaction) (Seq, error)
+	// CompactionGet returns the latest compaction whose Tail < beforeTail;
+	// a NoRoundID beforeTail means simply the latest. Returns NoCompaction
+	// and a nil error when none exists.
+	CompactionGet(ctx context.Context, thread ThreadID, beforeTail RoundID) (Compaction, error)
+
+	// RoundRange returns rounds from start to end one by one; a NoRoundID
+	// start means from the beginning, a NoRoundID end means to the head. A
+	// non-nil second value ends the iteration.
+	RoundRange(ctx context.Context, thread ThreadID, start RoundID, end RoundID) iter.Seq2[Round, error]
+	// RoundBefore returns at most limit rounds before start (excluding it),
+	// in ascending id order; a NoRoundID start means the last rounds,
+	// including the head. These rounds feed a chat, which never renders
+	// tool results or record bodies, so Results comes back empty and
+	// PinnedRecords come back without Data — read a round through
+	// RoundRange when they are needed.
+	RoundBefore(ctx context.Context, thread ThreadID, start RoundID, limit int) ([]Round, error)
+	// RoundAfter returns at most limit rounds after start (excluding it),
+	// in ascending id order; a NoRoundID start means the first rounds,
+	// including the oldest. Results and record Data come back empty, as in
+	// RoundBefore.
+	RoundAfter(ctx context.Context, thread ThreadID, start RoundID, limit int) ([]Round, error)
+	// RoundSearch returns rounds whose input text or response text contains
+	// query, case-insensitively — one Hit per round, at the first match,
+	// input before response. Reasoning, tool calls, tool results,
+	// attachments and errors are not searched. A zero thread searches every
+	// thread; a named thread restricts the search to it, or with exclude
+	// set, to every thread but it. An empty query matches nothing. Hits are
+	// ordered by (created, thread, round), ascending when asc and descending
+	// when not; a nil from starts at the end the direction runs from and
+	// inclusive says nothing there, otherwise the walk starts at from, taking
+	// the round it names when inclusive and starting past it when not. limit
+	// caps the result and 0 means no cap. Only a chat calls this: an
+	// implementation that will not support it may return nothing, and the
+	// chat is then configured to offer no message search.
+	RoundSearch(ctx context.Context, thread ThreadID, exclude bool, query string, from *Cursor, inclusive bool, asc bool, limit int) ([]Hit, error)
+	// RoundInput creates a round in the input state with the user's input,
+	// returns its id.
+	RoundInput(ctx context.Context, thread ThreadID, seq Seq, input Input) (RoundID, Seq, error)
+	// RoundOk marks the round completed with the model's usage and response
+	// content.
+	RoundOk(ctx context.Context, thread ThreadID, seq Seq, round RoundID, usage EventUsage, content Indexed[Content]) (Seq, error)
+	// RoundRefuse marks the round refused, keeping whatever usage and
+	// partial response content arrived before the refusal.
+	RoundRefuse(ctx context.Context, thread ThreadID, seq Seq, round RoundID, usage EventUsage, content Indexed[Content]) (Seq, error)
+	// RoundError marks the round errored and stores the error text, keeping
+	// whatever usage and partial response content arrived before the error.
+	RoundError(ctx context.Context, thread ThreadID, seq Seq, round RoundID, err string, usage EventUsage, content Indexed[Content]) (Seq, error)
+	// RoundResult adds tool results for the round, keyed by tool call id.
+	// results come all at once, no need to merge
+	RoundResult(ctx context.Context, thread ThreadID, seq Seq, round RoundID, result map[string]ContentToolResult) (Seq, error)
+	// RoundAbort marks the round aborted, keeping whatever usage and partial
+	// response content arrived before the abort.
+	RoundAbort(ctx context.Context, thread ThreadID, seq Seq, round RoundID, usage EventUsage, content Indexed[Content]) (Seq, error)
+
+	// RecordAdd stores a record; origin is the round whose action produced
+	// it. Returns the new record's id.
+	RecordAdd(ctx context.Context, thread ThreadID, seq Seq, origin RoundID, kind string, attrs map[string]any, data any) (RecordID, Seq, error)
+	// RecordPin pins the records to the round whose user message renders
+	// them on replay.
+	RecordPin(ctx context.Context, thread ThreadID, seq Seq, pin RoundID, records []RecordID) (Seq, error)
+	// RecordList returns the unpinned records.
+	RecordList(ctx context.Context, thread ThreadID) ([]Record, error)
+}

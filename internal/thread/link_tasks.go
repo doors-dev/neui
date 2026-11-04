@@ -1,0 +1,139 @@
+package thread
+
+import (
+	"cmp"
+	"context"
+	"encoding/json"
+	"fmt"
+	"slices"
+	"sync"
+
+	"neui.dev/api"
+	"neui.dev/internal/common"
+)
+
+type commonTask struct {
+	id   uint
+	link *linkTasks
+}
+
+func (t commonTask) ID() uint {
+	return t.id
+}
+
+func (t commonTask) Ok(output json.RawMessage) {
+	select {
+	case <-t.link.thread.close:
+	case t.link.thread.ch <- commandTaskResult{
+		linkTasks: t.link,
+		id:        t.id,
+		output:    output,
+	}:
+	}
+}
+
+func (t commonTask) Err(err error) {
+	select {
+	case <-t.link.thread.close:
+	case t.link.thread.ch <- commandTaskResult{
+		linkTasks: t.link,
+		id:        t.id,
+		err:       err,
+	}:
+	}
+}
+
+func (t commonTask) Notify(data json.RawMessage, meta map[string]any) {
+	select {
+	case <-t.link.thread.close:
+	case t.link.thread.ch <- commandTaskNotify{
+		linkTasks: t.link,
+		id:        t.id,
+		data:      data,
+		meta:      meta,
+	}:
+	}
+}
+
+type linkTask struct {
+	id      uint
+	origin  api.RoundID
+	cancel  context.CancelCauseFunc
+	name    string
+	comment string
+	attrs   map[string]any
+	module  string
+}
+
+func (l linkTask) ui() api.Task {
+	return api.Task{
+		ID:      l.id,
+		Module:  l.module,
+		Comment: l.comment,
+		Meta:    l.attrs,
+		Name:    l.name,
+		Cancel:  l.cancel,
+	}
+}
+
+type linkTasks struct {
+	mu      sync.Mutex
+	thread  *thread
+	counter uint
+	tasks   []linkTask
+}
+
+func (m *linkTasks) taskAdd(origin api.RoundID, module string, name string, comment string, meta map[string]any, cancel context.CancelCauseFunc) common.Task {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.counter += 1
+	m.tasks = append(m.tasks, linkTask{
+		id:      m.counter,
+		origin:  origin,
+		name:    name,
+		module:  module,
+		comment: comment,
+		attrs:   meta,
+		cancel:  cancel,
+	})
+	return commonTask{
+		id:   m.counter,
+		link: m,
+	}
+}
+
+func (m *linkTasks) taskRemove(id uint) (linkTask, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	i, ok := slices.BinarySearchFunc(m.tasks, id, func(e linkTask, id uint) int {
+		return cmp.Compare(e.id, id)
+	})
+	if !ok {
+		return linkTask{}, fmt.Errorf("task %d not found", id)
+	}
+	task := m.tasks[i]
+	m.tasks = slices.Delete(m.tasks, i, i+1)
+	return task, nil
+}
+
+func (m *linkTasks) taskGet(id uint) (linkTask, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	i, ok := slices.BinarySearchFunc(m.tasks, id, func(e linkTask, id uint) int {
+		return cmp.Compare(e.id, id)
+	})
+	if !ok {
+		return linkTask{}, false
+	}
+	return m.tasks[i], true
+}
+
+func (m *linkTasks) taskList() []api.Task {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	tasks := make([]api.Task, len(m.tasks))
+	for i, e := range m.tasks {
+		tasks[i] = e.ui()
+	}
+	return tasks
+}
