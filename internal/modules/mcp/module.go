@@ -156,10 +156,6 @@ func (m *module) run() {
 				m.touch()
 				continue
 			}
-			doors.Logger(m.ctx).Info(
-				"mcp: idle, connection closed",
-				"module", m.conf.Name,
-			)
 			m.closeConnection()
 			m.idle = nil
 		case cmd := <-m.ch:
@@ -183,11 +179,6 @@ func (m *module) on(cmd command) {
 			m.desc.Store(&cmd.desc)
 		}
 		m.module = m.buildModule(cmd.tools)
-		doors.Logger(m.ctx).Info(
-			"mcp: connected",
-			"module", m.conf.Name,
-			"tools", len(cmd.tools),
-		)
 		for _, w := range m.waiters {
 			if w.reply(cmd.client) {
 				m.inflight += 1

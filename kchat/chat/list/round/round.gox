@@ -51,9 +51,6 @@ func NewLiveRound(params params.Params, thread api.ChatThread, rewinder Rewinder
 		errored: doors.DeriveBeam(state, func(s api.RoundState) bool {
 			return s == api.RoundAbort || s == api.RoundError
 		}),
-		done: doors.DeriveBeam(state, func(s api.RoundState) bool {
-			return s != api.RoundInput
-		}),
 		last: doors.DeriveBeam(latest, func(latest api.RoundID) bool {
 			return latest == r.ID
 		}),
@@ -71,7 +68,6 @@ type liveRound struct {
 	params params.Params
 	last doors.Beam[bool]
 	errored doors.Beam[bool]
-	done doors.Beam[bool]
 	rewind doors.Beam[rewindState]
 	rewinder Rewinder
 	state doors.Source[api.RoundState]
@@ -136,11 +132,7 @@ elem (r LiveRound) Main() {
 				~(bubble(r.input, r.thread.FS()))
 				<div class="kchat-gut">
 					~(if !r.params.Off(params.Edit) {
-						~(r.done.Bind(elem(b bool) {
-							~(if b {
-								~(rewindButton(r.rewinder, r.rewind, r.id, r.input))
-							})
-						}))
+						~(rewindButton(r.rewinder, r.rewind, r.id, r.input))
 					})
 				</div>
 			</div>

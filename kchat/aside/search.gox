@@ -136,7 +136,7 @@ elem (p *Aside) hitName(h api.Hit) {
 	}
 	n := t.Name
 	if n == "" {
-		n = "New Chat"
+		n = "Untitled"
 	}
 	~~
 	<span class="kchat-hit-name">~(n)</span>

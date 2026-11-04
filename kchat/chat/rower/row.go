@@ -71,7 +71,6 @@ func (r *row[C]) After(ctx context.Context, c *row[C], mark bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.frozen {
-		println("LOG: updated after freeze")
 		return
 	}
 	oldDoor := r.after

@@ -2,7 +2,6 @@ package chat
 
 import (
 	"context"
-	"log/slog"
 	
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
@@ -114,7 +113,6 @@ func (c *chat) Update(ctx context.Context, e api.ChatEvent) {
 		case api.ChatEventRoundUsage:
 			c.composer.UpdateUsage(ctx, e.Usage)
 		case api.ChatEventAsk:
-			slog.Info("ask: ChatEventAsk reached the chat dispatcher")
 			c.composer.Ask(ctx, e.Ask)
 		case api.ChatEventAskDone:
 			c.composer.AskDone(ctx)

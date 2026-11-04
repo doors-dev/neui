@@ -396,7 +396,7 @@ func (r *row) confirm(hide func(ctx context.Context)) gox.Elem {
 //line row.gox:176
 		label := r.thread.Name
 	if label == "" {
-		label = "New chat"
+		label = "Untitled"
 	}
 
 		__e = __c.Init("div"); if __e != nil { return }

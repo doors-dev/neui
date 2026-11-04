@@ -193,7 +193,7 @@ elem (p *Aside) match(t api.Thread) {
 
 elem name(n string) {
 	~(if n == "" {
-		<span class="kchat-thread-name">New Chat</span>
+		<span class="kchat-thread-name">Untitled</span>
 	} else {
 		<span class="kchat-thread-name">~(n)</span>
 	})

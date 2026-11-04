@@ -3,7 +3,6 @@ package thread
 import (
 	"context"
 	"github.com/doors-dev/doors"
-	"log/slog"
 	"maps"
 
 	"neui.dev/api"
@@ -59,7 +58,6 @@ func (s *threadTools) on(cmd any) {
 			s.ask.Cancel(context.Background())
 		}
 		s.ask = cmd.ask
-		slog.Info("ask: commandAsk in tools state")
 		cmd.Ok(struct{}{})
 		s.thread.link.send(newMessageEvent(nil, api.ChatEventAsk{Ask: *s.ask}))
 	case commandLink:

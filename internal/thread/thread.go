@@ -525,13 +525,6 @@ func (t *thread) applyCompaction(cmd commandApplyCompaction) bool {
 		return false
 	}
 	usage := t.replay.Usage()
-	slog.Info(
-		"thread: compaction done",
-		"thread", t.id,
-		"target", compaction.Target,
-		"context", usage.Total(),
-		"text", cmd.resp.Content.Ordered(),
-	)
 	t.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: usage}))
 	return true
 }
@@ -557,7 +550,6 @@ func (t *thread) compact() (bool, error) {
 		return false, nil
 	}
 	ctx, seq := t.compaction.start(t.link.backend.Context(), c)
-	slog.Info("thread: compaction triggered", "thread", t.id, "target", c.Target, "tail", c.Tail, "messages", len(m))
 	t.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: true, Usage: api.EventUsage{}}))
 	events := t.link.backend.Provider().Stream(ctx, api.Request{
 		System:   t.link.system(),

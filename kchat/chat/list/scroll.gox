@@ -17,7 +17,6 @@ func (l *list) updateRange(ctx context.Context, first api.RoundID, last api.Roun
 	}
 	l.scrollState.first = first
 	l.scrollState.last = last
-	doors.Logger(ctx).Info("list: range", "first", first, "last", last, "top", l.scrollState.topReached, "bottom", l.scrollState.bottomReached, "history", l.history.Len())
 	l.scrollState.synced = false
 	if l.scrollState.spawned {
 		return
@@ -72,7 +71,6 @@ func (l *list) sync(ctx context.Context) (more bool) {
 	if l.scrollState.bottomReached && after < margin {
 		wantBefore += margin - after
 	}
-	doors.Logger(ctx).Info("list: sync", "first", first, "last", last, "before", before, "after", after, "wantBefore", wantBefore, "wantAfter", wantAfter, "top", l.scrollState.topReached, "bottom", l.scrollState.bottomReached)
 	if before < wantBefore && !l.scrollState.topReached {
 		seq := l.seq
 		anchor, head := l.lastSection.entry.id, l.lastSection.entry.head
@@ -81,7 +79,6 @@ func (l *list) sync(ctx context.Context) (more bool) {
 		}
 		l.mu.Unlock()
 		sections, ended, err := l.loadBefore(ctx, anchor, wantBefore - before)
-		doors.Logger(ctx).Info("list: loadBefore", "anchor", anchor, "n", wantBefore - before, "got", len(sections), "ended", ended, "err", err)
 		l.mu.Lock()
 		if seq != l.seq {
 			return true
@@ -124,7 +121,6 @@ func (l *list) sync(ctx context.Context) (more bool) {
 		tail := l.lastSection.entry.id
 		l.mu.Unlock()
 		sections, ended, err := l.loadAfter(ctx, anchor, wantAfter - after, tail)
-		doors.Logger(ctx).Info("list: loadAfter", "anchor", anchor, "n", wantAfter - after, "tail", tail, "got", len(sections), "ended", ended, "err", err)
 		l.mu.Lock()
 		if seq != l.seq {
 			return true

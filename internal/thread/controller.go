@@ -3,7 +3,6 @@ package thread
 import (
 	"context"
 	"iter"
-	"log/slog"
 
 	"neui.dev/api"
 	"neui.dev/internal/common"
@@ -23,7 +22,6 @@ func (c controller) ID() api.ThreadID {
 
 func (c controller) Ask(ask api.ChatAsk) (func(ctx context.Context), error) {
 	a := &ask
-	slog.Info("ask: controller.Ask", "module", c.module, "name", c.name)
 	r := NewResultResponse[struct{}]()
 	select {
 	case <-c.link.thread.close:
@@ -34,7 +32,6 @@ func (c controller) Ask(ask api.ChatAsk) (func(ctx context.Context), error) {
 		ResultResponse: r,
 	}:
 		_, err := r.Receive()
-		slog.Info("ask: controller.Ask accepted", "err", err)
 		return func(ctx context.Context) {
 			op := NewOperation(ctx)
 			cmd := commandAskDone{a, op}

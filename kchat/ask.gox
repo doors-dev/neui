@@ -3,7 +3,6 @@ package kchat
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"slices"
 	"strconv"
 	"strings"
@@ -52,7 +51,6 @@ func ModuleAsk() common.ModuleFactory {
 const askOwnLimit = 256 * 1024
 
 func AskOptions(input AskInput, answer common.Answer[AskOutput]) api.ChatAsk {
-	slog.Info("ask: AskOptions", "question", input.Question, "options", len(input.Options), "multiple", input.Multiple, "own", input.Own)
 	state := doors.NewSourceEqual(askState{
 		picked: make([]bool, len(input.Options)),
 	}, func(old, new askState) bool {
@@ -151,7 +149,6 @@ func (a *ask) submit(ctx context.Context) {
 elem (a *ask) form() {
 	~~
 	state, ok := a.state.Read(ctx)
-	slog.Info("ask: form render", "ok", ok, "options", len(a.input.Options), "own", a.input.Own)
 	if !ok {
 		return nil
 	}

@@ -175,7 +175,7 @@ elem (r *row) confirm(hide func(ctx context.Context)) {
 	~~
 	label := r.thread.Name
 	if label == "" {
-		label = "New chat"
+		label = "Untitled"
 	}
 	~~
 	<div class="kchat-form" role="group" aria-label="Delete chat">

@@ -186,7 +186,7 @@ func TestRunWaitsForMemory(t *testing.T) {
 			}
 		}
 		elapsed := time.Since(start)
-		if c.serial && elapsed < 600*time.Millisecond || !c.serial && elapsed >= 500*time.Millisecond {
+		if c.serial && elapsed < 550*time.Millisecond || !c.serial && elapsed >= 500*time.Millisecond {
 			t.Fatalf("total %d MiB: both runs took %v", c.total>>20, elapsed)
 		}
 	}

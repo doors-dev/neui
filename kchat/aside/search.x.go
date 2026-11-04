@@ -300,7 +300,7 @@ func (p *Aside) hitName(h api.Hit) gox.Elem {
 	}
 	n := t.Name
 	if n == "" {
-		n = "New Chat"
+		n = "Untitled"
 	}
 
 		__e = __c.Init("span"); if __e != nil { return }

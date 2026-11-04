@@ -20,7 +20,6 @@ func (l *list) updateRange(ctx context.Context, first api.RoundID, last api.Roun
 	}
 	l.scrollState.first = first
 	l.scrollState.last = last
-	doors.Logger(ctx).Info("list: range", "first", first, "last", last, "top", l.scrollState.topReached, "bottom", l.scrollState.bottomReached, "history", l.history.Len())
 	l.scrollState.synced = false
 	if l.scrollState.spawned {
 		return
@@ -75,7 +74,6 @@ func (l *list) sync(ctx context.Context) (more bool) {
 	if l.scrollState.bottomReached && after < margin {
 		wantBefore += margin - after
 	}
-	doors.Logger(ctx).Info("list: sync", "first", first, "last", last, "before", before, "after", after, "wantBefore", wantBefore, "wantAfter", wantAfter, "top", l.scrollState.topReached, "bottom", l.scrollState.bottomReached)
 	if before < wantBefore && !l.scrollState.topReached {
 		seq := l.seq
 		anchor, head := l.lastSection.entry.id, l.lastSection.entry.head
@@ -84,7 +82,6 @@ func (l *list) sync(ctx context.Context) (more bool) {
 		}
 		l.mu.Unlock()
 		sections, ended, err := l.loadBefore(ctx, anchor, wantBefore - before)
-		doors.Logger(ctx).Info("list: loadBefore", "anchor", anchor, "n", wantBefore - before, "got", len(sections), "ended", ended, "err", err)
 		l.mu.Lock()
 		if seq != l.seq {
 			return true
@@ -127,7 +124,6 @@ func (l *list) sync(ctx context.Context) (more bool) {
 		tail := l.lastSection.entry.id
 		l.mu.Unlock()
 		sections, ended, err := l.loadAfter(ctx, anchor, wantAfter - after, tail)
-		doors.Logger(ctx).Info("list: loadAfter", "anchor", anchor, "n", wantAfter - after, "tail", tail, "got", len(sections), "ended", ended, "err", err)
 		l.mu.Lock()
 		if seq != l.seq {
 			return true
@@ -203,41 +199,41 @@ func (l *list) setTail(ctx context.Context, name string, value any) {
 	doors.Call(ctx, l.lastSection.setter.Set(name, value))
 }
 
-//line scroll.gox:203
+//line scroll.gox:199
 func seedScroll(head api.RoundID) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("script"); if __e != nil { return }
 		{
-//line scroll.gox:204
+//line scroll.gox:200
 			__e = __c.Set("data:head", int(head)); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Raw("const log = document.currentScript.closest(\".kchat-log\")\n\t\tconst target = log.querySelector(`.kchat-section[data-id=\"${$data(\"head\")}\"]`)\n\t\tif (target) {\n\t\t\tconst base = log.scrollTop - log.getBoundingClientRect().top\n\t\t\tlog.scrollTo({\n\t\t\t\ttop: target.getBoundingClientRect().top + base,\n\t\t\t\tbehavior: \"instant\",\n\t\t\t})\n\t\t} else if (!log.querySelector(\".kchat-span\")) {\n\t\t\tlog.scrollTo({ top: log.scrollHeight, behavior: \"instant\" })\n\t\t}\n\t\trequestAnimationFrame(() => log.removeAttribute(\"data-seeding\"))"); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line scroll.gox:218
+//line scroll.gox:214
 }
 
-//line scroll.gox:220
+//line scroll.gox:216
 func restoreScroll(batch int, edge string) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("script"); if __e != nil { return }
 		{
-//line scroll.gox:221
+//line scroll.gox:217
 			__e = __c.Set("data:batch", batch); if __e != nil { return }
-//line scroll.gox:221
+//line scroll.gox:217
 			__e = __c.Set("data:edge", edge); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Raw("const script = document.currentScript\n\t\tconst log = script.closest(\".kchat-log\")\n\t\tconst top = log.scrollTop\n\t\tconst h0 = log.scrollHeight\n\t\tfor (const s of log.querySelectorAll(\n\t\t\t`.kchat-section[data-batch=\"${$data(\"batch\")}\"]`,\n\t\t)) {\n\t\t\ts.removeAttribute(\"data-pending\")\n\t\t}\n\t\tconst grew = log.scrollHeight - h0\n\t\tif ($data(\"edge\") === \"top\") {\n\t\t\tlog.scrollTo({ top: top + grew, behavior: \"instant\" })\n\t\t} else {\n\t\t\tlog.scrollTo({ top, behavior: \"instant\" })\n\t\t}\n\t\tlog.dispatchEvent(new Event(\"scroll\"))"); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line scroll.gox:239
+//line scroll.gox:235
 }
 
-//line scroll.gox:241
+//line scroll.gox:237
 func scrollBottom() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
@@ -248,7 +244,7 @@ func scrollBottom() gox.Elem {
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line scroll.gox:246
+//line scroll.gox:242
 }
 
 type syncMsg struct {
@@ -256,11 +252,11 @@ type syncMsg struct {
 	Last api.RoundID `json:"last"`
 }
 
-//line scroll.gox:253
+//line scroll.gox:249
 func (l List) Script() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line scroll.gox:254
+//line scroll.gox:250
 		__e = (doors.AHook[syncMsg]{
 		Name: "sync",
 		Scope: &doors.ScopeRate{Tick: 100 * time.Millisecond},
@@ -280,5 +276,5 @@ func (l List) Script() gox.Elem {
 			__e = __c.Close(); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
-//line scroll.gox:292
+//line scroll.gox:288
 }

@@ -47,7 +47,6 @@ func (m *marksman) Append(chunk string) {
 		return
 	}
 	if m.closed {
-		println("LOG: ALTREADY CLOSED")
 		return
 	}
 	m.partialPushed = false

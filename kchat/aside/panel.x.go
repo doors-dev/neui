@@ -348,7 +348,7 @@ func name(n string) gox.Elem {
 //line panel.gox:196
 				__e = __c.Set("class", "kchat-thread-name"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-				__e = __c.Text("New Chat"); if __e != nil { return }
+				__e = __c.Text("Untitled"); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		} else  {

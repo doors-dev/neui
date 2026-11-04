@@ -41,7 +41,6 @@ func (r *rower[C]) Append(c C) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.closed {
-		println("LOG ALREADY CLOSED")
 		return
 	}
 	r.on(context.Background(), c)
@@ -199,7 +198,6 @@ func (rw *rower[C]) on(ctx context.Context, c C) {
 	}
 	nums := rw.nums()
 	if len(nums) == 0 {
-		println("LOG: added after close")
 		return
 	}
 	content := rw.factory(c)
