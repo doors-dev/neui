@@ -14,8 +14,19 @@ var ErrNotFound = errors.New("not found")
 // come from the caller, so a collision is a mistake upstream.
 var ErrExists = errors.New("id already taken")
 
+// ErrUnlinked reports a call from a chat view that no longer holds the thread:
+// the thread was reopened elsewhere, closed, or the session was re-enabled with
+// another backend. It is also the context.Cause of a running tool or task
+// cancelled for that reason. Reopen the thread to act on it again.
 var ErrUnlinked = errors.New("instance was detached from the thread")
+
+// ErrDisabled is what Instance methods return while neui is not enabled for
+// the session, before Enable or after Disable.
 var ErrDisabled = errors.New("neui for this session is disabled")
+
+// ErrWrongState reports an action the thread cannot take right now, such as
+// sending while an input is already pending, sending an empty input, or
+// stopping when nothing runs. Nothing changed; retry once the state allows it.
 var ErrWrongState = errors.New("thread is in the wrong state to perform this action")
 
 // ErrNoProvider is what Enable returns when neither the app's WithProvider nor

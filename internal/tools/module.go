@@ -14,6 +14,9 @@ import (
 
 type Module = *module
 
+// ToolID identifies a tool within its own module, for Remove. A module numbers
+// the tools it is given from 1, so an ID is only meaningful against the module
+// that issued it.
 type ToolID int
 
 func NewModule(name string, desc string) Module {

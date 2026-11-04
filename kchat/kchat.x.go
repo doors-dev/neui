@@ -16,6 +16,8 @@ import (
 	"neui.dev/kchat/pops"
 )
 
+// Theme overrides colours of the built-in palette for one face, dark or
+// light; set it as Kchat.ThemeDark or Kchat.ThemeLight.
 type Theme = css.Theme
 
 // Feature is a part of the chat UI that can be hidden from the user.
@@ -47,19 +49,35 @@ const (
 // Simple is the preset for non-technical users. It grows as technical features are added.
 var Simple = []Feature{Tokens, Thinking, Tools, Tasks}
 
+// Kchat is the ready-made chat widget: the chat list sidebar, the thread, the
+// composer and its popovers. Render it on a page as ~kchat.Kchat{}; the zero
+// value is a complete chat. It fills its container, so give that container a
+// height.
 type Kchat struct {
+	// MaxAttachmentSize is the largest file, in bytes, a user may attach. Zero means 12 MiB.
 	MaxAttachmentSize int
+	// MaxAttachments is how many files one draft may hold. Zero means 10.
 	MaxAttachments int
+	// AttachmentTimeout bounds one file upload. Zero means 10 minutes.
 	AttachmentTimeout time.Duration
+	// AsideRight puts the chat list sidebar on the right instead of the left.
 	AsideRight bool
+	// Framed draws a rounded border around the widget.
 	Framed bool
+	// ThemeDark recolours the dark face, shown under a dark system scheme or
+	// inside data-theme="dark". The zero value keeps the built-in palette.
 	ThemeDark Theme
+	// ThemeLight recolours the light face, shown under a light system scheme or
+	// inside data-theme="light". The zero value keeps the built-in palette.
 	ThemeLight Theme
 	// Disable lists features hidden from the user; nil shows everything.
 	// Simple is the preset for non-technical users and grows with technical features added later.
 	Disable []Feature
 }
 
+// Main renders the widget for the current page instance. It runs on the
+// session neui.Enable set up: before Enable succeeds the chat shows as
+// disabled, and it comes alive once Enable succeeds.
 func (k Kchat) Main() gox.Elem {
 	params := params.Params{
 		MaxAttachmentSize: k.MaxAttachmentSize,
@@ -87,15 +105,15 @@ type kchat struct {
 	pops pops.Popups
 }
 
-//line kchat.gox:87
+//line kchat.gox:105
 func (k *kchat) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line kchat.gox:88
+//line kchat.gox:106
 		__e = __c.Any(css.Style(k.params.ThemeDark, k.params.ThemeLight)); if __e != nil { return }
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line kchat.gox:90
+//line kchat.gox:108
 			__e = __c.Set("class", func() any {
 			class := "kchat-widget kchat-widget_split"
 			if k.params.Off(params.Sidebar) {
@@ -108,7 +126,7 @@ func (k *kchat) Main() gox.Elem {
 			}
 			return class
 		}()); if __e != nil { return }
-//line kchat.gox:102
+//line kchat.gox:120
 			__e = __c.Set("data-kchat-theme", func() any {
 			key := css.FaceKey(k.params.ThemeDark, k.params.ThemeLight)
 			if key == "" {
@@ -117,25 +135,25 @@ func (k *kchat) Main() gox.Elem {
 			return key
 		}()); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line kchat.gox:109
+//line kchat.gox:127
 			if !k.params.Off(params.Sidebar) {
-//line kchat.gox:110
+//line kchat.gox:128
 				__e = __c.Any(aside.Aside{
 				Params: k.params,
 				Instance: k.inst,
 				Pops: k.pops,
 			}); if __e != nil { return }
 			}
-//line kchat.gox:116
+//line kchat.gox:134
 			__e = __c.Any(chat.Chat{
 			Params: k.params,
 			Inst: k.inst,
 			Pops: k.pops.Popup[string](),
 		}); if __e != nil { return }
-//line kchat.gox:121
+//line kchat.gox:139
 			__e = __c.Any(k.pops.Script()); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line kchat.gox:123
+//line kchat.gox:141
 }

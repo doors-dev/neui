@@ -16,33 +16,46 @@ import (
 	"neui.dev/internal/tools"
 )
 
+// ToolFS returns the thread's workspace filesystem, the same one the files
+// module and scripts read and write. A tool that produces a file writes it
+// here so the agent can open it by path. It panics outside a tool call's ctx.
 func ToolFS(ctx context.Context) api.FS {
 	return ctx.Value(common.KeyController).(common.Controller).FS()
 }
 
+// ToolThreadID returns the ID of the thread the tool call belongs to, e.g. to
+// key host-side state per conversation. It panics outside a tool call's ctx.
 func ToolThreadID(ctx context.Context) api.ThreadID {
 	return ctx.Value(common.KeyController).(common.Controller).ID()
 }
 
+// ToolThreadContext returns a context that lives as long as the thread stays
+// open, not just the tool call, and still works with ToolFS, ToolTask and the
+// other controller-backed Tool* functions; ToolFromJS and ToolFromAgent
+// report false on it.
+// Start background work registered with ToolTask on it. It panics outside a
+// tool call's ctx.
 func ToolThreadContext(ctx context.Context) context.Context {
 	return ctx.Value(common.KeyController).(common.Controller).Context()
 }
 
-// ToolConfig is the configuration the app serving this tool call runs on.
+// ToolConfig is the configuration the app serving this tool call runs on. It
+// panics outside a tool call's ctx.
 func ToolConfig(ctx context.Context) api.ThreadConfig {
 	return ctx.Value(common.KeyController).(common.Controller).Config()
 }
 
 // ToolModel is the model the thread streams with, and the limits it reads at
 // once, accepts in one image and in one request. A zero field is a limit the
-// API does not document.
+// API does not document. It panics outside a tool call's ctx.
 func ToolModel(ctx context.Context) api.Model {
 	return ctx.Value(common.KeyController).(common.Controller).Model()
 }
 
 // ToolFilesConfig is the file and workspace limits the app serving this tool
 // call runs on, resolved. A tool producing or reading files honours the same
-// caps the built-in file tools do by reading them here.
+// caps the built-in file tools do by reading them here. It panics outside a
+// tool call's ctx.
 func ToolFilesConfig(ctx context.Context) api.FilesConfig {
 	return ctx.Value(common.KeyController).(common.Controller).FilesConfig()
 }
@@ -56,16 +69,23 @@ type Task = common.Task
 // short description shown to the user while the task runs and stored with its
 // result. cancel is what the UI and a user stop invoke; the cause it receives,
 // [api.ErrCanceledByUser] for those, is what the task should report back.
+// The tool usually returns at once and the task delivers its result later;
+// run it on ToolThreadContext, not the call's ctx, which ends with the call.
+// It returns an error when the thread is closing, and panics outside a tool
+// call's ctx.
 func ToolTask(ctx context.Context, comment string, attrs map[string]any, cancel context.CancelCauseFunc) (Task, error) {
 	return ctx.Value(common.KeyController).(common.Controller).Task(comment, attrs, cancel)
 }
 
 // ToolFromJS reports whether the tool was called from a script rather than by
 // the agent directly; a tool can refuse script calls or behave differently.
+// It is false outside a tool call.
 func ToolFromJS(ctx context.Context) bool {
 	return tools.FromJS(ctx)
 }
 
+// ToolFromAgent reports whether the agent called the tool directly as a tool
+// call, rather than from a script. It is false outside a tool call.
 func ToolFromAgent(ctx context.Context) bool {
 	return tools.FromAgent(ctx)
 }
@@ -86,10 +106,24 @@ func OptionModules(m ...ModuleFactory) Option {
 	return common.OptionModules(m)
 }
 
+// NewModule returns an empty module to fill with Add, Tool and Ask. Its tools
+// reach the agent as name__tool, and desc is added to the system prompt as
+// the module's guidance; leave it empty to add nothing. Runs of characters
+// other than ASCII letters and digits in name become a single underscore,
+// and leading or trailing ones are dropped.
+// Register it with a factory that returns the same value for every thread:
+//
+//	m := neui.NewModule("crm", "Customer records of the signed-in user.")
+//	neui.WithModules(func(context.Context) neui.AnyModule { return m })
 func NewModule(name string, desc string) Module {
 	return Module{new(sync.Mutex), tools.NewModule(name, desc)}
 }
 
+// ModuleJS is the js module: js__run lets the agent run a JavaScript file
+// from the workspace or inline code, with every other tool callable as a
+// synchronous function, and js__stop cancels a run that outlived its call.
+// Scripts run on QuickJS (plain ES2023: no Node, browser APIs or promises),
+// limited by WithJSConfig.
 var ModuleJS ModuleFactory = js.Module
 
 // JSConfig tunes the js runtime; a zero field takes its default.
@@ -200,6 +234,7 @@ type WebConfig struct {
 // It returns results in rank order, best first, and no error when the query
 // simply matched nothing.
 type SearchBackend interface {
+	// Search runs q and returns up to q.Num results, best first.
 	Search(ctx context.Context, q SearchQuery) ([]SearchResult, error)
 }
 
@@ -248,8 +283,13 @@ func (b searchBackend) Search(ctx context.Context, q web.Query) ([]web.Result, e
 	return out, err
 }
 
+// AnyModule is what a ModuleFactory returns: a named set of tools. Module
+// implements it; a host implements it directly only to serve tools it builds
+// itself.
 type AnyModule = common.Module
 
+// AnyTool is one tool as the runtime sees it, the result of a Tool or Ask
+// definition.
 type AnyTool = common.Tool
 
 // Tooler is a tool definition: a Tool or an Ask. The same value can be added
@@ -260,7 +300,9 @@ type Tooler interface {
 
 // Module is a tool module a host assembles with Add and Remove; they, the
 // Tool and Ask shorthands, and the AnyModule reads the runtime makes, are safe
-// to call from any goroutine.
+// to call from any goroutine. Module is a handle: copies share one tool set,
+// so one Module can back every thread and a change reaches all of them. Make
+// one with NewModule; the zero Module is not usable.
 type Module struct {
 	mu    *sync.Mutex
 	inner tools.Module
@@ -268,20 +310,25 @@ type Module struct {
 
 var _ AnyModule = Module{}
 
+// Name is the module's sanitized name, the prefix of its tools' names.
 func (m Module) Name() string {
 	return m.inner.Name()
 }
 
+// Desc is the module's guidance for the system prompt.
 func (m Module) Desc() string {
 	return m.inner.Desc()
 }
 
+// List returns the module's tools in name order.
 func (m Module) List() []AnyTool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.inner.List()
 }
 
+// Get returns the tool with that name, sanitized as NewModule does, and
+// whether there is one.
 func (m Module) Get(name string) (AnyTool, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -294,7 +341,7 @@ func (m Module) Get(name string) (AnyTool, bool) {
 type ToolID = tools.ToolID
 
 // Add adds the tool t defines and returns its ID; a tool with the same name is
-// replaced.
+// replaced. It fails when the input or output type has no JSON schema.
 func (m Module) Add(t Tooler) (ToolID, error) {
 	tool, err := t.tool()
 	if err != nil {
@@ -310,6 +357,8 @@ func (m Module) Tool[I any, O any](name string, desc string, f func(ctx context.
 	return m.Add(Tool[I, O]{Name: name, Desc: desc, Handler: f})
 }
 
+// Answer is how an Ask's form returns the user's answer to the waiting tool
+// call: Submit with the answer or Fail with an error.
 type Answer[O any] = common.Answer[O]
 
 // Ask is shorthand for Add(Ask[I, O]{name, desc, f}).
@@ -317,6 +366,8 @@ func (m Module) Ask[I any, O any](name string, desc string, f func(input I, answ
 	return m.Add(Ask[I, O]{Name: name, Desc: desc, Handler: f})
 }
 
+// Remove removes the tool Add returned id for. It does nothing when that tool
+// is gone or was replaced by a later Add of the same name.
 func (m Module) Remove(id ToolID) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

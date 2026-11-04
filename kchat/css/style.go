@@ -11,6 +11,8 @@ import (
 //go:embed output.css
 var style []byte
 
+// Style renders the kchat stylesheet link and, when dark or light set any
+// colour, a rule applying them to widgets whose data-kchat-theme is their FaceKey.
 func Style(dark Theme, light Theme) gox.Elem {
 	return func(cur gox.Cursor) error {
 		if err := cur.InitVoid("link"); err != nil {

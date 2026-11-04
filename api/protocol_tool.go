@@ -6,9 +6,9 @@ package api
 // both in one array: the caller neither executes nor answers them, and their
 // output arrives as ContentOpaque. Configure those on the adapter.
 type Tool struct {
-	Name   string `json:"name"`
-	Desc   string `json:"description"`
-	Schema any    `json:"schema"`
+	Name   string `json:"name"`        // name the model calls it by, echoed in ContentToolUse.Name
+	Desc   string `json:"description"` // what the tool does and when to call it, written for the model
+	Schema any    `json:"schema"`      // JSON Schema of the input, marshalling to an object; nil takes no input
 }
 
 // ToolChoice constrains which tool the model may call. The constants below are

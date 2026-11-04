@@ -1,20 +1,19 @@
-// Package deepseek implements api.Provider against DeepSeek's OpenAI
-// compatible Chat Completions API.
+// Package deepseek is the api.Provider for DeepSeek's Chat Completions API.
 //
-// The endpoint is POST https://api.deepseek.com/chat/completions, with no
-// version segment in the path and no version header. Everything is sent as a
-// stream: stream_options.include_usage is always on, because it is the only way
-// usage is reported at all and a turn whose cost is unknown is worse than an
-// extra frame.
+// Build one with New and hand it to neui.WithProvider for the whole app or
+// neui.OptionProvider for one session:
 //
-// Two things about DeepSeek shape most of this package. Thinking is on by
-// default and its reasoning comes back as plain readable text in a
-// reasoning_content field, sealed behind nothing, so it is a
-// api.ContentReasoning carrying only Thoughts, with nothing in Meta on any
-// block, and this adapter produces no api.ContentOpaque at all. And
-// schemas are unconstrained here, because
-// strict mode lives on a separate host, so tool arguments that never parse are
-// an ordinary outcome rather than an edge case.
+//	p := deepseek.New(deepseek.Conf{Model: deepseek.Flash},
+//		deepseek.WithReasoningEffort(deepseek.EffortHigh))
+//
+// The key comes from DEEPSEEK_API_KEY unless WithAPIKey sets it. A provider
+// serves one model with one set of options; build two for two settings.
+// Thinking is on by default and streams back as readable reasoning. The wire
+// carries text only, so images and documents in a request reach the model as
+// a short note in their place. Caching is automatic and needs no options:
+// keep the tools, system prompt and history stable between turns to hit it.
+// Failures reach the thread as api.EventErr with an api.ErrCode and one of
+// this package's error types as Err.
 package deepseek
 
 import (
@@ -32,8 +31,7 @@ import (
 	"neui.dev/provider/lib"
 )
 
-// Name is what this adapter answers to, for whoever is choosing between APIs and
-// for whoever stores what comes back. Nothing in a content block records it.
+// Name is what Provider.Name returns.
 const Name = "deepseek"
 
 const (
@@ -49,30 +47,19 @@ const (
 	maxToolNameLen = 64
 )
 
-// Effort is DeepSeek's reasoning_effort. Only these two values exist: the
-// server folds low and medium into high and xhigh into max, so offering the
-// OpenAI vocabulary here would only let a caller believe in a distinction the
-// model does not make.
+// Effort is DeepSeek's reasoning_effort. Only two levels exist; the server
+// folds low and medium into high and xhigh into max.
 type Effort string
 
+// The two reasoning_effort levels DeepSeek accepts.
 const (
 	EffortHigh Effort = "high"
 	EffortMax  Effort = "max"
 )
 
-// Provider is one DeepSeek configuration: the model to talk to and every knob
-// api.Request leaves out, which is all of them: sampling, thinking,
-// reasoning effort, stop sequences and the cache partition key.
-//
-// Nothing but the model name itself is keyed by model. Flash and pro take the
-// identical request shape and differ only in price and concurrency, so what
-// changes the body is the thinking setting. A caller wanting two settings for
-// one model builds two Providers, which is what api.Request documents.
-//
-// Caching needs no configuration at all. DeepSeek's context cache is automatic
-// and has no markers, breakpoints or opt in, so a prefix either matches a
-// persisted unit byte for byte or it does not, and the only lever is keeping
-// the tools, system and message prefix stable between turns.
+// Provider is one DeepSeek configuration: a model plus the settings
+// api.Request leaves out (thinking, effort, sampling, stop sequences, response
+// cap). It is safe for concurrent use and holds no per turn state.
 type Provider struct {
 	key            string
 	base           string
@@ -89,31 +76,23 @@ type Provider struct {
 	transport      lib.Options
 }
 
+// Option configures a Provider at New. An option that returns an error is
+// logged and skipped.
 type Option func(*Provider) error
 
-// Conf is what a Provider cannot be built without. It is a struct rather than a
-// bare argument so a second mandatory field later adds a field here instead of
-// breaking every call site.
+// Conf is what a Provider cannot be built without.
 type Conf struct {
-	// Model is the model every turn of this Provider is sent to and stamped
-	// with. There is no default: the two v4 models differ in price and
-	// concurrency, so picking one would spend the caller's money on a guess.
+	// Model is the model every turn is sent to, usually Flash or V4Pro.
+	// There is no default.
 	Model api.Model `json:"model"`
 }
 
-// New builds a Provider. The key defaults to DEEPSEEK_API_KEY; a missing key is
-// not an error here, it draws a slog.Warn now and fails the first turn with
-// api.CodeAccess, because a constructor that cannot fail is easier to
-// place than one that can. The model is not an option for the same reason
-// inverted: no request can be formed without it, so the compiler asks for it
-// rather than the first turn. Options follow the constructor's rule: a nil
-// option is skipped, and one that reports an error is logged through
-// slog.Error and leaves its knob at the prior value.
-//
-// The default HTTP client has no timeout on purpose. DeepSeek holds a queued
-// request for up to ten minutes before inference starts, so a client wide
-// deadline would cut live turns; see WithTransport for the knob that is
-// actually shaped for this.
+// New builds a Provider for conf.Model. The key defaults to DEEPSEEK_API_KEY;
+// without one New logs a warning and every turn fails with api.CodeAccess. A
+// nil option is skipped, and an option that fails is logged and leaves its
+// setting as it was. The default HTTP client has no timeout, because DeepSeek
+// may queue a request for minutes before answering; WithTransport bounds a
+// dead connection instead.
 func New(conf Conf, opts ...Option) *Provider {
 	p := &Provider{
 		key:      os.Getenv("DEEPSEEK_API_KEY"),
@@ -136,10 +115,9 @@ func New(conf Conf, opts ...Option) *Provider {
 	return p
 }
 
-// WithAPIKey sets the key sent as the Bearer token, overriding whatever
-// DEEPSEEK_API_KEY holds. It is not validated here: a wrong key is the
-// server's to reject, and an empty one fails the first turn exactly as a
-// missing environment variable does.
+// WithAPIKey sets the key, overriding DEEPSEEK_API_KEY. An empty key fails
+// every turn with api.CodeAccess; a wrong one is rejected by the server with
+// the same code.
 func WithAPIKey(key string) Option {
 	return func(p *Provider) error {
 		p.key = key
@@ -147,13 +125,11 @@ func WithAPIKey(key string) Option {
 	}
 }
 
-// WithBaseURL overrides the host, without the /chat/completions path; a
-// trailing slash is trimmed. A value that is empty or does not parse to a
-// scheme and a host is rejected, which New logs while keeping the default, so
-// a bad base is a line at construction rather than a panic on the first turn.
-// api.deepseek.com/beta enables strict tool schemas and
-// assistant prefixes, neither of which this adapter emits; api.deepseek.com/anthropic
-// is a different wire format and will not work.
+// WithBaseURL points the provider at another host, such as a proxy or a test
+// server, without the /chat/completions path; a trailing slash is trimmed. An
+// empty value or one without a scheme and host is rejected at New and the
+// default stays. https://api.deepseek.com/anthropic speaks a different wire
+// format and does not work here.
 func WithBaseURL(base string) Option {
 	return func(p *Provider) error {
 		if base == "" {
@@ -171,10 +147,9 @@ func WithBaseURL(base string) Option {
 	}
 }
 
-// WithHTTPClient replaces the default client, which is how a proxy, extra
-// middleware or a test server gets in. Leave its Timeout at zero for the
-// reason New gives: it caps the whole exchange, and lib.Options.Idle is the
-// deadline shaped for streams.
+// WithHTTPClient replaces the default client, for a proxy, middleware or a
+// test server. Leave its Timeout at zero: it caps the whole streamed turn. Use
+// WithTransport to bound a dead connection.
 func WithHTTPClient(client *http.Client) Option {
 	return func(p *Provider) error {
 		p.client = client
@@ -182,13 +157,8 @@ func WithHTTPClient(client *http.Client) Option {
 	}
 }
 
-// WithThinking turns reasoning on or off. It is on by default both here and on
-// the server, and this adapter always sends the field explicitly so a change to
-// the server default cannot quietly change what a turn does.
-//
-// Turning it off is not free of consequences elsewhere: the sampling knobs
-// below only reach the model when thinking is off, and reasoning replay stops
-// mattering.
+// WithThinking turns reasoning on or off; it is on by default and always sent
+// explicitly. WithTemperature and WithTopP take effect only with it off.
 func WithThinking(on bool) Option {
 	return func(p *Provider) error {
 		p.thinking = on
@@ -196,16 +166,11 @@ func WithThinking(on bool) Option {
 	}
 }
 
-// WithReasoningEffort sets reasoning_effort inside the thinking object, which
-// is where the API reference's parameter table puts it.
-//
-// DeepSeek's own pages disagree about this. The thinking mode guide and the
-// landing page curl both show it as a top level sibling of thinking; the
-// reference table lists it only as a property of thinking. Sending it in the
-// wrong place almost certainly does not fail, it is silently ignored, which is
-// the worse outcome because the knob then appears to work. WithTopLevelReasoningEffort
-// is the other spelling; use it if a live account shows this one having no
-// effect. They are never sent together.
+// WithReasoningEffort sets reasoning_effort inside the thinking object, where
+// the API reference puts it. DeepSeek's guides show it as a top level field
+// instead, and a misplaced field is silently ignored, so if this one has no
+// visible effect switch to WithTopLevelReasoningEffort. The last of the two
+// options given wins.
 func WithReasoningEffort(e Effort) Option {
 	return func(p *Provider) error {
 		p.effort, p.effortTopLevel = e, false
@@ -222,10 +187,9 @@ func WithTopLevelReasoningEffort(e Effort) Option {
 	}
 }
 
-// WithTemperature sets temperature, which reaches the model only when thinking
-// is disabled. DeepSeek documents thinking mode as not supporting it and as
-// accepting it without effect, so this adapter omits it from the body entirely
-// while thinking is on rather than sending a field that does nothing.
+// WithTemperature sets temperature. It is sent only while thinking is off
+// (WithThinking(false)); with thinking on DeepSeek ignores it, so it is left
+// out.
 func WithTemperature(t float64) Option {
 	return func(p *Provider) error {
 		p.temperature = &t
@@ -242,7 +206,8 @@ func WithTopP(t float64) Option {
 	}
 }
 
-// WithStop sets stop sequences, up to the documented sixteen.
+// WithStop sets stop sequences, replacing any set before; DeepSeek takes up
+// to sixteen.
 func WithStop(stop ...string) Option {
 	return func(p *Provider) error {
 		p.stop = stop
@@ -250,14 +215,9 @@ func WithStop(stop ...string) Option {
 	}
 }
 
-// WithMaxTokens caps the response.
-//
-// The default is to send no cap at all. DeepSeek does not require one and
-// publishes no default for the v4 models, so inventing a number here would
-// truncate long turns for no stated reason. A value above the documented 384K
-// ceiling is refused rather than lowered to it: whoever configures a provider
-// can be told the number was not the one in effect, which is not true of a
-// model mid turn.
+// WithMaxTokens caps the response; a turn that hits it ends with
+// api.CodeCapped. By default no cap is sent. A value over the documented
+// 384,000 ceiling is rejected at New and the previous setting stays.
 func WithMaxTokens(n int) Option {
 	return func(p *Provider) error {
 		if n > maxOutputTokens {
@@ -268,10 +228,9 @@ func WithMaxTokens(n int) Option {
 	}
 }
 
-// WithUserID sets user_id. It is not only telemetry: it partitions the KV cache
-// and the concurrency allowance, so a value that varies per request destroys
-// cache hits across requests and gives every request its own quota. Leave it
-// unset unless the isolation is what is wanted.
+// WithUserID sets user_id, which partitions DeepSeek's cache and concurrency
+// allowance by user. Requests with different ids share no cache, so leave it
+// unset unless that isolation is wanted, and keep it fixed per provider.
 func WithUserID(id string) Option {
 	return func(p *Provider) error {
 		p.userID = id
@@ -279,15 +238,12 @@ func WithUserID(id string) Option {
 	}
 }
 
-// WithTransport sets the limits a turn is driven under: how long the wire may
-// stay silent, and how many bytes one frame may accumulate. Both live in
-// lib.Options, which documents them and holds their defaults, and this adapter
-// hands the value to lib.Stream without reading it.
-//
-// A turn that crosses the idle deadline ends with api.CodeNetwork, which is
-// what api.Provider says an adapter's own deadline reports. Every line read
-// resets the clock, the `: keep-alive` comments DeepSeek holds a queued request
-// open with included, so it measures a dead socket rather than a slow turn.
+// WithTransport sets the stream limits documented on lib.Options: how long the
+// wire may stay silent and how large one event may grow. A zero field keeps
+// lib's default. Every line received resets the idle deadline, including the
+// keep-alive comments DeepSeek sends while a request is queued, so it catches
+// a dead connection rather than a slow turn; a turn that crosses it ends with
+// api.CodeNetwork.
 func WithTransport(opt lib.Options) Option {
 	return func(p *Provider) error {
 		p.transport = opt
@@ -297,17 +253,23 @@ func WithTransport(opt lib.Options) Option {
 
 var _ api.Provider = (*Provider)(nil)
 
+// Name returns "deepseek".
 func (p *Provider) Name() string {
 	return Name
 }
 
-// Model answers from this Provider's configuration, so it is callable before
-// the first turn. Nothing here comes off the wire: DeepSeek publishes the
-// context window in its docs and reports it in no response.
+// Model returns the model from Conf. It is fixed for the provider's lifetime.
 func (p *Provider) Model() api.Model {
 	return p.model
 }
 
+// Stream runs one turn on its own goroutine and returns its events. A turn that
+// finishes ends in exactly one EventOk or EventErr, then the channel closes; a
+// cancelled ctx or a connection that just stops closes it with neither. A
+// missing key, a request this wire cannot carry, or one over
+// Model.RequestBytes ends at once in EventErr with api.CodeAccess,
+// api.CodeInvalid or api.CodeTooLarge. The thread calls it; hosts normally do
+// not.
 func (p *Provider) Stream(ctx context.Context, req api.Request) <-chan api.Event {
 	httpReq, sent, err := p.request(ctx, req)
 	if err != nil {

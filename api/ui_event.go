@@ -7,8 +7,8 @@ type ChatEvent interface {
 }
 
 // Final reports whether the event ends the current activity: true on a
-// RoundEnd or ToolResults not followed by an agent-driven continuation round,
-// and on CriticalError.
+// ChatEventRoundEnd or ChatEventToolResults with Final set, and on every
+// ChatEventCriticalError. A chat uses it to switch its controls back to idle.
 func Final(e ChatEvent) bool {
 	switch v := e.(type) {
 	case ChatEventRoundEnd:
@@ -23,13 +23,17 @@ func Final(e ChatEvent) bool {
 
 // ChatEventIndexed carries one block-naming event of a streaming round.
 type ChatEventIndexed struct {
+	// Event is the provider event for one block of the streaming round's
+	// response; apply it to Round.Response at Event.At().
 	Event IndexedEvent
 }
 
 func (ChatEventIndexed) chatEvent() {}
 
-// ChatEventAsk reports a tool asking the user for a decision.
+// ChatEventAsk reports a tool asking the user for a decision. Show the ask
+// until ChatEventAskDone; a new ask replaces one still showing.
 type ChatEventAsk struct {
+	// Ask is what to show: its Form, Button and Error.
 	Ask ChatAsk
 }
 
@@ -40,10 +44,13 @@ type ChatEventAskDone struct{}
 
 func (ChatEventAskDone) chatEvent() {}
 
-// ChatEventRoundStart reports a round entering the streaming state. Truncate
-// names the round the new one replaces, or NoRoundID.
+// ChatEventRoundStart reports a round entering the streaming state.
 type ChatEventRoundStart struct {
-	Round    Round
+	// Round is the new round with its input and no response yet.
+	Round Round
+	// Truncate is NoRoundID for an ordinary round. After Rewind or Retry it
+	// names the round the new one replaces: drop it and every round after it
+	// from the view.
 	Truncate RoundID
 }
 
@@ -54,10 +61,16 @@ func (ChatEventRoundStart) chatEvent() {}
 // follows; a round started by pending user input is a new activity, so it does
 // not clear final.
 type ChatEventRoundEnd struct {
+	// Round is the round that ended.
 	Round RoundID
+	// State is how it ended: RoundOk, RoundAbort, RoundRefuse or RoundError.
 	State RoundState
+	// Error is the ErrCode as a string when State is RoundError, empty
+	// otherwise.
 	Error string
+	// Usage is what the round spent in total.
 	Usage EventUsage
+	// Final is true when the activity ends here; see Final.
 	Final bool
 }
 
@@ -66,18 +79,23 @@ func (ChatEventRoundEnd) chatEvent() {}
 // ChatEventRoundUsage reports the usage a streaming round has accumulated so
 // far; every event carries the running total, not an increment.
 type ChatEventRoundUsage struct {
+	// Round is the streaming round.
 	Round RoundID
+	// Usage is the round's running total so far.
 	Usage EventUsage
 }
 
 func (ChatEventRoundUsage) chatEvent() {}
 
-// ChatEventToolResults delivers the results of a tools round. Final is true when
-// no continuation round follows.
+// ChatEventToolResults delivers the results of a tools round once every tool
+// call in it has finished.
 type ChatEventToolResults struct {
-	Round   RoundID
+	// Round is the round whose tool calls these answer.
+	Round RoundID
+	// Results holds one result per tool call, keyed by tool call id.
 	Results map[string]ContentToolResult
-	Final   bool
+	// Final is true when no continuation round follows, as after Stop.
+	Final bool
 }
 
 func (ChatEventToolResults) chatEvent() {}
@@ -85,6 +103,8 @@ func (ChatEventToolResults) chatEvent() {}
 // ChatEventInputPending reports whether input is queued for the running
 // activity.
 type ChatEventInputPending struct {
+	// Pending is true once Send queued input behind the running activity
+	// and false once it was consumed, unsent or dropped.
 	Pending bool
 }
 
@@ -94,8 +114,11 @@ func (ChatEventInputPending) chatEvent() {}
 // the end of an applied one usage estimates the compacted context — the
 // summary plus the rounds kept verbatim — and is zero otherwise.
 type ChatEventCompacting struct {
+	// Running is true while the compaction runs.
 	Running bool
-	Usage   EventUsage
+	// Usage is the estimated usage of the compacted context on the end of an
+	// applied compaction, zero otherwise.
+	Usage EventUsage
 }
 
 func (ChatEventCompacting) chatEvent() {}
@@ -108,6 +131,7 @@ func (ChatEventThreadCreated) chatEvent() {}
 
 // ChatEventName reports the thread's name changing.
 type ChatEventName struct {
+	// Name is the new name; empty leaves the thread unnamed.
 	Name string
 }
 
@@ -115,13 +139,19 @@ func (ChatEventName) chatEvent() {}
 
 // ChatEventTasks reports the thread's task list changing.
 type ChatEventTasks struct {
+	// Tasks is the full current list, replacing the previous one.
 	Tasks []Task
 }
 
 func (ChatEventTasks) chatEvent() {}
 
-// ChatEventCriticalError reports the thread failing beyond recovery.
+// ChatEventCriticalError reports the thread failing beyond recovery. The link
+// is dropped with it, so every ChatThread call returns ErrUnlinked afterwards,
+// and the instance reopens the thread in a new Chat, or a fresh thread when
+// that fails.
 type ChatEventCriticalError struct {
+	// Err is the cause, typically a storage failure, or ErrNotFound when the
+	// thread was deleted from another tab.
 	Err error
 }
 

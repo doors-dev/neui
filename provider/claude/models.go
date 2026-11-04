@@ -2,10 +2,12 @@ package claude
 
 import "neui.dev/api"
 
-// The current Claude lineup with the windows the models overview publishes
+// The current Claude lineup, ready to pass as Conf.Model, with the windows and
+// limits the models overview publishes
 // (https://platform.claude.com/docs/en/about-claude/models/overview, read
 // 2026-09-24). Every id is a pinned snapshot; Haiku 4.5 is the one that still
-// carries a date and the one with the smaller window.
+// carries a date and the one with the smaller window. For a model not listed,
+// build an api.Model with its id and limits.
 var (
 	Fable51 = api.Model{Name: "claude-fable-5-1", Context: 1_000_000, ImagePixels: 1568 * 1568, ImageBytes: 10_000_000, ImagesPerRequest: 600, RequestBytes: 32_000_000}
 	Opus55  = api.Model{Name: "claude-opus-5-5", Context: 1_000_000, ImagePixels: 1568 * 1568, ImageBytes: 10_000_000, ImagesPerRequest: 600, RequestBytes: 32_000_000}

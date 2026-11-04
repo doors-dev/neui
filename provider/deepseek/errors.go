@@ -18,16 +18,18 @@ var errNoKey = errors.New("deepseek: no API key, set DEEPSEEK_API_KEY or pass Wi
 
 var errTooLarge = errors.New("deepseek: request too large")
 
-// RequestError is a turn this adapter refused to send. Content is a bare string
-// on every role of this wire and a tool result message is a string and nothing
-// else, so images, documents and several block placements have no encoding at
-// all here. Dropping them and sending the rest would change what the model is
-// told, so the turn fails here instead of producing an answer to a different
-// question.
+// RequestError is a turn this adapter refused to send because DeepSeek would
+// reject it or it cannot be encoded faithfully: more than 128 tools, a tool
+// name over 64 characters or with characters other than letters, digits, _
+// and -, an unknown message role, or a replayed tool call with no name or
+// with lost arguments. It arrives as the Err of an api.EventErr with
+// api.CodeInvalid, before anything is sent.
 type RequestError struct {
+	// Reason says what was refused and names the tool or message.
 	Reason string
 }
 
+// Error returns "deepseek: " followed by Reason.
 func (e *RequestError) Error() string {
 	return "deepseek: " + e.Reason
 }
@@ -37,35 +39,43 @@ func reqErrf(format string, args ...any) *RequestError {
 }
 
 // FinishError is a finish_reason that ended the turn without a reply worth
-// keeping. Reason is the wire value verbatim, which for a value this adapter
-// does not recognize is the only thing that identifies what the server said,
-// and for a recognized one is still what a log needs to tell content_filter
-// from length after the code has flattened both into a branch.
+// keeping. It arrives as the Err of an api.EventErr: "length" as
+// api.CodeCapped, "content_filter" as api.CodeRefused,
+// "insufficient_system_resource" as api.CodeBusy, and any other value as
+// api.CodeUnknown.
 type FinishError struct {
+	// Reason is the finish_reason exactly as the server sent it.
 	Reason string
 }
 
+// Error returns "deepseek: finish_reason " followed by Reason.
 func (e *FinishError) Error() string {
 	return "deepseek: finish_reason " + e.Reason
 }
 
-// APIError is a non 200 response. Body is kept verbatim because DeepSeek does
-// not reliably answer with JSON on failure: octet-stream, plain text and empty
-// bodies are all reported, so the status is the only field worth branching on
-// and the rest is for logs.
-//
-// RetryAfter is zero unless the response carried a parseable Retry-After.
-// DeepSeek documents no such header and one measurement found none, so nothing
-// here depends on it being present.
+// APIError is a non 200 response. It arrives as the Err of an api.EventErr;
+// read it with errors.As. Branch on the event's Code, which follows the
+// status; DeepSeek does not reliably answer failures with JSON, so the other
+// fields are best effort and meant for logs.
 type APIError struct {
-	Status     int
-	Type       string
-	Code       string
-	Message    string
-	Body       string
+	// Status is the HTTP status.
+	Status int
+	// Type is the error envelope's type, empty when the body was not JSON.
+	Type string
+	// Code is the envelope's code as a string, empty when absent.
+	Code string
+	// Message is the envelope's message, empty when the body was not JSON.
+	Message string
+	// Body is the response body verbatim.
+	Body string
+	// RetryAfter is the Retry-After header's wait, zero when absent or
+	// unparseable; DeepSeek does not document sending it.
 	RetryAfter time.Duration
 }
 
+// Error returns "deepseek: http <status> (<code>): <message>", without the code
+// when there is none, and with the body or the status text when there is no
+// message.
 func (e *APIError) Error() string {
 	msg := e.Message
 	if msg == "" {
@@ -242,14 +252,19 @@ func retryAfter(header http.Header) time.Duration {
 }
 
 // StreamError is a failure reported inside an already successful response.
-// DeepSeek documents no such frame, so this only ever comes from a host in
-// front of it, and the code it carries is whatever that host used.
+// DeepSeek documents no such frame, so it comes from a gateway or proxy in
+// front of it. It arrives as the Err of an api.EventErr whose Code is derived
+// from Code, api.CodeUnknown for an unrecognized one.
 type StreamError struct {
-	Code    string
+	// Code is the frame's error code or type, as that host spelled it.
+	Code string
+	// Message is the frame's message, or the raw error when none parsed.
 	Message string
-	Raw     string
+	// Raw is the error payload verbatim.
+	Raw string
 }
 
+// Error returns "deepseek: stream error (<code>): <message>".
 func (e *StreamError) Error() string {
 	if e.Code != "" {
 		return fmt.Sprintf("deepseek: stream error (%s): %s", e.Code, e.Message)

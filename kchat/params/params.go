@@ -1,3 +1,5 @@
+// Package params carries kchat settings through the widget's components.
+// Hosts use it only through kchat.Feature.
 package params
 
 import (
@@ -7,6 +9,9 @@ import (
 	"neui.dev/kchat/css"
 )
 
+// Params are the widget settings shared by kchat's components. The exported
+// fields mirror the Kchat fields of the same name; ID is a random per-widget
+// id set by InitDefault.
 type Params struct {
 	MaxAttachmentSize int
 	MaxAttachments    int
@@ -19,8 +24,11 @@ type Params struct {
 	off               uint32
 }
 
+// Feature is a part of the chat UI that can be hidden; hosts use the
+// constants kchat re-exports, such as kchat.Tokens, in Kchat.Disable.
 type Feature uint8
 
+// The features kchat can hide; each is documented on its kchat constant.
 const (
 	Tokens Feature = iota + 1
 	Thinking
@@ -34,16 +42,19 @@ const (
 	ThreadEdit
 )
 
+// Disable hides features.
 func (p *Params) Disable(features []Feature) {
 	for _, f := range features {
 		p.off |= 1 << f
 	}
 }
 
+// Off reports whether f is hidden.
 func (p Params) Off(f Feature) bool {
 	return p.off&(1<<f) != 0
 }
 
+// InitDefault fills zero attachment limits with their defaults and assigns a fresh ID.
 func (p *Params) InitDefault() {
 	if p.MaxAttachmentSize == 0 {
 		p.MaxAttachmentSize = 12 << 20

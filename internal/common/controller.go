@@ -20,10 +20,20 @@ func AttachThread(ctx context.Context, from context.Context) context.Context {
 	return context.WithValue(ctx, KeyController, c)
 }
 
+// Task is a background task registered with ToolTask. Ok or Err delivers its
+// final result and ends it. Notify delivers an interim record while the task
+// keeps running; it is dropped once the task has finished. All methods are
+// safe to call from any goroutine.
 type Task interface {
+	// ID is the task's id within the thread, as the agent and the UI see it.
 	ID() uint
+	// Ok ends the task with output, a JSON value, as its result; it reaches
+	// the agent as a <task_result> block in the conversation.
 	Ok(output json.RawMessage)
+	// Err ends the task with the error as its result.
 	Err(error)
+	// Notify delivers data, a JSON value, as an interim report with meta
+	// attributes, while the task keeps running.
 	Notify(data json.RawMessage, meta map[string]any)
 }
 

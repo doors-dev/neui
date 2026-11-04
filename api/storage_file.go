@@ -30,12 +30,12 @@ func (o Origin) Valid() bool {
 // File is the stored record: what the caller supplied plus what storage
 // measured on the way in.
 type File struct {
-	ThreadID  ThreadID  `json:"thread_id"`
-	Name      string    `json:"name"`
-	MIME      string    `json:"mime"`
-	Origin    Origin    `json:"origin"`
-	Size      int64     `json:"size"`
-	CreatedAt time.Time `json:"created_at"`
+	ThreadID  ThreadID  `json:"thread_id"`  // thread the file belongs to
+	Name      string    `json:"name"`       // key within the thread and origin
+	MIME      string    `json:"mime"`       // as the caller supplied it to FilePut
+	Origin    Origin    `json:"origin"`     // which side stored it
+	Size      int64     `json:"size"`       // bytes, measured by storage
+	CreatedAt time.Time `json:"created_at"` // when FilePut committed it
 	// Draft marks a blob stored ahead of the message that will carry it.
 	// A draft is not part of the conversation: it is listed to whoever
 	// manages drafts, never to the model, and stays a draft until

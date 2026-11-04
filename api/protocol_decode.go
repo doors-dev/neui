@@ -5,10 +5,12 @@ import (
 	"fmt"
 )
 
-// Contents decodes any content block by its "type" tag. A new content type must
-// also be added to decodeContent, or stored threads holding it stop loading.
+// Contents is a list of content blocks that decodes from JSON by each block's
+// "type" tag, so a stored message reads back as the concrete Content types.
 type Contents []Content
 
+// UnmarshalJSON decodes a JSON array of tagged blocks; a block with a missing
+// or unknown type is an error.
 func (cs *Contents) UnmarshalJSON(data []byte) error {
 	raws, err := rawContents(data)
 	if err != nil {
@@ -31,6 +33,8 @@ func (cs *Contents) UnmarshalJSON(data []byte) error {
 // UserContent is an error, never a silent drop.
 type UserContents []UserContent
 
+// UnmarshalJSON decodes a JSON array of tagged blocks, failing on any block
+// that is not UserContent.
 func (cs *UserContents) UnmarshalJSON(data []byte) error {
 	raws, err := rawContents(data)
 	if err != nil {

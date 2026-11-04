@@ -15,14 +15,27 @@ import (
 // body of a non 200 response, and an error frame on a stream that already
 // returned 200. Status is zero for the second, which carries neither a status
 // code nor a request id.
+//
+// It arrives as the Err of an api.EventErr; read it with errors.As. Branch on
+// the event's Code, and use these fields for logs and support requests.
 type APIError struct {
-	Status     int
-	Type       string
-	Message    string
-	RequestID  string
+	// Status is the HTTP status, zero for an in-stream error.
+	Status int
+	// Type is the API's error type, such as "overloaded_error" or
+	// "invalid_request_error".
+	Type string
+	// Message is the API's explanation, or the raw body when it was not the
+	// documented JSON.
+	Message string
+	// RequestID is Anthropic's request id, to quote to their support; empty
+	// for an in-stream error.
+	RequestID string
+	// RetryAfter is the Retry-After header's wait, zero when absent.
 	RetryAfter time.Duration
 }
 
+// Error returns "claude: <status> <type>: <message> (request <id>)", leaving
+// out the parts that are empty.
 func (e *APIError) Error() string {
 	var b []byte
 	b = append(b, "claude: "...)

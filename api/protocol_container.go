@@ -3,13 +3,16 @@ package api
 // Container is a tool output that becomes one block of a result, the block
 // Content returns; ContentType names it for the tool's description.
 type Container interface {
+	// Content returns the block the output becomes.
 	Content() UserContent
+	// ContentType names the kind of block, such as "image" or "document".
 	ContentType() string
 }
 
 // MultiContainer is a tool output that becomes several blocks of one result,
 // in the order Contents returns them.
 type MultiContainer interface {
+	// Contents returns the blocks of the result, in order.
 	Contents() []UserContent
 }
 
@@ -17,14 +20,18 @@ type MultiContainer interface {
 // validated, which Content turns into a ContentDocument block carrying the
 // mime as a plain string.
 type Document struct {
-	Data []byte       `json:"data"`
+	// Data is the raw file bytes.
+	Data []byte `json:"data"`
+	// Mime is the document type; check it with IsValid before returning.
 	Mime DocumentMime `json:"mime"`
 }
 
+// ContentType returns "document".
 func (d Document) ContentType() string {
 	return "document"
 }
 
+// Content returns d as a ContentDocument.
 func (d Document) Content() UserContent {
 	return ContentDocument{
 		Data: d.Data,
@@ -38,10 +45,13 @@ var _ Container = Document{}
 // validated, which Content turns into a ContentImage block carrying the mime
 // as a plain string.
 type Image struct {
-	Data []byte    `json:"data"`
+	// Data is the raw image bytes.
+	Data []byte `json:"data"`
+	// Mime is the image type; check it with IsValid before returning.
 	Mime ImageMime `json:"mime"`
 }
 
+// Content returns i as a ContentImage.
 func (i Image) Content() UserContent {
 	return ContentImage{
 		Data: i.Data,
@@ -49,6 +59,7 @@ func (i Image) Content() UserContent {
 	}
 }
 
+// ContentType returns "image".
 func (i Image) ContentType() string {
 	return "image"
 }
@@ -60,6 +71,7 @@ var _ Container = Image{}
 // thing an adapter has to refuse.
 type ImageMime string
 
+// The accepted image types.
 const (
 	ImagePNG  ImageMime = "image/png"
 	ImageJPEG ImageMime = "image/jpeg"
@@ -83,6 +95,8 @@ func (m ImageMime) IsValid() bool {
 // where other adapters substitute a note for the block.
 type DocumentMime string
 
+// The accepted document types. Only DocumentPDF and DocumentText are
+// portable across providers.
 const (
 	DocumentPDF      DocumentMime = "application/pdf"
 	DocumentText     DocumentMime = "text/plain"

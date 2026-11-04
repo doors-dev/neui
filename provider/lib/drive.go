@@ -34,56 +34,28 @@ type Converter interface {
 	End(err error) []api.Event
 }
 
-// Options are the limits Drive keeps on a turn, and the whole of what an
-// adapter takes from its caller about transport: an adapter exposes one option
-// carrying this value and hands it here unread, so the fields, their defaults
-// and the reasoning for them live in one place rather than three.
-//
-// Idle ends a turn whose wire has been silent that long. The clock covers the
-// wait for the response headers too, because a gateway that accepts a request
-// and never answers is silence like any other. It does not run while the caller
-// is slow to take what has already been produced. Zero or less is DefaultIdle.
-//
-// Max caps the bytes one frame may accumulate. A completed response object
-// carries every text part, every tool call's arguments and every reasoning
-// item's sealed payload, so frames run to megabytes and this is the only thing
-// between a broken peer and the heap. Zero or less is DefaultMaxFrame.
+// Options are the transport limits Stream keeps on a turn. Hosts pass them to a
+// provider's WithTransport option, which hands them here unread; the zero value
+// takes both defaults.
 type Options struct {
+	// Idle ends a turn whose wire has sent nothing, keepalives included, for
+	// this long, counting the wait for response headers. A slow consumer does
+	// not count. Zero or less is DefaultIdle.
 	Idle time.Duration
-	Max  int
+	// Max caps the bytes one frame may hold; a larger frame ends the turn
+	// with an error. Zero or less is DefaultMaxFrame.
+	Max int
 }
 
-// DefaultIdle is the deadline a turn keeps when Options.Idle asks for none, and
-// it is the only idle default there is: no adapter carries one of its own.
-//
-// There is no value meaning never. A caller who wants a turn to run effectively
-// unbounded passes an hour, which says so out loud and needs no rule to
-// remember, where a disable switch is a magic value whose failure mode is the
-// one thing nothing recovers from: a half open socket parks the producer
-// forever on a channel that never closes.
-//
-// Two minutes, because this deadline measures zero bytes and not slowness.
-// Every API these adapters speak sends keepalives through a queue wait
-// precisely so that a long wait is not silent, and Drive resets the clock on
-// them without a Converter ever seeing one, so two minutes of nothing is a dead
-// socket in every case anyone has observed. A larger number is defensible only
-// for an API that says it may go that long without sending a byte, and none
-// says so.
+// DefaultIdle is the idle deadline when Options.Idle is unset. Every supported
+// API sends keepalives while a request waits, so two silent minutes is a dead
+// socket. There is no "never" value; pass a long duration instead.
 const DefaultIdle = 2 * time.Minute
 
-// DefaultMaxFrame is the cap a turn keeps when Options.Max asks for none, and
-// as with DefaultIdle it is the only frame default there is: no adapter carries
-// one of its own.
-//
-// 64 MiB, because the frame that ends a turn carries the whole completed
-// response object on the wire that sends one — every text part, every tool
-// call's arguments and every sealed reasoning payload — so frames reach
-// megabytes on an ordinary long turn and a cap tight enough to read as a budget
-// would cut turns for being long. This one is here to keep a broken peer from
-// taking the heap with it and nothing else.
-//
-// There is no value meaning no cap, for the reason DefaultIdle gives: a caller
-// who wants one passes a number large enough to say so.
+// DefaultMaxFrame is the frame cap when Options.Max is unset. It is generous
+// because the frame that ends a turn can carry the whole response, and exists
+// only to keep a broken peer from exhausting memory. There is no "no cap"
+// value; pass a larger number instead.
 const DefaultMaxFrame = 64 << 20
 
 // ErrIdle is what End is handed when Options.Idle elapsed.
@@ -100,11 +72,12 @@ const maxErrorBody = 1 << 20
 // own account of it. Every one of those is spelled differently per API, so the
 // adapter decodes it and Drive does not look inside.
 type HTTPError struct {
-	Status int
-	Header http.Header
-	Body   []byte
+	Status int         // HTTP status code, never 200
+	Header http.Header // response headers, for retry-after and request ids
+	Body   []byte      // response body, at most 1 MiB
 }
 
+// Error returns the status only; the body is left to the adapter to decode.
 func (e *HTTPError) Error() string {
 	return fmt.Sprintf("neui: http %d", e.Status)
 }
@@ -122,6 +95,11 @@ func Drain(events ...api.Event) <-chan api.Event {
 	return ch
 }
 
+// Stream sends req with client and returns the turn's events as conv produces
+// them from the response, applying the opt defaults. The channel closes once
+// Convert returns false or End has run and its events are delivered. Cancelling
+// parentCtx ends the turn and drops events not yet taken; otherwise the caller
+// must read the channel until it closes.
 func Stream(parentCtx context.Context, client *http.Client, req *http.Request, conv Converter, opt Options) <-chan api.Event {
 	ctx, cancel := context.WithCancelCause(parentCtx)
 	if opt.Idle <= 0 {

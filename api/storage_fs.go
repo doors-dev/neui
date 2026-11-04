@@ -15,12 +15,12 @@ const (
 
 // FSEntry is one name in the merged filesystem view.
 type FSEntry struct {
-	Name    string // workspace-relative path
-	Size    int64
-	Dir     bool
-	ModTime time.Time
-	MIME    string // manifest MIME for virtual entries, extension-derived for local files; "" when unknown
-	Virtual bool   // served from file storage, not workspace disk: reads download, LocalPath refuses
+	Name    string    // workspace-relative path
+	Size    int64     // bytes; 0 for directories
+	Dir     bool      // a directory rather than a file
+	ModTime time.Time // last write for local files, upload time for virtual ones
+	MIME    string    // manifest MIME for virtual entries, extension-derived for local files; "" when unknown
+	Virtual bool      // served from file storage, not workspace disk: reads download, LocalPath refuses
 }
 
 // FS is the filesystem a thread's tools see: the workspace merged with the
@@ -36,13 +36,13 @@ type FS interface {
 	// ReadAll streams the whole file, wherever it lives.
 	ReadAll(ctx context.Context, name string) (io.ReadCloser, error)
 	// LocalPath returns the absolute local path of a workspace file, for
-	// consumers needing io.ReaderAt or a real path (excelize, image ops).
+	// libraries that need io.ReaderAt or a real path.
 	// Virtual entries have no local path and are refused; copy into the
 	// workspace first.
 	LocalPath(ctx context.Context, name string) (string, error)
 	// TempDir returns the absolute local path of a scratch directory
 	// reserved for libraries that do their own filesystem work and cannot
-	// be routed through this interface (excelize unzipping a workbook),
+	// be routed through this interface, such as unpacking an archive,
 	// creating it on first call. It is not workspace content: it stays out
 	// of ReadDir and out of the FilesConfig workspace limits, every other
 	// method refuses paths inside it with ErrReserved, and it is wiped once

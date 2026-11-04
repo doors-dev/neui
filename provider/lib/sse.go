@@ -2,6 +2,9 @@
 // answered: reading a server sent event stream, keeping a deadline on one, and
 // handing a caller events while the wire keeps moving. What is left in an
 // adapter is the wire format and nothing else.
+//
+// Hosts meet it only as Options, passed to a provider's WithTransport to tune
+// the idle deadline and the frame size cap.
 package lib
 
 import (
@@ -16,8 +19,8 @@ import (
 // its data: lines joined with newlines. Data belongs to whoever received it and
 // stays valid for as long as they keep it.
 type Frame struct {
-	Event string
-	Data  []byte
+	Event string // value of the event: line; "" when absent
+	Data  []byte // data: lines joined with "\n"; never empty
 }
 
 // isKeepAlive says the frame is the wire proving it is alive rather than an

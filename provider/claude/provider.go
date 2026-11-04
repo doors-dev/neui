@@ -1,17 +1,17 @@
-// Package claude implements api.Provider against Anthropic's Messages
-// API, streaming POST /v1/messages with the anthropic-version header.
+// Package claude is the api.Provider for Anthropic's Messages API.
 //
-// Nothing here uses an SDK. The whole point of a hand written adapter is exact
-// control of the wire format: a thinking block has to be replayed byte for
-// byte, a sealed payload must never be re-encoded, and the block index the
-// protocol reports is counted here rather than taken from the provider.
+// Build one with New and hand it to neui.WithProvider for the whole app or
+// neui.OptionProvider for one session:
 //
-// Everything api.Request deliberately omits lives on the provider value
-// instead: the model comes from Conf, and the response cap, sampling settings,
-// thinking configuration, reasoning effort and cache breakpoints from options,
-// because they either vary by model or are refused outright by the models that
-// matter most. A caller that wants two settings for one model builds two
-// providers.
+//	p := claude.New(claude.Conf{Model: claude.Opus55},
+//		claude.WithMaxTokens(32000),
+//		claude.WithCacheBreakpoints(claude.CacheTools, claude.CacheMessages))
+//
+// The key comes from ANTHROPIC_API_KEY unless WithAPIKey sets it. A provider
+// serves one model with one set of options; build two for two settings.
+// Failures reach the thread as api.EventErr with an api.ErrCode, and an error
+// response from the API carries an *APIError, read with errors.As. The adapter talks to the wire directly,
+// without an SDK, so thinking blocks replay byte for byte.
 package claude
 
 import (
@@ -51,15 +51,17 @@ var errTooLarge = errors.New("claude: request too large")
 type ThinkingType string
 
 const (
-	ThinkingAdaptive ThinkingType = "adaptive"
-	ThinkingEnabled  ThinkingType = "enabled"
-	ThinkingDisabled ThinkingType = "disabled"
+	ThinkingAdaptive ThinkingType = "adaptive" // the model decides how much to think; 4.6 and later
+	ThinkingEnabled  ThinkingType = "enabled"  // extended thinking with Thinking.Budget; before 4.7
+	ThinkingDisabled ThinkingType = "disabled" // no thinking, where the model allows it
 )
 
 // ThinkingDisplay is how thinking streams back. As with ThinkingType, the
 // const is the documented value and custom strings pass through.
 type ThinkingDisplay string
 
+// DisplaySummarized streams a summary of the thinking rather than the thinking
+// itself.
 const DisplaySummarized ThinkingDisplay = "summarized"
 
 // Thinking is the thinking configuration sent verbatim. It is a passthrough
@@ -119,6 +121,8 @@ type Provider struct {
 	transport   lib.Options
 }
 
+// Option configures a Provider at New. An option that returns an error is
+// logged and skipped.
 type Option func(*Provider) error
 
 // Conf is what a provider cannot be built without. The model decides which
@@ -212,16 +216,11 @@ func WithBeta(flags ...string) Option {
 	}
 }
 
-// WithMaxTokens sets max_tokens, the response cap this API requires on every
-// request. It caps thinking too, which is on by default on the newest models,
-// so a caller who wants long answers raises it.
-//
-// A value below this API's schema minimum of 1 is refused here, because an
-// out-of-range cap is a misconfiguration a host can be told about at
-// construction, where the same number arriving mid turn could only be silently
-// adjusted. The ceiling is the other half and cannot be checked: it differs per
-// model and the API publishes it nowhere api.Model carries, so a value over the
-// configured model's ceiling goes to the API and comes back as CodeInvalid.
+// WithMaxTokens sets max_tokens, the response cap sent on every request; the
+// default is 16384. It caps thinking too, which is on by default on the newest
+// models, so raise it for long answers. A turn that hits it ends with
+// api.CodeCapped. A value below 1 is logged and ignored at New, keeping the default; a value over the model's
+// ceiling is not checked here and fails each turn with api.CodeInvalid.
 func WithMaxTokens(n int) Option {
 	return func(p *Provider) error {
 		if n < 1 {
@@ -232,11 +231,10 @@ func WithMaxTokens(n int) Option {
 	}
 }
 
-// WithTemperature, WithTopP and WithTopK set sampling. Every current frontier
-// model refuses a non default value for these on every request, thinking or
-// not, and older models refuse them while thinking is on, so setting one and
-// then streaming to such a model is refused here rather than sent and answered
-// with a 400.
+// WithTemperature sets temperature. Current frontier models refuse any
+// sampling setting, and older ones refuse it while thinking is on, so with
+// such a model every turn fails with api.CodeInvalid before anything is sent.
+// The same holds for WithTopP and WithTopK.
 func WithTemperature(t float64) Option {
 	return func(p *Provider) error {
 		p.temperature = &t
@@ -244,6 +242,7 @@ func WithTemperature(t float64) Option {
 	}
 }
 
+// WithTopP sets top_p, under the same model restrictions as WithTemperature.
 func WithTopP(v float64) Option {
 	return func(p *Provider) error {
 		p.topP = &v
@@ -251,6 +250,7 @@ func WithTopP(v float64) Option {
 	}
 }
 
+// WithTopK sets top_k, under the same model restrictions as WithTemperature.
 func WithTopK(v int) Option {
 	return func(p *Provider) error {
 		p.topK = &v
@@ -268,11 +268,11 @@ func WithStopSequences(seqs ...string) Option {
 	}
 }
 
-// WithThinking sets the thinking configuration. It is rendered into the prompt,
-// so changing it starts a new cache prefix, and changing it partway through a
-// tool use turn is not an error: the API quietly turns thinking off for that
-// request instead. Nothing in the response says so except the absence of
-// thinking blocks, so configure one provider per setting and keep it.
+// WithThinking sets the thinking configuration; the zero value sends none and
+// leaves the model default. It is part of the cached prompt, so switching
+// providers with different settings mid thread starts a new cache prefix, and
+// mid tool use the API silently drops thinking for that request. Keep one
+// setting per thread.
 func WithThinking(t Thinking) Option {
 	return func(p *Provider) error {
 		p.thinking = t
@@ -285,6 +285,8 @@ func WithThinking(t Thinking) Option {
 // passes through unchanged.
 type Effort string
 
+// The documented effort levels, least to most. Which ones a model accepts
+// differs by model.
 const (
 	EffortLow    Effort = "low"
 	EffortMedium Effort = "medium"
@@ -293,10 +295,9 @@ const (
 	EffortMax    Effort = "max"
 )
 
-// WithEffort sets output_config.effort: low, medium, high, xhigh or max. Which
-// levels a model accepts differs by model, and it is rendered into the prompt
-// alongside the thinking configuration, so changing it also starts a new cache
-// prefix.
+// WithEffort sets output_config.effort; empty leaves the model default. A
+// level the model does not accept fails each turn with api.CodeInvalid. Like
+// the thinking configuration it is part of the cached prompt.
 func WithEffort(effort Effort) Option {
 	return func(p *Provider) error {
 		p.effort = string(effort)
@@ -304,12 +305,10 @@ func WithEffort(effort Effort) Option {
 	}
 }
 
-// WithCacheBreakpoints places ephemeral cache_control markers. Caching is opt
-// in and the API allows at most four markers; the three breakpoints here are
-// the whole hierarchy, so any combination is within the limit.
-//
-// A marker is never attached to a replayed reasoning or opaque block: those go
-// back byte for byte or the request is refused as modified.
+// WithCacheBreakpoints turns on prompt caching at the given places. Caching is
+// off without it. CacheMessages caches everything up to the latest message,
+// which is what a growing thread wants; any combination stays within the
+// API's limit of four markers.
 func WithCacheBreakpoints(points ...Breakpoint) Option {
 	return func(p *Provider) error {
 		p.breakpoints = append(p.breakpoints, points...)
@@ -323,8 +322,8 @@ func WithCacheBreakpoints(points ...Breakpoint) Option {
 type CacheTTL string
 
 const (
-	CacheTTL5M CacheTTL = "5m"
-	CacheTTL1H CacheTTL = "1h"
+	CacheTTL5M CacheTTL = "5m" // the default
+	CacheTTL1H CacheTTL = "1h" // for threads idle longer than five minutes between turns
 )
 
 // WithCacheTTL sets the cache_control ttl, for example CacheTTL1H. Empty leaves
@@ -336,17 +335,11 @@ func WithCacheTTL(ttl CacheTTL) Option {
 	}
 }
 
-// WithTransport sets the limits lib keeps on a turn: how long the wire may stay
-// silent, and how many bytes one server sent event may accumulate. The fields,
-// their defaults and the reasoning behind both live on lib.Options and the value
-// is handed down unread, so a field left zero keeps lib's own default rather
-// than one of this adapter's.
-//
-// The idle deadline is what bounds a turn here, and it is always on: anything
-// arriving resets it, ping frames included, so it measures a dead socket rather
-// than a slow turn, which is the whole reason a deadline here works where one
-// built on content alone cannot. There is no value that turns it off; a caller
-// who wants a turn to run effectively unbounded passes an hour.
+// WithTransport sets the stream limits documented on lib.Options: how long the
+// wire may stay silent and how large one event may grow. A zero field keeps
+// lib's default. The idle deadline is always on and resets on anything
+// received, ping frames included, so it catches a dead connection rather than
+// a slow turn; a turn that crosses it ends with api.CodeNetwork.
 func WithTransport(opt lib.Options) Option {
 	return func(p *Provider) error {
 		p.transport = opt
@@ -354,25 +347,22 @@ func WithTransport(opt lib.Options) Option {
 	}
 }
 
-// Name says which API this is, for whoever is choosing between providers and
-// for whoever stores what comes back.
+// Name returns "claude".
 func (p *Provider) Name() string {
 	return providerName
 }
 
-// Model answers from configuration alone, so it is callable before the first
-// turn and says the same thing on every one.
+// Model returns the model from Conf. It is fixed for the provider's lifetime.
 func (p *Provider) Model() api.Model {
 	return p.model
 }
 
-// Stream runs the turn on its own goroutine. A turn that is allowed to finish
-// ends in exactly one EventOk or EventErr and the channel closes after it. A
-// cancelled turn ends in neither, and neither does one whose connection simply
-// stopped: the producer stops where it is and closes the channel.
-//
-// The request is built out of what the caller asked for, so a refusal building
-// it is theirs to fix and no turn ever starts.
+// Stream runs one turn on its own goroutine and returns its events. A turn that
+// finishes ends in exactly one EventOk or EventErr, then the channel closes; a
+// cancelled ctx or a connection that just stops closes it with neither. A
+// request that cannot be encoded, or is over Model.RequestBytes, ends at once
+// in EventErr with api.CodeInvalid or api.CodeTooLarge. The thread calls it;
+// hosts normally do not.
 func (p *Provider) Stream(ctx context.Context, req api.Request) <-chan api.Event {
 	httpReq, sent, err := p.request(ctx, req)
 	if errors.Is(err, errTooLarge) {

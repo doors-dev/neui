@@ -122,8 +122,8 @@ type IslandConfig struct {
 	// FnTime is how long one IslandCall may run, app function calls included,
 	// before it is stopped. Default 5s.
 	FnTime time.Duration
-	// FnMemory is the memory limit in bytes of the fresh JS runtime each
-	// IslandCall runs on, at least 4 MiB. Its call depth is MaxCallDepth.
+	// FnMemory is the memory limit in bytes of the JS runtime an app run's
+	// IslandCalls share, at least 4 MiB. Its call depth is MaxCallDepth.
 	// Default 4 MiB.
 	FnMemory int
 }

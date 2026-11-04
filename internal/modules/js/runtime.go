@@ -46,15 +46,37 @@ func getRuntime(ctx context.Context) *runtime {
 	return rt.(*runtime)
 }
 
+// Config tunes the js runtime; a zero field takes its default. The limits
+// are shared by every session of an app that sets WithJSConfig, and by every
+// app in the process that does not: a script waits to start until a
+// worker and enough of TotalMemory are free.
 type Config struct {
-	TotalMemory   int           // bytes, budgets of all executing scripts summed, per app; default 512 MiB, raised to WorkerMemory
-	WorkerMemory  int           // bytes, the largest budget one script may take; default 128 MiB, raised to DefaultMemory
-	DefaultMemory int           // bytes, the budget of a script that asks for less or none; default 16 MiB, at least 4 MiB
-	MaxWorkers    int           // scripts executing at once, per app; default 16
-	JobTimeout    time.Duration // execution cap per script; default 30s
-	AsyncAfter    time.Duration // how long a run stays synchronous before it detaches; default 10s
-	MaxQueue      int           // scripts waiting to start before submissions are rejected, per app; default 100
-	MaxCallDepth  int           // nested JS calls before an InternalError is thrown; default 1000
+	// TotalMemory is the sum in bytes of the memory budgets of all scripts
+	// executing at once across the app. Default 512 MiB; a value below
+	// WorkerMemory is raised to it.
+	TotalMemory int
+	// WorkerMemory is the largest memory budget in bytes one script may
+	// take. Default 128 MiB; a value below DefaultMemory is raised to it.
+	WorkerMemory int
+	// DefaultMemory is the memory budget in bytes of a script that asks for
+	// less or none. Default 16 MiB, at least 4 MiB.
+	DefaultMemory int
+	// MaxWorkers is how many scripts may execute at once across the app.
+	// Default 16.
+	MaxWorkers int
+	// JobTimeout caps how long one script may execute; a script may ask for
+	// less. Default 30s.
+	JobTimeout time.Duration
+	// AsyncAfter is how long a run keeps the tool call waiting before it
+	// detaches and delivers its result later as a background task. Default
+	// 10s.
+	AsyncAfter time.Duration
+	// MaxQueue is how many scripts may wait to start across the app; one
+	// submitted past it is rejected. Default 100.
+	MaxQueue int
+	// MaxCallDepth is how many nested JS calls a script may make before an
+	// error is thrown. Default 1000.
+	MaxCallDepth int
 }
 
 const minMemory = 4 * 1024 * 1024

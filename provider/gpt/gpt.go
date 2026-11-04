@@ -1,11 +1,13 @@
-// Package gpt implements api.Provider against OpenAI's Responses API.
+// Package gpt is the OpenAI provider for neui. Build one with New and hand it
+// to neui.WithProvider or neui.OptionProvider:
 //
-// Responses rather than Chat Completions. api.ContentReasoning carries Meta
-// for the provider's own encoding of the thinking, which is shaped by this API's
-// reasoning items and their encrypted_content. Chat Completions can express none
-// of it and loses reasoning between turns entirely, which would leave
-// ContentReasoning permanently empty here and make a tool loop on a reasoning
-// model measurably worse.
+//	p := gpt.New(gpt.Conf{Model: gpt.GPT56Luna}, gpt.WithReasoningEffort(gpt.EffortHigh))
+//	neui.Enable(ctx, neui.OptionProvider(p))
+//
+// The key is read from OPENAI_API_KEY unless WithAPIKey sets one. Model and
+// settings are fixed per Provider, so the same model at two efforts is two
+// Providers. It speaks the Responses API rather than Chat Completions, because
+// only Responses carries reasoning across turns.
 package gpt
 
 import (
@@ -17,13 +19,8 @@ import (
 	"neui.dev/provider/lib"
 )
 
-// Provider is the adapter. It is safe for concurrent use: everything on it is
-// read only after New returns, and a turn keeps its state on the goroutine
-// Stream starts.
-//
-// keyExplicit separates "no key wanted" from "no key configured", so
-// WithAPIKey("") reaches a gateway that authenticates some other way instead of
-// falling back to the environment.
+// Provider is an api.Provider for one OpenAI model. It is safe for concurrent
+// use by any number of sessions.
 type Provider struct {
 	apiKey      string
 	baseURL     string
@@ -35,10 +32,7 @@ type Provider struct {
 	keyExplicit bool
 }
 
-// Name says which API this is. An encrypted reasoning payload is bound to
-// whoever issued it and means nothing anywhere else, but a stored thread
-// outlives the choice of provider, so remembering which one produced it belongs
-// to whoever keeps the thread rather than to the blocks or to this adapter.
+// Name returns "gpt".
 func (p *Provider) Name() string {
 	return "gpt"
 }
@@ -48,14 +42,11 @@ func (p *Provider) Model() api.Model {
 	return p.model
 }
 
-// Stream sends the turn and decodes the reply. The channel is unbuffered: every
-// event is handed to a caller that is there to take it, and a send that blocks
-// until the context is done is what ends a turn nobody is reading.
-//
-// The model and its settings come from the Provider rather than the turn, so
-// the same model at two efforts is two Providers. The request is built out of
-// what the caller wrote plus that configuration, and a refusal building it is a
-// mistake in one or the other rather than an outcome, so no turn ever starts.
+// Stream sends one turn and streams its events as api.Provider describes;
+// read until the channel closes or cancel ctx. A request that cannot be built,
+// such as one with no model, ends at once with CodeInvalid, and one over the
+// model's RequestBytes with CodeTooLarge. A failure the service reports arrives
+// as an EventErr whose Err wraps an *APIError.
 func (p *Provider) Stream(ctx context.Context, req api.Request) <-chan api.Event {
 	httpReq, sent, err := p.request(ctx, req)
 	if errors.Is(err, errTooLarge) {

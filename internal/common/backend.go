@@ -8,31 +8,65 @@ import (
 	"neui.dev/api"
 )
 
+// ModuleFactory builds one module per thread. The runtime calls it each time
+// a thread opens, with a context that lasts while the thread stays open; that
+// context carries no tool call. When two modules of a thread share a name,
+// the later one is skipped and an error is logged.
 type ModuleFactory = func(ctx context.Context) Module
 
+// Tool is one tool as the runtime sees it, the result of a Tool or Ask
+// definition.
 type Tool interface {
+	// Params is the JSON schema of the tool's input.
 	Params() []byte
+	// Name is the tool's name within its module.
 	Name() string
+	// Desc is the description the tool was defined with.
 	Desc() string
+	// Summary is the description the agent sees: Desc with the output
+	// schema appended.
 	Summary() string
+	// Output is the JSON schema of the tool's result.
 	Output() []byte
+	// Dispatched calls the tool the way ctx says it was reached, from the
+	// agent or from a script.
 	Dispatched(ctx context.Context, arg json.RawMessage) (any, error)
+	// Agent calls the tool as a direct tool call and returns its result as
+	// content for the model.
 	Agent(ctx context.Context, input json.RawMessage) (api.UserContents, error)
+	// JS returns the tool as a function a script calls with one JSON
+	// argument.
 	JS(ctx context.Context) quickjs.HostFunc
 }
 
+// Answer is how an Ask's form returns the user's answer to the waiting tool
+// call. Only the first Submit or Fail counts; later calls, and calls after
+// the tool call has ended, do nothing.
 type Answer[O any] interface {
+	// Submit ends the call with output as its result and removes the
+	// question from the chat; ctx is the answering event handler's.
 	Submit(ctx context.Context, output O)
+	// Fail ends the call with err and removes the question from the chat;
+	// ctx is the answering event handler's.
 	Fail(ctx context.Context, err error)
 }
 
+// Module is what a ModuleFactory returns: a named set of tools. A host
+// implements it directly only to serve tools it builds itself.
 type Module interface {
+	// Name is the module's name; its tools reach the agent as name__tool.
 	Name() string
+	// Desc is the module's guidance, added to the system prompt; empty adds
+	// nothing.
 	Desc() string
+	// List returns the module's tools.
 	List() []Tool
+	// Get returns the tool with that name and whether there is one.
 	Get(name string) (Tool, bool)
 }
 
+// Option configures one session in Enable. Options apply in order on top of
+// the app-wide values.
 type Option interface {
 	apply(*Backend)
 }

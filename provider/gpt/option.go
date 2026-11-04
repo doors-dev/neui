@@ -18,41 +18,23 @@ const (
 	apiKeyEnv      = "OPENAI_API_KEY"
 )
 
-// ReplayMode says when a reasoning item is sent back on a later turn.
-//
-// The service validates a reasoning item against the item that followed it in
-// the response it came from: sending one with nothing behind it earns "Item
-// 'rs_…' of type 'reasoning' was provided without its required following item".
-// The refusal in the other direction — "'function_call' was provided without its
-// required 'reasoning' item" — names the call by the id field of the
-// function_call item, which this adapter's function_call does not carry, so a
-// call is sent whatever happens to the thinking in front of it and the only
-// question left is which reasoning items to replay at all.
+// ReplayMode says which earlier reasoning items are sent back on later turns;
+// set it with WithReasoningReplay. The default, ReplayToolTurns, suits every
+// reasoning model the service documents.
 type ReplayMode int
 
 const (
 	// ReplayToolTurns replays a reasoning item only when a tool call followed
-	// it. That is the case the service documents as required. For a turn that
-	// ended in text, replay is documented as optional and irrelevant items are
-	// discarded server side, and an assistant message is replayed here without
-	// the msg_ id it was issued with, which is the one thing about the pairing
-	// check that is not documented. Default, because it takes the documented
-	// benefit without betting on the undocumented half.
+	// it, the case the service requires. Default.
 	ReplayToolTurns ReplayMode = iota
-	// ReplayAlways replays every reasoning item that has something to carry.
-	// Correct if an assistant message satisfies the pairing check without its
-	// original id; a 400 on every multi turn conversation if it does not.
+	// ReplayAlways replays every reasoning item, including those before a text
+	// answer. If the service rejects that pairing, every multi-turn
+	// conversation fails with a 400.
 	ReplayAlways
-	// ReplayNever sends no reasoning items back. The calls they produced still
-	// travel, with the results answering them, because nothing in the thread
-	// depends on a reasoning item having been sent.
-	//
-	// It is what a model that cannot take reasoning input at all is served with:
-	// "Reasoning input items can only be provided to a reasoning or computer use
-	// model." There is no table of which models those are, because the id field
-	// is an open string, tiers land without notice, and a table that is wrong
-	// fails the request it was written to save. It is also the escape hatch for
-	// a gateway that rejects the items. Costs quality on tool loops.
+	// ReplayNever sends no reasoning items back; tool calls and results still
+	// travel. Use it for a model or gateway that rejects reasoning input
+	// ("Reasoning input items can only be provided to a reasoning or computer
+	// use model"). It costs quality on tool loops.
 	ReplayNever
 )
 
@@ -94,33 +76,20 @@ func defaultSettings() settings {
 	}
 }
 
-// Option configures a Provider. Everything with a working default is an option:
-// the key falls back to the environment, the base URL and the rest have values
-// that stream as they are.
+// Option configures a Provider in New. Every option has a working default.
 type Option func(*Provider) error
 
-// Conf is what a Provider cannot be built without, so the compiler refuses a
-// half configured one. It is a struct rather than a bare argument so that a
-// second mandatory field later does not break every call site.
+// Conf holds what every Provider needs. Model is required; use one of the
+// models in this package, such as GPT56Luna, or an api.Model of your own for a
+// gateway or a newer id.
 type Conf struct {
 	Model api.Model // the one model this provider streams with, spelled as it goes on the wire
 }
 
-// New builds a Provider. The key comes from OPENAI_API_KEY unless WithAPIKey
-// says otherwise; a missing key is only warned about here, and the auth
-// failure on the first turn remains the real signal.
-//
-// An option that reports an error is logged and skipped, so the knob it would
-// have set keeps its prior or default value.
-//
-// An empty Conf.Model is not refused here: it is the same omission as an empty
-// model on the wire and is reported the same way, as a refusal to build the
-// turn.
-//
-// The client is built with no Timeout. It is a deadline on the whole exchange
-// including the body, so any value caps how long a turn may run rather than how
-// long it may go quiet, and the idle budget WithTransport carries is the knob
-// that means what a timeout is usually wanted for.
+// New builds a Provider. It never fails: an option with an invalid value is
+// logged and skipped, a missing key is only warned about (the first turn then
+// fails with an auth error), and an empty Conf.Model fails each turn with
+// CodeInvalid. The key comes from OPENAI_API_KEY unless WithAPIKey sets one.
 func New(conf Conf, opts ...Option) *Provider {
 	p := &Provider{
 		baseURL: defaultBaseURL,
@@ -188,8 +157,8 @@ func WithHTTPClient(client *http.Client) Option {
 	}
 }
 
-// WithOrganization and WithProject set the headers a key spanning several of
-// either needs to disambiguate itself.
+// WithOrganization sends the OpenAI-Organization header, for a key that
+// belongs to several organizations.
 func WithOrganization(id string) Option {
 	return func(p *Provider) error {
 		p.org = id
@@ -197,6 +166,8 @@ func WithOrganization(id string) Option {
 	}
 }
 
+// WithProject sends the OpenAI-Project header, for a key that spans several
+// projects.
 func WithProject(id string) Option {
 	return func(p *Provider) error {
 		p.project = id
@@ -204,17 +175,10 @@ func WithProject(id string) Option {
 	}
 }
 
-// WithTransport sets the limits lib keeps on a turn: how long the wire may stay
-// silent, and how many bytes one frame may accumulate. lib owns the mechanism
-// and the defaults, so the fields, their values and the reasoning for them are
-// documented on lib.Options and a field left at zero takes lib's default here
-// rather than one of this adapter's.
-//
-// The idle half is always on and there is no value that turns it off; a caller
-// who wants a turn to run effectively unbounded passes an hour. Any bytes on the
-// connection reset it, including the SSE comment lines the service sends to hold
-// a queued request open, so it measures a dead socket rather than a slow turn,
-// and a turn that crosses it fails with CodeNetwork.
+// WithTransport sets the stream limits documented on lib.Options: how long the
+// connection may stay silent and how large one frame may grow. A zero field
+// keeps lib's default. The idle limit cannot be turned off, only raised; a turn
+// that crosses it fails with CodeNetwork.
 func WithTransport(opt lib.Options) Option {
 	return func(p *Provider) error {
 		p.set.transport = opt
@@ -226,13 +190,9 @@ func WithTransport(opt lib.Options) Option {
 // below it is also meaningless.
 const maxOutputTokensFloor = 16
 
-// WithMaxTokens caps the response. It counts reasoning as well as visible
-// output, so on a reasoning model a small value produces a turn that is entirely
-// thinking and no answer. Zero, the default, sends no cap and leaves the service
-// its own.
-//
-// A value under the schema minimum is refused here rather than quietly raised to
-// it: whoever configures a provider is there to be told, where a turn is not.
+// WithMaxTokens caps the response, reasoning included, so on a reasoning model
+// a small cap can leave no room for the answer. Zero, the default, sends no cap.
+// Values from 1 to 15 are below the API minimum and are rejected.
 func WithMaxTokens(n int) Option {
 	return func(p *Provider) error {
 		if n < 0 {
@@ -246,11 +206,9 @@ func WithMaxTokens(n int) Option {
 	}
 }
 
-// WithTemperature and WithTopP set sampling. Both are dropped on reasoning
-// models, which answer "Unsupported parameter: 'temperature' is not supported
-// with this model." to either, so setting one on a Provider configured with
-// gpt-5 or an o-series model is not an error, it just does not reach the wire.
-// WithForcedSampling overrides that.
+// WithTemperature sets the sampling temperature, 0 to 2. It is not sent to
+// reasoning models (the gpt-5, o1, o3, o4 and codex families), which reject
+// it, unless WithForcedSampling is set.
 func WithTemperature(v float64) Option {
 	return func(p *Provider) error {
 		if v < 0 || v > 2 {
@@ -261,6 +219,8 @@ func WithTemperature(v float64) Option {
 	}
 }
 
+// WithTopP sets nucleus sampling, 0 to 1. Like WithTemperature it is not
+// sent to reasoning models unless WithForcedSampling is set.
 func WithTopP(v float64) Option {
 	return func(p *Provider) error {
 		if v < 0 || v > 1 {
@@ -271,10 +231,8 @@ func WithTopP(v float64) Option {
 	}
 }
 
-// WithForcedSampling sends sampling parameters whatever the model is. For a
-// gateway serving a model this adapter classifies wrongly, or for the reported
-// case of gpt-5.1 accepting them at effort "none", which is not in the current
-// documentation.
+// WithForcedSampling sends WithTemperature and WithTopP to every model, for a
+// model this provider wrongly classifies as reasoning.
 func WithForcedSampling() Option {
 	return func(p *Provider) error {
 		p.set.forceSampling = true
@@ -282,11 +240,11 @@ func WithForcedSampling() Option {
 	}
 }
 
-// Effort names a reasoning.effort value. It is an open string rather than a
-// closed enum so a value a future release adds passes through without a new
-// constant here.
+// Effort is a reasoning.effort value for WithReasoningEffort. Any string
+// passes through, so a value newer than these constants works too.
 type Effort string
 
+// Effort values, from no reasoning to the most.
 const (
 	EffortNone    Effort = "none"
 	EffortMinimal Effort = "minimal"
@@ -297,11 +255,9 @@ const (
 	EffortMax     Effort = "max"
 )
 
-// WithReasoningEffort sets reasoning.effort: none, minimal, low, medium, high,
-// xhigh or max. Which values a model accepts differs per model and per release
-// and an unsupported one is a 400, so this is not validated against a table
-// that would be wrong within a month. It is dropped on non reasoning models,
-// which reject a reasoning block outright.
+// WithReasoningEffort sets reasoning.effort. Accepted values differ per model
+// and are not checked here; an unsupported one fails the turn with a 400. It is
+// not sent to non-reasoning models.
 func WithReasoningEffort(effort Effort) Option {
 	return func(p *Provider) error {
 		p.set.effort = string(effort)
@@ -309,23 +265,20 @@ func WithReasoningEffort(effort Effort) Option {
 	}
 }
 
-// Summary names a reasoning.summary value. Open like Effort: custom strings
-// pass through.
+// Summary is a reasoning.summary value for WithReasoningSummary. Any string
+// passes through.
 type Summary string
 
+// Summary values. SummaryAuto lets the service pick the detail.
 const (
 	SummaryAuto     Summary = "auto"
 	SummaryConcise  Summary = "concise"
 	SummaryDetailed Summary = "detailed"
 )
 
-// WithReasoningSummary opts into readable reasoning: auto, concise or detailed.
-// Without it a reasoning item comes back with an empty summary and
-// ContentReasoning.Summary stays empty for every turn, which is the case
-// api.ContentReasoning documents as legitimate rather than a bug. It is
-// off by default because the summarizers on recent models are gated on
-// organization verification and a default that 400s an unverified caller on
-// every request is worse than an empty field.
+// WithReasoningSummary asks for readable reasoning summaries, shown in the
+// chat as thinking. Off by default, so ContentReasoning.Summary stays empty;
+// recent models require a verified organization and answer 400 otherwise.
 func WithReasoningSummary(summary Summary) Option {
 	return func(p *Provider) error {
 		p.set.summary = string(summary)
@@ -333,10 +286,11 @@ func WithReasoningSummary(summary Summary) Option {
 	}
 }
 
-// ReasoningMode names a reasoning.mode value. Open like Effort: custom strings
-// pass through.
+// ReasoningMode is a reasoning.mode value for WithReasoningMode. Any string
+// passes through.
 type ReasoningMode string
 
+// ReasoningMode values.
 const (
 	ReasoningStandard ReasoningMode = "standard"
 	ReasoningPro      ReasoningMode = "pro"
@@ -350,14 +304,18 @@ func WithReasoningMode(mode ReasoningMode) Option {
 	}
 }
 
-// ReasoningContext names a reasoning.context value. Open like Effort: custom
-// strings pass through.
+// ReasoningContext is a reasoning.context value for WithReasoningContext. Any
+// string passes through.
 type ReasoningContext string
 
+// ReasoningContext values.
 const (
-	ContextAuto        ReasoningContext = "auto"
+	// ContextAuto lets the service decide which earlier reasoning to use.
+	ContextAuto ReasoningContext = "auto"
+	// ContextCurrentTurn uses only the reasoning of the current turn.
 	ContextCurrentTurn ReasoningContext = "current_turn"
-	ContextAllTurns    ReasoningContext = "all_turns"
+	// ContextAllTurns uses the replayed reasoning of earlier turns too.
+	ContextAllTurns ReasoningContext = "all_turns"
 )
 
 // WithReasoningContext sets reasoning.context: auto, current_turn or all_turns.
@@ -383,10 +341,11 @@ func WithReasoningReplay(mode ReplayMode) Option {
 	}
 }
 
-// Verbosity names a text.verbosity value. Open like Effort: custom strings
-// pass through.
+// Verbosity is a text.verbosity value for WithVerbosity, how long the answer
+// text tends to be. Any string passes through.
 type Verbosity string
 
+// Verbosity values.
 const (
 	VerbosityLow    Verbosity = "low"
 	VerbosityMedium Verbosity = "medium"
@@ -410,12 +369,10 @@ func WithParallelToolCalls(ok bool) Option {
 	}
 }
 
-// WithStrictTools decides the strict flag on every tool. Unset, which is the
-// default, means the service normalizes the schema into strict mode where it
-// can and quietly falls back where it cannot. True requires every object in
-// api.Tool.Schema to carry additionalProperties:false and list every
-// property in required, and is a 400 otherwise; since the schema comes from the
-// caller, that is theirs to promise.
+// WithStrictTools sets the strict flag on every tool. Unset, the service makes
+// schemas strict where it can. True fails the turn with a 400 unless every
+// object in each tool schema has additionalProperties:false and lists every
+// property in required.
 func WithStrictTools(strict bool) Option {
 	return func(p *Provider) error {
 		p.set.strictTools = &strict
@@ -423,9 +380,8 @@ func WithStrictTools(strict bool) Option {
 	}
 }
 
-// WithStore turns server side retention on. Off by default. Turning it on stops
-// encrypted_content being populated by default, so reasoning replay then
-// depends on the include parameter this adapter already sends.
+// WithStore turns server-side retention of responses on. Off by default; this
+// provider resends the whole thread each turn and needs nothing stored.
 func WithStore(store bool) Option {
 	return func(p *Provider) error {
 		p.set.store = store
@@ -433,10 +389,9 @@ func WithStore(store bool) Option {
 	}
 }
 
-// WithInclude replaces the include list. Unset, the adapter asks for
-// reasoning.encrypted_content on reasoning models, which is redundant on
-// current models where stateless mode populates it anyway and still required on
-// older ones.
+// WithInclude replaces the include list. Unset, reasoning models are sent
+// "reasoning.encrypted_content", which reasoning replay needs; keep it in a
+// list of your own.
 func WithInclude(values ...string) Option {
 	return func(p *Provider) error {
 		p.set.include = values
@@ -454,27 +409,26 @@ func WithPromptCacheKey(key string) Option {
 	}
 }
 
-// CacheMode names a prompt_cache_options.mode value and CacheTTL its ttl. Open
-// like Effort: custom strings pass through.
+// CacheMode is a prompt_cache_options.mode value for WithPromptCacheOptions.
+// Any string passes through.
 type CacheMode string
 
+// CacheMode values.
 const (
 	CacheImplicit CacheMode = "implicit"
 	CacheExplicit CacheMode = "explicit"
 )
 
+// CacheTTL is a prompt_cache_options.ttl value for WithPromptCacheOptions.
+// Any string passes through.
 type CacheTTL string
 
+// CacheTTL30M keeps a cached prefix for 30 minutes, currently the only value.
 const CacheTTL30M CacheTTL = "30m"
 
-// WithPromptCacheOptions sets prompt_cache_options, mode being implicit or
-// explicit and ttl currently only 30m. gpt-5.6 and later only: earlier models
-// answer 400 to the field, so it is set on a Provider configured with one of
-// those and left alone on any other.
-//
-// Explicit mode wants per block breakpoints, which this adapter cannot place:
-// api.Content has no way to mark a block as the end of a cached prefix,
-// and guessing one would move it every time the thread grew.
+// WithPromptCacheOptions sets prompt_cache_options. Use it only with gpt-5.6
+// and later; earlier models answer 400. Prefer CacheImplicit: CacheExplicit
+// expects per-block cache breakpoints, which this provider does not place.
 func WithPromptCacheOptions(mode CacheMode, ttl CacheTTL) Option {
 	return func(p *Provider) error {
 		p.set.cacheMode = string(mode)
@@ -483,10 +437,12 @@ func WithPromptCacheOptions(mode CacheMode, ttl CacheTTL) Option {
 	}
 }
 
-// ServiceTier names a service_tier value. Open like Effort: custom strings
-// pass through.
+// ServiceTier is a service_tier value for WithServiceTier. Any string passes
+// through.
 type ServiceTier string
 
+// ServiceTier values. TierFlex is cheaper and slower; TierPriority is faster
+// and costs more.
 const (
 	TierAuto     ServiceTier = "auto"
 	TierDefault  ServiceTier = "default"
@@ -495,10 +451,8 @@ const (
 	TierPriority ServiceTier = "priority"
 )
 
-// WithServiceTier sets service_tier: auto, default, flex, scale or priority.
-// flex is slower and answers 429 when there is no spare capacity, which arrives
-// as CodeBusy, the same as a rate limit: the answer to either is to back off and
-// send the turn again unchanged, so nothing is lost by not telling them apart.
+// WithServiceTier sets service_tier. Under TierFlex a turn fails with CodeBusy
+// when there is no spare capacity, the same as a rate limit; back off and retry.
 func WithServiceTier(tier ServiceTier) Option {
 	return func(p *Provider) error {
 		p.set.serviceTier = string(tier)

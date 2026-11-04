@@ -6,8 +6,8 @@ import "os"
 // produces goes through Root, which cannot be escaped by .. or symlinks; Dir
 // exists to hand a cwd to an exec'd process.
 type Workspace struct {
-	Dir  string
-	Root *os.Root
+	Dir  string   // absolute path, for a cwd and nothing else
+	Root *os.Root // confined handle every file access goes through
 }
 
 // Close releases the handle and nothing else: the directory stays, so the

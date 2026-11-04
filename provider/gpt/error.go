@@ -10,21 +10,22 @@ import (
 	"neui.dev/provider/lib"
 )
 
-// APIError is a failure the service reported, either as a status before the
-// stream started or as a frame inside it. Everything it said is kept:
-// api.ErrCode collapses a hundred spellings into eight values worth
-// branching on, and the rest is what a bug report needs. RequestID in
-// particular is the first thing support asks for.
+// APIError is a failure the service reported, as an HTTP status before the
+// stream started or as an error frame inside it. It reaches the host as the Err
+// of an api.EventErr; branch on EventErr.Code and get the details with
+// errors.As, for logs and bug reports.
 type APIError struct {
-	Status    int  // 0 when the failure arrived in band
-	NoRetry   bool // the response said x-should-retry: false
-	Type      string
-	Code      string
-	Param     string
-	Message   string
-	RequestID string
+	Status    int    // HTTP status; 0 when the failure arrived inside the stream
+	NoRetry   bool   // the response said x-should-retry: false
+	Type      string // the service's error type, such as "invalid_request_error"
+	Code      string // the service's error code, or the reason a response ended incomplete
+	Param     string // the request parameter the error is about, if any
+	Message   string // the service's message, or the raw body when it was not JSON
+	RequestID string // the x-request-id header, which OpenAI support asks for
 }
 
+// Error formats the status or "stream error", code, message, param and
+// request id, as far as they are set.
 func (e *APIError) Error() string {
 	var sb strings.Builder
 	sb.WriteString("gpt: ")

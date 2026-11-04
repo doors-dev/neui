@@ -13,38 +13,41 @@ import (
 // guard for MessageStorage writes.
 type Seq int
 
+// ThreadID names a thread. It is chosen by the caller of ThreadCreate and is
+// also the key for the thread's files and workspace.
 type ThreadID string
 
 // RoundID is a thread-scoped, monotonically increasing round identifier;
 // NoRoundID (-1) is the none/open sentinel.
 type RoundID int
 
-// Thread is one conversation; Seq is its current write serial.
+// Thread is one conversation as MessageStorage lists it.
 type Thread struct {
-	ID      ThreadID  `json:"id"`
-	Name    string    `json:"name"`
-	Seq     Seq       `json:"seq"`
-	Created time.Time `json:"created"`
-	Updated time.Time `json:"updated"`
+	ID      ThreadID  `json:"id"`      // stable key for every MessageStorage call on it
+	Name    string    `json:"name"`    // display name; "" while unnamed
+	Seq     Seq       `json:"seq"`     // current write serial, passed to the next write
+	Created time.Time `json:"created"` // when ThreadCreate or ThreadClone made it
+	Updated time.Time `json:"updated"` // last content write; ThreadList orders by it
 }
 
 // Hit is one round matched by RoundSearch. Snippet is a bounded run of
 // the matched text taken verbatim from the round, cut at rune boundaries
 // and containing the match.
 type Hit struct {
-	Thread  ThreadID  `json:"thread"`
-	Round   RoundID   `json:"round"`
-	Created time.Time `json:"created"`
-	Snippet string    `json:"snippet"`
+	Thread  ThreadID  `json:"thread"`  // thread holding the round
+	Round   RoundID   `json:"round"`   // the matched round
+	Created time.Time `json:"created"` // the round's Created
+	Snippet string    `json:"snippet"` // matched text with some context
 }
 
 // Cursor positions a RoundSearch page. It names one round by the whole sort
 // key RoundSearch orders by, so a page resumes exactly where the last ended
-// even when several rounds share a creation time.
+// even when several rounds share a creation time. Build it from the last Hit of
+// a page.
 type Cursor struct {
-	Created time.Time `json:"created"`
-	Thread  ThreadID  `json:"thread"`
-	Round   RoundID   `json:"round"`
+	Created time.Time `json:"created"` // Hit.Created
+	Thread  ThreadID  `json:"thread"`  // Hit.Thread
+	Round   RoundID   `json:"round"`   // Hit.Round
 }
 
 // RoundState is a round's lifecycle and replay tag; the zero value ("")
@@ -63,7 +66,8 @@ const (
 	RoundOk = RoundState("ok")
 	// RoundRefuse marks a round the model refused to answer; not
 	// replayed, and all tool results from the previous round are omitted
-	// on replay of the next message. Has retry.
+	// on replay of the next message. It cannot be retried; Rewind it
+	// instead.
 	RoundRefuse = RoundState("refuse")
 	// RoundAbort marks a round the user aborted during response
 	// streaming; not replayed, has a retry option.
@@ -76,17 +80,17 @@ const (
 // Round is one full exchange — the user input plus the model's response,
 // tool results, and usage — and the unit the UI renders as a turn.
 type Round struct {
-	ID     RoundID    `json:"id"`
-	Thread ThreadID   `json:"thread"`
-	State  RoundState `json:"state"`
+	ID     RoundID    `json:"id"`     // identifies the round within Thread
+	Thread ThreadID   `json:"thread"` // thread the round belongs to
+	State  RoundState `json:"state"`  // lifecycle; decides replay and retry
 	// Created is when the round was opened. It is the zero time on rounds
 	// written before storage recorded it.
 	Created  time.Time                    `json:"created"`
-	Input    Input                        `json:"input"`
-	Error    string                       `json:"error"`
-	Usage    EventUsage                   `json:"usage"`
-	Response Indexed[Content]             `json:"response"`
-	Results  map[string]ContentToolResult `json:"results"`
+	Input    Input                        `json:"input"`    // what the user sent
+	Error    string                       `json:"error"`    // error text when State is RoundError
+	Usage    EventUsage                   `json:"usage"`    // last usage the provider reported
+	Response Indexed[Content]             `json:"response"` // the model's blocks, by stream Index
+	Results  map[string]ContentToolResult `json:"results"`  // tool results by tool call id
 	// PinnedRecords holds the records pinned to this round, hydrated on
 	// reads by RoundRange, RoundBefore, and RoundAfter; Data is carried
 	// only when the read asks for results.
@@ -96,8 +100,8 @@ type Round struct {
 // Input is the user-typed text plus attachment filenames given as
 // thread-relative paths.
 type Input struct {
-	Attachments []string `json:"attachments"`
-	Text        string   `json:"text"`
+	Attachments []string `json:"attachments"` // e.g. "user_uploads/report.pdf"
+	Text        string   `json:"text"`        // "" for attachments only
 }
 
 // Len returns the number of content parts the input may produce: one for
@@ -145,9 +149,9 @@ var NoCompaction = Compaction{
 // a lower bound, because the fixed prefix — system prompt and tool
 // definitions — is not part of the arithmetic.
 type Compaction struct {
-	Text   string  `json:"text"`
-	Target RoundID `json:"target"`
-	Tail   RoundID `json:"tail"`
+	Text   string  `json:"text"`   // the summary that replaces rounds before Target
+	Target RoundID `json:"target"` // first kept round
+	Tail   RoundID `json:"tail"`   // thread head when it was made
 	// Output is the output token count of the compaction response — the
 	// summary's own size.
 	Output int `json:"output"`
@@ -184,6 +188,7 @@ type MessageStorage interface {
 	// serial without writing any content. Updated stays as it was, so a
 	// bump on its own does not reorder the thread in ThreadList.
 	ThreadBump(ctx context.Context, thread ThreadID) (Thread, error)
+	// ThreadGet returns the thread; an unknown id is ErrNotFound.
 	ThreadGet(ctx context.Context, thread ThreadID) (Thread, error)
 	// ThreadCreate creates a thread with the caller-supplied id.
 	ThreadCreate(ctx context.Context, id ThreadID) (Thread, error)

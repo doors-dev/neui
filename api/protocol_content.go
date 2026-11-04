@@ -33,22 +33,16 @@ func (i Indexed[T]) Ordered() []T {
 }
 
 // Content is one block of a message. The set is limited to what every provider
-// can express, plus ContentOpaque.
+// can express, plus ContentOpaque for what only one provider understands.
 //
-// Meta is a block's own adapter data, in whatever shape the issuing adapter
-// reads back; nothing between here and that adapter interprets it. Folding a
-// stream, a later Meta replaces the one before it whenever it is not empty. Only
-// ContentText, ContentToolUse and ContentReasoning carry it, being the blocks a
-// stream fills. On the user-authored blocks — ContentText, ContentImage,
-// ContentDocument — Meta is the caller's data instead; no adapter reads or
-// sends it.
+// Meta on ContentText, ContentToolUse and ContentReasoning is the issuing
+// adapter's own data, handed back to it unchanged on replay; folding a stream,
+// a non-empty Meta replaces the one before it. On user-authored blocks
+// (ContentText, ContentImage, ContentDocument) Meta is the caller's data, which
+// no adapter reads or sends.
 //
-// Where a wire takes one string and the message holds several blocks, the
-// adapter joins them with a blank line. A single newline runs the end of one
-// block into the start of the next, and a list, a heading or a code fence loses
-// its framing at exactly that join, so the blank line is the requirement and not
-// the cautious choice. Putting the fragments of one block back together is a
-// different operation and adds nothing between them.
+// An adapter whose wire takes one string for several blocks joins them with a
+// blank line, so lists, headings and code fences keep their framing.
 type Content interface {
 	contentType() string
 	json.Marshaler
@@ -56,10 +50,13 @@ type Content interface {
 
 // ContentText is a plain text block.
 type ContentText struct {
-	Text string          `json:"text"`
+	// Text is the block's text.
+	Text string `json:"text"`
+	// Meta is adapter data on model output, caller data on user input.
 	Meta json.RawMessage `json:"meta,omitempty"`
 }
 
+// MarshalJSON encodes c with its "type" tag.
 func (c ContentText) MarshalJSON() ([]byte, error) {
 	type alias ContentText
 	return json.Marshal(struct {
@@ -74,11 +71,12 @@ func (ContentText) contentType() string {
 
 // ContentImage is an image attachment.
 type ContentImage struct {
-	Data []byte          `json:"data"` // base64 on wire
-	Mime string          `json:"mimeType"`
+	Data []byte          `json:"data"`           // base64 on wire
+	Mime string          `json:"mimeType"`       // an ImageMime value
 	Meta json.RawMessage `json:"meta,omitempty"` // caller data; adapters ignore it
 }
 
+// MarshalJSON encodes c with its "type" tag.
 func (c ContentImage) MarshalJSON() ([]byte, error) {
 	type alias ContentImage
 	return json.Marshal(struct {
@@ -93,12 +91,13 @@ func (ContentImage) contentType() string {
 
 // ContentDocument is a file attachment, such as a PDF.
 type ContentDocument struct {
-	Data []byte          `json:"data"` // base64 on wire
-	Mime string          `json:"mimeType"`
-	Name string          `json:"name"`
+	Data []byte          `json:"data"`           // base64 on wire
+	Mime string          `json:"mimeType"`       // a DocumentMime value
+	Name string          `json:"name"`           // file name or title, sent where the wire has one; may be empty
 	Meta json.RawMessage `json:"meta,omitempty"` // caller data; adapters ignore it
 }
 
+// MarshalJSON encodes c with its "type" tag.
 func (c ContentDocument) MarshalJSON() ([]byte, error) {
 	type alias ContentDocument
 	return json.Marshal(struct {
@@ -111,42 +110,26 @@ func (ContentDocument) contentType() string {
 	return "document"
 }
 
-// ContentToolUse is a tool call the model asked for.
+// ContentToolUse is a tool call the model asked for. Every call replayed to a
+// provider must be answered by a ContentToolResult with the same ID; LostResult
+// stands in for one that is missing.
 //
-// Input is the arguments as valid JSON. Nil means one thing and nothing else:
-// the provider sent no arguments, so the call takes none. It is stored as nil
-// and nothing on the way to storage rewrites it to an empty object; an adapter
-// encoding the call writes {} where its wire insists on an object.
-//
-// Arguments that arrived and never formed valid JSON are discarded rather than
-// stored — a fragment of JSON is not JSON and cannot be sent back — and the fold
-// that built the block puts DiscardedArguments in Input in their place. The
-// discarded text survives only in the log that recorded it, because the result
-// goes back with every later request of the conversation and an excerpt buys
-// nothing a reissued call does not.
-//
-// A call carrying DiscardedArguments, like a call with nil Input, is always
-// answered by a ContentToolResult, and the result answering a discarded call
-// carries ToolErrJSON. That is an invariant of whoever dispatches the calls
-// rather than an intention, so an adapter may assert it, and every adapter reads
-// the paired result before the call: where the result carries ToolErrJSON the
-// call is encoded however the wire requires and Input is not read at all, and a
-// call carrying DiscardedArguments with no such result is refused with
-// CodeInvalid rather than sent as {}, which would replay as a legitimate call
-// that takes no arguments.
-//
-// Only a turn that ended EventOk can reach here with discarded arguments; a turn
-// cut short ends in EventErr and is discarded whole.
-//
-// Input needs omitempty because json.RawMessage reads a null back as the four
-// bytes of the word, so leaving the field out is how nil survives a round trip.
+// Input is the arguments as valid JSON; nil means the provider sent none, and
+// an adapter writes {} where its wire requires an object. Arguments that never
+// formed valid JSON are not stored: Input holds DiscardedArguments instead, and
+// the result answering the call must carry ToolErrJSON. An adapter encodes such
+// a call without reading Input, and refuses with CodeInvalid a discarded call
+// whose result lacks ToolErrJSON.
 type ContentToolUse struct {
-	ID    string          `json:"id"`
-	Name  string          `json:"name"`
-	Input json.RawMessage `json:"input,omitempty"`
-	Meta  json.RawMessage `json:"meta,omitempty"`
+	ID    string          `json:"id"`              // provider's call id, matched by ContentToolResult.ID
+	Name  string          `json:"name"`            // name of the Tool called
+	Input json.RawMessage `json:"input,omitempty"` // omitempty keeps nil through a round trip
+	Meta  json.RawMessage `json:"meta,omitempty"`  // issuing adapter's data
 }
 
+// LostResult returns a ToolErrRuntime result answering c, telling the model the
+// result was lost or the call never ran. Use it to keep a call answered when
+// its real result is missing.
 func (c ContentToolUse) LostResult() ContentToolResult {
 	return ContentToolResult{
 		ID: c.ID,
@@ -157,6 +140,8 @@ func (c ContentToolUse) LostResult() ContentToolResult {
 	}
 }
 
+// MarshalJSON encodes c with its "type" tag, writing DiscardedArguments as no
+// input.
 func (c ContentToolUse) MarshalJSON() ([]byte, error) {
 	if bytes.Equal(c.Input, DiscardedArguments) {
 		c.Input = nil
@@ -188,16 +173,17 @@ var DiscardedArguments = json.RawMessage("!discarded-arguments")
 // call with it as a failed tool result, or the model waits on a call that never
 // ran.
 //
-// Raw is the whole accumulation, where the caller still holds one. A caller that
-// kept it only in a log leaves it empty and the model is told to reissue the call
-// with nothing quoted back. Error repeats only its start, because the result is
-// resent with every later request of the conversation.
+// NewContentToolResult classifies it as ToolErrJSON.
 type DiscardedArgumentsError struct {
+	// Raw is the invalid argument text, if the caller still holds it; empty
+	// asks the model to reissue the call with nothing quoted back.
 	Raw string
 }
 
 const discardedArgumentsLimit = 256
 
+// Error tells the model to reissue the call, quoting at most the first 256
+// runes of Raw, since the result is resent with every later request.
 func (e DiscardedArgumentsError) Error() string {
 	const msg = "tool call arguments were not valid JSON, the call was not made, reissue it with complete arguments"
 	if e.Raw == "" {
@@ -227,22 +213,16 @@ func (ContentText) userContent()     {}
 func (ContentImage) userContent()    {}
 func (ContentDocument) userContent() {}
 
-// ContentToolResult reports the outcome of a ContentToolUse, matched by
-// ToolUseID.
+// ContentToolResult reports the outcome of the ContentToolUse with the same
+// ID. Build one with NewContentToolResult.
 //
-// Its position among the blocks of its message is the caller's arrangement, kept
-// only as far as the wire allows: one provider takes a result as a block in a
-// user turn, where any order survives, another as a message that must directly
-// follow the assistant turn, which cannot hold a result written after text.
-// Error classifies the outcome and goes on no provider wire: only one provider
-// has a field for a failed result at all, and what the model reads about the
-// failure is in Content, exactly as it is for a call that succeeded.
-//
-// Content is the blocks the call produced, in order; most tools produce one.
+// Its position among the blocks of a message is kept only as far as the wire
+// allows. Error classifies the outcome for routing and goes on no wire; what
+// the model reads about a failure is in Content.
 type ContentToolResult struct {
-	ID      string       `json:"toolUseId"`
-	Content UserContents `json:"content"`
-	Error   ToolError    `json:"error"`
+	ID      string       `json:"toolUseId"` // ContentToolUse.ID this answers
+	Content UserContents `json:"content"`   // blocks the call produced, in order
+	Error   ToolError    `json:"error"`     // ToolOk on success
 }
 
 // ToolError says how a call turned out. It is a classification for whoever
@@ -260,6 +240,8 @@ const (
 	ToolErrJSON    ToolError = "err_json"    // the arguments never formed valid JSON, so the call was never made; see DiscardedArguments
 )
 
+// UnmarshalJSON decodes a stored value, reading any unknown one as
+// ToolErrRuntime.
 func (e *ToolError) UnmarshalJSON(data []byte) error {
 	var s string
 	if err := json.Unmarshal(data, &s); err != nil {
@@ -274,6 +256,9 @@ func (e *ToolError) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// Refused returns c with its content replaced by a note that the output was
+// omitted because the provider refused it, keeping ID and Error so the call
+// stays answered.
 func (c ContentToolResult) Refused() ContentToolResult {
 	return ContentToolResult{
 		ID: c.ID,
@@ -307,6 +292,7 @@ func NewContentToolResult(id string, content UserContents, err error) ContentToo
 	}
 }
 
+// MarshalJSON encodes c with its "type" tag.
 func (c ContentToolResult) MarshalJSON() ([]byte, error) {
 	type alias ContentToolResult
 	return json.Marshal(struct {
@@ -320,49 +306,26 @@ func (ContentToolResult) contentType() string {
 }
 
 // ContentReasoning is the model's thinking, in whichever forms the provider
-// hands over, often more than one at once.
+// hands over. Summary and Thoughts are keyed by the Part of EventSummary and
+// EventThinking; read them in order with Ordered. A provider that does not
+// index parts fills key 0. Any of Summary, Thoughts and Meta may be empty.
 //
-// Summary and Thoughts are separate fields because which of them arrives differs
-// by provider and a consumer rendering one has to know which it has. Both are
-// maps of parts keyed by the provider's Part, the counter EventThinking and
-// EventSummary carry: one API indexes them and promises no order between the
-// parts it streams, and rejoining parts it sent apart adds separators the model
-// never generated. The key is kept so a consumer rendering mid-stream can match
-// a later event to the entry it fills; SummaryParts and ThoughtParts give the
-// parts in Part order. Providers that index neither fill one entry of the field
-// they use, at 0. Either field, and Meta, is legitimately empty.
-//
-// Wherever a provider signs or seals reasoning, Meta is the replay unit and the
-// text never is. Its bytes go back exactly as they arrived: such a provider
-// requires the block echoed on every later request and rejects the request
-// otherwise, and a signature covers bytes nobody can re-derive. Which bytes to
-// keep is the issuing adapter's choice. Rebuilding a block from Thoughts is only
-// for providers that sign nothing; where one signs or seals, a block with no
-// Meta is not replayed at all, since it cannot be made valid and what is
-// readable may be a Summary rather than the thinking. Dropping one costs that
-// turn's reasoning and nothing else; no block is bound to another.
-//
-// Whether replay is required, ignored or forbidden differs by provider, and for
-// one depends on whether the turn called a tool, so whether a stored block is
-// replayable is the adapter's decision and not a comparison this layer
-// specifies.
-//
-// A sealed payload is bound to its issuer and fails at any other provider.
-// Nothing here records which provider issued a block: whoever stores the
-// conversation hands an adapter a thread its own provider issued, or strips what
-// it did not.
-//
-// Model is the model the producing provider was configured with, the string
-// EventStart.Model reports, not the name the service said it served: a provider
-// configured the same way writes the same string, so a stored block compares
-// equal with == to the model being sent now.
+// Where a provider signs or seals reasoning, Meta is what is replayed, byte for
+// byte, and the text never is; such a block without Meta is not replayed.
+// Whether a stored block is replayed at all is the adapter's decision. A sealed
+// payload fails at any other provider, and nothing here records the issuer, so
+// whoever stores a thread hands an adapter only blocks its provider issued or
+// strips them.
 type ContentReasoning struct {
+	// Model is the model the provider was configured with, as EventStart.Model
+	// reports, so it compares with == to the model of a later request.
 	Model    string          `json:"model"`
-	Summary  Indexed[string] `json:"summary"`  // paraphrase written by the service
-	Thoughts Indexed[string] `json:"thoughts"` // thinking as the model generated it
-	Meta     json.RawMessage `json:"meta,omitempty"`
+	Summary  Indexed[string] `json:"summary"`        // paraphrase written by the service
+	Thoughts Indexed[string] `json:"thoughts"`       // thinking as the model generated it
+	Meta     json.RawMessage `json:"meta,omitempty"` // signature or sealed payload, replayed as is
 }
 
+// MarshalJSON encodes c with its "type" tag.
 func (c ContentReasoning) MarshalJSON() ([]byte, error) {
 	type alias ContentReasoning
 	return json.Marshal(struct {
@@ -375,32 +338,18 @@ func (ContentReasoning) contentType() string {
 	return "reasoning"
 }
 
-// ContentOpaque carries a payload this protocol has no type for, such as a tool
-// the provider ran itself. Sealed thinking is not one of these: it is
-// ContentReasoning with nothing readable in it.
-//
-// Kind is the issuing adapter's own name for what the payload is, not for who
-// issued it, and Data is whatever that adapter needs handed back, stored as the
-// bytes its API sent because the API signed them. Nothing outside that adapter
-// reads either, and an adapter handed a Kind it never issued does not try to
-// make sense of the Data.
-//
-// This layer specifies only how the pieces combine when a harness folds a
-// stream: Data replaces, and Deltas append in arrival order. Deltas are
-// fragments of a field inside Data, for payloads that stream one, so a payload
-// is not whole when it opens. They stay beside Data because only the issuing
-// adapter knows which field they belong to and it is the one that puts them
-// back.
-//
-// Model is the model the producing provider was configured with, as on
-// ContentReasoning.
+// ContentOpaque carries a payload this protocol has no type for, such as the
+// output of a tool the provider ran itself. Only the issuing adapter reads it;
+// an adapter handed a Kind it never issued leaves the Data alone. Folding a
+// stream, Data replaces and Deltas append in arrival order.
 type ContentOpaque struct {
-	Model  string          `json:"model"`
-	Kind   string          `json:"kind"`
-	Data   json.RawMessage `json:"data"`
-	Deltas []string        `json:"deltas"`
+	Model  string          `json:"model"`  // configured model, as on ContentReasoning
+	Kind   string          `json:"kind"`   // issuing adapter's name for the payload
+	Data   json.RawMessage `json:"data"`   // bytes as the API sent them, which it may have signed
+	Deltas []string        `json:"deltas"` // streamed fragments of a field inside Data, put back by the adapter
 }
 
+// MarshalJSON encodes c with its "type" tag.
 func (c ContentOpaque) MarshalJSON() ([]byte, error) {
 	type alias ContentOpaque
 	return json.Marshal(struct {
