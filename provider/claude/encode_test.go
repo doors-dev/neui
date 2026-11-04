@@ -111,6 +111,82 @@ func TestForcedToolChoiceWithExtendedThinking(t *testing.T) {
 	}
 }
 
+func TestForcedToolChoiceRefusedByModel(t *testing.T) {
+	for _, model := range []string{"claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5-1", "claude-mythos-5-1", "anthropic.claude-opus-5-5"} {
+		for _, choice := range []api.ToolChoice{api.ToolChoiceAny, api.ToolChoice("f")} {
+			mustFail(t, New(Conf{Model: api.Model{Name: model}}), api.Request{ToolChoice: choice, Messages: []api.Message{userText("hi")}}, "refuses tool choice")
+		}
+		for choice, want := range map[api.ToolChoice]string{api.ToolChoiceAuto: `{"type":"auto"}`, api.ToolChoiceNone: `{"type":"none"}`} {
+			got := mustEncode(t, New(Conf{Model: api.Model{Name: model}}), api.Request{ToolChoice: choice, Messages: []api.Message{userText("hi")}})
+			if string(got["tool_choice"]) != want {
+				t.Errorf("%s: tool_choice = %s, want %s", model, got["tool_choice"], want)
+			}
+		}
+	}
+	for _, model := range []string{"claude-opus-5", "claude-sonnet-5", "claude-fable-5", "claude-haiku-5-5"} {
+		got := mustEncode(t, New(Conf{Model: api.Model{Name: model}}), api.Request{ToolChoice: api.ToolChoiceAny, Messages: []api.Message{userText("hi")}})
+		if string(got["tool_choice"]) != `{"type":"any"}` {
+			t.Errorf("%s: tool_choice = %s, want any", model, got["tool_choice"])
+		}
+	}
+}
+
+func TestSamplingRefusedByVersion(t *testing.T) {
+	req := api.Request{Messages: []api.Message{userText("hi")}}
+	mustFail(t, New(Conf{Model: api.Model{Name: "claude-sonnet-4-5"}}, WithVersion("2026-10-21"), WithTopK(40)), req, "API version 2026-10-21")
+	mustFail(t, New(Conf{Model: api.Model{Name: "claude-sonnet-4-5"}}, WithVersion("2026-12-01"), WithTemperature(0.5)), req, "every model")
+	got := mustEncode(t, New(Conf{Model: api.Model{Name: "claude-sonnet-4-5"}}, WithVersion("2026-08-01"), WithTemperature(0.5)), req)
+	if string(got["temperature"]) != "0.5" {
+		t.Fatalf("temperature = %s before the version that removed it", got["temperature"])
+	}
+}
+
+func TestTopPWithThinkingOnOlderModels(t *testing.T) {
+	req := api.Request{Messages: []api.Message{userText("hi")}}
+	thinking := WithThinking(Thinking{Type: ThinkingEnabled, Budget: 2048})
+	for _, v := range []float64{0.95, 0.99, 1} {
+		got := mustEncode(t, New(Conf{Model: api.Model{Name: "claude-sonnet-4-5"}}, thinking, WithTopP(v)), req)
+		if string(got["top_p"]) != fmt.Sprint(v) {
+			t.Errorf("top_p %v with thinking: sent %s", v, got["top_p"])
+		}
+	}
+	for _, v := range []float64{0.9, 1.01} {
+		mustFail(t, New(Conf{Model: api.Model{Name: "claude-sonnet-4-5"}}, thinking, WithTopP(v)), req, "0.95 to 1")
+	}
+	mustFail(t, New(Conf{Model: api.Model{Name: "claude-sonnet-4-5"}}, thinking, WithTopP(0.99), WithTemperature(1)), req, "temperature and top_k")
+	mustFail(t, New(Conf{Model: api.Model{Name: "claude-opus-4-6"}}, WithThinking(Thinking{Type: ThinkingAdaptive}), WithTopK(5)), req, "temperature and top_k")
+	mustFail(t, New(Conf{Model: api.Model{Name: "claude-haiku-5-5"}}, WithTopP(0.99)), req, "refuses temperature")
+}
+
+func TestImageMimeChecked(t *testing.T) {
+	user := func(c api.Content) api.Request {
+		return api.Request{Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{c, api.ContentText{Text: "what is it"}}}}}
+	}
+	for _, mime := range []string{"", "image/bmp", "application/pdf"} {
+		mustFail(t, New(Conf{Model: api.Model{Name: testModel}}), user(api.ContentImage{Data: []byte{1}, Mime: mime}), "is not accepted")
+	}
+	for _, mime := range []string{"image/png", "image/jpeg", "image/gif", "image/webp"} {
+		mustEncode(t, New(Conf{Model: api.Model{Name: testModel}}), user(api.ContentImage{Data: []byte{1}, Mime: mime}))
+	}
+
+	got := mustEncode(t, New(Conf{Model: api.Model{Name: testModel}}), api.Request{
+		Messages: []api.Message{
+			userText("look"),
+			{Role: api.RoleAssistant, Content: api.Contents{api.ContentToolUse{ID: "toolu_1", Name: "shot", Input: json.RawMessage(`{}`)}}},
+			{Role: api.RoleUser, Content: api.Contents{api.ContentToolResult{ID: "toolu_1", Content: api.UserContents{
+				api.ContentImage{Data: []byte{1}, Mime: "image/bmp"},
+				api.ContentImage{Data: []byte{1}},
+				api.ContentImage{Data: []byte{1}, Mime: "image/png"},
+			}}}},
+		},
+	})
+	msgs := string(got["messages"])
+	want := `"content":[{"type":"text","text":"[image omitted]"},{"type":"text","text":"[image omitted]"},{"type":"image","source":{"type":"base64","media_type":"image/png","data":"AQ=="}}]`
+	if !strings.Contains(msgs, want) {
+		t.Fatalf("messages =\n%s\nwant to contain\n%s", msgs, want)
+	}
+}
+
 func TestSamplingRefusedByModel(t *testing.T) {
 	tests := []struct {
 		model    string
@@ -123,6 +199,11 @@ func TestSamplingRefusedByModel(t *testing.T) {
 		{"claude-opus-4-7", Thinking{}, true},
 		{"claude-sonnet-5", Thinking{}, true},
 		{"claude-fable-5", Thinking{}, true},
+		{"claude-haiku-5-5", Thinking{}, true},
+		{"claude-sonnet-5-5", Thinking{}, true},
+		{"claude-opus-5-5", Thinking{}, true},
+		{"claude-fable-5-1", Thinking{}, true},
+		{"claude-haiku-4-5-20251001", Thinking{}, false},
 		{"anthropic.claude-opus-5", Thinking{}, true},
 		// Older models take them, but only while thinking is off.
 		{"claude-opus-4-6", Thinking{}, false},
@@ -959,6 +1040,22 @@ func TestName(t *testing.T) {
 
 // Model reads back as configured: a listed model with its window, a caller's
 // literal as written, where zero is unknown rather than a window of zero.
+func TestDeclaredModels(t *testing.T) {
+	for _, m := range []api.Model{Fable51, Opus55, Sonnet55, Haiku55, Sonnet5} {
+		if m.Context != 1_000_000 || m.ImagePixels != 4784*28*28 || m.ImagesPerRequest != 600 {
+			t.Errorf("%s: %+v, want the 1M window, the high resolution tier and 600 images", m.Name, m)
+		}
+	}
+	if Haiku45.Context != 200_000 || Haiku45.ImagePixels != 1568*28*28 || Haiku45.ImagesPerRequest != 100 {
+		t.Errorf("%s: %+v, want the 200k window, the standard tier and 100 images", Haiku45.Name, Haiku45)
+	}
+	for _, m := range []api.Model{Fable51, Opus55, Sonnet55, Haiku55, Sonnet5, Haiku45} {
+		if m.RequestBytes != 128_000_000 || m.ImageBytes != 10_000_000*3/4 {
+			t.Errorf("%s: request %d, image %d bytes, want 128 MB and the raw size of 10 MB base64", m.Name, m.RequestBytes, m.ImageBytes)
+		}
+	}
+}
+
 func TestModel(t *testing.T) {
 	var p api.Provider = New(Conf{Model: Haiku45})
 	if got := p.Model(); got != Haiku45 || got.Context != 200_000 {

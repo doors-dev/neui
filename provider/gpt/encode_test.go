@@ -685,6 +685,18 @@ func TestEncodeTopLevel(t *testing.T) {
 		}
 	})
 
+	t.Run("effort none keeps sampling on a reasoning model", func(t *testing.T) {
+		set := defaultSettings()
+		temp, topP := 0.2, 0.9
+		set.temperature, set.topP = &temp, &topP
+		set.effort = string(EffortNone)
+		body := encodeBody(t, testModel, set, base)
+		if body["temperature"] != 0.2 || body["top_p"] != 0.9 {
+			t.Fatalf("temperature %v, top_p %v, want 0.2 and 0.9", body["temperature"], body["top_p"])
+		}
+		sameJSON(t, body["reasoning"], `{"effort":"none"}`)
+	})
+
 	t.Run("forced sampling overrides the model gate", func(t *testing.T) {
 		set := defaultSettings()
 		temp := 0.2
@@ -832,6 +844,49 @@ func TestProviderOptions(t *testing.T) {
 		}
 	})
 
+	t.Run("a cap over a declared model's output limit is refused", func(t *testing.T) {
+		p := New(Conf{Model: GPT6Sol}, WithAPIKey("k"), WithMaxTokens(128_001))
+		if p.set.maxTokens != 0 {
+			t.Fatalf("maxTokens %d, want the refused option to have changed nothing", p.set.maxTokens)
+		}
+		if err := WithMaxTokens(128_000)(p); err != nil {
+			t.Fatalf("the documented ceiling must be accepted: %v", err)
+		}
+		own := New(Conf{Model: api.Model{Name: "gpt-7"}}, WithAPIKey("k"), WithMaxTokens(256_000))
+		if own.set.maxTokens != 256_000 {
+			t.Fatalf("maxTokens %d, want an undeclared model left unchecked", own.set.maxTokens)
+		}
+	})
+
+	t.Run("effort values a declared model leaves out are refused", func(t *testing.T) {
+		refused := map[api.Model][]Effort{
+			GPT56Sol:  {EffortMinimal},
+			GPT56Luna: {EffortMinimal},
+			GPT6Astra: {EffortMinimal, EffortNone},
+			GPT6Sol:   {EffortMinimal},
+			GPT6Luna:  {EffortMinimal},
+		}
+		for m, efforts := range refused {
+			p := New(Conf{Model: m}, WithAPIKey("k"))
+			for _, e := range efforts {
+				if err := WithReasoningEffort(e)(p); err == nil {
+					t.Errorf("%s took effort %q", m.Name, e)
+				}
+			}
+			for _, e := range []Effort{EffortLow, EffortMedium, EffortHigh, EffortXHigh, EffortMax} {
+				if err := WithReasoningEffort(e)(p); err != nil {
+					t.Errorf("%s refused effort %q: %v", m.Name, e, err)
+				}
+			}
+		}
+		if err := WithReasoningEffort(EffortNone)(New(Conf{Model: GPT6Sol}, WithAPIKey("k"))); err != nil {
+			t.Errorf("gpt-6-sol refused effort none: %v", err)
+		}
+		if err := WithReasoningEffort(EffortMinimal)(New(Conf{Model: api.Model{Name: "gpt-5"}}, WithAPIKey("k"))); err != nil {
+			t.Errorf("an undeclared model must be left unchecked: %v", err)
+		}
+	})
+
 	t.Run("the model reads back as configured, window included", func(t *testing.T) {
 		p := New(Conf{Model: GPT56Sol}, WithAPIKey("k"))
 		if got := p.Model(); got != GPT56Sol || got.Context != 1_050_000 {
@@ -896,24 +951,35 @@ func TestRequestWire(t *testing.T) {
 	sameJSON(t, c.body["reasoning"], `{"effort":"low","summary":"auto"}`)
 }
 
-// The declared image caps have to be this service's own. ImagePixels is the area
-// a caller downscales an image to before the request is built, so a threshold
+// The declared caps have to be this service's own. ImagePixels is the area a
+// caller downscales an image to before the request is built, so a threshold
 // borrowed from a sibling API throws away resolution this one would have read,
 // and nothing downstream can see that happening. What the docs publish is 30,000
 // patches of 32x32 pixels per image, exceeded by rejection rather than by
-// resizing, and no per-image byte cap at all: zero says unknown, where a number
-// invented for it would shed attachments the service accepts.
-func TestModelImageCaps(t *testing.T) {
+// resizing; a tool-result image capped at a 20,971,520-character data URL, which
+// ImageBytes declares as the raw size that encodes to it; and 512 MB a request.
+func TestModelLimits(t *testing.T) {
 	const patches = 30_000 * 32 * 32
 	for _, m := range []api.Model{GPT56Sol, GPT56Luna, GPT6Astra, GPT6Sol, GPT6Luna} {
 		if m.ImagePixels != patches {
 			t.Errorf("%s declares %d pixels in an image, want the %d of the documented patch budget", m.Name, m.ImagePixels, patches)
 		}
-		if m.ImageBytes != 0 {
-			t.Errorf("%s declares a %d byte image cap that this service does not publish", m.Name, m.ImageBytes)
-		}
 		if m.ImagesPerRequest != 1500 {
 			t.Errorf("%s declares %d images in a request, want the documented 1500", m.Name, m.ImagesPerRequest)
+		}
+		if m.RequestBytes != 512_000_000 {
+			t.Errorf("%s declares %d bytes a request, want the documented 512 MB", m.Name, m.RequestBytes)
+		}
+		if m.Context != 1_050_000 {
+			t.Errorf("%s declares a %d token context, want the documented 1,050,000", m.Name, m.Context)
+		}
+		for _, mime := range []string{"image/jpeg", "image/png", "image/gif", "image/webp"} {
+			if url := dataURL(mime, make([]byte, m.ImageBytes)); len(url) > 20_971_520 {
+				t.Errorf("%s: a %s of the declared %d bytes is a %d-character data URL, over the documented 20,971,520", m.Name, mime, m.ImageBytes, len(url))
+			}
+			if url := dataURL(mime, make([]byte, m.ImageBytes+3)); len(url) <= 20_971_520 {
+				t.Errorf("%s: ImageBytes %d leaves room under the data URL limit for %s", m.Name, m.ImageBytes, mime)
+			}
 		}
 	}
 }

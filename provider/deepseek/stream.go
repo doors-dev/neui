@@ -149,8 +149,8 @@ func (c *converter) End(err error) []api.Event {
 // one the frame echoes back: every block of this turn is stamped from here, and
 // a stamp is only worth having if the next request writes the same string.
 //
-// The usage frame has an empty choices array, which is documented and not an
-// anomaly, so nothing here may assume a first choice exists.
+// The frame carrying usage may have an empty choices array, so nothing here may
+// assume a first choice exists.
 func (c *converter) chunk(k *chunk) []api.Event {
 	var events []api.Event
 	if !c.started {
@@ -311,6 +311,9 @@ func (c *converter) done() api.Event {
 // it fails, and api.CodeBusy is what says it is worth sending again after
 // a backoff.
 //
+// aborted is documented only as a generation that was interrupted, with nothing
+// wrong in the request, so it fails as api.CodeNetwork: send it again as sent.
+//
 // A value nobody here recognizes fails with api.CodeUnknown and carries
 // the raw string, rather than being rounded to the nearest completion: a
 // vocabulary that grew has to arrive unclassified, because a turn cut short for
@@ -325,6 +328,8 @@ func finishEvent(v string) api.Event {
 		return api.EventErr{Code: api.CodeRefused, Err: &FinishError{Reason: v}}
 	case "insufficient_system_resource":
 		return api.EventErr{Code: api.CodeBusy, Err: &FinishError{Reason: v}}
+	case "aborted":
+		return api.EventErr{Code: api.CodeNetwork, Err: &FinishError{Reason: v}}
 	default:
 		return api.EventErr{Code: api.CodeUnknown, Err: &FinishError{Reason: v}}
 	}

@@ -12,10 +12,6 @@ import "encoding/json"
 // frequency_penalty and presence_penalty are absent on purpose. DeepSeek marks
 // both "no longer supported", so a field for them would encode a knob the
 // server ignores.
-//
-// ReasoningEffort is the top level spelling of the effort knob. Only one of it
-// and thinking.reasoning_effort is ever set; see Provider.effortTopLevel for why
-// there are two.
 type chatRequest struct {
 	Model           string         `json:"model"`
 	Tools           []tool         `json:"tools,omitempty"`
@@ -37,8 +33,7 @@ type streamOptions struct {
 }
 
 type thinking struct {
-	Type   string `json:"type"`
-	Effort string `json:"reasoning_effort,omitempty"`
+	Type string `json:"type"`
 }
 
 // message is all four documented message shapes in one struct, because the
@@ -141,7 +136,8 @@ type toolDeltaFunction struct {
 	Arguments string `json:"arguments"`
 }
 
-// usage arrives once, in a frame whose choices array is empty.
+// usage is null on every frame but the last one before [DONE], which carries the
+// whole turn's counters.
 //
 // The counters are inclusive, which is the opposite of what several other
 // providers do: prompt_tokens is documented as equal to

@@ -50,15 +50,24 @@ type Model struct {
 	// buy nothing. Zero means unknown, and a caller reading zero sends what it
 	// has.
 	ImagePixels int `json:"imagePixels"`
-	// ImageBytes is the largest one encoded image the API takes. Zero means
-	// unknown.
+	// ImageBytes is the largest one image the API takes, counted in raw file
+	// bytes before base64 or any other encoding. A provider whose docs state
+	// the limit on the encoded form declares the raw size that encodes to it:
+	// three quarters of a base64 limit. Zero means unknown: no image is
+	// refused for its size on replay, and an image shaped for the model is
+	// held to 4 MiB.
 	ImageBytes int `json:"imageBytes"`
 	// ImagesPerRequest is how many images the API reads in one request. It
 	// tracks the model's context rather than its byte limit, since every image
 	// costs tokens. A PDF charges one per page, the API rendering every page to
 	// an image. Zero means unknown.
 	ImagesPerRequest int `json:"imagesPerRequest"`
-	// RequestBytes is the largest request the API takes, every block of every
-	// message included. Zero means unknown.
+	// RequestBytes is the largest request the API takes, counted as the
+	// marshalled body that goes on the wire: every block of every message
+	// included, media already base64-encoded. It is the one byte limit not
+	// counted raw; the replay budget derived from it takes three quarters of
+	// it to get back to raw media bytes (see ThreadConfig.ThreadMemoryLimit).
+	// Zero means unknown: the body is sent without a size check, and the
+	// replay budget is ThreadMemoryLimit alone.
 	RequestBytes int `json:"requestBytes"`
 }

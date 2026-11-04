@@ -260,6 +260,7 @@ func TestEncodeToolResults(t *testing.T) {
 func TestEncodeAssistantCollapsesToOneMessage(t *testing.T) {
 	p := New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k"))
 	body := encodeBody(t, p, api.Request{
+		Tools: []api.Tool{{Name: "get_weather"}, {Name: "get_time"}},
 		Messages: []api.Message{{
 			Role: api.RoleAssistant,
 			Content: api.Contents{
@@ -386,16 +387,18 @@ func TestEncodeAssistantContentNull(t *testing.T) {
 	}
 }
 
-// Reasoning goes back on the turns that called a tool, which is where the
-// server requires it and answers a 400 without it, and nowhere else, which is
-// where the server ignores it and bills for it.
+// Reasoning goes back on every assistant turn of a request that declares tools,
+// including turns that called none, which is where the server requires it and
+// answers a 400 without it, and nowhere in a request without tools, which is
+// where the server ignores it.
 //
-// Nothing about a model decides this. There are two models, no snapshots and no
-// aliases, so a stamp separates nothing, and a stamp the fold layer never wrote
-// would only turn a required field into a rejected request.
+// Nothing about a model decides this. Both models follow the same rule, and a
+// stamp the fold layer never wrote would only turn a required field into a
+// rejected request.
 func TestEncodeReasoningReplay(t *testing.T) {
 	tests := []struct {
 		name    string
+		noTools bool
 		content api.Contents
 		want    string
 	}{
@@ -424,10 +427,19 @@ func TestEncodeReasoningReplay(t *testing.T) {
 			want: "nobody's",
 		},
 		{
-			name: "a turn that only spoke sends none",
+			name: "a turn that only spoke replays it when the request has tools",
 			content: api.Contents{
 				api.ContentReasoning{Model: "deepseek-v4-pro", Thoughts: map[int]string{0: "mine"}},
 				api.ContentText{Text: "hi"},
+			},
+			want: "mine",
+		},
+		{
+			name:    "a request without tools sends none",
+			noTools: true,
+			content: api.Contents{
+				api.ContentReasoning{Model: "deepseek-v4-pro", Thoughts: map[int]string{0: "mine"}},
+				api.ContentToolUse{ID: "call_a", Name: "t", Input: json.RawMessage(`{}`)},
 			},
 			want: "",
 		},
@@ -456,12 +468,17 @@ func TestEncodeReasoningReplay(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			body := encodeBody(t, New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), api.Request{
+			req := api.Request{
+				Tools: []api.Tool{{Name: "t"}},
 				Messages: []api.Message{{
 					Role:    api.RoleAssistant,
 					Content: tc.content,
 				}},
-			})
+			}
+			if tc.noTools {
+				req.Tools = nil
+			}
+			body := encodeBody(t, New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), req)
 			if got := body.Messages[0].ReasoningContent; got != tc.want {
 				t.Fatalf("reasoning_content %q, want %q", got, tc.want)
 			}
@@ -529,7 +546,7 @@ func TestEncodeToolChoice(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(string(tc.choice), func(t *testing.T) {
-			raw := encodeJSON(t, New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), api.Request{
+			raw := encodeJSON(t, New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k"), WithThinking(false)), api.Request{
 				ToolChoice: tc.choice,
 				Messages:   []api.Message{{Role: api.RoleUser, Content: text("hi")}},
 			})
@@ -542,6 +559,32 @@ func TestEncodeToolChoice(t *testing.T) {
 			if !strings.Contains(raw, tc.want) {
 				t.Fatalf("body %s does not contain %s", raw, tc.want)
 			}
+		})
+	}
+}
+
+// DeepSeek answers a forced choice in thinking mode with a 400, so it is
+// refused here with a sentence saying how to get one. Choices that force
+// nothing still go out.
+func TestEncodeForcedToolChoiceInThinkingMode(t *testing.T) {
+	p := New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k"))
+	for _, choice := range []api.ToolChoice{api.ToolChoiceAny, "get_weather"} {
+		t.Run(string(choice), func(t *testing.T) {
+			err := encodeError(t, p, api.Request{
+				ToolChoice: choice,
+				Messages:   []api.Message{{Role: api.RoleUser, Content: text("hi")}},
+			})
+			if !strings.Contains(err.Error(), "WithThinking(false)") {
+				t.Fatalf("error %q", err)
+			}
+		})
+	}
+	for _, choice := range []api.ToolChoice{"", api.ToolChoiceAuto, api.ToolChoiceNone} {
+		t.Run(string(choice), func(t *testing.T) {
+			encodeBody(t, p, api.Request{
+				ToolChoice: choice,
+				Messages:   []api.Message{{Role: api.RoleUser, Content: text("hi")}},
+			})
 		})
 	}
 }
@@ -562,18 +605,28 @@ func TestEncodeToolValidation(t *testing.T) {
 	t.Run("name length", func(t *testing.T) {
 		req := base
 		req.Tools = []api.Tool{{Name: strings.Repeat("a", maxToolNameLen+1)}}
-		if err := encodeError(t, New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), req); !strings.Contains(err.Error(), "64") {
+		if err := encodeError(t, New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), req); !strings.Contains(err.Error(), "128") {
 			t.Fatalf("error %q", err)
 		}
 	})
-	t.Run("too many", func(t *testing.T) {
+	t.Run("name at the limit", func(t *testing.T) {
 		req := base
-		for i := range maxTools + 1 {
-			req.Tools = append(req.Tools, api.Tool{Name: "t" + string(rune('a'+i%26)) + string(rune('a'+i/26))})
-		}
-		if err := encodeError(t, New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), req); !strings.Contains(err.Error(), "at most 128") {
+		req.Tools = []api.Tool{{Name: strings.Repeat("a", maxToolNameLen)}}
+		encodeBody(t, New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), req)
+	})
+	t.Run("duplicate name", func(t *testing.T) {
+		req := base
+		req.Tools = []api.Tool{{Name: "get_weather"}, {Name: "get_weather"}}
+		if err := encodeError(t, New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), req); !strings.Contains(err.Error(), "twice") {
 			t.Fatalf("error %q", err)
 		}
+	})
+	t.Run("no count limit", func(t *testing.T) {
+		req := base
+		for i := range 200 {
+			req.Tools = append(req.Tools, api.Tool{Name: "t" + string(rune('a'+i%26)) + string(rune('a'+i/26))})
+		}
+		encodeBody(t, New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), req)
 	})
 	t.Run("no model", func(t *testing.T) {
 		if err := encodeError(t, New(Conf{}, WithAPIKey("k")), api.Request{}); !strings.Contains(err.Error(), "no model") {
@@ -583,12 +636,15 @@ func TestEncodeToolValidation(t *testing.T) {
 }
 
 // Thinking is on by default and the field goes out explicitly, so a change to
-// the server default cannot quietly change what a turn does. Sampling only
-// reaches the model with thinking off, so it is omitted while thinking is on
-// rather than sent to be ignored.
+// the server default cannot quietly change what a turn does. Effort and
+// temperature reach the model with thinking on and off respectively, and top_p
+// with thinking on for flash and off for v4-pro, so each is omitted elsewhere
+// rather than sent to be ignored. Effort is a top level field; the thinking
+// object has only a type.
 func TestEncodeThinkingAndSampling(t *testing.T) {
 	tests := []struct {
 		name    string
+		model   string
 		opts    []Option
 		want    []string
 		notWant []string
@@ -611,15 +667,40 @@ func TestEncodeThinkingAndSampling(t *testing.T) {
 			want: []string{`"thinking":{"type":"disabled"}`, `"temperature":0.2`, `"top_p":0.9`},
 		},
 		{
-			name:    "nested reasoning effort",
-			opts:    []Option{WithReasoningEffort(EffortMax)},
-			want:    []string{`"thinking":{"type":"enabled","reasoning_effort":"max"}`},
-			notWant: []string{`"reasoning_effort":"max","`},
+			name:    "flash honors top_p with thinking on",
+			model:   "deepseek-flash",
+			opts:    []Option{WithTemperature(0.2), WithTopP(0.97)},
+			want:    []string{`"thinking":{"type":"enabled"}`, `"top_p":0.97`},
+			notWant: []string{"temperature"},
 		},
 		{
-			name: "top level reasoning effort",
-			opts: []Option{WithTopLevelReasoningEffort(EffortHigh)},
-			want: []string{`"thinking":{"type":"enabled"}`, `"reasoning_effort":"high"`},
+			name:  "a legacy flash id too",
+			model: "deepseek-v4-flash",
+			opts:  []Option{WithTopP(0.97)},
+			want:  []string{`"top_p":0.97`},
+		},
+		{
+			name:    "flash fixes top_p with thinking off",
+			model:   "deepseek-flash",
+			opts:    []Option{WithThinking(false), WithTemperature(0.2), WithTopP(0.9)},
+			want:    []string{`"thinking":{"type":"disabled"}`, `"temperature":0.2`},
+			notWant: []string{"top_p"},
+		},
+		{
+			name: "reasoning effort is top level",
+			opts: []Option{WithReasoningEffort(EffortMax)},
+			want: []string{`"thinking":{"type":"enabled"},"reasoning_effort":"max"`},
+		},
+		{
+			name: "low effort",
+			opts: []Option{WithReasoningEffort(EffortLow)},
+			want: []string{`"reasoning_effort":"low"`},
+		},
+		{
+			name:    "no effort with thinking off",
+			opts:    []Option{WithThinking(false), WithReasoningEffort(EffortMax)},
+			want:    []string{`"thinking":{"type":"disabled"}`},
+			notWant: []string{"reasoning_effort"},
 		},
 		{
 			name: "stop and user id",
@@ -629,7 +710,11 @@ func TestEncodeThinkingAndSampling(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			raw := encodeJSON(t, New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, append([]Option{WithAPIKey("k")}, tc.opts...)...), api.Request{
+			model := tc.model
+			if model == "" {
+				model = "deepseek-v4-pro"
+			}
+			raw := encodeJSON(t, New(Conf{Model: api.Model{Name: model}}, append([]Option{WithAPIKey("k")}, tc.opts...)...), api.Request{
 				Messages: []api.Message{{Role: api.RoleUser, Content: text("hi")}},
 			})
 			for _, want := range tc.want {
@@ -643,6 +728,18 @@ func TestEncodeThinkingAndSampling(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// A user_id over the documented 512 bytes is the option's error, and the id it
+// had stays.
+func TestWithUserIDLimit(t *testing.T) {
+	p := New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k"), WithUserID("tenant-7"), WithUserID(strings.Repeat("a", maxUserIDBytes+1)))
+	if p.userID != "tenant-7" {
+		t.Fatalf("user id %q", p.userID)
+	}
+	if err := WithUserID(strings.Repeat("a", maxUserIDBytes))(&Provider{}); err != nil {
+		t.Fatalf("an id at the limit was refused: %v", err)
 	}
 }
 

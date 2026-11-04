@@ -710,6 +710,24 @@ func TestStreamSequences(t *testing.T) {
 			},
 		},
 		{
+			name: "in band overload is busy",
+			sse: frame("response.created", createdFrame) +
+				frame("error", `{"type":"error","sequence_number":9,"error":{"message":"The model is overloaded.","type":"service_unavailable_error","param":null,"code":"server_is_overloaded"}}`),
+			want: []string{
+				"start id=resp_1 model=gpt-5.6-sol",
+				"err busy",
+			},
+		},
+		{
+			name: "in band spend limit is access",
+			sse: frame("response.created", createdFrame) +
+				frame("error", `{"type":"error","sequence_number":9,"error":{"message":"Spend limit reached.","type":null,"param":null,"code":"project_spend_limit_exceeded"}}`),
+			want: []string{
+				"start id=resp_1 model=gpt-5.6-sol",
+				"err access",
+			},
+		},
+		{
 			name: "in band error carrying only a type still classifies",
 			sse: frame("response.created", createdFrame) +
 				frame("error", `{"type":"error","sequence_number":9,"error":{"message":"The server had an error while processing your request","type":"server_error","param":null,"code":null}}`),
@@ -1157,6 +1175,36 @@ func TestHTTPErrorsBeforeTheStream(t *testing.T) {
 			status: 429,
 			body:   `{"error":{"message":"You exceeded your current quota","type":"insufficient_quota","param":null,"code":"insufficient_quota"}}`,
 			want:   api.CodeAccess,
+		},
+		{
+			name:   "no credit balance is not a rate limit",
+			status: 429,
+			body:   `{"error":{"message":"Your organization has no credits left.","type":"insufficient_quota","param":null,"code":"credit_balance_exhausted"}}`,
+			want:   api.CodeAccess,
+		},
+		{
+			name:   "an organization spend limit is not a rate limit",
+			status: 429,
+			body:   `{"error":{"message":"Spend limit reached.","type":null,"param":null,"code":"organization_spend_limit_exceeded"}}`,
+			want:   api.CodeAccess,
+		},
+		{
+			name:   "a project spend limit is not a rate limit",
+			status: 429,
+			body:   `{"error":{"message":"Spend limit reached.","type":null,"param":null,"code":"project_spend_limit_exceeded"}}`,
+			want:   api.CodeAccess,
+		},
+		{
+			name:   "an organization usage limit is not a rate limit",
+			status: 429,
+			body:   `{"error":{"message":"Usage limit reached.","type":null,"param":null,"code":"organization_usage_limit_exceeded"}}`,
+			want:   api.CodeAccess,
+		},
+		{
+			name:   "slow down is a rate limit",
+			status: 429,
+			body:   `{"error":{"message":"Please slow down.","type":"rate_limit_error","param":null,"code":"slow_down"}}`,
+			want:   api.CodeBusy,
 		},
 		{
 			// The flex tier answers 429 when it has no spare capacity, which is

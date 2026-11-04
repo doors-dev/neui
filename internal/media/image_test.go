@@ -199,3 +199,21 @@ func TestShapeErrorsWhenCapUnreachable(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestShapeHoldsImageBytesOnRawBytes(t *testing.T) {
+	data := noiseJPEG(t, 400, 400, 95)
+	img, err := Shape(data, api.ImageJPEG, api.Model{ImageBytes: len(data)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(img.Data, data) {
+		t.Fatalf("a %d byte image at exactly ImageBytes was re-encoded to %d bytes", len(data), len(img.Data))
+	}
+	img, err = Shape(data, api.ImageJPEG, api.Model{ImageBytes: len(data) - 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(img.Data) > len(data)-1 {
+		t.Fatalf("a %d byte image under a %d byte cap came back at %d bytes", len(data), len(data)-1, len(img.Data))
+	}
+}

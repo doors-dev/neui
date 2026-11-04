@@ -139,6 +139,9 @@ func (c *converter) End(err error) []api.Event {
 		if code == api.CodeTooLarge {
 			return []api.Event{api.EventErr{Code: code, Err: measuredTooLarge(c.model, c.sent, c.declared, failure)}}
 		}
+		if spendLimited(failure) {
+			code = api.CodeAccess
+		}
 		if code == api.CodeInvalid && contextOverflow(failure.Message) {
 			code = api.CodeContextLength
 		}

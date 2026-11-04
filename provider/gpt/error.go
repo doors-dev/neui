@@ -100,13 +100,14 @@ func httpError(h *lib.HTTPError, model string, sent int, declared int) api.Event
 // classifier: a rejected key answers 401 with type invalid_request_error and
 // only code says invalid_api_key. Precedence is status, then code, then type.
 //
-// 429 is two unrelated failures. A quota that ran out is an account level fact
-// and retrying it is a hot loop against a bill nobody paid, so it goes with the
-// credentials rather than with the rate limit. A tier with no spare capacity
-// answers 429 as well and stays CodeBusy alongside the rate limit, because
-// backing off and sending the same request again is the answer to both; the only
-// thing that ever told the two apart was a phrase in the message, which is not
-// something to classify on.
+// 429 is two unrelated failures. A quota, credit balance or spend limit that ran
+// out is an account level fact the docs say no retry restores, and retrying it
+// is a hot loop against a bill nobody paid, so it goes with the credentials
+// rather than with the rate limit. A tier with no spare capacity answers 429 as
+// well and stays CodeBusy alongside the rate limit, because backing off and
+// sending the same request again is the answer to both; the only thing that
+// ever told the two apart was a phrase in the message, which is not something
+// to classify on.
 //
 // A timeout, a 5xx and a dead socket are one code, because the request was sent
 // as written and the fix is to send it again. 503 is the exception among the
@@ -159,7 +160,7 @@ func statusCode(e *APIError) api.ErrCode {
 	case http.StatusRequestTimeout:
 		return api.CodeNetwork
 	case http.StatusTooManyRequests:
-		if e.Code == "insufficient_quota" || e.Type == "insufficient_quota" {
+		if errorVocabulary(e.Code) == api.CodeAccess || e.Type == "insufficient_quota" {
 			return api.CodeAccess
 		}
 		return api.CodeBusy
@@ -198,9 +199,12 @@ func errorVocabulary(code string) api.ErrCode {
 	switch code {
 	case "context_length_exceeded", "string_above_max_length":
 		return api.CodeContextLength
-	case "rate_limit_exceeded", "rate_limit_error", "overloaded_error":
+	case "rate_limit_exceeded", "rate_limit_error", "overloaded_error",
+		"slow_down", "server_is_overloaded", "service_unavailable_error":
 		return api.CodeBusy
-	case "insufficient_quota", "invalid_api_key":
+	case "insufficient_quota", "invalid_api_key", "credit_balance_exhausted",
+		"organization_spend_limit_exceeded", "project_spend_limit_exceeded",
+		"organization_usage_limit_exceeded":
 		return api.CodeAccess
 	case "server_error", "vector_store_timeout":
 		return api.CodeNetwork
