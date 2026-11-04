@@ -1,0 +1,37 @@
+{
+  "specs": [
+    {
+      "file": "anthropic.json.gz",
+      "source": "https://raw.githubusercontent.com/anthropics/anthropic-sdk-go/697438c4bbab8f36cf009a97febec4ac4c3e40ab/scripts/mock-spec.json.gz",
+      "commit": "697438c4bbab8f36cf009a97febec4ac4c3e40ab",
+      "apiVersion": "2023-06-01",
+      "roots": [
+        "/components/schemas/CreateMessageParams",
+        "/components/schemas/CountMessageTokensParams",
+        "/components/schemas/MessageStreamEvent",
+        "/components/schemas/ErrorResponse"
+      ],
+      "upstreamSha256": "c97bf0fed08d870696726a077a32ce8a0972edf678ed2f373e916baf4db70157",
+      "sha256": "18c25482a6a8b8724b0078bcb9547b53b626d77e99eb6e6703a0a3ee15c782a5",
+      "fetched": "2026-11-04"
+    },
+    {
+      "file": "openai.json.gz",
+      "source": "https://raw.githubusercontent.com/openai/openai-openapi/20a459affe7aea4cc7333375802706e296a56011/openapi.json",
+      "commit": "20a459affe7aea4cc7333375802706e296a56011",
+      "apiVersion": "2.3.0",
+      "roots": [
+        "/components/schemas/CreateResponse",
+        "/components/schemas/TokenCountsBody",
+        "/components/schemas/ResponseStreamEvent",
+        "/components/schemas/CreateChatCompletionRequest",
+        "/components/schemas/CreateChatCompletionStreamResponse",
+        "/components/schemas/ErrorResponse"
+      ],
+      "upstreamSha256": "067ff996bab83b5945551b0c14ce3a3e567781182a1e6b176115eaea3657ff86",
+      "sha256": "bd18eaaab478888ee1bc1124131e7bec457f4bee52e56306836ec0382fa07d1f",
+      "fetched": "2026-11-04"
+    }
+  ],
+  "update": "Regenerate with: go run ./internal/testkit/conform/fetchspec. To move a pin, change its commit in fetchspec/main.go and commit the new specs and SPECS together. The Anthropic pin must describe the anthropic-version the claude adapter sends (its defaultVersion); anthropic-sdk-go 697438c is the last commit before the SDK moved to 2026-10-21. A pin is never replaced silently: the suite checks sha256 of the decompressed spec against this file."
+}
