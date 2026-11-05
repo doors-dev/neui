@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/doors-dev/doors"
@@ -43,15 +43,14 @@ func Module(context.Context) common.Module {
 }
 
 type module struct {
-	mu      sync.Mutex
-	pending *pending
+	pending atomic.Pointer[pending]
 }
 
 type pending struct {
 	comment string
 	cancel  context.CancelCauseFunc
 	done    chan struct{}
-	fired   bool
+	claimed atomic.Bool
 }
 
 type NowResult struct {
@@ -164,23 +163,23 @@ func (m *module) timer(ctx context.Context, arg TimerArg) (TimerResult, error) {
 		}
 	}
 	thread := common.GetController(ctx)
-	m.mu.Lock()
-	if m.pending != nil {
-		comment := m.pending.comment
-		m.mu.Unlock()
-		return TimerResult{}, fmt.Errorf("a timer is already pending (%s): time__cancel it or wait for it to fire", comment)
-	}
 	waitCtx, cancel := context.WithCancelCause(thread.Context())
 	p := &pending{comment: arg.Comment, cancel: cancel, done: make(chan struct{})}
-	m.pending = p
-	m.mu.Unlock()
+	if !m.pending.CompareAndSwap(nil, p) {
+		cancel(nil)
+		comment := ""
+		if q := m.pending.Load(); q != nil {
+			comment = q.comment
+		}
+		return TimerResult{}, fmt.Errorf("a timer is already pending (%s): time__cancel it or wait for it to fire", comment)
+	}
 	task, err := thread.Task(arg.Comment, map[string]any{
 		"requested": requested,
 		"firesAt":   fires.Format(layout),
 	}, cancel)
 	if err != nil {
 		cancel(err)
-		m.clear(p)
+		m.pending.CompareAndSwap(p, nil)
 		return TimerResult{}, err
 	}
 	go m.wait(waitCtx, p, task, fires)
@@ -188,20 +187,15 @@ func (m *module) timer(ctx context.Context, arg TimerArg) (TimerResult, error) {
 }
 
 func (m *module) wait(ctx context.Context, p *pending, task common.Task, fires time.Time) {
-	defer m.clear(p)
+	defer close(p.done)
+	defer m.pending.CompareAndSwap(p, nil)
 	timer := time.NewTimer(time.Until(fires))
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():
 		task.Err(context.Cause(ctx))
 	case <-timer.C:
-		m.mu.Lock()
-		claimed := m.pending == p
-		if claimed {
-			p.fired = true
-		}
-		m.mu.Unlock()
-		if !claimed {
+		if !p.claimed.CompareAndSwap(false, true) {
 			<-ctx.Done()
 			task.Err(context.Cause(ctx))
 			return
@@ -216,28 +210,15 @@ func (m *module) wait(ctx context.Context, p *pending, task common.Task, fires t
 	}
 }
 
-func (m *module) clear(p *pending) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.pending == p {
-		m.pending = nil
-	}
-	close(p.done)
-}
-
 func (m *module) cancel(ctx context.Context, _ struct{}) (struct{}, error) {
-	m.mu.Lock()
-	p := m.pending
+	p := m.pending.Load()
 	if p == nil {
-		m.mu.Unlock()
 		return struct{}{}, errors.New("no timer is pending")
 	}
-	if p.fired {
-		m.mu.Unlock()
+	if !p.claimed.CompareAndSwap(false, true) {
 		return struct{}{}, errors.New("the timer already fired: its task_result reports the firing")
 	}
-	m.pending = nil
-	m.mu.Unlock()
+	m.pending.CompareAndSwap(p, nil)
 	p.cancel(nil)
 	<-p.done
 	return struct{}{}, nil

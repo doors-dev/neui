@@ -53,7 +53,7 @@ func (testThread) Rename(context.Context, string) error {
 }
 
 func TestFetchSaveAsStreamsToWorkspace(t *testing.T) {
-	store, err := local.NewFileStorage()
+	store, err := local.NewFileStorage("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +103,7 @@ func TestFetchSaveAsStreamsToWorkspace(t *testing.T) {
 }
 
 func TestFetchSaveAsOverTheCapKeepsNothing(t *testing.T) {
-	store, err := local.NewFileStorage()
+	store, err := local.NewFileStorage("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +143,7 @@ func TestFetchSaveAsOverTheCapKeepsNothing(t *testing.T) {
 }
 
 func TestFetchSaveAsFailureKeepsExistingFile(t *testing.T) {
-	store, err := local.NewFileStorage()
+	store, err := local.NewFileStorage("")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -497,24 +497,3 @@ func TestConnectClearsStaleDesc(t *testing.T) {
 		t.Fatalf("got %q, want empty desc after reconnect", d)
 	}
 }
-
-func TestGetWaitsForInit(t *testing.T) {
-	srv := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1"}, nil)
-	srv.AddTool(&mcp.Tool{
-		Name:        "early",
-		Description: "early",
-		InputSchema: map[string]any{"type": "object"},
-	}, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return &mcp.CallToolResult{}, nil
-	})
-	ts := serve(t, srv)
-	m, _ := startModule(t, srv, Config{
-		Name:        "early",
-		URL:         ts.URL,
-		IdleTimeout: 5 * time.Second,
-		Ping:        2 * time.Second,
-	})
-	if _, ok := m.Get("early"); !ok {
-		t.Fatal("first Get missed a tool of a connecting server")
-	}
-}

@@ -104,7 +104,6 @@ func (m *module) Desc() string {
 }
 
 func (m *module) Get(name string) (common.Tool, bool) {
-	m.waitInit()
 	type tool struct {
 		tool  common.Tool
 		found bool

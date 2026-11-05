@@ -211,7 +211,7 @@ func TestDeleteUnlinkedThread(t *testing.T) {
 
 func TestToolRoundEndWipesScratch(t *testing.T) {
 	ctx := context.Background()
-	store, err := local.NewFileStorage()
+	store, err := local.NewFileStorage("")
 	if err != nil {
 		t.Fatalf("NewFileStorage: %v", err)
 	}
@@ -309,7 +309,7 @@ func (p recordingProvider) Stream(ctx context.Context, request api.Request) <-ch
 func stubThread(t *testing.T, id api.ThreadID, p api.Provider, config api.ThreadConfig) (*thread, api.MessageStorage, replay.Replay) {
 	t.Helper()
 	ctx := context.WithValue(context.Background(), common.ConfigKey{}, config)
-	store, err := local.NewFileStorage()
+	store, err := local.NewFileStorage("")
 	if err != nil {
 		t.Fatalf("NewFileStorage: %v", err)
 	}
@@ -1009,6 +1009,25 @@ func TestUnsendWhileWaitingReleasesPendingInput(t *testing.T) {
 	}
 }
 
+func TestFailedRoundReleasesPendingInput(t *testing.T) {
+	th, r, _, _ := taskThread(t, "fail-pending")
+	events := captureEvents(th)
+	state := startRound(t, th, r, api.Input{Text: "first"})
+	th.pending = true
+	th.input = api.Input{Text: "queued"}
+	events()
+	state.err(api.CodeBusy, nil, api.Indexed[api.Content]{}, api.EventUsage{})
+	if _, ok := th.state.(threadWait); !ok {
+		t.Fatalf("a failed round left the thread in %T, want waiting", th.state)
+	}
+	if th.pending || !releasedPending(events()) {
+		t.Fatalf("a failed round left pending=%v or did not tell the composer", th.pending)
+	}
+	if th.input.Text != "queued" {
+		t.Fatalf("a failed round dropped the queued input, got %q", th.input.Text)
+	}
+}
+
 func TestCriticalErrorClearsPendingAndCompaction(t *testing.T) {
 	th, _, _, _ := taskThread(t, "critical-reset")
 	th.pending = true
@@ -1138,7 +1157,7 @@ func (c countingWorkspaces) WorkspaceDelete(id api.ThreadID) error {
 
 func TestFailedOpenDisposesItsLink(t *testing.T) {
 	ctx := context.WithValue(context.Background(), common.ConfigKey{}, api.ThreadConfig{})
-	store, err := local.NewFileStorage()
+	store, err := local.NewFileStorage("")
 	if err != nil {
 		t.Fatalf("NewFileStorage: %v", err)
 	}

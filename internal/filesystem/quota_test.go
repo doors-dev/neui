@@ -15,7 +15,7 @@ import (
 
 func newQuotaFS(t *testing.T, config api.FilesConfig) (*workFS, *local.FileStorage) {
 	t.Helper()
-	store, err := local.NewFileStorage()
+	store, err := local.NewFileStorage("")
 	if err != nil {
 		t.Fatal(err)
 	}

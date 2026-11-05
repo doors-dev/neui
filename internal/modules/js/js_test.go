@@ -51,7 +51,7 @@ func (testThread) FilesConfig() api.FilesConfig {
 
 func newCtx(t *testing.T) (context.Context, api.FS) {
 	t.Helper()
-	store, err := local.NewFileStorage()
+	store, err := local.NewFileStorage("")
 	if err != nil {
 		t.Fatal(err)
 	}

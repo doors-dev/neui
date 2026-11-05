@@ -268,6 +268,11 @@ func (s *threadRound) err(code api.ErrCode, cause error, content api.Indexed[api
 	default:
 		panic("unknown errror code")
 	}
+	wasPending := s.thread.pending
+	s.thread.pending = false
+	if wasPending {
+		s.thread.link.send(newMessageEvent(nil, api.ChatEventInputPending{Pending: false}))
+	}
 	s.thread.applyHeldCompaction()
 	s.thread.switchStateWait()
 }

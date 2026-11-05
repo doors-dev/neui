@@ -66,7 +66,7 @@ type callTestParams struct {
 
 func newCallTestRun(t *testing.T, config api.IslandConfig, lib Library) (*run, *callTestTask, context.Context) {
 	t.Helper()
-	storage, err := local.NewFileStorage()
+	storage, err := local.NewFileStorage("")
 	if err != nil {
 		t.Fatal(err)
 	}

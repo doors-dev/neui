@@ -26,8 +26,8 @@ const (
 	workspacesDirName = "workspaces"
 )
 
-func NewFileStorage() (*FileStorage, error) {
-	base, err := os.MkdirTemp("", "neui-files-")
+func NewFileStorage(dir string) (*FileStorage, error) {
+	base, err := os.MkdirTemp(dir, "neui-files-")
 	if err != nil {
 		return nil, err
 	}

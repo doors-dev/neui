@@ -21,15 +21,9 @@ import (
 
 func GetSession(ctx context.Context) Session {
 	return doors.SessionStore(ctx).Init(common.KeySession, func() any {
-		s, err := local.NewFileStorage()
-		if err != nil {
-			doors.Logger(ctx).Error("instance: local file storage", "err", err)
-		}
 		return &session{
-			fileStorageErr:      err,
 			ctx:                 doors.SessionContext(ctx),
 			localMessageStorage: local.NewMessageStorage(),
-			localFileStorage:    s,
 			instances:           make(map[*instance]struct{}),
 			chats:               ui.NewChats(),
 		}
@@ -43,7 +37,6 @@ type session struct {
 	ctx                 context.Context
 	localMessageStorage api.MessageStorage
 	localFileStorage    *local.FileStorage
-	fileStorageErr      error
 	backend             *common.Backend
 	cancel              context.CancelFunc
 	instances           map[*instance]struct{}
@@ -113,7 +106,11 @@ func (s Session) Enable(opts []common.Option) error {
 		return nil
 	}
 	if s.localFileStorage == nil {
-		return fmt.Errorf("instance: local file storage: %w", s.fileStorageErr)
+		fs, err := local.NewFileStorage(common.NewBackend(s.ctx, nil, nil, nil, opts).FilesConfig().TempDir)
+		if err != nil {
+			return fmt.Errorf("instance: local file storage: %w", err)
+		}
+		s.localFileStorage = fs
 	}
 	options := make([]common.Option, 0, len(opts)+5)
 	options = append(options, common.OptionModule(chatmod.Module))

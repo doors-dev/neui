@@ -33,7 +33,7 @@ func (t *fakeTask) Notify(json.RawMessage, map[string]any) {}
 func arm(m *module) (*pending, context.Context) {
 	ctx, cancel := context.WithCancelCause(context.Background())
 	p := &pending{comment: "c", cancel: cancel, done: make(chan struct{})}
-	m.pending = p
+	m.pending.Store(p)
 	return p, ctx
 }
 
@@ -53,7 +53,7 @@ func TestCancelAfterFiringReportsFired(t *testing.T) {
 	}
 	close(task.release)
 	<-p.done
-	if m.pending != nil {
+	if m.pending.Load() != nil {
 		t.Fatal("pending not cleared after firing")
 	}
 }
@@ -62,11 +62,10 @@ func TestCancelClaimedBeforeFiringReportsCancellation(t *testing.T) {
 	m := &module{}
 	p, ctx := arm(m)
 	task := newFakeTask()
-	m.mu.Lock()
+	p.claimed.Store(true)
+	m.pending.Store(nil)
 	go m.wait(ctx, p, task, time.Now())
 	time.Sleep(20 * time.Millisecond)
-	m.pending = nil
-	m.mu.Unlock()
 	p.cancel(nil)
 	select {
 	case err := <-task.err:
@@ -92,7 +91,7 @@ func TestCancelPendingTimer(t *testing.T) {
 	if err := <-task.err; !errors.Is(err, context.Canceled) {
 		t.Fatalf("unexpected cause %v", err)
 	}
-	if m.pending != nil {
+	if m.pending.Load() != nil {
 		t.Fatal("pending not cleared")
 	}
 }

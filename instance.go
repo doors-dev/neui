@@ -17,8 +17,10 @@ import (
 // leaves the session as it was. Without OptionMessageStorage and
 // OptionFileStorage, threads are kept in memory and files in a per-session
 // temporary directory; neither is reachable after the session ends, and the
-// directory is not removed. Once enabled, later calls do nothing unless
-// OptionForce is passed.
+// directory is not removed. The directory also holds the thread workspaces, so
+// Enable creates it even with OptionFileStorage, and returns an error when it
+// cannot; a later call tries again. Once enabled, later calls do nothing
+// unless OptionForce is passed.
 func Enable(ctx context.Context, opts ...Option) error {
 	return instance.GetSession(ctx).Enable(opts)
 }

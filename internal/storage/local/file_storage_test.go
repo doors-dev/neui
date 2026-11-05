@@ -14,7 +14,7 @@ import (
 
 func newFileStore(t *testing.T) *FileStorage {
 	t.Helper()
-	s, err := NewFileStorage()
+	s, err := NewFileStorage("")
 	if err != nil {
 		t.Fatal(err)
 	}

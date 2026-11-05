@@ -20,7 +20,7 @@ const testThread = "thread"
 
 func newTestFS(t *testing.T) (*workFS, *local.FileStorage) {
 	t.Helper()
-	store, err := local.NewFileStorage()
+	store, err := local.NewFileStorage("")
 	if err != nil {
 		t.Fatal(err)
 	}
