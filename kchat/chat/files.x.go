@@ -25,48 +25,79 @@ func (c *chat) files() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 //line files.gox:21
-		__e = __c.Any(c.pops.BindControls("files",
-		func(show func(ctx context.Context)) gox.Elem {
-			return gox.Elem(func(__c gox.Cursor) (__e error) {
-				ctx := __c.Context(); _ = ctx
-//line files.gox:23
-				__e = __c.Any(filesButton(show, false)); if __e != nil { return }
-			return })
+		__e = __c.Any(doors.DeriveBeam(c.dead, func(k closedKind) bool {
+		return k != alive
+	}).Bind(func(dead bool) gox.Elem {
+		return gox.Elem(func(__c gox.Cursor) (__e error) {
+			ctx := __c.Context(); _ = ctx
 //line files.gox:24
-		},
-		func(hide func(ctx context.Context)) gox.Elem {
-			return gox.Elem(func(__c gox.Cursor) (__e error) {
-				ctx := __c.Context(); _ = ctx
+			if dead {
+				__e = __c.Init("button"); if __e != nil { return }
+				{
+//line files.gox:25
+					__e = __c.Set("class", "kchat-iconbtn"); if __e != nil { return }
+//line files.gox:25
+					__e = __c.Set("title", "Files"); if __e != nil { return }
+//line files.gox:25
+					__e = __c.Set("aria-label", "Files"); if __e != nil { return }
+					__e = __c.Set("disabled", true); if __e != nil { return }
+					__e = __c.Submit(); if __e != nil { return }
 //line files.gox:26
-				__e = __c.Any(filesButton(hide, true)); if __e != nil { return }
-			return })
-//line files.gox:27
-		},
-	)); if __e != nil { return }
+					__e = (doors.Class("kchat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+						ctx := __c.Context(); _ = ctx
+//line files.gox:26
+						__e = __c.Any(icons.Files()); if __e != nil { return }
+					return })); if __e != nil { return }
+				}
+				__e = __c.Close(); if __e != nil { return }
+			} else  {
 //line files.gox:29
+				__e = __c.Any(c.pops.BindControls("files",
+				func(show func(ctx context.Context)) gox.Elem {
+					return gox.Elem(func(__c gox.Cursor) (__e error) {
+						ctx := __c.Context(); _ = ctx
+//line files.gox:31
+						__e = __c.Any(filesButton(show, false)); if __e != nil { return }
+					return })
+//line files.gox:32
+				},
+				func(hide func(ctx context.Context)) gox.Elem {
+					return gox.Elem(func(__c gox.Cursor) (__e error) {
+						ctx := __c.Context(); _ = ctx
+//line files.gox:34
+						__e = __c.Any(filesButton(hide, true)); if __e != nil { return }
+					return })
+//line files.gox:35
+				},
+			)); if __e != nil { return }
+			}
+		return })
+//line files.gox:38
+	})); if __e != nil { return }
+//line files.gox:39
 		__e = __c.Any(c.pops.BindPop("files", func(hide func(context.Context)) gox.Elem {
 		return gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
-//line files.gox:30
+//line files.gox:40
 			__e = __c.Any(&fileList{fs: c.thread.FS(), loc: c.inst.Location()}); if __e != nil { return }
 		return })
-//line files.gox:31
+//line files.gox:41
 	})); if __e != nil { return }
 	return })
-//line files.gox:32
+//line files.gox:42
 }
 
-//line files.gox:34
+//line files.gox:44
 func filesButton(toggle func(ctx context.Context), open bool) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line files.gox:36
+//line files.gox:46
 		class := "kchat-iconbtn"
 	if open {
 		class = "kchat-iconbtn kchat-iconbtn_open"
 	}
 
-//line files.gox:41
+//line files.gox:51
 		__e = (doors.AClick{
 		Scope: new(doors.ScopeBlocking),
 		On: func(ctx context.Context, rp doors.RequestPointer) bool {
@@ -77,24 +108,24 @@ func filesButton(toggle func(ctx context.Context), open bool) gox.Elem {
 			ctx := __c.Context(); _ = ctx
 			__e = __c.Init("button"); if __e != nil { return }
 			{
-//line files.gox:47
+//line files.gox:57
 				__e = __c.Set("class", class); if __e != nil { return }
-//line files.gox:47
+//line files.gox:57
 				__e = __c.Set("title", "Files"); if __e != nil { return }
-//line files.gox:47
+//line files.gox:57
 				__e = __c.Set("aria-label", "Files"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line files.gox:48
+//line files.gox:58
 				__e = (doors.Class("kchat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 					ctx := __c.Context(); _ = ctx
-//line files.gox:48
+//line files.gox:58
 					__e = __c.Any(icons.Files()); if __e != nil { return }
 				return })); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
-//line files.gox:50
+//line files.gox:60
 }
 
 type fileList struct {
@@ -103,32 +134,32 @@ type fileList struct {
 	body *doors.Door
 }
 
-//line files.gox:58
+//line files.gox:68
 func (l *fileList) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line files.gox:60
+//line files.gox:70
 		l.body = new(doors.Door)
 	l.body.Inner(ctx, l.content())
 
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line files.gox:63
+//line files.gox:73
 			__e = __c.Set("class", "kchat-rowmenu kchat-popbody kchat-files"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line files.gox:64
+//line files.gox:74
 			__e = __c.Any(l.body); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line files.gox:66
+//line files.gox:76
 }
 
-//line files.gox:68
+//line files.gox:78
 func (l *fileList) content() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line files.gox:72
+//line files.gox:82
 		entries := []api.FSEntry{}
 	for _, dir := range []string{api.UserUploadsDir, api.AgentUploadsDir} {
 		found, err := l.fs.ReadDir(ctx, dir)
@@ -142,11 +173,11 @@ func (l *fileList) content() gox.Elem {
 		return b.ModTime.Compare(a.ModTime)
 	})
 
-//line files.gox:85
+//line files.gox:95
 		if len(entries) == 0 {
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line files.gox:86
+//line files.gox:96
 				__e = __c.Set("class", "kchat-side-empty"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Init("div"); if __e != nil { return }
@@ -157,7 +188,7 @@ func (l *fileList) content() gox.Elem {
 				__e = __c.Close(); if __e != nil { return }
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line files.gox:88
+//line files.gox:98
 					__e = __c.Set("class", "kchat-side-empty-hint"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
 					__e = __c.Text("Attachments and anything the agent saves show up here"); if __e != nil { return }
@@ -168,54 +199,54 @@ func (l *fileList) content() gox.Elem {
 		} else  {
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line files.gox:91
+//line files.gox:101
 				__e = __c.Set("class", "kchat-pop-group"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line files.gox:92
+//line files.gox:102
 				for _, e := range entries {
-//line files.gox:93
+//line files.gox:103
 					__e = __c.Any(l.row(e)); if __e != nil { return }
 				}
 			}
 			__e = __c.Close(); if __e != nil { return }
 		}
 	return })
-//line files.gox:97
+//line files.gox:107
 }
 
-//line files.gox:99
+//line files.gox:109
 func (l *fileList) row(e api.FSEntry) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line files.gox:101
+//line files.gox:111
 		name := path.Base(e.Name)
 	del := doors.NewSource(false)
 
-//line files.gox:104
+//line files.gox:114
 		__e = __c.Any(del.Bind(func(asking bool) gox.Elem {
 		return gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
-//line files.gox:105
+//line files.gox:115
 			if asking {
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line files.gox:106
+//line files.gox:116
 					__e = __c.Set("class", "kchat-form"); if __e != nil { return }
-//line files.gox:106
+//line files.gox:116
 					__e = __c.Set("role", "group"); if __e != nil { return }
-//line files.gox:106
+//line files.gox:116
 					__e = __c.Set("aria-label", "Delete file"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
 					__e = __c.Init("div"); if __e != nil { return }
 					{
-//line files.gox:107
+//line files.gox:117
 						__e = __c.Set("class", "kchat-form-text"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 						__e = __c.Text("Delete "); if __e != nil { return }
 						__e = __c.Init("b"); if __e != nil { return }
 						{
 							__e = __c.Submit(); if __e != nil { return }
-//line files.gox:107
+//line files.gox:117
 							__e = __c.Any(name); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
@@ -224,10 +255,10 @@ func (l *fileList) row(e api.FSEntry) gox.Elem {
 					__e = __c.Close(); if __e != nil { return }
 					__e = __c.Init("div"); if __e != nil { return }
 					{
-//line files.gox:108
+//line files.gox:118
 						__e = __c.Set("class", "kchat-form-actions"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line files.gox:109
+//line files.gox:119
 						__e = (doors.AClick{
 						Scope: new(doors.ScopeBlocking),
 						On: func(ctx context.Context, rp doors.RequestPointer) bool {
@@ -238,16 +269,16 @@ func (l *fileList) row(e api.FSEntry) gox.Elem {
 							ctx := __c.Context(); _ = ctx
 							__e = __c.Init("button"); if __e != nil { return }
 							{
-//line files.gox:115
+//line files.gox:125
 								__e = __c.Set("type", "button"); if __e != nil { return }
-//line files.gox:115
+//line files.gox:125
 								__e = __c.Set("class", "kchat-btn kchat-btn_2nd"); if __e != nil { return }
 								__e = __c.Submit(); if __e != nil { return }
 								__e = __c.Text("Cancel"); if __e != nil { return }
 							}
 							__e = __c.Close(); if __e != nil { return }
 						return })); if __e != nil { return }
-//line files.gox:116
+//line files.gox:126
 						__e = (doors.AClick{
 						Scope: new(doors.ScopeBlocking),
 						On: func(ctx context.Context, rp doors.RequestPointer) bool {
@@ -261,9 +292,9 @@ func (l *fileList) row(e api.FSEntry) gox.Elem {
 							ctx := __c.Context(); _ = ctx
 							__e = __c.Init("button"); if __e != nil { return }
 							{
-//line files.gox:125
+//line files.gox:135
 								__e = __c.Set("type", "button"); if __e != nil { return }
-//line files.gox:125
+//line files.gox:135
 								__e = __c.Set("class", "kchat-btn kchat-btn_del"); if __e != nil { return }
 								__e = __c.Submit(); if __e != nil { return }
 								__e = __c.Text("Delete"); if __e != nil { return }
@@ -277,53 +308,53 @@ func (l *fileList) row(e api.FSEntry) gox.Elem {
 			} else  {
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line files.gox:129
+//line files.gox:139
 					__e = __c.Set("class", "kchat-entry"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line files.gox:130
+//line files.gox:140
 					__e = (doors.Class("kchat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 						ctx := __c.Context(); _ = ctx
-//line files.gox:130
+//line files.gox:140
 						if strings.HasPrefix(e.Name, api.UserUploadsDir + "/") {
-//line files.gox:131
+//line files.gox:141
 							__e = __c.Any(icons.UploadSimple()); if __e != nil { return }
 						} else  {
-//line files.gox:133
+//line files.gox:143
 							__e = __c.Any(icons.DownloadSimple()); if __e != nil { return }
 						}
 					return })); if __e != nil { return }
 					__e = __c.Init("span"); if __e != nil { return }
 					{
-//line files.gox:135
+//line files.gox:145
 						__e = __c.Set("class", "kchat-entry-body"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 						__e = __c.Init("a"); if __e != nil { return }
 						{
-//line files.gox:136
+//line files.gox:146
 							__e = __c.Set("class", "kchat-entry-name"); if __e != nil { return }
-//line files.gox:136
+//line files.gox:146
 							__e = __c.Set("href", download(l.fs, e.Name)); if __e != nil { return }
-//line files.gox:136
+//line files.gox:146
 							__e = __c.Set("download", name); if __e != nil { return }
-//line files.gox:136
+//line files.gox:146
 							__e = __c.Set("title", name); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
-//line files.gox:136
+//line files.gox:146
 							__e = __c.Any(name); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
 						__e = __c.Init("span"); if __e != nil { return }
 						{
-//line files.gox:137
+//line files.gox:147
 							__e = __c.Set("class", "kchat-entry-detail"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
-//line files.gox:137
+//line files.gox:147
 							__e = __c.Any(size(e.Size) + " · " + when(e.ModTime, l.loc)); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
-//line files.gox:139
+//line files.gox:149
 					__e = (doors.AClick{
 					Scope: new(doors.ScopeBlocking),
 					On: func(ctx context.Context, rp doors.RequestPointer) bool {
@@ -334,15 +365,15 @@ func (l *fileList) row(e api.FSEntry) gox.Elem {
 						ctx := __c.Context(); _ = ctx
 						__e = __c.Init("button"); if __e != nil { return }
 						{
-//line files.gox:145
+//line files.gox:155
 							__e = __c.Set("class", "kchat-ctl"); if __e != nil { return }
-//line files.gox:145
+//line files.gox:155
 							__e = __c.Set("aria-label", "Delete " + name); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
-//line files.gox:146
+//line files.gox:156
 							__e = (doors.Class("kchat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 								ctx := __c.Context(); _ = ctx
-//line files.gox:146
+//line files.gox:156
 								__e = __c.Any(icons.Trash()); if __e != nil { return }
 							return })); if __e != nil { return }
 						}
@@ -352,10 +383,10 @@ func (l *fileList) row(e api.FSEntry) gox.Elem {
 				__e = __c.Close(); if __e != nil { return }
 			}
 		return })
-//line files.gox:150
+//line files.gox:160
 	})); if __e != nil { return }
 	return })
-//line files.gox:151
+//line files.gox:161
 }
 
 func size(n int64) string {

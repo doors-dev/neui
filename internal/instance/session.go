@@ -69,6 +69,7 @@ func (s Session) newInstance(id string, ctx context.Context) Instance {
 		session: s,
 		ch:      make(chan command),
 		links:   make(map[*link]struct{}),
+		dead:    make(map[*link]struct{}),
 		page:    page.NewPage(ctx),
 		current: doors.TabState[api.ThreadID](ctx, "neui_thread"),
 	}

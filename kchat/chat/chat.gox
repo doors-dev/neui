@@ -2,6 +2,9 @@ package chat
 
 import (
 	"context"
+	"errors"
+	"sync"
+	"time"
 	
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
@@ -38,7 +41,23 @@ func (c Chat) Chat(thread api.ChatThread, s api.ChatState) api.Chat {
 		pops: c.Pops,
 		list: list.NewList(c.Params, c.Inst, thread, controller, s.ID, s.Round, at),
 		name: doors.NewSource(s.Name),
+		dead: doors.NewSource(alive),
 	}
+}
+
+type closedKind int
+
+const (
+	alive closedKind = iota
+	failed
+	deleted
+)
+
+func closedKindOf(err error) closedKind {
+	if errors.Is(err, api.ErrNotFound) {
+		return deleted
+	}
+	return failed
 }
 
 elem (c Chat) Placeholder(enabled doors.Beam[bool]) {
@@ -85,6 +104,7 @@ type chat struct {
 	pops pops.Popup[string]
 	list list.List
 	name doors.Source[string]
+	dead doors.Source[closedKind]
 }
 
 func (c *chat) Update(ctx context.Context, e api.ChatEvent) {
@@ -120,6 +140,9 @@ func (c *chat) Update(ctx context.Context, e api.ChatEvent) {
 			c.list.IndexedEvent(e.Event)
 		case api.ChatEventToolResults:
 			c.list.ToolsDone()
+		case api.ChatEventCriticalError:
+			c.dead.Update(ctx, closedKindOf(e.Err))
+			c.pops.Hide(ctx, "files")
 		}
 	})
 }
@@ -146,15 +169,7 @@ elem (c *chat) Main() {
 				~(c.files())
 			})
 		</div>
-		<div class="kchat-log kchat-log_scroll" role="log" aria-label="Chat messages" data-seeding="">
-			~(c.list.Main())
-			~(c.list.Script())
-		</div>
-		~composer.Composer{
-			Controller: c.composer,
-			Params: c.params,
-			Pops: c.pops,
-		}
+		~(c.dead.Bind(c.body))
 		<script data:id=(c.params.ID) data:paste=(pasteAsFile)>
 			const main = document.currentScript.parentElement
 			const id = $data("id")
@@ -211,6 +226,60 @@ elem (c *chat) Main() {
 				attach(dt.files)
 			})
 		</script>
+	</div>
+}
+
+elem (c *chat) body(kind closedKind) {
+	~(if kind == alive {
+		<div class="kchat-log kchat-log_scroll" role="log" aria-label="Chat messages" data-seeding="">
+			~(c.list.Main())
+			~(c.list.Script())
+		</div>
+		~composer.Composer{
+			Controller: c.composer,
+			Params: c.params,
+			Pops: c.pops,
+		}
+	} else {
+		<div class="kchat-closed-area">
+			~(c.closed(kind))
+		</div>
+	})
+}
+
+elem (c *chat) closed(kind closedKind) {
+	~~
+	icon, head, text := icons.WarningFill(), "Something went wrong", "This chat hit an error."
+	if kind == deleted {
+		icon, head, text = icons.Trash(), "This chat was deleted.", "It was deleted elsewhere."
+	}
+	var once sync.Once
+	confirm := func(ctx context.Context) {
+		once.Do(func() {
+			c.thread.Reload(ctx)
+		})
+	}
+	~~
+	<div class="kchat-closed-card" role="alert">
+		~>(doors.Class("kchat-ic kchat-closed-ic")) ~(icon)
+		<p class="kchat-closed-title">~(head)</p>
+		<p class="kchat-closed-text">~(text)</p>
+		<div class="kchat-closed-acts">
+			~>doors.AClick{
+				Scope: new(doors.ScopeBlocking),
+				On: func(ctx context.Context, rp doors.RequestPointer) bool {
+					confirm(ctx)
+					return true
+				},
+			} <button type="button" class="kchat-btn kchat-btn_auto">OK<i class="kchat-file-fill" aria-hidden="true"></i></button>
+		</div>
+		~(doors.Go(func(ctx context.Context) {
+			select {
+			case <-ctx.Done():
+			case <-time.After(10 * time.Second):
+				confirm(ctx)
+			}
+		}))
 	</div>
 }
 

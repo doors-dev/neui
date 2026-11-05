@@ -18,14 +18,24 @@ import (
 )
 
 elem (c *chat) files() {
-	~(c.pops.BindControls("files",
-		elem(show func(ctx context.Context)) {
-			~(filesButton(show, false))
-		},
-		elem(hide func(ctx context.Context)) {
-			~(filesButton(hide, true))
-		},
-	))
+	~(doors.DeriveBeam(c.dead, func(k closedKind) bool {
+		return k != alive
+	}).Bind(elem(dead bool) {
+		~(if dead {
+			<button class="kchat-iconbtn" title="Files" aria-label="Files" disabled>
+				~>(doors.Class("kchat-ic")) ~(icons.Files())
+			</button>
+		} else {
+			~(c.pops.BindControls("files",
+				elem(show func(ctx context.Context)) {
+					~(filesButton(show, false))
+				},
+				elem(hide func(ctx context.Context)) {
+					~(filesButton(hide, true))
+				},
+			))
+		})
+	}))
 	~(c.pops.BindPop("files", elem(hide func(context.Context)) {
 		~(&fileList{fs: c.thread.FS(), loc: c.inst.Location()})
 	}))

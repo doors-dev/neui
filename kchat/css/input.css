@@ -22,6 +22,11 @@
 	100% { opacity: 0 }
 }
 
+@keyframes kchat-auto-fill {
+	0% { width: 0 }
+	100% { width: 100% }
+}
+
 @layer kchat {
 	.kchat-widget {
 		--app-bg: var(--kchat-dark-app-bg, --theme(--color-zinc-950 inline));
@@ -155,10 +160,71 @@
 		min-w-0
 	}
 
-	.kchat-pane > .kchat-log {
+	.kchat-pane .kchat-log {
 		@apply
 		flex-1
 		min-h-0
+	}
+
+	.kchat-closed-area {
+		@apply
+		flex
+		flex-1
+		min-h-0
+		items-center
+		justify-center
+		pt-4
+		px-3
+		pb-12
+	}
+
+	.kchat-closed-card {
+		@apply
+		flex
+		flex-col
+		items-center
+		gap-1.5
+		p-4
+		text-center
+	}
+
+	.kchat-closed-card > .kchat-closed-ic {
+		@apply
+		flex-none
+		w-5
+		h-5
+		text-(--danger-ink)
+	}
+
+	.kchat-closed-title {
+		@apply
+		mt-1
+		mb-0
+		mx-0
+		text-[0.9375rem]
+		font-semibold
+		text-(--app-ink)
+		text-balance
+	}
+
+	.kchat-closed-text {
+		@apply
+		m-0
+		min-w-0
+		max-w-[30ch]
+		text-sm
+		leading-normal
+		text-(--app-ink-quiet)
+		text-balance
+	}
+
+	.kchat-closed-acts {
+		@apply
+		flex
+		flex-none
+		items-center
+		gap-2
+		mt-2
 	}
 
 	.kchat-widget_off .kchat-composer {
@@ -396,6 +462,33 @@
 	.kchat-btn_2nd:focus-visible {
 		@apply
 		border-(--panel-border-focus)
+	}
+
+	.kchat-btn_auto {
+		@apply
+		relative
+		isolate
+		overflow-hidden
+		min-w-18
+		border-(--secondary-bg)
+	}
+
+	.kchat-btn_auto > .kchat-file-fill {
+		@apply
+		w-0
+		animate-[kchat-auto-fill_10s_linear_forwards]
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.kchat-btn_auto {
+			@apply
+			border-(--button-border)
+		}
+
+		.kchat-btn_auto > .kchat-file-fill {
+			@apply
+			hidden
+		}
 	}
 
 	.kchat-btn:disabled, .kchat-iconbtn:disabled {

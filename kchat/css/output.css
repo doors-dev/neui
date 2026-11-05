@@ -35,6 +35,14 @@
     opacity: 0;
   }
 }
+@keyframes kchat-auto-fill {
+  0% {
+    width: 0;
+  }
+  100% {
+    width: 100%;
+  }
+}
 @layer kchat {
   .kchat-widget {
     --app-bg: var(--kchat-dark-app-bg, oklch(14.1% 0.005 285.823));
@@ -169,9 +177,61 @@
     flex: 1;
     flex-direction: column;
   }
-  .kchat-pane > .kchat-log {
+  .kchat-pane .kchat-log {
     min-height: 0px;
     flex: 1;
+  }
+  .kchat-closed-area {
+    display: flex;
+    min-height: 0px;
+    flex: 1;
+    align-items: center;
+    justify-content: center;
+    padding-inline: calc(var(--spacing, 0.25rem) * 3);
+    padding-top: calc(var(--spacing, 0.25rem) * 4);
+    padding-bottom: calc(var(--spacing, 0.25rem) * 12);
+  }
+  .kchat-closed-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: calc(var(--spacing, 0.25rem) * 1.5);
+    padding: calc(var(--spacing, 0.25rem) * 4);
+    text-align: center;
+  }
+  .kchat-closed-card > .kchat-closed-ic {
+    height: calc(var(--spacing, 0.25rem) * 5);
+    width: calc(var(--spacing, 0.25rem) * 5);
+    flex: none;
+    color: var(--danger-ink);
+  }
+  .kchat-closed-title {
+    margin-inline: 0px;
+    margin-top: var(--spacing, 0.25rem);
+    margin-bottom: 0px;
+    font-size: 0.9375rem;
+    --kchat-tw-font-weight: var(--font-weight-semibold, 600);
+    font-weight: var(--font-weight-semibold, 600);
+    text-wrap: balance;
+    color: var(--app-ink);
+  }
+  .kchat-closed-text {
+    margin: 0px;
+    max-width: 30ch;
+    min-width: 0px;
+    font-size: var(--text-sm, 0.875rem);
+    line-height: var(--kchat-tw-leading, var(--text-sm--line-height, calc(1.25 / 0.875)));
+    --kchat-tw-leading: var(--leading-normal, 1.5);
+    line-height: var(--leading-normal, 1.5);
+    text-wrap: balance;
+    color: var(--app-ink-quiet);
+  }
+  .kchat-closed-acts {
+    margin-top: calc(var(--spacing, 0.25rem) * 2);
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: calc(var(--spacing, 0.25rem) * 2);
   }
   .kchat-widget_off .kchat-composer {
     pointer-events: none;
@@ -418,6 +478,25 @@
   }
   .kchat-btn_2nd:focus-visible {
     border-color: var(--panel-border-focus);
+  }
+  .kchat-btn_auto {
+    position: relative;
+    isolation: isolate;
+    min-width: calc(var(--spacing, 0.25rem) * 18);
+    overflow: hidden;
+    border-color: var(--secondary-bg);
+  }
+  .kchat-btn_auto > .kchat-file-fill {
+    width: 0px;
+    animation: kchat-auto-fill 10s linear forwards;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .kchat-btn_auto {
+      border-color: var(--button-border);
+    }
+    .kchat-btn_auto > .kchat-file-fill {
+      display: none;
+    }
   }
   .kchat-btn:disabled, .kchat-iconbtn:disabled {
     cursor: default;

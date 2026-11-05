@@ -41,6 +41,7 @@ type instance struct {
 	backend atomic.Pointer[common.Backend]
 	ch      chan command
 	links   map[*link]struct{}
+	dead    map[*link]struct{}
 	page    page.Page
 	current doors.Source[*api.ThreadID]
 	synced  bool
@@ -160,6 +161,7 @@ func (inst *instance) onCommand(cmd command) {
 		cmd.link.send(thread.NewMessageInit(api.ChatState{}, nil))
 	case commandUnlink:
 		delete(inst.links, cmd.link)
+		delete(inst.dead, cmd.link)
 	case commandSwitch:
 		if inst.backend.Load() == nil && cmd.backend == nil {
 			return
@@ -247,6 +249,11 @@ func (inst *instance) reloadLinks(m thread.MessageReload) {
 		link.disconnect()
 	}
 	clear(inst.links)
+	for link := range inst.dead {
+		link.send(m)
+		link.disconnect()
+	}
+	clear(inst.dead)
 }
 
 func (inst *instance) clearQueue() {
@@ -278,13 +285,14 @@ func (inst *instance) onMessage(m thread.Message) {
 
 func (inst *instance) onCriticalErr() {
 	for link := range inst.links {
-		link.disconnect()
+		inst.dead[link] = struct{}{}
 	}
 	clear(inst.links)
 	inst.clearQueue()
 	uplink, err := thread.OpenLink(inst.uplink.ID(), inst.backend.Load(), inst.page, nil)
 	if err != nil {
-		inst.renewUplink()
+		inst.uplink.Close()
+		inst.setUplink(context.Background(), thread.NewLink(inst.backend.Load(), inst.page))
 		return
 	}
 	inst.uplink = uplink
@@ -307,6 +315,9 @@ func (inst *instance) destruct() {
 		inst.uplink = thread.Link{}
 	}
 	for link, _ := range inst.links {
+		link.disconnect()
+	}
+	for link := range inst.dead {
 		link.disconnect()
 	}
 }
