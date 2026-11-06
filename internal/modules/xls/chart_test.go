@@ -5,12 +5,15 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"neui.dev/internal/testkit"
 )
 
 func TestChart(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	_, err := chartTool(threadCtx(fs), chartArg{
+	_, err := chartTool(c.Ctx(), chartArg{
 		Path:       "book.xlsx",
 		Sheet:      "Data",
 		Type:       "column",
@@ -46,25 +49,27 @@ func TestChart(t *testing.T) {
 			t.Fatalf("chart lacks %s:\n%s", want, chart)
 		}
 	}
-	_, err = chartTool(threadCtx(fs), chartArg{Path: "book.xlsx", Sheet: "Data", Type: "line", DataRange: "B2:B2", Anchor: "F20"})
+	_, err = chartTool(c.Ctx(), chartArg{Path: "book.xlsx", Sheet: "Data", Type: "line", DataRange: "B2:B2", Anchor: "F20"})
 	if err == nil || !strings.Contains(err.Error(), "no data rows") {
 		t.Fatalf("header-only err = %v", err)
 	}
 }
 
 func TestChartBadType(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	_, err := chartTool(threadCtx(fs), chartArg{Path: "book.xlsx", Sheet: "Data", Type: "donut", DataRange: "B1:B4", Anchor: "F2"})
+	_, err := chartTool(c.Ctx(), chartArg{Path: "book.xlsx", Sheet: "Data", Type: "donut", DataRange: "B1:B4", Anchor: "F2"})
 	if err == nil || !strings.Contains(err.Error(), "donut") {
 		t.Fatalf("err = %v", err)
 	}
 }
 
 func TestHighlight(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	_, err := highlightTool(threadCtx(fs), highlightArg{
+	_, err := highlightTool(c.Ctx(), highlightArg{
 		Path:  "book.xlsx",
 		Sheet: "Data",
 		Range: "B2:B4",
@@ -88,9 +93,10 @@ func TestHighlight(t *testing.T) {
 }
 
 func TestHighlightColorScale(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	_, err := highlightTool(threadCtx(fs), highlightArg{
+	_, err := highlightTool(c.Ctx(), highlightArg{
 		Path:  "book.xlsx",
 		Sheet: "Data",
 		Range: "B2:B4",
@@ -131,9 +137,10 @@ func TestHighlightRules(t *testing.T) {
 		{rule: highlightRule{Type: "top", Value: "0"}, wantErr: "integer count"},
 		{rule: highlightRule{Type: "between", Value: "1"}, wantErr: "between"},
 	} {
-		fs, _ := newFSStore(t)
+		ctl := testkit.NewController(t, testkit.Setup{})
+		fs := ctl.FS()
 		buildBook(t, fs, "book.xlsx")
-		_, err := highlightTool(threadCtx(fs), highlightArg{Path: "book.xlsx", Sheet: "Data", Range: "A2:B4", Rule: c.rule})
+		_, err := highlightTool(ctl.Ctx(), highlightArg{Path: "book.xlsx", Sheet: "Data", Range: "A2:B4", Rule: c.rule})
 		if c.wantErr != "" {
 			if err == nil || !strings.Contains(err.Error(), c.wantErr) {
 				t.Fatalf("%+v: err = %v", c.rule, err)

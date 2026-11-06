@@ -14,7 +14,7 @@ import (
 func compactionThread(t *testing.T, id api.ThreadID, model api.Model, rounds int) (*thread, replay.Replay, func() []api.ChatEvent) {
 	t.Helper()
 	config := api.ThreadConfig{ThreadMemoryLimit: -1, CompactionAllowed: 0.2, CompactionPreserve: 0.25, CompactionTrigger: 0.5}
-	th, _, r := stubThread(t, id, hangingProvider{stubProvider{model: model}}, config)
+	th, _, r := stubThread(t, id, hangingProvider{model}, config)
 	th.close = make(chan struct{})
 	t.Cleanup(func() {
 		th.compaction.stop()

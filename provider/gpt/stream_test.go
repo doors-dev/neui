@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"neui.dev/api"
+	"neui.dev/internal/testkit/conform"
 	"neui.dev/provider/lib"
 )
 
@@ -67,103 +68,6 @@ func describeAll(events []api.Event) []string {
 
 func drain(ch <-chan api.Event) []string {
 	return describeAll(collect(ch))
-}
-
-// checkGrammar enforces the grammar in protocol/event.go on a sequence, because
-// a fixture that pins the lines an adapter produced says nothing about whether
-// the shape is legal:
-//
-//	stream    := EventStart? body (EventOk | EventErr)?
-//	body      := any interleaving of block* and EventUsage*
-//	text      := (EventText | EventMeta)+ EventClose?
-//	tool      := (EventTool | EventMeta)+ EventClose?
-//	reasoning := (EventThinking | EventSummary | EventMeta)+ EventClose?
-//	opaque    := EventOpaque+ EventClose?
-//
-// A block production is the events at one Index rather than a contiguous run,
-// so the state here is per index and interleaving passes. EventMeta names no
-// kind, so it opens a block and leaves the kind to whatever fills it, and it is
-// refused only on an opaque block, whose Data is already entirely the adapter's.
-//
-// The terminal event is optional and its absence is what says a reply was cut
-// off, so what is required is that nothing follows one. A block with no
-// EventClose may have ended when the turn did, been cut short, or streamed on a
-// wire that never frames a block end, and nothing tells the three apart, so no
-// close is required of any block here.
-func checkGrammar(t *testing.T, events []api.Event) {
-	t.Helper()
-	kinds := map[int]string{}
-	closed := map[int]bool{}
-	highest := -1
-	ended := false
-	for i, e := range events {
-		if ended {
-			t.Fatalf("event %d (%s) arrives after the stream already ended\n%s", i, describe(e), strings.Join(describeAll(events), "\n"))
-		}
-		switch e.(type) {
-		case api.EventStart:
-			if i != 0 {
-				t.Fatalf("event %d: start is only valid first", i)
-			}
-			continue
-		case api.EventOk, api.EventErr:
-			ended = true
-			continue
-		case api.EventUsage:
-			continue
-		}
-		idx, kind := blockOf(e)
-		if closed[idx] {
-			t.Fatalf("event %d (%s) edits block %d after it closed", i, describe(e), idx)
-		}
-		if idx > highest {
-			if idx != highest+1 {
-				t.Fatalf("event %d (%s): index %d leaves a hole after %d, and Index is a position in the message", i, describe(e), idx, highest)
-			}
-			highest = idx
-		}
-		switch {
-		case kind == "close":
-			if kinds[idx] == "" {
-				t.Fatalf("event %d closes block %d, which no event ever opened", i, idx)
-			}
-			closed[idx] = true
-		case kind == "meta":
-			if kinds[idx] == "opaque" {
-				t.Fatalf("event %d attaches meta to opaque block %d, whose Data is already the adapter's", i, idx)
-			}
-			if kinds[idx] == "" {
-				kinds[idx] = "meta"
-			}
-		case kinds[idx] == "" || kinds[idx] == "meta":
-			if kind == "opaque" && kinds[idx] == "meta" {
-				t.Fatalf("event %d opens opaque block %d, which already carries meta", i, idx)
-			}
-			kinds[idx] = kind
-		case kinds[idx] != kind:
-			t.Fatalf("event %d fills %s block %d with a %s event", i, kinds[idx], idx, kind)
-		}
-	}
-}
-
-func blockOf(e api.Event) (int, string) {
-	switch e := e.(type) {
-	case api.EventText:
-		return e.Index, "text"
-	case api.EventTool:
-		return e.Index, "tool"
-	case api.EventThinking:
-		return e.Index, "reasoning"
-	case api.EventSummary:
-		return e.Index, "reasoning"
-	case api.EventMeta:
-		return e.Index, "meta"
-	case api.EventOpaque:
-		return e.Index, "opaque"
-	case api.EventClose:
-		return e.Index, "close"
-	}
-	panic(fmt.Sprintf("no block for %T", e))
 }
 
 func equalLines(t *testing.T, got, want []string) {
@@ -927,7 +831,7 @@ func TestStreamSequences(t *testing.T) {
 			srv := sseServer(t, tc.sse)
 			p := testProvider(t, srv.URL)
 			got := collect(p.Stream(context.Background(), textRequest()))
-			checkGrammar(t, got)
+			conform.CheckGrammar(t, got)
 			equalLines(t, describeAll(got), tc.want)
 		})
 	}

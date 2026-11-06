@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"neui.dev/api"
+	"neui.dev/internal/testkit/conform"
 	"neui.dev/provider/lib"
 )
 
@@ -110,115 +111,6 @@ func equalSeq(t *testing.T, got []api.Event, want []string) {
 				i, have[i], want[i], strings.Join(have, "\n      "), strings.Join(want, "\n      "))
 		}
 	}
-}
-
-// checkGrammar enforces the grammar from protocol/event.go, because asserting
-// that events merely appeared says nothing about the contract:
-//
-//	stream := EventStart? body (EventOk | EventErr)?
-//
-// The terminal event is optional and its absence is the whole of what says a
-// reply was cut off, so what is checked here is that nothing follows one.
-func checkGrammar(t *testing.T, events []api.Event) {
-	t.Helper()
-	checkPrefix(t, events)
-}
-
-// checkPrefix enforces what holds of any stream, finished or cut short: one
-// start and it comes first, a terminal event only at the end, and per Index
-//
-//	text      := (EventText | EventMeta)+ EventClose?
-//	tool      := (EventTool | EventMeta)+ EventClose?
-//	reasoning := (EventThinking | EventSummary | EventMeta)+ EventClose?
-//	opaque    := EventOpaque+ EventClose?
-//
-// EventMeta names no kind, so it opens a block without saying which one it is
-// and is refused only on an opaque block, whose Data is already the adapter's.
-//
-// A block the turn cut short never closes, so nothing here requires every block
-// to: the consumer holds the blocks and is the one that can see which did not.
-//
-// EventErr.Err is checked here rather than at one call site because it is
-// documented as always set: a caller that has to nil check before it can log or
-// match is what the guarantee exists to prevent, so every path that ends a turn
-// badly is held to it.
-func checkPrefix(t *testing.T, events []api.Event) {
-	t.Helper()
-	kinds := map[int]string{}
-	metad := map[int]bool{}
-	closed := map[int]bool{}
-	highest := -1
-	for i, e := range events {
-		if _, ok := e.(api.EventStart); ok && i > 0 {
-			t.Fatalf("event %d: start is only valid first", i)
-		}
-		if i < len(events)-1 {
-			switch e.(type) {
-			case api.EventOk, api.EventErr:
-				t.Fatalf("event %d: %s is terminal but is not last", i, render(e))
-			}
-		}
-		if e, ok := e.(api.EventErr); ok && e.Err == nil {
-			t.Fatalf("event %d: %s carries no Err", i, render(e))
-		}
-		idx, kind, ok := blockOf(e)
-		if !ok {
-			continue
-		}
-		if closed[idx] {
-			t.Fatalf("event %d: %s edits a closed block", i, render(e))
-		}
-		if idx > highest {
-			if idx != highest+1 {
-				t.Fatalf("event %d: index %d leaves a hole after %d", i, idx, highest)
-			}
-			highest = idx
-		}
-		if kind == "close" {
-			if kinds[idx] == "" {
-				t.Fatalf("event %d: close of a block that was never opened", i)
-			}
-			closed[idx] = true
-			continue
-		}
-		if kind == "meta" {
-			if kinds[idx] == "opaque" {
-				t.Fatalf("event %d: meta at block %d, which is opaque", i, idx)
-			}
-			metad[idx] = true
-			if kinds[idx] == "" {
-				kinds[idx] = "meta"
-			}
-			continue
-		}
-		if kind == "opaque" && metad[idx] {
-			t.Fatalf("event %d: opaque block %d already carries meta", i, idx)
-		}
-		if have := kinds[idx]; have != "" && have != "meta" && have != kind {
-			t.Fatalf("event %d: %s at block %d already holding %s", i, kind, idx, have)
-		}
-		kinds[idx] = kind
-	}
-}
-
-func blockOf(e api.Event) (int, string, bool) {
-	switch e := e.(type) {
-	case api.EventText:
-		return e.Index, "text", true
-	case api.EventThinking:
-		return e.Index, "reasoning", true
-	case api.EventSummary:
-		return e.Index, "reasoning", true
-	case api.EventMeta:
-		return e.Index, "meta", true
-	case api.EventTool:
-		return e.Index, "tool", true
-	case api.EventOpaque:
-		return e.Index, "opaque", true
-	case api.EventClose:
-		return e.Index, "close", true
-	}
-	return 0, "", false
 }
 
 // sse assembles a fixture in the wire format: a named event line, one data
@@ -728,7 +620,7 @@ func TestStreamSequences(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			p := testProvider(t, sseServer(tc.body))
 			got := collect(t, p, hello())
-			checkGrammar(t, got)
+			conform.CheckGrammar(t, got)
 			equalSeq(t, got, tc.want)
 		})
 	}
@@ -762,7 +654,7 @@ func TestThinkingDisplayDecidesTheEvent(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			p := testProvider(t, sseServer(body), WithThinking(Thinking{Type: "enabled", Budget: 1024, Display: tc.display}))
 			got := collect(t, p, hello())
-			checkGrammar(t, got)
+			conform.CheckGrammar(t, got)
 			equalSeq(t, got, []string{
 				"start msg_01 claude-opus-5",
 				"usage in=25 out=1 rsn=0 cr=0 cw=0",
@@ -800,7 +692,7 @@ func TestLargeFrame(t *testing.T) {
 
 	p := testProvider(t, sseServer(body))
 	got := collect(t, p, hello())
-	checkGrammar(t, got)
+	conform.CheckGrammar(t, got)
 
 	text, ok := got[2].(api.EventText)
 	if !ok {
@@ -821,7 +713,7 @@ func TestFrameOverLimit(t *testing.T) {
 	)
 	p := testProvider(t, sseServer(body), WithTransport(lib.Options{Max: 1024}))
 	got := collect(t, p, hello())
-	checkGrammar(t, got)
+	conform.CheckGrammar(t, got)
 	if last := render(got[len(got)-1]); last != "err network" {
 		t.Fatalf("last event %s, want error transport", last)
 	}
@@ -838,7 +730,7 @@ func TestMultilineDataFrame(t *testing.T) {
 
 	p := testProvider(t, sseServer(body))
 	got := collect(t, p, hello())
-	checkGrammar(t, got)
+	conform.CheckGrammar(t, got)
 	equalSeq(t, got, []string{"start msg_ml claude-opus-5", "ok turn"})
 }
 
@@ -889,7 +781,7 @@ func TestHTTPErrorBeforeStream(t *testing.T) {
 				io.WriteString(w, tc.body)
 			})
 			got := collect(t, p, hello())
-			checkGrammar(t, got)
+			conform.CheckGrammar(t, got)
 			if len(got) != 1 {
 				t.Fatalf("got %v, want one error", renderAll(got))
 			}
@@ -1002,7 +894,7 @@ func TestCancelMidStream(t *testing.T) {
 			time.Sleep(40 * time.Millisecond)
 		}
 	}
-	checkPrefix(t, got)
+	conform.CheckGrammar(t, got)
 	for _, e := range got {
 		switch e.(type) {
 		case api.EventOk, api.EventErr:
@@ -1030,7 +922,7 @@ func TestCallerDeadlineIsSilent(t *testing.T) {
 			time.Sleep(60 * time.Millisecond)
 		}
 	}
-	checkPrefix(t, got)
+	conform.CheckGrammar(t, got)
 	for _, e := range got {
 		switch e.(type) {
 		case api.EventOk, api.EventErr:
@@ -1055,7 +947,7 @@ func TestIdleTimeout(t *testing.T) {
 	defer close(released)
 
 	got := collect(t, p, hello())
-	checkGrammar(t, got)
+	conform.CheckGrammar(t, got)
 	last, ok := got[len(got)-1].(api.EventErr)
 	if !ok {
 		t.Fatalf("last event %s, want an error", render(got[len(got)-1]))
@@ -1093,7 +985,7 @@ func TestKeepaliveHoldsTheDeadlineOpen(t *testing.T) {
 	}, WithTransport(lib.Options{Idle: 150 * time.Millisecond}))
 
 	got := collect(t, p, hello())
-	checkGrammar(t, got)
+	conform.CheckGrammar(t, got)
 	equalSeq(t, got, []string{
 		"start msg_01 claude-opus-5",
 		"usage in=25 out=1 rsn=0 cr=0 cw=0",
@@ -1108,7 +1000,7 @@ func TestMalformedFrame(t *testing.T) {
 	body := sse("message_start", fixStart) + "event: content_block_start\ndata: {not json\n\n"
 	p := testProvider(t, sseServer(body))
 	got := collect(t, p, hello())
-	checkGrammar(t, got)
+	conform.CheckGrammar(t, got)
 	if last := render(got[len(got)-1]); last != "err network" {
 		t.Fatalf("last event %s, want error transport", last)
 	}
@@ -1141,7 +1033,7 @@ func TestBrokenKnownFramesFail(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			got := collect(t, testProvider(t, sseServer(sse(append([]string{"message_start", fixStart}, frames...)...))), hello())
-			checkGrammar(t, got)
+			conform.CheckGrammar(t, got)
 			if last := render(got[len(got)-1]); last != "err network" {
 				t.Fatalf("last event %s, want err network\n%s", last, strings.Join(renderAll(got), "\n"))
 			}
@@ -1163,7 +1055,7 @@ func TestUnknownFramesAreIgnored(t *testing.T) {
 		"message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn"}}`,
 		"message_stop", fixStopFrame,
 	))), hello())
-	checkGrammar(t, got)
+	conform.CheckGrammar(t, got)
 	if last := render(got[len(got)-1]); last != "ok turn" {
 		t.Fatalf("last event %s, want ok turn\n%s", last, strings.Join(renderAll(got), "\n"))
 	}
@@ -1172,7 +1064,7 @@ func TestUnknownFramesAreIgnored(t *testing.T) {
 func TestUnreachableHost(t *testing.T) {
 	p := mustNew(t, Conf{Model: api.Model{Name: testModel}}, WithAPIKey("k"), WithBaseURL("http://127.0.0.1:1"))
 	got := collect(t, p, hello())
-	checkGrammar(t, got)
+	conform.CheckGrammar(t, got)
 	if len(got) != 1 {
 		t.Fatalf("got %v, want one error", renderAll(got))
 	}
@@ -1184,7 +1076,7 @@ func TestUnreachableHost(t *testing.T) {
 func TestEncodeFailureIsATerminalEvent(t *testing.T) {
 	p := mustNew(t, Conf{Model: api.Model{Name: testModel}}, WithAPIKey("k"))
 	got := collect(t, p, api.Request{})
-	checkGrammar(t, got)
+	conform.CheckGrammar(t, got)
 	if ev := got[0].(api.EventErr); ev.Code != api.CodeInvalid {
 		t.Fatalf("code %s, want invalid", ev.Code)
 	}

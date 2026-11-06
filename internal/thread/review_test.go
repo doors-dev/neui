@@ -11,6 +11,7 @@ import (
 	"neui.dev/internal/common"
 	"neui.dev/internal/page"
 	"neui.dev/internal/replay"
+	"neui.dev/internal/testkit"
 )
 
 func TestLinkToAnotherBackendDropsThePendingInput(t *testing.T) {
@@ -33,7 +34,7 @@ func TestLinkToAnotherBackendDropsThePendingInput(t *testing.T) {
 }
 
 func TestStrayTaskResultStartsNoRound(t *testing.T) {
-	th, r, sent, origin := taskThread(t, "stray-result")
+	th, r, p, origin := taskThread(t, "stray-result")
 	if err := r.Record(origin, "note", nil, "stashed"); err != nil {
 		t.Fatalf("replay Record: %v", err)
 	}
@@ -41,8 +42,8 @@ func TestStrayTaskResultStartsNoRound(t *testing.T) {
 	th.state = wait
 	stray := commonTask{id: 42, link: th.link.linkTasks}
 	wait.on(deliver(th, func() { stray.Err(api.ErrCanceledByUser) }))
-	if _, ok := th.state.(threadWait); !ok || len(*sent) != 0 {
-		t.Fatalf("a result from an unknown task left the thread in %T with %d requests sent", th.state, len(*sent))
+	if _, ok := th.state.(threadWait); !ok || len(p.Requests()) != 0 {
+		t.Fatalf("a result from an unknown task left the thread in %T with %d requests sent", th.state, len(p.Requests()))
 	}
 }
 
@@ -79,8 +80,12 @@ func TestFailedAbortOnStopIsCritical(t *testing.T) {
 }
 
 type hangingProvider struct {
-	stubProvider
+	model api.Model
 }
+
+func (hangingProvider) Name() string { return "stub" }
+
+func (p hangingProvider) Model() api.Model { return p.model }
 
 func (hangingProvider) Stream(ctx context.Context, _ api.Request) <-chan api.Event {
 	ch := make(chan api.Event, 1)
@@ -98,7 +103,7 @@ func TestCancelledCompactionReportsNothing(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
 	t.Cleanup(func() { slog.SetDefault(previous) })
 	config := api.ThreadConfig{ThreadMemoryLimit: -1, CompactionPreserve: 0.25, CompactionTrigger: 0.5}
-	th, _, r := stubThread(t, "compact-cancelled", hangingProvider{stubProvider{model: api.Model{Name: "stub", Context: 1000}}}, config)
+	th, _, r := stubThread(t, "compact-cancelled", hangingProvider{api.Model{Name: "stub", Context: 1000}}, config)
 	th.close = make(chan struct{})
 	for _, name := range []string{"one", "two"} {
 		if _, _, err := r.RoundInit(api.Input{Text: name}); err != nil {
@@ -143,7 +148,7 @@ func TestTaskWithoutCancelIsRefused(t *testing.T) {
 }
 
 func TestCompactBeforeTheThreadIsStoredIsWrongState(t *testing.T) {
-	th, messages, _ := stubThread(t, "compact-new", stubProvider{model: api.Model{Name: "stub"}}, api.ThreadConfig{})
+	th, messages, _ := stubThread(t, "compact-new", testkit.NewProvider(api.Model{Name: "stub"}), api.ThreadConfig{})
 	th.replay = replay.NewReplay(th.link.ctx, "compact-new-unsaved", messages, th.link.backend.Config(), th.link.backend.Provider().Model())
 	op := NewOperation(context.Background())
 	th.on(commandCompact{link: th.link, Operation: op})
@@ -153,7 +158,7 @@ func TestCompactBeforeTheThreadIsStoredIsWrongState(t *testing.T) {
 }
 
 func TestEmptyRewindWithNothingPendingKeepsTheChat(t *testing.T) {
-	th, messages, r := stubThread(t, "rewind-empty", stubProvider{api.Model{Name: "stub"}, nil}, api.ThreadConfig{})
+	th, messages, r := stubThread(t, "rewind-empty", testkit.NewProvider(api.Model{Name: "stub"}), api.ThreadConfig{})
 	first, _, err := r.RoundInit(api.Input{Text: "one"})
 	if err != nil {
 		t.Fatalf("replay RoundInit: %v", err)

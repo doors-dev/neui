@@ -7,6 +7,7 @@ import (
 
 	"github.com/xuri/excelize/v2"
 	"neui.dev/api"
+	"neui.dev/internal/testkit"
 )
 
 func reopen(t *testing.T, fs api.FS, name string) *excelize.File {
@@ -24,9 +25,10 @@ func reopen(t *testing.T, fs api.FS, name string) *excelize.File {
 }
 
 func TestTotal(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	res, err := totalTool(threadCtx(fs), totalArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:B4", Aggs: []aggSpec{{Column: "B", Fn: "sum"}}})
+	res, err := totalTool(c.Ctx(), totalArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:B4", Aggs: []aggSpec{{Column: "B", Fn: "sum"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,9 +60,10 @@ func TestTotal(t *testing.T) {
 }
 
 func TestTotalBadFn(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	_, err := totalTool(threadCtx(fs), totalArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:B4", Aggs: []aggSpec{{Column: "B", Fn: "median"}}})
+	_, err := totalTool(c.Ctx(), totalArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:B4", Aggs: []aggSpec{{Column: "B", Fn: "median"}}})
 	if err == nil || !strings.Contains(err.Error(), "median") || !strings.Contains(err.Error(), "count_nums") {
 		t.Fatalf("err = %v", err)
 	}
@@ -87,9 +90,10 @@ func TestTotalFns(t *testing.T) {
 		{"count", "SUBTOTAL(103,B2:B4)"},
 		{"count_nums", "SUBTOTAL(102,B2:B4)"},
 	} {
-		fs, _ := newFSStore(t)
+		ctl := testkit.NewController(t, testkit.Setup{})
+		fs := ctl.FS()
 		buildBook(t, fs, "book.xlsx")
-		if _, err := totalTool(threadCtx(fs), totalArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:B4", Aggs: []aggSpec{{Column: "B", Fn: c.fn}}}); err != nil {
+		if _, err := totalTool(ctl.Ctx(), totalArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:B4", Aggs: []aggSpec{{Column: "B", Fn: c.fn}}}); err != nil {
 			t.Fatal(err)
 		}
 		fl, err := reopen(t, fs, "book.xlsx").GetCellFormula("Data", "B5")
@@ -103,7 +107,8 @@ func TestTotalFns(t *testing.T) {
 }
 
 func TestTotalCountEval(t *testing.T) {
-	fs, _ := newFSStore(t)
+	ctl := testkit.NewController(t, testkit.Setup{})
+	fs := ctl.FS()
 	f := excelize.NewFile()
 	for cell, v := range map[string]any{"A1": "All", "B1": "Nums", "A2": 1, "A3": "x", "A4": 2, "B2": 1, "B3": "x", "B4": 2} {
 		if err := f.SetCellValue("Sheet1", cell, v); err != nil {
@@ -111,7 +116,7 @@ func TestTotalCountEval(t *testing.T) {
 		}
 	}
 	writeBook(t, fs, "book.xlsx", f)
-	if _, err := totalTool(threadCtx(fs), totalArg{Path: "book.xlsx", Sheet: "Sheet1", Range: "A1:B5", Aggs: []aggSpec{{Column: "A", Fn: "count"}, {Column: "B", Fn: "count_nums"}}}); err != nil {
+	if _, err := totalTool(ctl.Ctx(), totalArg{Path: "book.xlsx", Sheet: "Sheet1", Range: "A1:B5", Aggs: []aggSpec{{Column: "A", Fn: "count"}, {Column: "B", Fn: "count_nums"}}}); err != nil {
 		t.Fatal(err)
 	}
 	g := reopen(t, fs, "book.xlsx")
@@ -127,9 +132,10 @@ func TestTotalCountEval(t *testing.T) {
 }
 
 func TestTotalRefusesNonEmpty(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	_, err := totalTool(threadCtx(fs), totalArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:B3", Aggs: []aggSpec{{Column: "B", Fn: "sum"}}})
+	_, err := totalTool(c.Ctx(), totalArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:B3", Aggs: []aggSpec{{Column: "B", Fn: "sum"}}})
 	if err == nil || !strings.Contains(err.Error(), "not empty") {
 		t.Fatalf("err = %v", err)
 	}
@@ -138,9 +144,9 @@ func TestTotalRefusesNonEmpty(t *testing.T) {
 	}
 }
 
-func salesTable(t *testing.T, fs api.FS) {
+func salesTable(t *testing.T, ctx context.Context) {
 	t.Helper()
-	_, err := tableTool(threadCtx(fs), tableArg{
+	_, err := tableTool(ctx, tableArg{
 		Path:    "book.xlsx",
 		Sheet:   "Data",
 		Columns: []columnSpec{{Header: "Item"}, {Header: "Price", Format: "number"}, {Header: "Qty", Format: "integer"}},
@@ -154,9 +160,10 @@ func salesTable(t *testing.T, fs api.FS) {
 }
 
 func TestTotalByHeader(t *testing.T) {
-	fs, _ := newFSStore(t)
+	ctl := testkit.NewController(t, testkit.Setup{})
+	fs := ctl.FS()
 	buildBook(t, fs, "book.xlsx")
-	ctx := threadCtx(fs)
+	ctx := ctl.Ctx()
 	res, err := totalTool(ctx, totalArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:D4", Aggs: []aggSpec{{Column: "amount", Fn: "max"}, {Column: "A", Fn: "count"}}})
 	if err != nil {
 		t.Fatal(err)
@@ -179,7 +186,8 @@ func TestTotalByHeader(t *testing.T) {
 }
 
 func TestTotalCopiesNumberFormat(t *testing.T) {
-	fs, _ := newFSStore(t)
+	ctl := testkit.NewController(t, testkit.Setup{})
+	fs := ctl.FS()
 	f := excelize.NewFile()
 	for cell, v := range map[string]any{"A1": "Item", "B1": "Price", "A2": "a", "B2": 2.5, "A3": "b", "B3": 4} {
 		if err := f.SetCellValue("Sheet1", cell, v); err != nil {
@@ -195,7 +203,7 @@ func TestTotalCopiesNumberFormat(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeBook(t, fs, "book.xlsx", f)
-	ctx := threadCtx(fs)
+	ctx := ctl.Ctx()
 	if _, err := totalTool(ctx, totalArg{Path: "book.xlsx", Sheet: "Sheet1", Range: "A1:B3", Aggs: []aggSpec{{Column: "Price", Fn: "sum"}}}); err != nil {
 		t.Fatal(err)
 	}
@@ -225,9 +233,9 @@ func TestTotalCopiesNumberFormat(t *testing.T) {
 }
 
 func TestTotalRefusesTable(t *testing.T) {
-	fs, _ := newFSStore(t)
-	salesTable(t, fs)
-	ctx := threadCtx(fs)
+	ctl := testkit.NewController(t, testkit.Setup{})
+	fs, ctx := ctl.FS(), ctl.Ctx()
+	salesTable(t, ctx)
 	for _, c := range []struct{ rng, want string }{{"A1:C4", "is table"}, {"B1:C4", "overlaps table"}, {"A1:C3", "overlaps table"}} {
 		_, err := totalTool(ctx, totalArg{Path: "book.xlsx", Sheet: "Data", Range: c.rng, Aggs: []aggSpec{{Column: "Qty", Fn: "sum"}}})
 		if err == nil || !strings.Contains(err.Error(), c.want) {
@@ -248,7 +256,8 @@ func TestTotalRefusesTable(t *testing.T) {
 }
 
 func TestTotalRefusesInsideAutoFilter(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	f := excelize.NewFile()
 	for cell, v := range map[string]any{"A1": "N", "B1": "P", "A2": "a", "B2": 1, "A3": "b", "B3": 3} {
 		if err := f.SetCellValue("Sheet1", cell, v); err != nil {
@@ -259,7 +268,7 @@ func TestTotalRefusesInsideAutoFilter(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeBook(t, fs, "book.xlsx", f)
-	_, err := totalTool(threadCtx(fs), totalArg{Path: "book.xlsx", Sheet: "Sheet1", Range: "A1:B3", Aggs: []aggSpec{{Column: "P", Fn: "sum"}}})
+	_, err := totalTool(c.Ctx(), totalArg{Path: "book.xlsx", Sheet: "Sheet1", Range: "A1:B3", Aggs: []aggSpec{{Column: "P", Fn: "sum"}}})
 	if err == nil || !strings.Contains(err.Error(), "autofilter") {
 		t.Fatalf("err = %v", err)
 	}

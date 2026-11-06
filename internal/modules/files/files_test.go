@@ -11,74 +11,13 @@ import (
 	"image/gif"
 	"image/png"
 	"io"
-	"iter"
 	"strings"
 	"testing"
 
 	"neui.dev/api"
-	"neui.dev/internal/common"
-	"neui.dev/internal/filesystem"
 	"neui.dev/internal/storage/local"
+	"neui.dev/internal/testkit"
 )
-
-func newFS(t *testing.T) filesystem.FS {
-	fs, _ := newFSStore(t)
-	return fs
-}
-
-type testThread struct {
-	fs    api.FS
-	model api.Model
-	files api.FilesConfig
-}
-
-func (testThread) Context() context.Context { return context.Background() }
-
-func (testThread) ID() api.ThreadID { return "thread" }
-
-func (testThread) PageContext() context.Context { return context.Background() }
-
-func (testThread) Task(string, map[string]any, context.CancelCauseFunc) (common.Task, error) {
-	return nil, errors.New("no tasks in tests")
-}
-
-func (testThread) Ask(api.ChatAsk) (func(context.Context), error) {
-	return nil, errors.New("no asks in tests")
-}
-
-func (testThread) Rename(context.Context, string) error { return nil }
-
-func (testThread) Modules() iter.Seq[common.Module] {
-	return func(func(common.Module) bool) {}
-}
-
-func (t testThread) FS() api.FS               { return t.fs }
-func (t testThread) Model() api.Model         { return t.model }
-func (t testThread) Config() api.ThreadConfig { return api.ThreadConfig{} }
-
-func (t testThread) FilesConfig() api.FilesConfig {
-	return common.FilesConfigDefaults(t.files)
-}
-
-func threadCtx(fs api.FS) context.Context {
-	return context.WithValue(context.Background(), common.KeyController, testThread{fs: fs})
-}
-
-func modelCtx(fs api.FS, model api.Model) context.Context {
-	return context.WithValue(context.Background(), common.KeyController, testThread{fs: fs, model: model})
-}
-
-func newFSStore(t *testing.T) (filesystem.FS, *local.FileStorage) {
-	t.Helper()
-	store, err := local.NewFileStorage("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Remove() })
-	fs := filesystem.Open("thread", store, store, api.FilesConfig{})
-	t.Cleanup(func() { fs.Dispose() })
-	return fs, store
-}
 
 func putFile(t *testing.T, store *local.FileStorage, origin api.Origin, name, content string) {
 	t.Helper()
@@ -87,7 +26,7 @@ func putFile(t *testing.T, store *local.FileStorage, origin api.Origin, name, co
 	}
 }
 
-func write(t *testing.T, fs filesystem.FS, name, content string) {
+func write(t *testing.T, fs api.FS, name, content string) {
 	t.Helper()
 	w, err := fs.Create(name)
 	if err != nil {
@@ -113,7 +52,8 @@ func TestModuleBuilds(t *testing.T) {
 }
 
 func TestReadPaging(t *testing.T) {
-	fs := newFS(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	var b strings.Builder
 	for i := 1; i <= 5; i++ {
 		b.WriteString(strings.Repeat("x", 10))
@@ -121,44 +61,45 @@ func TestReadPaging(t *testing.T) {
 	}
 	write(t, fs, "a.txt", b.String())
 	read := readTool
-	out, err := read(threadCtx(fs), readArg{Path: "a.txt"})
+	out, err := read(c.Ctx(), readArg{Path: "a.txt"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.HasPrefix(out, "1: xxxxxxxxxx\n") || !strings.HasSuffix(out, "(end of file, 5 lines)") {
 		t.Fatalf("out = %q", out)
 	}
-	out, err = read(threadCtx(fs), readArg{Path: "a.txt", Offset: 2, Limit: 2})
+	out, err = read(c.Ctx(), readArg{Path: "a.txt", Offset: 2, Limit: 2})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out, "2: ") || !strings.Contains(out, "3: ") || !strings.Contains(out, "(showing lines 2-3 of 5, continue with offset=4)") {
 		t.Fatalf("out = %q", out)
 	}
-	if _, err := read(threadCtx(fs), readArg{Path: "a.txt", Offset: 9}); err == nil {
+	if _, err := read(c.Ctx(), readArg{Path: "a.txt", Offset: 9}); err == nil {
 		t.Fatal("offset past EOF succeeded")
 	}
 	write(t, fs, "empty.txt", "")
-	out, err = read(threadCtx(fs), readArg{Path: "empty.txt"})
+	out, err = read(c.Ctx(), readArg{Path: "empty.txt"})
 	if err != nil || out != "(empty file)" {
 		t.Fatalf("empty: %q, %v", out, err)
 	}
 	write(t, fs, "bin", "a\x00b")
-	if _, err := read(threadCtx(fs), readArg{Path: "bin"}); err == nil || !strings.Contains(err.Error(), "readBytes") {
+	if _, err := read(c.Ctx(), readArg{Path: "bin"}); err == nil || !strings.Contains(err.Error(), "readBytes") {
 		t.Fatalf("binary: %v", err)
 	}
 }
 
 func TestReadByteLimit(t *testing.T) {
-	fs := newFS(t)
+	limited := testkit.NewController(t, testkit.Setup{Files: api.FilesConfig{ReadLimit: 25}})
+	c := testkit.NewController(t, testkit.Setup{})
 	var b strings.Builder
 	for i := 1; i <= 5; i++ {
 		b.WriteString(strings.Repeat("x", 10))
 		b.WriteString("\n")
 	}
-	write(t, fs, "a.txt", b.String())
-	ctx := context.WithValue(context.Background(), common.KeyController, testThread{fs: fs, files: api.FilesConfig{ReadLimit: 25}})
-	out, err := readTool(ctx, readArg{Path: "a.txt"})
+	write(t, limited.FS(), "a.txt", b.String())
+	write(t, c.FS(), "a.txt", b.String())
+	out, err := readTool(limited.Ctx(), readArg{Path: "a.txt"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +109,7 @@ func TestReadByteLimit(t *testing.T) {
 	if !strings.HasSuffix(out, "(showing lines 1-3 of 5, continue with offset=4)") {
 		t.Fatalf("out = %q", out)
 	}
-	out, err = readTool(threadCtx(fs), readArg{Path: "a.txt"})
+	out, err = readTool(c.Ctx(), readArg{Path: "a.txt"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,30 +119,31 @@ func TestReadByteLimit(t *testing.T) {
 }
 
 func TestReadBytes(t *testing.T) {
-	fs := newFS(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	write(t, fs, "b.bin", "hello world")
 	rb := readBytesTool
-	data, err := rb(threadCtx(fs), readBytesArg{Path: "b.bin", Offset: 6, N: 5})
+	data, err := rb(c.Ctx(), readBytesArg{Path: "b.bin", Offset: 6, N: 5})
 	if err != nil || string(data) != "world" {
 		t.Fatalf("%q, %v", data, err)
 	}
-	data, err = rb(threadCtx(fs), readBytesArg{Path: "b.bin"})
+	data, err = rb(c.Ctx(), readBytesArg{Path: "b.bin"})
 	if err != nil || string(data) != "hello world" {
 		t.Fatalf("%q, %v", data, err)
 	}
 }
 
 func TestWriteBytes(t *testing.T) {
-	fs := newFS(t)
-	e, err := writeBytesTool(threadCtx(fs), writeBytesArg{Path: "out/x.bin", Data: []byte{1, 2, 3}})
+	c := testkit.NewController(t, testkit.Setup{})
+	e, err := writeBytesTool(c.Ctx(), writeBytesArg{Path: "out/x.bin", Data: []byte{1, 2, 3}})
 	if err != nil || e.Size != 3 || e.Path != "out/x.bin" {
 		t.Fatalf("%+v, %v", e, err)
 	}
 }
 
 func TestWriteBytesErrorsNameThePath(t *testing.T) {
-	fs, _ := newFSStore(t)
-	_, err := writeBytesTool(threadCtx(fs), writeBytesArg{Path: "agent_uploads/x.bin", Data: []byte{1}})
+	c := testkit.NewController(t, testkit.Setup{})
+	_, err := writeBytesTool(c.Ctx(), writeBytesArg{Path: "agent_uploads/x.bin", Data: []byte{1}})
 	if !errors.Is(err, api.ErrReadOnly) || !strings.HasPrefix(err.Error(), `"agent_uploads/x.bin": `) {
 		t.Fatalf("%v", err)
 	}
@@ -217,28 +159,29 @@ func pngBytes(t *testing.T, w, h int) []byte {
 }
 
 func TestReadImage(t *testing.T) {
-	fs := newFS(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	small := pngBytes(t, 10, 10)
-	if _, err := writeBytesTool(threadCtx(fs), writeBytesArg{Path: "small.png", Data: small}); err != nil {
+	if _, err := writeBytesTool(c.Ctx(), writeBytesArg{Path: "small.png", Data: small}); err != nil {
 		t.Fatal(err)
 	}
-	img, err := readImageTool(threadCtx(fs), PathArg{Path: "small.png"})
+	img, err := readImageTool(c.Ctx(), PathArg{Path: "small.png"})
 	if err != nil || img.Mime != api.ImagePNG || !bytes.Equal(img.Data, small) {
 		t.Fatalf("mime %s, equal %v, %v", img.Mime, bytes.Equal(img.Data, small), err)
 	}
 	write(t, fs, "not.png", "just text")
-	if _, err := readImageTool(threadCtx(fs), PathArg{Path: "not.png"}); err == nil {
+	if _, err := readImageTool(c.Ctx(), PathArg{Path: "not.png"}); err == nil {
 		t.Fatal("text accepted as image")
 	}
 }
 
 func TestReadImageDownscales(t *testing.T) {
-	fs := newFS(t)
+	c := testkit.NewController(t, testkit.Setup{})
 	big := pngBytes(t, 4000, 100)
-	if _, err := writeBytesTool(threadCtx(fs), writeBytesArg{Path: "big.png", Data: big}); err != nil {
+	if _, err := writeBytesTool(c.Ctx(), writeBytesArg{Path: "big.png", Data: big}); err != nil {
 		t.Fatal(err)
 	}
-	img, err := readImageTool(threadCtx(fs), PathArg{Path: "big.png"})
+	img, err := readImageTool(c.Ctx(), PathArg{Path: "big.png"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -252,13 +195,12 @@ func TestReadImageDownscales(t *testing.T) {
 }
 
 func TestReadImageUsesModelPixels(t *testing.T) {
-	fs := newFS(t)
+	c := testkit.NewController(t, testkit.Setup{Model: api.Model{ImagePixels: 1568 * 1568}})
 	big := pngBytes(t, 4000, 3000)
-	if _, err := writeBytesTool(threadCtx(fs), writeBytesArg{Path: "wide.png", Data: big}); err != nil {
+	if _, err := writeBytesTool(c.Ctx(), writeBytesArg{Path: "wide.png", Data: big}); err != nil {
 		t.Fatal(err)
 	}
-	ctx := modelCtx(fs, api.Model{ImagePixels: 1568 * 1568})
-	img, err := readImageTool(ctx, PathArg{Path: "wide.png"})
+	img, err := readImageTool(c.Ctx(), PathArg{Path: "wide.png"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -272,27 +214,29 @@ func TestReadImageUsesModelPixels(t *testing.T) {
 }
 
 func TestReadDocument(t *testing.T) {
-	fs := newFS(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	write(t, fs, "doc.pdf", "%PDF-1.4 fake")
-	doc, err := readDocumentTool(threadCtx(fs), PathArg{Path: "doc.pdf"})
+	doc, err := readDocumentTool(c.Ctx(), PathArg{Path: "doc.pdf"})
 	if err != nil || doc.Mime != api.DocumentPDF {
 		t.Fatalf("mime %s, %v", doc.Mime, err)
 	}
 	write(t, fs, "prog.bin", "\x00\x01\x02")
-	if _, err := readDocumentTool(threadCtx(fs), PathArg{Path: "prog.bin"}); err == nil {
+	if _, err := readDocumentTool(c.Ctx(), PathArg{Path: "prog.bin"}); err == nil {
 		t.Fatal("binary accepted as document")
 	}
 }
 
 func TestZipUnzipRoundTrip(t *testing.T) {
-	fs := newFS(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	write(t, fs, "dir/a.txt", "alpha")
 	write(t, fs, "dir/sub/b.txt", "beta")
-	e, err := zipTool(threadCtx(fs), zipArg{Paths: []string{"dir"}, Dst: "out.zip"})
+	e, err := zipTool(c.Ctx(), zipArg{Paths: []string{"dir"}, Dst: "out.zip"})
 	if err != nil || e.Path != "out.zip" || e.Size == 0 {
 		t.Fatalf("%+v, %v", e, err)
 	}
-	res, err := unzipTool(threadCtx(fs), unzipArg{Src: "out.zip", Dst: "restored"})
+	res, err := unzipTool(c.Ctx(), unzipArg{Src: "out.zip", Dst: "restored"})
 	if err != nil || res.Count != 2 {
 		t.Fatalf("%+v, %v", res, err)
 	}
@@ -308,10 +252,11 @@ func TestZipUnzipRoundTrip(t *testing.T) {
 }
 
 func TestZipWalkSkipsUploads(t *testing.T) {
-	fs, store := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs, store := c.FS(), c.Store()
 	write(t, fs, "dir/a.txt", "alpha")
 	putFile(t, store, api.OriginUser, "up.txt", "upload")
-	e, err := zipTool(threadCtx(fs), zipArg{Paths: []string{"."}, Dst: "out.zip"})
+	e, err := zipTool(c.Ctx(), zipArg{Paths: []string{"."}, Dst: "out.zip"})
 	if err != nil || e.Size == 0 {
 		t.Fatalf("%+v, %v", e, err)
 	}
@@ -319,7 +264,7 @@ func TestZipWalkSkipsUploads(t *testing.T) {
 	if len(names) != 1 || names[0] != "dir/a.txt" {
 		t.Fatalf("names = %v", names)
 	}
-	e, err = zipTool(threadCtx(fs), zipArg{Paths: []string{"user_uploads"}, Dst: "up.zip"})
+	e, err = zipTool(c.Ctx(), zipArg{Paths: []string{"user_uploads"}, Dst: "up.zip"})
 	if err != nil || e.Size == 0 {
 		t.Fatalf("%+v, %v", e, err)
 	}
@@ -348,28 +293,30 @@ func zipNames(t *testing.T, fs api.FS, name string) []string {
 }
 
 func TestUnzipUploadNeedsCopy(t *testing.T) {
-	fs, store := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	store := c.Store()
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	w, _ := zw.Create("inner.txt")
 	io.WriteString(w, "x")
 	zw.Close()
 	putFile(t, store, api.OriginUser, "a.zip", buf.String())
-	if _, err := unzipTool(threadCtx(fs), unzipArg{Src: "user_uploads/a.zip", Dst: "out"}); err == nil || !strings.Contains(err.Error(), "copy") {
+	if _, err := unzipTool(c.Ctx(), unzipArg{Src: "user_uploads/a.zip", Dst: "out"}); err == nil || !strings.Contains(err.Error(), "copy") {
 		t.Fatalf("upload src: %v", err)
 	}
-	if _, err := copyTool(threadCtx(fs), copyArg{Src: "user_uploads/a.zip", Dst: "a.zip"}); err != nil {
+	if _, err := copyTool(c.Ctx(), copyArg{Src: "user_uploads/a.zip", Dst: "a.zip"}); err != nil {
 		t.Fatal(err)
 	}
-	res, err := unzipTool(threadCtx(fs), unzipArg{Src: "a.zip", Dst: "out"})
+	res, err := unzipTool(c.Ctx(), unzipArg{Src: "a.zip", Dst: "out"})
 	if err != nil || res.Count != 1 {
 		t.Fatalf("%+v, %v", res, err)
 	}
 }
 
 func TestUnzipWithTheCapTurnedOff(t *testing.T) {
-	fs := newFS(t)
-	ctx := context.WithValue(context.Background(), common.KeyController, testThread{fs: fs, files: api.FilesConfig{UnzipLimit: -1}})
+	c := testkit.NewController(t, testkit.Setup{Files: api.FilesConfig{UnzipLimit: -1}})
+	fs := c.FS()
+	ctx := c.Ctx()
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	w, _ := zw.Create("inner.txt")
@@ -395,9 +342,10 @@ func TestUnzipWithTheCapTurnedOff(t *testing.T) {
 }
 
 func TestMediaCapsRefuseWithErrTooLarge(t *testing.T) {
-	fs := newFS(t)
+	c := testkit.NewController(t, testkit.Setup{Files: api.FilesConfig{DocumentLimit: 4, ImageFileLimit: 4}})
+	fs := c.FS()
 	write(t, fs, "doc.pdf", "%PDF-1.4 fake")
-	ctx := context.WithValue(context.Background(), common.KeyController, testThread{fs: fs, files: api.FilesConfig{DocumentLimit: 4, ImageFileLimit: 4}})
+	ctx := c.Ctx()
 	if _, err := readDocumentTool(ctx, PathArg{Path: "doc.pdf"}); !errors.Is(err, api.ErrTooLarge) {
 		t.Fatalf("a document over DocumentLimit: want api.ErrTooLarge, got %v", err)
 	}
@@ -407,90 +355,95 @@ func TestMediaCapsRefuseWithErrTooLarge(t *testing.T) {
 }
 
 func TestUnzipRejectsEscape(t *testing.T) {
-	fs := newFS(t)
+	c := testkit.NewController(t, testkit.Setup{})
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	w, _ := zw.Create("../evil.txt")
 	io.WriteString(w, "x")
 	zw.Close()
-	if _, err := writeBytesTool(threadCtx(fs), writeBytesArg{Path: "evil.zip", Data: buf.Bytes()}); err != nil {
+	if _, err := writeBytesTool(c.Ctx(), writeBytesArg{Path: "evil.zip", Data: buf.Bytes()}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := unzipTool(threadCtx(fs), unzipArg{Src: "evil.zip"}); err == nil || !strings.Contains(err.Error(), "unsafe") {
+	if _, err := unzipTool(c.Ctx(), unzipArg{Src: "evil.zip"}); err == nil || !strings.Contains(err.Error(), "unsafe") {
 		t.Fatalf("err = %v", err)
 	}
 }
 
 func TestGrep(t *testing.T) {
-	fs := newFS(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	write(t, fs, "a.go", "package a\nfunc Hello() {}\n")
 	write(t, fs, "b.txt", "hello there\n")
-	res, err := grepTool(threadCtx(fs), grepArg{Pattern: "(?i)hello"})
+	res, err := grepTool(c.Ctx(), grepArg{Pattern: "(?i)hello"})
 	if err != nil || len(res.Matches) != 2 {
 		t.Fatalf("%+v, %v", res, err)
 	}
-	res, err = grepTool(threadCtx(fs), grepArg{Pattern: "(?i)hello", Glob: "**/*.go"})
+	res, err = grepTool(c.Ctx(), grepArg{Pattern: "(?i)hello", Glob: "**/*.go"})
 	if err != nil || len(res.Matches) != 1 || res.Matches[0].Path != "a.go" || res.Matches[0].Line != 2 {
 		t.Fatalf("%+v, %v", res, err)
 	}
 }
 
 func TestGrepSkipsUploadsUnlessPathed(t *testing.T) {
-	fs, store := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs, store := c.FS(), c.Store()
 	write(t, fs, "local.txt", "needle here\n")
 	putFile(t, store, api.OriginUser, "up.txt", "needle in upload\n")
 	putFile(t, store, api.OriginAgent, "mem.txt", "needle in memory\n")
-	res, err := grepTool(threadCtx(fs), grepArg{Pattern: "needle"})
+	res, err := grepTool(c.Ctx(), grepArg{Pattern: "needle"})
 	if err != nil || len(res.Matches) != 1 || res.Matches[0].Path != "local.txt" {
 		t.Fatalf("default walk: %+v, %v", res, err)
 	}
-	res, err = grepTool(threadCtx(fs), grepArg{Pattern: "needle", Path: "user_uploads"})
+	res, err = grepTool(c.Ctx(), grepArg{Pattern: "needle", Path: "user_uploads"})
 	if err != nil || len(res.Matches) != 1 || res.Matches[0].Path != "user_uploads/up.txt" {
 		t.Fatalf("explicit dir: %+v, %v", res, err)
 	}
-	res, err = grepTool(threadCtx(fs), grepArg{Pattern: "needle", Path: "agent_uploads/mem.txt"})
+	res, err = grepTool(c.Ctx(), grepArg{Pattern: "needle", Path: "agent_uploads/mem.txt"})
 	if err != nil || len(res.Matches) != 1 || res.Matches[0].Path != "agent_uploads/mem.txt" {
 		t.Fatalf("explicit file: %+v, %v", res, err)
 	}
 }
 
 func TestGlobListsUploads(t *testing.T) {
-	fs, store := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs, store := c.FS(), c.Store()
 	write(t, fs, "top.csv", "1")
 	putFile(t, store, api.OriginUser, "data.csv", "2")
-	res, err := globTool(threadCtx(fs), globArg{Pattern: "**/*.csv"})
+	res, err := globTool(c.Ctx(), globArg{Pattern: "**/*.csv"})
 	if err != nil || len(res.Paths) != 2 {
 		t.Fatalf("%+v, %v", res, err)
 	}
 }
 
 func TestGlob(t *testing.T) {
-	fs := newFS(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	write(t, fs, "x/deep/data.csv", "1")
 	write(t, fs, "top.csv", "2")
 	write(t, fs, "note.txt", "3")
-	res, err := globTool(threadCtx(fs), globArg{Pattern: "**/*.csv"})
+	res, err := globTool(c.Ctx(), globArg{Pattern: "**/*.csv"})
 	if err != nil || len(res.Paths) != 2 {
 		t.Fatalf("%+v, %v", res, err)
 	}
 }
 
 func TestAgentUploadReplaceLoop(t *testing.T) {
-	fs := newFS(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	write(t, fs, "MEMORY.md", "v1")
 	cp := copyTool
 	del := deleteTool
-	if _, err := cp(threadCtx(fs), copyArg{Src: "MEMORY.md", Dst: "agent_uploads/MEMORY.md"}); err != nil {
+	if _, err := cp(c.Ctx(), copyArg{Src: "MEMORY.md", Dst: "agent_uploads/MEMORY.md"}); err != nil {
 		t.Fatal(err)
 	}
 	write(t, fs, "MEMORY.md", "v2")
-	if _, err := cp(threadCtx(fs), copyArg{Src: "MEMORY.md", Dst: "agent_uploads/MEMORY.md"}); !errors.Is(err, api.ErrExists) {
+	if _, err := cp(c.Ctx(), copyArg{Src: "MEMORY.md", Dst: "agent_uploads/MEMORY.md"}); !errors.Is(err, api.ErrExists) {
 		t.Fatalf("overwrite without delete: %v", err)
 	}
-	if _, err := del(threadCtx(fs), PathArg{Path: "agent_uploads/MEMORY.md"}); err != nil {
+	if _, err := del(c.Ctx(), PathArg{Path: "agent_uploads/MEMORY.md"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := cp(threadCtx(fs), copyArg{Src: "MEMORY.md", Dst: "agent_uploads/MEMORY.md"}); err != nil {
+	if _, err := cp(c.Ctx(), copyArg{Src: "MEMORY.md", Dst: "agent_uploads/MEMORY.md"}); err != nil {
 		t.Fatal(err)
 	}
 	rc, err := fs.ReadAll(context.Background(), "agent_uploads/MEMORY.md")
@@ -505,22 +458,24 @@ func TestAgentUploadReplaceLoop(t *testing.T) {
 }
 
 func TestCopyToAgentUploadsSurfacesExists(t *testing.T) {
-	fs := newFS(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	write(t, fs, "r.txt", "data")
 	cp := copyTool
-	e, err := cp(threadCtx(fs), copyArg{Src: "r.txt", Dst: "agent_uploads/r.txt"})
+	e, err := cp(c.Ctx(), copyArg{Src: "r.txt", Dst: "agent_uploads/r.txt"})
 	if err != nil || e.Path != "agent_uploads/r.txt" {
 		t.Fatalf("%+v, %v", e, err)
 	}
-	if _, err := cp(threadCtx(fs), copyArg{Src: "r.txt", Dst: "agent_uploads/r.txt"}); !errors.Is(err, api.ErrExists) {
+	if _, err := cp(c.Ctx(), copyArg{Src: "r.txt", Dst: "agent_uploads/r.txt"}); !errors.Is(err, api.ErrExists) {
 		t.Fatalf("err = %v", err)
 	}
 }
 
 func TestReadOverlongLine(t *testing.T) {
-	fs := newFS(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	write(t, fs, "a.txt", "first\r\n"+strings.Repeat("x", 3<<20)+"\r\nthird\n")
-	out, err := readTool(threadCtx(fs), readArg{Path: "a.txt"})
+	out, err := readTool(c.Ctx(), readArg{Path: "a.txt"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -531,10 +486,11 @@ func TestReadOverlongLine(t *testing.T) {
 }
 
 func TestGrepOverlongLine(t *testing.T) {
-	fs := newFS(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	write(t, fs, "a/big.txt", strings.Repeat("y", 3<<20)+"\nneedle one\n")
 	write(t, fs, "b/small.txt", "needle two\n")
-	res, err := grepTool(threadCtx(fs), grepArg{Pattern: "needle"})
+	res, err := grepTool(c.Ctx(), grepArg{Pattern: "needle"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -544,10 +500,11 @@ func TestGrepOverlongLine(t *testing.T) {
 }
 
 func TestZipSkipsExplicitDst(t *testing.T) {
-	fs := newFS(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	write(t, fs, "a.txt", "a")
 	write(t, fs, "out.zip", "old")
-	if _, err := zipTool(threadCtx(fs), zipArg{Paths: []string{"a.txt", "out.zip"}, Dst: "out.zip"}); err != nil {
+	if _, err := zipTool(c.Ctx(), zipArg{Paths: []string{"a.txt", "out.zip"}, Dst: "out.zip"}); err != nil {
 		t.Fatal(err)
 	}
 	if names := zipNames(t, fs, "out.zip"); len(names) != 1 || names[0] != "a.txt" {
@@ -556,46 +513,48 @@ func TestZipSkipsExplicitDst(t *testing.T) {
 }
 
 func TestReadImageRejectsOversizedGIF(t *testing.T) {
-	fs := newFS(t)
+	c := testkit.NewController(t, testkit.Setup{})
 	header := []byte("GIF89a\xff\xff\xff\xff\x00\x00\x00;")
-	if _, err := writeBytesTool(threadCtx(fs), writeBytesArg{Path: "huge.gif", Data: header}); err != nil {
+	if _, err := writeBytesTool(c.Ctx(), writeBytesArg{Path: "huge.gif", Data: header}); err != nil {
 		t.Fatal(err)
 	}
-	_, err := readImageTool(threadCtx(fs), PathArg{Path: "huge.gif"})
+	_, err := readImageTool(c.Ctx(), PathArg{Path: "huge.gif"})
 	if err == nil || !strings.Contains(err.Error(), "65535x65535") {
 		t.Fatalf("err %v", err)
 	}
 }
 
 func TestGlobRelativeToPath(t *testing.T) {
-	fs := newFS(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	write(t, fs, "src/a.go", "package a\n")
 	write(t, fs, "src/sub/b.go", "package b\n")
 	write(t, fs, "c.go", "package c\n")
-	res, err := globTool(threadCtx(fs), globArg{Pattern: "*.go", Path: "src"})
+	res, err := globTool(c.Ctx(), globArg{Pattern: "*.go", Path: "src"})
 	if err != nil || len(res.Paths) != 1 || res.Paths[0] != "src/a.go" {
 		t.Fatalf("%+v, %v", res, err)
 	}
-	res, err = globTool(threadCtx(fs), globArg{Pattern: "sub/*.go", Path: "src/"})
+	res, err = globTool(c.Ctx(), globArg{Pattern: "sub/*.go", Path: "src/"})
 	if err != nil || len(res.Paths) != 1 || res.Paths[0] != "src/sub/b.go" {
 		t.Fatalf("%+v, %v", res, err)
 	}
-	res, err = globTool(threadCtx(fs), globArg{Pattern: "*.go"})
+	res, err = globTool(c.Ctx(), globArg{Pattern: "*.go"})
 	if err != nil || len(res.Paths) != 1 || res.Paths[0] != "c.go" {
 		t.Fatalf("%+v, %v", res, err)
 	}
-	gres, err := grepTool(threadCtx(fs), grepArg{Pattern: "package", Path: "src", Glob: "*.go"})
+	gres, err := grepTool(c.Ctx(), grepArg{Pattern: "package", Path: "src", Glob: "*.go"})
 	if err != nil || len(gres.Matches) != 1 || gres.Matches[0].Path != "src/a.go" {
 		t.Fatalf("%+v, %v", gres, err)
 	}
-	gres, err = grepTool(threadCtx(fs), grepArg{Pattern: "package", Path: "src/sub/b.go", Glob: "*.go"})
+	gres, err = grepTool(c.Ctx(), grepArg{Pattern: "package", Path: "src/sub/b.go", Glob: "*.go"})
 	if err != nil || len(gres.Matches) != 1 || gres.Matches[0].Path != "src/sub/b.go" {
 		t.Fatalf("%+v, %v", gres, err)
 	}
 }
 
 func TestReadDocumentExtensionsAndMagic(t *testing.T) {
-	fs := newFS(t)
+	ctl := testkit.NewController(t, testkit.Setup{})
+	fs := ctl.FS()
 	cases := []struct {
 		name, content string
 		mime          api.DocumentMime
@@ -611,14 +570,14 @@ func TestReadDocumentExtensionsAndMagic(t *testing.T) {
 	}
 	for _, c := range cases {
 		write(t, fs, c.name, c.content)
-		doc, err := readDocumentTool(threadCtx(fs), PathArg{Path: c.name})
+		doc, err := readDocumentTool(ctl.Ctx(), PathArg{Path: c.name})
 		if err != nil || doc.Mime != c.mime {
 			t.Fatalf("%s: mime %s, %v", c.name, doc.Mime, err)
 		}
 	}
 	for _, name := range []string{"fake.pdf", "fake.docx", "fake.pptx"} {
 		write(t, fs, name, "not the real thing")
-		if _, err := readDocumentTool(threadCtx(fs), PathArg{Path: name}); err == nil {
+		if _, err := readDocumentTool(ctl.Ctx(), PathArg{Path: name}); err == nil {
 			t.Fatalf("%s accepted", name)
 		}
 	}
@@ -639,7 +598,7 @@ func gifBytes(t *testing.T, frames int) []byte {
 }
 
 func TestReadImageGIFFrames(t *testing.T) {
-	fs := newFS(t)
+	ctx := testkit.NewController(t, testkit.Setup{}).Ctx()
 	single := gifBytes(t, 1)
 	many := []byte("GIF89a\x04\x00\x04\x00\x00\x00\x00")
 	for range 100000 {
@@ -658,10 +617,10 @@ func TestReadImageGIFFrames(t *testing.T) {
 		{"cut.gif", single[:len(single)-3], "truncated"},
 	}
 	for _, c := range cases {
-		if _, err := writeBytesTool(threadCtx(fs), writeBytesArg{Path: c.name, Data: c.data}); err != nil {
+		if _, err := writeBytesTool(ctx, writeBytesArg{Path: c.name, Data: c.data}); err != nil {
 			t.Fatal(err)
 		}
-		img, err := readImageTool(threadCtx(fs), PathArg{Path: c.name})
+		img, err := readImageTool(ctx, PathArg{Path: c.name})
 		if c.want == "" {
 			if err != nil || img.Mime != api.ImageGIF {
 				t.Fatalf("%s: mime %s, %v", c.name, img.Mime, err)
@@ -675,23 +634,24 @@ func TestReadImageGIFFrames(t *testing.T) {
 }
 
 func TestReadHidesTheBOMAndAgreesWithGrepOnLoneCR(t *testing.T) {
-	fs := newFS(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	write(t, fs, "b.txt", "\ufeffa\rb\r\nneedle\n")
-	out, err := readTool(threadCtx(fs), readArg{Path: "b.txt"})
+	out, err := readTool(c.Ctx(), readArg{Path: "b.txt"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if want := "1: a\rb\n2: needle\n(end of file, 2 lines)"; out != want {
 		t.Fatalf("got %q", out)
 	}
-	res, err := grepTool(threadCtx(fs), grepArg{Pattern: "needle", Path: "b.txt"})
+	res, err := grepTool(c.Ctx(), grepArg{Pattern: "needle", Path: "b.txt"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(res.Matches) != 1 || res.Matches[0].Line != 2 {
 		t.Fatalf("got %+v", res.Matches)
 	}
-	res, err = grepTool(threadCtx(fs), grepArg{Pattern: "^a", Path: "b.txt"})
+	res, err = grepTool(c.Ctx(), grepArg{Pattern: "^a", Path: "b.txt"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -701,16 +661,17 @@ func TestReadHidesTheBOMAndAgreesWithGrepOnLoneCR(t *testing.T) {
 }
 
 func TestLineCutsKeepWholeRunes(t *testing.T) {
-	fs := newFS(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	write(t, fs, "u.txt", "x"+strings.Repeat("é", 1500)+"\n")
-	out, err := readTool(threadCtx(fs), readArg{Path: "u.txt"})
+	out, err := readTool(c.Ctx(), readArg{Path: "u.txt"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if want := "1: x" + strings.Repeat("é", 999) + "... (line truncated)\n(end of file, 1 lines)"; out != want {
 		t.Fatalf("read: got %q", out)
 	}
-	res, err := grepTool(threadCtx(fs), grepArg{Pattern: "x", Path: "u.txt"})
+	res, err := grepTool(c.Ctx(), grepArg{Pattern: "x", Path: "u.txt"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -720,18 +681,19 @@ func TestLineCutsKeepWholeRunes(t *testing.T) {
 }
 
 func TestLongToolsStopOnCancel(t *testing.T) {
-	fs := newFS(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	write(t, fs, "a/b.txt", "needle\n")
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	w, _ := zw.Create("inner.txt")
 	io.WriteString(w, "x")
 	zw.Close()
-	if _, err := writeBytesTool(threadCtx(fs), writeBytesArg{Path: "a.zip", Data: buf.Bytes()}); err != nil {
+	if _, err := writeBytesTool(c.Ctx(), writeBytesArg{Path: "a.zip", Data: buf.Bytes()}); err != nil {
 		t.Fatal(err)
 	}
 	stop := errors.New("stopped")
-	ctx, cancel := context.WithCancelCause(threadCtx(fs))
+	ctx, cancel := context.WithCancelCause(c.Ctx())
 	cancel(stop)
 	if _, err := grepTool(ctx, grepArg{Pattern: "needle"}); !errors.Is(err, stop) {
 		t.Fatalf("grep: %v", err)
@@ -751,15 +713,15 @@ func TestLongToolsStopOnCancel(t *testing.T) {
 }
 
 func TestUnzipWithoutFilesListsAnEmptyArray(t *testing.T) {
-	fs := newFS(t)
+	c := testkit.NewController(t, testkit.Setup{})
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	zw.Create("dir/")
 	zw.Close()
-	if _, err := writeBytesTool(threadCtx(fs), writeBytesArg{Path: "d.zip", Data: buf.Bytes()}); err != nil {
+	if _, err := writeBytesTool(c.Ctx(), writeBytesArg{Path: "d.zip", Data: buf.Bytes()}); err != nil {
 		t.Fatal(err)
 	}
-	res, err := unzipTool(threadCtx(fs), unzipArg{Src: "d.zip"})
+	res, err := unzipTool(c.Ctx(), unzipArg{Src: "d.zip"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -769,8 +731,8 @@ func TestUnzipWithoutFilesListsAnEmptyArray(t *testing.T) {
 }
 
 func TestUnzipRemovesTheCutEntry(t *testing.T) {
-	fs := newFS(t)
-	ctx := context.WithValue(context.Background(), common.KeyController, testThread{fs: fs, files: api.FilesConfig{UnzipLimit: 10}})
+	c := testkit.NewController(t, testkit.Setup{Files: api.FilesConfig{UnzipLimit: 10}})
+	fs, ctx := c.FS(), c.Ctx()
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	w, _ := zw.Create("first.txt")
@@ -793,7 +755,8 @@ func TestUnzipRemovesTheCutEntry(t *testing.T) {
 }
 
 func TestUnzipRemovesTheEntryCutByCancel(t *testing.T) {
-	fs := newFS(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	w, _ := zw.Create("big.txt")
@@ -815,10 +778,11 @@ func TestUnzipRemovesTheEntryCutByCancel(t *testing.T) {
 }
 
 func TestZipSkipsOverlappingArgs(t *testing.T) {
-	fs := newFS(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	write(t, fs, "src/main.go", "package main")
 	write(t, fs, "src/b.go", "package main")
-	if _, err := zipTool(threadCtx(fs), zipArg{Paths: []string{"src", "src/main.go", "src/b.go", "src"}, Dst: "out.zip"}); err != nil {
+	if _, err := zipTool(c.Ctx(), zipArg{Paths: []string{"src", "src/main.go", "src/b.go", "src"}, Dst: "out.zip"}); err != nil {
 		t.Fatal(err)
 	}
 	if names := zipNames(t, fs, "out.zip"); len(names) != 2 {
@@ -827,7 +791,8 @@ func TestZipSkipsOverlappingArgs(t *testing.T) {
 }
 
 func TestWalkStopsAtTheFirstStop(t *testing.T) {
-	fs := newFS(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	write(t, fs, "a/x.txt", "x")
 	write(t, fs, "a/y.txt", "y")
 	write(t, fs, "b/z.txt", "z")
@@ -842,15 +807,10 @@ func TestWalkStopsAtTheFirstStop(t *testing.T) {
 }
 
 func TestFailedWriteBytesKeepsTheOriginal(t *testing.T) {
-	store, err := local.NewFileStorage("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Remove() })
-	fs := filesystem.Open("thread", store, store, api.FilesConfig{MaxBytes: 20})
-	t.Cleanup(func() { fs.Dispose() })
+	c := testkit.NewController(t, testkit.Setup{Files: api.FilesConfig{MaxBytes: 20}})
+	fs := c.FS()
 	write(t, fs, "a.bin", "0123456789")
-	if _, err := writeBytesTool(threadCtx(fs), writeBytesArg{Path: "a.bin", Data: make([]byte, 15)}); !errors.Is(err, api.ErrQuota) {
+	if _, err := writeBytesTool(c.Ctx(), writeBytesArg{Path: "a.bin", Data: make([]byte, 15)}); !errors.Is(err, api.ErrQuota) {
 		t.Fatalf("got %v", err)
 	}
 	rc, err := fs.ReadAll(context.Background(), "a.bin")

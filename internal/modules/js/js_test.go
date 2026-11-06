@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"iter"
 	"reflect"
 	"strings"
 	"testing"
@@ -14,55 +13,10 @@ import (
 	"modernc.org/quickjs"
 	"neui.dev/api"
 	"neui.dev/internal/common"
-	"neui.dev/internal/filesystem"
 	"neui.dev/internal/modules/js/task"
-	"neui.dev/internal/storage/local"
+	"neui.dev/internal/testkit"
 	"neui.dev/internal/tools"
 )
-
-type testThread struct {
-	fs api.FS
-}
-
-func (testThread) Context() context.Context { return context.Background() }
-
-func (testThread) ID() api.ThreadID { return "thread" }
-
-func (testThread) PageContext() context.Context { return context.Background() }
-
-func (testThread) Task(string, map[string]any, context.CancelCauseFunc) (common.Task, error) {
-	return nil, errors.New("no tasks in tests")
-}
-
-func (testThread) Ask(api.ChatAsk) (func(context.Context), error) {
-	return nil, errors.New("no asks in tests")
-}
-
-func (testThread) Rename(context.Context, string) error { return nil }
-
-func (testThread) Modules() iter.Seq[common.Module] {
-	return func(func(common.Module) bool) {}
-}
-
-func (t testThread) FS() api.FS               { return t.fs }
-func (t testThread) Model() api.Model         { return api.Model{} }
-func (t testThread) Config() api.ThreadConfig { return api.ThreadConfig{} }
-
-func (testThread) FilesConfig() api.FilesConfig {
-	return common.FilesConfigDefaults(api.FilesConfig{})
-}
-
-func newCtx(t *testing.T) (context.Context, api.FS) {
-	t.Helper()
-	store, err := local.NewFileStorage("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Remove() })
-	fs := filesystem.Open("thread", store, store, api.FilesConfig{})
-	t.Cleanup(func() { fs.Dispose() })
-	return context.WithValue(context.Background(), common.KeyController, testThread{fs: fs}), fs
-}
 
 func write(t *testing.T, fs api.FS, name, content string) {
 	t.Helper()
@@ -93,7 +47,8 @@ func read(t *testing.T, fs api.FS, name string) string {
 }
 
 func TestRun(t *testing.T) {
-	ctx, fs := newCtx(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	ctx, fs := c.Ctx(), c.FS()
 	write(t, fs, "calc.js", "console.log('hey');\nreturn 21 * 2;")
 	m := &module{runtime: getRuntime(context.Background())}
 	res, err := m.run(ctx, RunArg{File: "calc.js"})
@@ -123,7 +78,8 @@ func TestRun(t *testing.T) {
 }
 
 func TestRunThrow(t *testing.T) {
-	ctx, fs := newCtx(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	ctx, fs := c.Ctx(), c.FS()
 	write(t, fs, "bad.js", `throw new Error("boom");`)
 	m := &module{runtime: getRuntime(context.Background())}
 	if _, err := m.run(ctx, RunArg{File: "bad.js"}); !errors.Is(err, errScript) || !strings.Contains(err.Error(), `log file "bad.js.log"`) {
@@ -135,7 +91,8 @@ func TestRunThrow(t *testing.T) {
 }
 
 func TestRunTimeout(t *testing.T) {
-	ctx, fs := newCtx(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	ctx, fs := c.Ctx(), c.FS()
 	write(t, fs, "spin.js", "while (true) {}")
 	m := &module{runtime: getRuntime(context.Background())}
 	if _, err := m.run(ctx, RunArg{File: "spin.js", Timeout: 200}); !errors.Is(err, task.ErrTimeout) {
@@ -143,17 +100,7 @@ func TestRunTimeout(t *testing.T) {
 	}
 }
 
-type toolThread struct {
-	testThread
-	module common.Module
-}
-
-func (t toolThread) Modules() iter.Seq[common.Module] {
-	return func(yield func(common.Module) bool) { yield(t.module) }
-}
-
 func TestRunTimeoutCancelsTool(t *testing.T) {
-	base, fs := newCtx(t)
 	seen := make(chan error, 1)
 	wait := tools.NewModule("wait", "")
 	if _, err := wait.Add("block", "", func(ctx context.Context, _ struct{}) (struct{}, error) {
@@ -163,7 +110,7 @@ func TestRunTimeoutCancelsTool(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	ctx := context.WithValue(base, common.KeyController, toolThread{testThread: testThread{fs: fs}, module: wait})
+	ctx := testkit.NewController(t, testkit.Setup{Modules: []common.Module{wait}}).Ctx()
 	m := &module{runtime: getRuntime(context.Background())}
 	start := time.Now()
 	_, err := m.run(ctx, RunArg{Code: "try { wait__block({}); } catch (e) {}\nwhile (true) {}", Timeout: 200})
@@ -179,7 +126,7 @@ func TestRunTimeoutCancelsTool(t *testing.T) {
 }
 
 func TestRunMissing(t *testing.T) {
-	ctx, _ := newCtx(t)
+	ctx := testkit.NewController(t, testkit.Setup{}).Ctx()
 	m := &module{runtime: getRuntime(context.Background())}
 	if _, err := m.run(ctx, RunArg{File: "ghost.js"}); !errors.Is(err, api.ErrNotFound) {
 		t.Fatalf("err = %v", err)
@@ -187,7 +134,7 @@ func TestRunMissing(t *testing.T) {
 }
 
 func TestStopIdle(t *testing.T) {
-	ctx, _ := newCtx(t)
+	ctx := testkit.NewController(t, testkit.Setup{}).Ctx()
 	m := &module{runtime: getRuntime(context.Background())}
 	if _, err := m.stop(ctx, struct{}{}); err == nil {
 		t.Fatal("stop with nothing running succeeded")
@@ -195,7 +142,8 @@ func TestStopIdle(t *testing.T) {
 }
 
 func TestRunWaitsForMemory(t *testing.T) {
-	ctx, fs := newCtx(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	ctx, fs := c.Ctx(), c.FS()
 	spin := "const end = Date.now() + 300;\nwhile (Date.now() < end) {}\nreturn 1;"
 	write(t, fs, "a.js", spin)
 	write(t, fs, "b.js", spin)
@@ -227,7 +175,8 @@ func TestRunWaitsForMemory(t *testing.T) {
 }
 
 func TestRunArg(t *testing.T) {
-	ctx, fs := newCtx(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	ctx, fs := c.Ctx(), c.FS()
 	write(t, fs, "echo.js", "return {arg, kind: typeof arg};")
 	m := &module{runtime: getRuntime(context.Background())}
 	for _, c := range []struct {
@@ -254,7 +203,8 @@ func TestRunArg(t *testing.T) {
 }
 
 func TestRunSkipsCanceledQueued(t *testing.T) {
-	ctx, fs := newCtx(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	ctx, fs := c.Ctx(), c.FS()
 	write(t, fs, "spin.js", "const end = Date.now() + 1000;\nwhile (Date.now() < end) {}\nreturn 1;")
 	write(t, fs, "quick.js", "return 2;")
 	seed := NewSeed(Config{DefaultMemory: 4 << 20, WorkerMemory: 8 << 20, TotalMemory: 8 << 20})
@@ -301,7 +251,8 @@ func TestRunSkipsCanceledQueued(t *testing.T) {
 }
 
 func TestRunCode(t *testing.T) {
-	ctx, fs := newCtx(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	ctx, fs := c.Ctx(), c.FS()
 	m := &module{runtime: getRuntime(context.Background())}
 	res, err := m.run(ctx, RunArg{Code: "console.log('hey');\nreturn 21 * 2;"})
 	if err != nil {
@@ -323,7 +274,8 @@ func TestRunCode(t *testing.T) {
 }
 
 func TestRunFileXorCode(t *testing.T) {
-	ctx, fs := newCtx(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	ctx, fs := c.Ctx(), c.FS()
 	write(t, fs, "calc.js", "return 1;")
 	m := &module{runtime: getRuntime(context.Background())}
 	if _, err := m.run(ctx, RunArg{File: "calc.js", Code: "return 1;"}); err == nil || !strings.Contains(err.Error(), "both") {
@@ -335,7 +287,7 @@ func TestRunFileXorCode(t *testing.T) {
 }
 
 func TestRunBackToBackNotBusy(t *testing.T) {
-	ctx, _ := newCtx(t)
+	ctx := testkit.NewController(t, testkit.Setup{}).Ctx()
 	m := &module{runtime: getRuntime(context.Background())}
 	for range 200 {
 		if _, err := m.run(ctx, RunArg{Code: "return 1;"}); err != nil {
@@ -345,7 +297,7 @@ func TestRunBackToBackNotBusy(t *testing.T) {
 }
 
 func TestRunCanceledCall(t *testing.T) {
-	base, _ := newCtx(t)
+	base := testkit.NewController(t, testkit.Setup{}).Ctx()
 	ctx, cancel := context.WithCancelCause(base)
 	m := &module{runtime: getRuntime(context.Background())}
 	go func() {
@@ -368,7 +320,7 @@ func TestRunCanceledCall(t *testing.T) {
 }
 
 func TestRunUnserializableResult(t *testing.T) {
-	ctx, _ := newCtx(t)
+	ctx := testkit.NewController(t, testkit.Setup{}).Ctx()
 	m := &module{runtime: getRuntime(context.Background())}
 	for _, code := range []string{"return () => 1;", "return Symbol('x');", "return {toJSON() {}};"} {
 		_, err := m.run(ctx, RunArg{Code: code})
@@ -379,7 +331,7 @@ func TestRunUnserializableResult(t *testing.T) {
 }
 
 func TestRunArgProtoKey(t *testing.T) {
-	ctx, _ := newCtx(t)
+	ctx := testkit.NewController(t, testkit.Setup{}).Ctx()
 	m := &module{runtime: getRuntime(context.Background())}
 	res, err := m.run(ctx, RunArg{Code: "return Object.keys(arg);", Arg: json.RawMessage(`{"__proto__":{"x":1},"y":2}`)})
 	if err != nil {
@@ -401,7 +353,7 @@ func TestConfigNonPositiveTakesDefaults(t *testing.T) {
 }
 
 func TestRunHugeLimitsApplyTheLimit(t *testing.T) {
-	ctx, _ := newCtx(t)
+	ctx := testkit.NewController(t, testkit.Setup{}).Ctx()
 	m := &module{runtime: getRuntime(context.Background())}
 	res, err := m.run(ctx, RunArg{
 		Code:    "const end = Date.now() + 50;\nwhile (Date.now() < end) {}\nreturn 1;",
@@ -417,7 +369,7 @@ func TestRunHugeLimitsApplyTheLimit(t *testing.T) {
 }
 
 func TestExecuteSetupTimeout(t *testing.T) {
-	_, f := newCtx(t)
+	c := testkit.NewController(t, testkit.Setup{})
 	ctx, cancel := context.WithCancelCause(context.Background())
 	cancel(task.ErrTimeout)
 	rt := getRuntime(context.Background())
@@ -427,7 +379,7 @@ func TestExecuteSetupTimeout(t *testing.T) {
 	}
 	defer vm.Close()
 	_, err = rt.execute(vm, task.Input{
-		Params:  task.Params{Name: "../escape", Script: "return 1;", Controller: testThread{fs: f}},
+		Params:  task.Params{Name: "../escape", Script: "return 1;", Controller: c},
 		Context: ctx,
 	})
 	if !errors.Is(err, task.ErrTimeout) || errors.Is(err, errRuntime) {
@@ -436,9 +388,9 @@ func TestExecuteSetupTimeout(t *testing.T) {
 }
 
 func TestTaskNameAfterCancel(t *testing.T) {
-	_, f := newCtx(t)
+	c := testkit.NewController(t, testkit.Setup{})
 	done := make(chan struct{})
-	w, _, cancel := task.NewTask(task.Params{Name: "a.js", Controller: testThread{fs: f}}, func() { close(done) }, time.Hour)
+	w, _, cancel := task.NewTask(task.Params{Name: "a.js", Controller: c}, func() { close(done) }, time.Hour)
 	cancel(errStopped)
 	for {
 		if w.Name() != "a.js" {
@@ -453,7 +405,8 @@ func TestTaskNameAfterCancel(t *testing.T) {
 }
 
 func TestConsoleLogsUnserializableValues(t *testing.T) {
-	ctx, fs := newCtx(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	ctx, fs := c.Ctx(), c.FS()
 	m := &module{runtime: getRuntime(context.Background())}
 	if _, err := m.run(ctx, RunArg{Code: "console.log(undefined, Symbol('s'), 1); return null;"}); err != nil {
 		t.Fatal(err)
@@ -464,7 +417,8 @@ func TestConsoleLogsUnserializableValues(t *testing.T) {
 }
 
 func TestRunRefusesAnOversizedScript(t *testing.T) {
-	ctx, fs := newCtx(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	ctx, fs := c.Ctx(), c.FS()
 	write(t, fs, "big.js", "return 1;\n//"+strings.Repeat("x", scriptLimit))
 	m := &module{runtime: getRuntime(context.Background())}
 	if _, err := m.run(ctx, RunArg{File: "big.js"}); err == nil || !strings.Contains(err.Error(), "4 MiB script size limit") {
@@ -477,7 +431,7 @@ func TestRunRefusesAnOversizedScript(t *testing.T) {
 }
 
 func TestRunRefusesWhileRunningBeforeReading(t *testing.T) {
-	ctx, _ := newCtx(t)
+	ctx := testkit.NewController(t, testkit.Setup{}).Ctx()
 	m := &module{runtime: getRuntime(context.Background()), running: &running{name: "other.js"}}
 	if _, err := m.run(ctx, RunArg{File: "missing.js"}); err == nil || !strings.Contains(err.Error(), "already running") {
 		t.Fatalf("err = %v", err)
@@ -485,7 +439,7 @@ func TestRunRefusesWhileRunningBeforeReading(t *testing.T) {
 }
 
 func TestLogKeepsTheNewestMegabyte(t *testing.T) {
-	_, fs := newCtx(t)
+	fs := testkit.NewController(t, testkit.Setup{}).FS()
 	entry := strings.Repeat("x", 100<<10)
 	for i := range 25 {
 		if err := Log(fs, "a.log", "INFO", entry+string(rune('a'+i))); err != nil {
@@ -506,17 +460,11 @@ func TestLogKeepsTheNewestMegabyte(t *testing.T) {
 }
 
 func TestClearLogQuotaIsNotARuntimeFailure(t *testing.T) {
-	store, err := local.NewFileStorage("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Remove() })
-	fs := filesystem.Open("thread", store, store, api.FilesConfig{MaxFiles: 1})
-	t.Cleanup(func() { fs.Dispose() })
-	ctx := context.WithValue(context.Background(), common.KeyController, testThread{fs: fs})
+	c := testkit.NewController(t, testkit.Setup{Files: api.FilesConfig{MaxFiles: 1}})
+	ctx, fs := c.Ctx(), c.FS()
 	write(t, fs, "a.js", "return 1;")
 	m := &module{runtime: getRuntime(context.Background())}
-	_, err = m.run(ctx, RunArg{File: "a.js"})
+	_, err := m.run(ctx, RunArg{File: "a.js"})
 	if !errors.Is(err, api.ErrQuota) || errors.Is(err, errRuntime) {
 		t.Fatalf("err = %v", err)
 	}

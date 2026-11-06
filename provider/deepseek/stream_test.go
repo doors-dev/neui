@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"neui.dev/api"
+	"neui.dev/internal/testkit/conform"
 	"neui.dev/provider/lib"
 )
 
@@ -25,7 +26,7 @@ func TestStreamText(t *testing.T) {
 		doneFrame,
 	))
 	events := collect(t, p, turn("9.11 or 9.8?"))
-	checkGrammar(t, events)
+	conform.CheckUnframed(t, events)
 	wantTrace(t, events,
 		"start chatcmpl-1 deepseek-v4-pro",
 		`text 0 "9.11"`,
@@ -45,7 +46,7 @@ func TestStreamEmptyOpeningDeltaOpensNoBlock(t *testing.T) {
 		doneFrame,
 	))
 	events := collect(t, p, turn("hi"))
-	checkGrammar(t, events)
+	conform.CheckUnframed(t, events)
 	wantTrace(t, events, "start chatcmpl-1 deepseek-v4-pro", "ok turn")
 }
 
@@ -60,7 +61,7 @@ func TestStreamToolCall(t *testing.T) {
 		doneFrame,
 	))
 	events := collect(t, p, turn("weather in Paris?"))
-	checkGrammar(t, events)
+	conform.CheckUnframed(t, events)
 	wantTrace(t, events,
 		"start chatcmpl-1 deepseek-v4-pro",
 		`tool 0 id="call_0_9c1f" name="get_weather" args=""`,
@@ -87,7 +88,7 @@ func TestStreamSeveralToolCalls(t *testing.T) {
 		doneFrame,
 	))
 	events := collect(t, p, turn("three things"))
-	checkGrammar(t, events)
+	conform.CheckUnframed(t, events)
 	wantTrace(t, events,
 		"start chatcmpl-1 deepseek-v4-pro",
 		fmt.Sprintf(`tool 0 id="call_dup" name="get_weather" args=%q`, `{"city":"Paris"}`),
@@ -111,7 +112,7 @@ func TestStreamToolCallFragmentsInterleave(t *testing.T) {
 		doneFrame,
 	))
 	events := collect(t, p, turn("weather and time"))
-	checkGrammar(t, events)
+	conform.CheckUnframed(t, events)
 	wantTrace(t, events,
 		"start chatcmpl-1 deepseek-v4-pro",
 		fmt.Sprintf(`tool 0 id="call_a" name="get_weather" args=%q`, `{"city":`),
@@ -132,7 +133,7 @@ func TestStreamToolCallWithoutIndex(t *testing.T) {
 		doneFrame,
 	))
 	events := collect(t, p, turn("ping"))
-	checkGrammar(t, events)
+	conform.CheckUnframed(t, events)
 	wantTrace(t, events,
 		"start chatcmpl-1 deepseek-v4-pro",
 		"err network",
@@ -149,7 +150,7 @@ func TestStreamReadsOnlyChoiceZero(t *testing.T) {
 		doneFrame,
 	))
 	events := collect(t, p, turn("hi"))
-	checkGrammar(t, events)
+	conform.CheckUnframed(t, events)
 	wantTrace(t, events,
 		"start chatcmpl-1 deepseek-v4-pro",
 		`text 0 "mine"`,
@@ -175,7 +176,7 @@ func TestStreamReasoning(t *testing.T) {
 		doneFrame,
 	))
 	events := collect(t, p, turn("9.11 or 9.8?"))
-	checkGrammar(t, events)
+	conform.CheckUnframed(t, events)
 	wantTrace(t, events,
 		"start chatcmpl-1 deepseek-v4-pro",
 		`thinking 0 part=0 "Let me compare"`,
@@ -201,7 +202,7 @@ func TestStreamReasoningTextAndToolCallEachTakeABlock(t *testing.T) {
 		doneFrame,
 	))
 	events := collect(t, p, turn("weather?"))
-	checkGrammar(t, events)
+	conform.CheckUnframed(t, events)
 	wantTrace(t, events,
 		"start chatcmpl-1 deepseek-v4-pro",
 		`thinking 0 part=0 "which city"`,
@@ -235,7 +236,7 @@ func TestStreamToolCallChangingIDFails(t *testing.T) {
 				bodies = append(bodies, chunkFrame(f, ""))
 			}
 			events := collect(t, serve(t, stringHandler(append(bodies, chunkFrame(`{}`, "tool_calls"), doneFrame)...)), turn("ping"))
-			checkGrammar(t, events)
+			conform.CheckUnframed(t, events)
 			last, ok := events[len(events)-1].(api.EventErr)
 			if !ok || last.Code != api.CodeNetwork {
 				t.Fatalf("ended with %#v, want err network", events[len(events)-1])
@@ -253,7 +254,7 @@ func TestStreamToolCallRepeatingItsIDPasses(t *testing.T) {
 		doneFrame,
 	))
 	events := collect(t, p, turn("ping"))
-	checkGrammar(t, events)
+	conform.CheckUnframed(t, events)
 	wantTrace(t, events,
 		"start chatcmpl-1 deepseek-v4-pro",
 		`tool 0 id="call_a" name="ping" args="{"`,
@@ -335,7 +336,7 @@ func TestStreamToolCallIdentityArrivesInPieces(t *testing.T) {
 			frames = append(frames, chunkFrame(`{}`, "tool_calls"), doneFrame)
 
 			events := collect(t, serve(t, stringHandler(frames...)), turn("weather in Paris?"))
-			checkGrammar(t, events)
+			conform.CheckUnframed(t, events)
 			want := append([]string{"start chatcmpl-1 deepseek-v4-pro"}, tc.want...)
 			wantTrace(t, events, append(want, "ok turn")...)
 		})
@@ -361,7 +362,7 @@ func TestReplayReproducesTheTurnByteForByte(t *testing.T) {
 		doneFrame,
 	))
 	events := collect(t, p, turn("9.11 or 9.8?"))
-	checkGrammar(t, events)
+	conform.CheckUnframed(t, events)
 
 	body := encodeBody(t, mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), api.Request{
 		Tools: []api.Tool{{Name: "note"}},
@@ -397,7 +398,7 @@ func TestStreamToolArgumentsThatNeverParse(t *testing.T) {
 		doneFrame,
 	))
 	events := collect(t, p, turn("search"))
-	checkGrammar(t, events)
+	conform.CheckUnframed(t, events)
 	wantTrace(t, events,
 		"start chatcmpl-1 deepseek-v4-pro",
 		`tool 0 id="call_trunc" name="search" args=""`,
@@ -465,7 +466,7 @@ func TestStreamUsageFrameHasNoChoices(t *testing.T) {
 		doneFrame,
 	))
 	events := collect(t, p, turn("hi"))
-	checkGrammar(t, events)
+	conform.CheckUnframed(t, events)
 	wantTrace(t, events,
 		"start chatcmpl-1 deepseek-v4-pro",
 		"usage in=3000 out=350 reasoning=600 read=9000 write=0",
@@ -482,7 +483,7 @@ func TestStreamEmptyTurn(t *testing.T) {
 		doneFrame,
 	))
 	events := collect(t, p, turn("hi"))
-	checkGrammar(t, events)
+	conform.CheckUnframed(t, events)
 	wantTrace(t, events,
 		"start chatcmpl-1 deepseek-v4-pro",
 		"usage in=10 out=0 reasoning=0 read=0 write=0",
@@ -592,7 +593,7 @@ func TestFinishReasons(t *testing.T) {
 				doneFrame,
 			))
 			events := collect(t, p, turn("hi"))
-			checkGrammar(t, events)
+			conform.CheckUnframed(t, events)
 			wantTrace(t, events,
 				"start chatcmpl-1 deepseek-v4-pro",
 				`text 0 "partial"`,
@@ -637,7 +638,7 @@ func TestStreamKeepAliveProducesNoEvents(t *testing.T) {
 		}
 	}, WithTransport(lib.Options{Idle: 3 * time.Second}))
 	events := collect(t, p, turn("hi"))
-	checkGrammar(t, events)
+	conform.CheckUnframed(t, events)
 	wantTrace(t, events,
 		"start chatcmpl-1 deepseek-v4-pro",
 		`text 0 "late"`,
@@ -661,7 +662,7 @@ func TestStreamIgnoresEmptyAndUnusedFrames(t *testing.T) {
 		"data:[DONE]\n\n",
 	))
 	events := collect(t, p, turn("hi"))
-	checkGrammar(t, events)
+	conform.CheckUnframed(t, events)
 	wantTrace(t, events,
 		"start chatcmpl-1 deepseek-v4-pro",
 		`text 0 "hi"`,
@@ -681,7 +682,7 @@ func TestStreamIdleTimeout(t *testing.T) {
 		}
 	}, WithTransport(lib.Options{Idle: 100 * time.Millisecond}))
 	events := collect(t, p, turn("hi"))
-	checkGrammar(t, events)
+	conform.CheckUnframed(t, events)
 	wantTrace(t, events, "start chatcmpl-1 deepseek-v4-pro", "err network")
 }
 
@@ -697,7 +698,7 @@ func TestStreamFrameLargerThanScannerLimit(t *testing.T) {
 		doneFrame,
 	))
 	events := collect(t, p, turn("write"))
-	checkGrammar(t, events)
+	conform.CheckUnframed(t, events)
 	if len(events) != 3 {
 		t.Fatalf("sequence %v", traces(events))
 	}
@@ -747,7 +748,7 @@ func TestHTTPErrors(t *testing.T) {
 				io.WriteString(w, tc.body)
 			})
 			events := collect(t, p, turn("hi"))
-			checkGrammar(t, events)
+			conform.CheckUnframed(t, events)
 			wantTrace(t, events, "err "+string(tc.want))
 			var apiErr *APIError
 			if !errors.As(events[0].(api.EventErr).Err, &apiErr) {
@@ -832,7 +833,7 @@ func TestStreamInBandError(t *testing.T) {
 				doneFrame,
 			))
 			events := collect(t, p, turn("hi"))
-			checkGrammar(t, events)
+			conform.CheckUnframed(t, events)
 			wantTrace(t, events,
 				"start chatcmpl-1 deepseek-v4-pro",
 				`text 0 "partial"`,
@@ -858,7 +859,7 @@ func TestStreamInBandErrorKeepsTheDeltaItRodeWith(t *testing.T) {
 		doneFrame,
 	))
 	events := collect(t, p, turn("hi"))
-	checkGrammar(t, events)
+	conform.CheckUnframed(t, events)
 	wantTrace(t, events,
 		"start chatcmpl-1 deepseek-v4-pro",
 		`text 0 "half a sen"`,
@@ -876,7 +877,7 @@ func TestStreamUnparseableFrame(t *testing.T) {
 		doneFrame,
 	))
 	events := collect(t, p, turn("hi"))
-	checkGrammar(t, events)
+	conform.CheckUnframed(t, events)
 	wantTrace(t, events, "start chatcmpl-1 deepseek-v4-pro", "err network")
 }
 
@@ -894,7 +895,7 @@ func TestStreamDisconnectBeforeFinishReason(t *testing.T) {
 		drop(w)
 	})
 	events := collect(t, p, turn("hi"))
-	checkGrammar(t, events)
+	conform.CheckUnframed(t, events)
 	wantTrace(t, events,
 		"start chatcmpl-1 deepseek-v4-pro",
 		`text 0 "half a sen"`,
@@ -914,7 +915,7 @@ func TestStreamDoneWithoutFinishReason(t *testing.T) {
 		doneFrame,
 	))
 	events := collect(t, p, turn("hi"))
-	checkGrammar(t, events)
+	conform.CheckUnframed(t, events)
 	wantTrace(t, events,
 		"start chatcmpl-1 deepseek-v4-pro",
 		`text 0 "hello"`,
@@ -956,7 +957,7 @@ func TestStreamCancelMidTurn(t *testing.T) {
 			cancel()
 		}
 	}
-	checkPrefix(t, events)
+	conform.CheckUnframed(t, events)
 	for _, e := range events {
 		if e, ok := e.(api.EventErr); ok {
 			t.Fatalf("a cancelled turn reported %s\nsequence %v", e.Code, traces(events))
@@ -986,7 +987,7 @@ func TestStreamCancelWhileParkedOnASend(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	events = append(events, drain(t, ch)...)
 
-	checkPrefix(t, events)
+	conform.CheckUnframed(t, events)
 	for _, e := range events {
 		if e, ok := e.(api.EventErr); ok {
 			t.Fatalf("a cancelled turn reported %s\nsequence %v", e.Code, traces(events))
@@ -1012,7 +1013,7 @@ func TestStreamCallerDeadlineIsSilent(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 	events := drain(t, p.Stream(ctx, turn("hi")))
-	checkPrefix(t, events)
+	conform.CheckUnframed(t, events)
 	for _, e := range events {
 		if e, ok := e.(api.EventErr); ok {
 			t.Fatalf("a caller deadline reported %s\nsequence %v", e.Code, traces(events))
@@ -1057,7 +1058,7 @@ func TestStreamStartFallsBackToTheConfiguredModel(t *testing.T) {
 		doneFrame,
 	))
 	events := collect(t, p, turn("hi"))
-	checkGrammar(t, events)
+	conform.CheckUnframed(t, events)
 	wantTrace(t, events,
 		"start  deepseek-v4-pro",
 		`text 0 "x"`,

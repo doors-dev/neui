@@ -6,11 +6,13 @@ import (
 	"testing"
 
 	"github.com/xuri/excelize/v2"
+	"neui.dev/internal/testkit"
 )
 
 func TestTable(t *testing.T) {
-	fs, _ := newFSStore(t)
-	ctx := threadCtx(fs)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
+	ctx := c.Ctx()
 	res, err := tableTool(ctx, tableArg{
 		Path:  "report.xlsx",
 		Sheet: "Report",
@@ -90,8 +92,9 @@ func TestTable(t *testing.T) {
 }
 
 func TestTableSecondSheet(t *testing.T) {
-	fs, _ := newFSStore(t)
-	ctx := threadCtx(fs)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
+	ctx := c.Ctx()
 	cols := []columnSpec{{Header: "K"}, {Header: "V", Format: "number"}}
 	if _, err := tableTool(ctx, tableArg{Path: "multi.xlsx", Sheet: "First", Columns: cols, Rows: [][]any{{"a", 1.0}}}); err != nil {
 		t.Fatal(err)
@@ -129,9 +132,10 @@ func TestTableSecondSheet(t *testing.T) {
 }
 
 func TestFormat(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	ctx := threadCtx(fs)
+	ctx := c.Ctx()
 	if _, err := formatTool(ctx, formatArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:B1", Bold: true, Fill: "yellow"}); err != nil {
 		t.Fatal(err)
 	}
@@ -177,8 +181,9 @@ func TestFormat(t *testing.T) {
 }
 
 func TestTableDates(t *testing.T) {
-	fs, _ := newFSStore(t)
-	ctx := threadCtx(fs)
+	ctl := testkit.NewController(t, testkit.Setup{})
+	fs := ctl.FS()
+	ctx := ctl.Ctx()
 	cols := []columnSpec{{Header: "Day", Format: "date"}, {Header: "At", Format: "date"}, {Header: "Serial", Format: "date"}}
 	if _, err := tableTool(ctx, tableArg{Path: "d.xlsx", Sheet: "S", Columns: cols, Rows: [][]any{{"2024-03-15", "2024-03-15T13:30:00+02:00", 45366.0}}}); err != nil {
 		t.Fatal(err)
@@ -218,14 +223,15 @@ func TestTableDates(t *testing.T) {
 }
 
 func TestTableDate1904(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	f := excelize.NewFile()
 	on := true
 	if err := f.SetWorkbookProps(&excelize.WorkbookPropsOptions{Date1904: &on}); err != nil {
 		t.Fatal(err)
 	}
 	writeBook(t, fs, "d.xlsx", f)
-	if _, err := tableTool(threadCtx(fs), tableArg{Path: "d.xlsx", Sheet: "Sheet1", Columns: []columnSpec{{Header: "Day", Format: "date"}}, Rows: [][]any{{"2024-03-15"}}}); err != nil {
+	if _, err := tableTool(c.Ctx(), tableArg{Path: "d.xlsx", Sheet: "Sheet1", Columns: []columnSpec{{Header: "Day", Format: "date"}}, Rows: [][]any{{"2024-03-15"}}}); err != nil {
 		t.Fatal(err)
 	}
 	if v, _ := reopen(t, fs, "d.xlsx").GetCellValue("Sheet1", "A2", excelize.Options{RawCellValue: true}); v != "43904" {
@@ -234,22 +240,23 @@ func TestTableDate1904(t *testing.T) {
 }
 
 func TestTableBadDate(t *testing.T) {
-	fs, _ := newFSStore(t)
-	_, err := tableTool(threadCtx(fs), tableArg{Path: "d.xlsx", Sheet: "S", Columns: []columnSpec{{Header: "Day", Format: "date"}}, Rows: [][]any{{"15/03/2024"}}})
+	c := testkit.NewController(t, testkit.Setup{})
+	_, err := tableTool(c.Ctx(), tableArg{Path: "d.xlsx", Sheet: "S", Columns: []columnSpec{{Header: "Day", Format: "date"}}, Rows: [][]any{{"15/03/2024"}}})
 	if err == nil || !strings.Contains(err.Error(), "15/03/2024") {
 		t.Fatalf("err = %v", err)
 	}
 }
 
 func TestTableRefusesEarlyDates(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	for _, v := range []string{"1899-12-31", "1899-12-31T12:00:00", "1850-06-01"} {
-		_, err := tableTool(threadCtx(fs), tableArg{Path: "d.xlsx", Sheet: "S", Columns: []columnSpec{{Header: "Day", Format: "date"}}, Rows: [][]any{{v}}})
+		_, err := tableTool(c.Ctx(), tableArg{Path: "d.xlsx", Sheet: "S", Columns: []columnSpec{{Header: "Day", Format: "date"}}, Rows: [][]any{{v}}})
 		if err == nil || !strings.Contains(err.Error(), "before 1900-01-01") {
 			t.Fatalf("%s: err = %v", v, err)
 		}
 	}
-	if _, err := tableTool(threadCtx(fs), tableArg{Path: "d.xlsx", Sheet: "S", Columns: []columnSpec{{Header: "Day", Format: "date"}}, Rows: [][]any{{"1900-01-01"}}}); err != nil {
+	if _, err := tableTool(c.Ctx(), tableArg{Path: "d.xlsx", Sheet: "S", Columns: []columnSpec{{Header: "Day", Format: "date"}}, Rows: [][]any{{"1900-01-01"}}}); err != nil {
 		t.Fatal(err)
 	}
 	f := excelize.NewFile()
@@ -258,31 +265,33 @@ func TestTableRefusesEarlyDates(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeBook(t, fs, "e.xlsx", f)
-	_, err := tableTool(threadCtx(fs), tableArg{Path: "e.xlsx", Sheet: "Sheet1", Columns: []columnSpec{{Header: "Day", Format: "date"}}, Rows: [][]any{{"1903-12-31"}}})
+	_, err := tableTool(c.Ctx(), tableArg{Path: "e.xlsx", Sheet: "Sheet1", Columns: []columnSpec{{Header: "Day", Format: "date"}}, Rows: [][]any{{"1903-12-31"}}})
 	if err == nil || !strings.Contains(err.Error(), "before 1904-01-01") {
 		t.Fatalf("1904 err = %v", err)
 	}
 }
 
 func TestTableCreatesXLSXOnly(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	for _, name := range []string{"r.csv", "r.xlsm", "report"} {
-		_, err := tableTool(threadCtx(fs), tableArg{Path: name, Sheet: "S", Columns: []columnSpec{{Header: "K"}}, Rows: [][]any{{"a"}}})
+		_, err := tableTool(c.Ctx(), tableArg{Path: name, Sheet: "S", Columns: []columnSpec{{Header: "K"}}, Rows: [][]any{{"a"}}})
 		if err == nil || !strings.Contains(err.Error(), "does not end in .xlsx") {
 			t.Fatalf("%s: err = %v", name, err)
 		}
-		if _, err := fs.Stat(threadCtx(fs), name); err == nil {
+		if _, err := fs.Stat(c.Ctx(), name); err == nil {
 			t.Fatalf("%s was created", name)
 		}
 	}
-	if _, err := tableTool(threadCtx(fs), tableArg{Path: "R.XLSX", Sheet: "S", Columns: []columnSpec{{Header: "K"}}, Rows: [][]any{{"a"}}}); err != nil {
+	if _, err := tableTool(c.Ctx(), tableArg{Path: "R.XLSX", Sheet: "S", Columns: []columnSpec{{Header: "K"}}, Rows: [][]any{{"a"}}}); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestTableFormulas(t *testing.T) {
-	fs, _ := newFSStore(t)
-	ctx := threadCtx(fs)
+	ctl := testkit.NewController(t, testkit.Setup{})
+	fs := ctl.FS()
+	ctx := ctl.Ctx()
 	cols := []columnSpec{{Header: "Qty", Format: "integer"}, {Header: "Price", Format: "currency"}, {Header: "Total", Format: "currency"}, {Header: "Note"}}
 	rows := [][]any{{2.0, 1.5, "=A{row}*B{row}", "=IFS(A{row}>1,\"many\",TRUE,\"one\")"}, {1.0, 4.0, "=A{row}*B{row}", "=\"one\""}}
 	if _, err := tableTool(ctx, tableArg{Path: "t.xlsx", Sheet: "S", Cell: "A5", Columns: cols, Rows: rows}); err != nil {
@@ -313,14 +322,15 @@ func TestTableFormulas(t *testing.T) {
 }
 
 func TestTableKeepsPanes(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	f := excelize.NewFile()
 	user := excelize.Panes{Freeze: true, XSplit: 1, YSplit: 3, TopLeftCell: "B4", ActivePane: "bottomRight", Selection: []excelize.Selection{{SQRef: "C5", ActiveCell: "C5", Pane: "bottomRight"}}}
 	if err := f.SetPanes("Sheet1", &user); err != nil {
 		t.Fatal(err)
 	}
 	writeBook(t, fs, "p.xlsx", f)
-	if _, err := tableTool(threadCtx(fs), tableArg{Path: "p.xlsx", Sheet: "Sheet1", Cell: "E10", Columns: []columnSpec{{Header: "K"}}, Rows: [][]any{{"a"}}}); err != nil {
+	if _, err := tableTool(c.Ctx(), tableArg{Path: "p.xlsx", Sheet: "Sheet1", Cell: "E10", Columns: []columnSpec{{Header: "K"}}, Rows: [][]any{{"a"}}}); err != nil {
 		t.Fatal(err)
 	}
 	panes, err := reopen(t, fs, "p.xlsx").GetPanes("Sheet1")
@@ -333,8 +343,9 @@ func TestTableKeepsPanes(t *testing.T) {
 }
 
 func TestTableFreezesFirstOnly(t *testing.T) {
-	fs, _ := newFSStore(t)
-	ctx := threadCtx(fs)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
+	ctx := c.Ctx()
 	cols := []columnSpec{{Header: "K"}}
 	if _, err := tableTool(ctx, tableArg{Path: "p.xlsx", Sheet: "S", Columns: cols, Rows: [][]any{{"a"}}}); err != nil {
 		t.Fatal(err)
@@ -352,9 +363,10 @@ func TestTableFreezesFirstOnly(t *testing.T) {
 }
 
 func TestTableRefusesNonEmpty(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	ctx := threadCtx(fs)
+	ctx := c.Ctx()
 	_, err := tableTool(ctx, tableArg{Path: "book.xlsx", Sheet: "Data", Cell: "D2", Columns: []columnSpec{{Header: "K"}}, Rows: [][]any{{"a"}}})
 	if err == nil || !strings.Contains(err.Error(), "not empty") {
 		t.Fatalf("err = %v", err)
@@ -373,7 +385,8 @@ func TestTableRefusesNonEmpty(t *testing.T) {
 }
 
 func TestTableRefusesAutoFilter(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	f := excelize.NewFile()
 	for cell, v := range map[string]any{"A1": "N", "B1": "P", "A2": "a", "B2": 1} {
 		if err := f.SetCellValue("Sheet1", cell, v); err != nil {
@@ -384,14 +397,15 @@ func TestTableRefusesAutoFilter(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeBook(t, fs, "book.xlsx", f)
-	_, err := tableTool(threadCtx(fs), tableArg{Path: "book.xlsx", Sheet: "Sheet1", Cell: "A5", Columns: []columnSpec{{Header: "K"}}, Rows: [][]any{{"a"}}})
+	_, err := tableTool(c.Ctx(), tableArg{Path: "book.xlsx", Sheet: "Sheet1", Cell: "A5", Columns: []columnSpec{{Header: "K"}}, Rows: [][]any{{"a"}}})
 	if err == nil || !strings.Contains(err.Error(), "autofilter") {
 		t.Fatalf("err = %v", err)
 	}
 }
 
 func TestTableKeepsUserWidths(t *testing.T) {
-	fs, _ := newFSStore(t)
+	ctl := testkit.NewController(t, testkit.Setup{})
+	fs := ctl.FS()
 	f := excelize.NewFile()
 	if err := f.SetCellValue("Sheet1", "A1", "taken"); err != nil {
 		t.Fatal(err)
@@ -401,7 +415,7 @@ func TestTableKeepsUserWidths(t *testing.T) {
 	}
 	writeBook(t, fs, "book.xlsx", f)
 	cols := []columnSpec{{Header: "Long header A"}, {Header: "Long header B"}, {Header: "Long header C"}}
-	if _, err := tableTool(threadCtx(fs), tableArg{Path: "book.xlsx", Sheet: "Sheet1", Cell: "A10", Columns: cols, Rows: [][]any{{"a", "b", "c"}}}); err != nil {
+	if _, err := tableTool(ctl.Ctx(), tableArg{Path: "book.xlsx", Sheet: "Sheet1", Cell: "A10", Columns: cols, Rows: [][]any{{"a", "b", "c"}}}); err != nil {
 		t.Fatal(err)
 	}
 	g := reopen(t, fs, "book.xlsx")
@@ -427,14 +441,15 @@ func TestTableKeepsUserWidths(t *testing.T) {
 }
 
 func TestTableParsesNumbers(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	cols := []columnSpec{{Header: "N", Format: "number"}, {Header: "C", Format: "currency"}, {Header: "P", Format: "percent"}, {Header: "I", Format: "integer"}}
 	rows := [][]any{
 		{"1,234.5", "$1,234.50", "15%", "12"},
 		{" -7 ", "-$3", 0.15, 4.0},
 		{"", "2", ".5", "1,000"},
 	}
-	if _, err := tableTool(threadCtx(fs), tableArg{Path: "n.xlsx", Sheet: "S", Columns: cols, Rows: rows}); err != nil {
+	if _, err := tableTool(c.Ctx(), tableArg{Path: "n.xlsx", Sheet: "S", Columns: cols, Rows: rows}); err != nil {
 		t.Fatal(err)
 	}
 	f := reopen(t, fs, "n.xlsx")
@@ -451,7 +466,7 @@ func TestTableParsesNumbers(t *testing.T) {
 		format string
 		value  any
 	}{{"number", "abc"}, {"number", "1,23"}, {"number", "$5"}, {"integer", "1e5"}, {"percent", "15 %%"}, {"currency", "€5"}, {"number", "-"}, {"number", "15%"}, {"integer", "15%"}, {"currency", "15%"}} {
-		_, err := tableTool(threadCtx(fs), tableArg{Path: "bad.xlsx", Sheet: "S", Columns: []columnSpec{{Header: "X", Format: bad.format}}, Rows: [][]any{{bad.value}}})
+		_, err := tableTool(c.Ctx(), tableArg{Path: "bad.xlsx", Sheet: "S", Columns: []columnSpec{{Header: "X", Format: bad.format}}, Rows: [][]any{{bad.value}}})
 		if err == nil || !strings.Contains(err.Error(), "not a number") {
 			t.Fatalf("%s %q: err = %v", bad.format, bad.value, err)
 		}
@@ -459,7 +474,8 @@ func TestTableParsesNumbers(t *testing.T) {
 }
 
 func TestTableRefusesBadColumnsAndCells(t *testing.T) {
-	fs, _ := newFSStore(t)
+	ctl := testkit.NewController(t, testkit.Setup{})
+	fs := ctl.FS()
 	for _, c := range []struct {
 		cols    []columnSpec
 		rows    [][]any
@@ -471,12 +487,12 @@ func TestTableRefusesBadColumnsAndCells(t *testing.T) {
 		{cols: []columnSpec{{Header: "K"}, {Header: "V"}}, rows: [][]any{{"a", map[string]any{"v": 1.0}}}, wantErr: "not a cell value"},
 		{cols: []columnSpec{{Header: "K"}}, rows: [][]any{{[]any{"a"}}}, wantErr: "not a cell value"},
 	} {
-		_, err := tableTool(threadCtx(fs), tableArg{Path: "bad.xlsx", Sheet: "S", Columns: c.cols, Rows: c.rows})
+		_, err := tableTool(ctl.Ctx(), tableArg{Path: "bad.xlsx", Sheet: "S", Columns: c.cols, Rows: c.rows})
 		if err == nil || !strings.Contains(err.Error(), c.wantErr) {
 			t.Fatalf("%+v: err = %v", c.cols, err)
 		}
 	}
-	if _, err := fs.Stat(threadCtx(fs), "bad.xlsx"); err == nil {
+	if _, err := fs.Stat(ctl.Ctx(), "bad.xlsx"); err == nil {
 		t.Fatal("bad.xlsx was written")
 	}
 }

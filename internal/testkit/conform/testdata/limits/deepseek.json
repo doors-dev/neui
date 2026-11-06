@@ -1,0 +1,15 @@
+{
+  "asOf": "2026-11-06",
+  "sources": {
+    "context": "https://api-docs.deepseek.com/quick_start/pricing",
+    "imagePixels": "https://api-docs.deepseek.com/guides/vision/",
+    "imageBytes": "https://api-docs.deepseek.com/guides/vision/",
+    "imagesPerRequest": "https://api-docs.deepseek.com/guides/vision/",
+    "requestBytes": "https://api-docs.deepseek.com/guides/files_api/",
+    "maxOutput": "https://api-docs.deepseek.com/api/create-chat-completion"
+  },
+  "models": {
+    "deepseek-flash": {"context": 1048576, "imagePixels": 1690000, "imageBytes": 33554432, "imageEncoding": "base64", "imagesPerRequest": 600, "requestBytes": 50331648, "maxOutput": 393216, "note": "about 1300x1300 px per image; 32 MiB per image, not said to be counted before or after base64, read as base64"},
+    "deepseek-v4-pro": {"context": 1048576, "imagePixels": 0, "imageBytes": 0, "imagesPerRequest": 0, "requestBytes": 50331648, "maxOutput": 393216, "note": "no vision"}
+  }
+}

@@ -11,6 +11,7 @@ import (
 
 	"neui.dev/api"
 	"neui.dev/internal/storage/local"
+	"neui.dev/internal/testkit"
 )
 
 var compactionConfig = api.ThreadConfig{CompactionPreserve: 0.25}
@@ -1119,6 +1120,27 @@ func TestRejectedRoundShedsTheStashMediaAndKeepsItsText(t *testing.T) {
 	}
 	if got := countImages(kept.messages.resultStash[0]); got != 1 {
 		t.Fatalf("a transient failure shed %d images from the stash: a connection blip must not cost the tool output", 1-got)
+	}
+}
+
+func TestCompactionInstructionHasMarker(t *testing.T) {
+	s := local.NewMessageStorage()
+	r := NewReplay(context.Background(), "a", s, compactionConfig, api.Model{})
+	mustCreate(t, r)
+	growingRounds(t, r, 100, 200, 300, 400)
+	_, compaction, err := r.PrepareCompaction()
+	if err != nil {
+		t.Fatalf("PrepareCompaction: %v", err)
+	}
+	if !testkit.IsCompaction(api.Request{Messages: compaction}) {
+		t.Fatalf("testkit.IsCompaction misses the compaction request: the fake provider would hand it a round's turn")
+	}
+	_, round, err := r.RoundInit(api.Input{Text: "next"})
+	if err != nil {
+		t.Fatalf("RoundInit: %v", err)
+	}
+	if testkit.IsCompaction(api.Request{Messages: round}) {
+		t.Fatalf("testkit.IsCompaction takes a round request for a compaction")
 	}
 }
 

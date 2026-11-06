@@ -16,12 +16,14 @@ import (
 
 	"github.com/xuri/excelize/v2"
 	"neui.dev/api"
+	"neui.dev/internal/testkit"
 )
 
 func TestWrite(t *testing.T) {
-	fs, _ := newFSStore(t)
+	ctl := testkit.NewController(t, testkit.Setup{})
+	fs := ctl.FS()
 	buildBook(t, fs, "book.xlsx")
-	ctx := threadCtx(fs)
+	ctx := ctl.Ctx()
 	res, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "E1", Rows: [][]any{{"Triple", "Flag", nil, "n"}}})
 	if err != nil {
 		t.Fatal(err)
@@ -70,7 +72,8 @@ func TestWrite(t *testing.T) {
 }
 
 func TestWriteKeepsOtherCachedValues(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	f := excelize.NewFile()
 	for cell, v := range map[string]any{"A1": "N", "B1": "Twice", "A2": 1, "A3": 2, "B2": 2, "B3": 4} {
 		if err := f.SetCellValue("Sheet1", cell, v); err != nil {
@@ -81,7 +84,7 @@ func TestWriteKeepsOtherCachedValues(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeBook(t, fs, "book.xlsx", f)
-	if _, err := writeTool(threadCtx(fs), writeArg{Path: "book.xlsx", Sheet: "Sheet1", Cell: "C2", Rows: [][]any{{"=A{row}*3"}}, Repeat: 2}); err != nil {
+	if _, err := writeTool(c.Ctx(), writeArg{Path: "book.xlsx", Sheet: "Sheet1", Cell: "C2", Rows: [][]any{{"=A{row}*3"}}, Repeat: 2}); err != nil {
 		t.Fatal(err)
 	}
 	g := reopen(t, fs, "book.xlsx")
@@ -94,17 +97,18 @@ func TestWriteKeepsOtherCachedValues(t *testing.T) {
 }
 
 func TestWriteRefusesNonEmpty(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	_, err := writeTool(threadCtx(fs), writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "C2", Rows: [][]any{{nil, "x"}}})
+	_, err := writeTool(c.Ctx(), writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "C2", Rows: [][]any{{nil, "x"}}})
 	if err == nil || !strings.Contains(err.Error(), "not empty") || !strings.Contains(err.Error(), "C2") {
 		t.Fatalf("err = %v", err)
 	}
-	_, err = writeTool(threadCtx(fs), writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "D3", Rows: [][]any{{"=1"}}, Repeat: 1})
+	_, err = writeTool(c.Ctx(), writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "D3", Rows: [][]any{{"=1"}}, Repeat: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = writeTool(threadCtx(fs), writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "D3", Rows: [][]any{{"=2"}}})
+	_, err = writeTool(c.Ctx(), writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "D3", Rows: [][]any{{"=2"}}})
 	if err == nil || !strings.Contains(err.Error(), "not empty") {
 		t.Fatalf("formula cell err = %v", err)
 	}
@@ -118,8 +122,9 @@ func TestWriteRefusesNonEmpty(t *testing.T) {
 }
 
 func TestWriteRefusals(t *testing.T) {
-	fs, _ := newFSStore(t)
-	ctx := threadCtx(fs)
+	ctl := testkit.NewController(t, testkit.Setup{})
+	fs := ctl.FS()
+	ctx := ctl.Ctx()
 	if _, err := tableTool(ctx, tableArg{Path: "book.xlsx", Sheet: "Data", Columns: []columnSpec{{Header: "K"}, {Header: "V"}}, Rows: [][]any{{"a", "x"}, {"b"}}, Name: "T"}); err != nil {
 		t.Fatal(err)
 	}
@@ -204,9 +209,10 @@ func TestWriteRefusals(t *testing.T) {
 }
 
 func TestWriteFutureFunctions(t *testing.T) {
-	fs, _ := newFSStore(t)
+	ctl := testkit.NewController(t, testkit.Setup{})
+	fs := ctl.FS()
 	buildBook(t, fs, "book.xlsx")
-	ctx := threadCtx(fs)
+	ctx := ctl.Ctx()
 	rows := [][]any{{
 		"=IFS(B{row}>15,\"big\",TRUE,\"small\")",
 		"=textjoin(\",\",TRUE,A2:A4)",
@@ -255,16 +261,18 @@ func TestFormulaPrefixesIntlAndCeiling(t *testing.T) {
 }
 
 func TestWriteRefusesHugeRepeat(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	_, err := writeTool(threadCtx(fs), writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "E2", Rows: [][]any{{1.0}}, Repeat: math.MaxUint64})
+	_, err := writeTool(c.Ctx(), writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "E2", Rows: [][]any{{1.0}}, Repeat: math.MaxUint64})
 	if err == nil || !strings.Contains(err.Error(), "repeat") {
 		t.Fatalf("err = %v", err)
 	}
 }
 
 func TestWriteRefusesVBA(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	f := excelize.NewFile()
 	buf, err := f.WriteToBuffer()
 	if err != nil {
@@ -296,7 +304,7 @@ func TestWriteRefusesVBA(t *testing.T) {
 	if err := w.Close(); err != nil {
 		t.Fatal(err)
 	}
-	ctx := threadCtx(fs)
+	ctx := c.Ctx()
 	_, err = writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Sheet1", Cell: "A1", Rows: [][]any{{1.0}}})
 	if err == nil || !strings.Contains(err.Error(), "VBA") {
 		t.Fatalf("err = %v", err)
@@ -316,9 +324,10 @@ func mustRead(t *testing.T, name string) []byte {
 }
 
 func TestWriteConcurrent(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	ctx := threadCtx(fs)
+	ctx := c.Ctx()
 	var wg sync.WaitGroup
 	errs := make(chan error, 8)
 	for i := range 8 {
@@ -405,9 +414,10 @@ func readPart(t *testing.T, fs api.FS, name, part string) string {
 }
 
 func TestExcelFixtureKeptByWrites(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	excelFixture(t, fs, "excel.xlsx")
-	ctx := threadCtx(fs)
+	ctx := c.Ctx()
 	infos, err := sheetsTool(ctx, sheetsArg{Path: "excel.xlsx"})
 	if err != nil {
 		t.Fatal(err)

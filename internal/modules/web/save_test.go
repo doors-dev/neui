@@ -1,12 +1,9 @@
 package web
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
-	"iter"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,54 +11,12 @@ import (
 	"time"
 
 	"neui.dev/api"
-	"neui.dev/internal/common"
-	"neui.dev/internal/filesystem"
-	"neui.dev/internal/storage/local"
+	"neui.dev/internal/testkit"
 )
 
-type testThread struct {
-	fs api.FS
-}
-
-func (testThread) ID() api.ThreadID { return "thread" }
-
-func (testThread) Context() context.Context { return context.Background() }
-
-func (testThread) PageContext() context.Context { return context.Background() }
-
-func (testThread) Modules() iter.Seq[common.Module] {
-	return func(func(common.Module) bool) {}
-}
-
-func (t testThread) FS() api.FS               { return t.fs }
-func (t testThread) Model() api.Model         { return api.Model{} }
-func (t testThread) Config() api.ThreadConfig { return api.ThreadConfig{} }
-
-func (testThread) FilesConfig() api.FilesConfig {
-	return common.FilesConfigDefaults(api.FilesConfig{})
-}
-
-func (testThread) Task(string, map[string]any, context.CancelCauseFunc) (common.Task, error) {
-	return nil, errors.New("no tasks in tests")
-}
-
-func (testThread) Ask(api.ChatAsk) (func(context.Context), error) {
-	return nil, errors.New("no asks in tests")
-}
-
-func (testThread) Rename(context.Context, string) error {
-	return errors.New("no renames in tests")
-}
-
 func TestFetchSaveAsStreamsToWorkspace(t *testing.T) {
-	store, err := local.NewFileStorage("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Remove() })
-	fs := filesystem.Open("thread", store, store, api.FilesConfig{})
-	t.Cleanup(func() { fs.Dispose() })
-	ctx := context.WithValue(context.Background(), common.KeyController, common.Controller(testThread{fs: fs}))
+	c := testkit.NewController(t, testkit.Setup{})
+	fs, ctx := c.FS(), c.Ctx()
 	body := "%PDF-1.7\x00 binary-ish payload"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/pdf")
@@ -100,14 +55,8 @@ func TestFetchSaveAsStreamsToWorkspace(t *testing.T) {
 }
 
 func TestFetchSaveAsOverTheCapKeepsNothing(t *testing.T) {
-	store, err := local.NewFileStorage("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Remove() })
-	fs := filesystem.Open("thread", store, store, api.FilesConfig{})
-	t.Cleanup(func() { fs.Dispose() })
-	ctx := context.WithValue(context.Background(), common.KeyController, common.Controller(testThread{fs: fs}))
+	c := testkit.NewController(t, testkit.Setup{})
+	fs, ctx := c.FS(), c.Ctx()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/pdf")
 		if r.URL.Path == "/sized" {
@@ -136,14 +85,8 @@ func TestFetchSaveAsOverTheCapKeepsNothing(t *testing.T) {
 }
 
 func TestFetchSaveAsFailureKeepsExistingFile(t *testing.T) {
-	store, err := local.NewFileStorage("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Remove() })
-	fs := filesystem.Open("thread", store, store, api.FilesConfig{})
-	t.Cleanup(func() { fs.Dispose() })
-	ctx := context.WithValue(context.Background(), common.KeyController, common.Controller(testThread{fs: fs}))
+	c := testkit.NewController(t, testkit.Setup{})
+	fs, ctx := c.FS(), c.Ctx()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/pdf")
 		switch r.URL.Path {
@@ -201,14 +144,7 @@ func TestFetchSaveAsFailureKeepsExistingFile(t *testing.T) {
 }
 
 func TestFetchSaveAsTimeoutNamesTheFetch(t *testing.T) {
-	store, err := local.NewFileStorage("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Remove() })
-	fs := filesystem.Open("thread", store, store, api.FilesConfig{})
-	t.Cleanup(func() { fs.Dispose() })
-	ctx := context.WithValue(context.Background(), common.KeyController, common.Controller(testThread{fs: fs}))
+	ctx := testkit.NewController(t, testkit.Setup{}).Ctx()
 	release := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/pdf")
@@ -223,21 +159,15 @@ func TestFetchSaveAsTimeoutNamesTheFetch(t *testing.T) {
 	defer close(release)
 	m := Module(Config{HTTPClient: srv.Client(), Timeout: 200 * time.Millisecond})(ctx)
 	tool, _ := m.Get("fetch")
-	_, err = tool.Agent(ctx, json.RawMessage(fmt.Sprintf(`{"url":%q,"saveAs":"slow.pdf"}`, srv.URL)))
+	_, err := tool.Agent(ctx, json.RawMessage(fmt.Sprintf(`{"url":%q,"saveAs":"slow.pdf"}`, srv.URL)))
 	if err == nil || !strings.Contains(err.Error(), "fetching "+srv.URL+" timed out after 200ms") {
 		t.Errorf("a timeout mid-download must name the url and the timeout: %v", err)
 	}
 }
 
 func TestFetchSaveAsErrorsNameSaveAs(t *testing.T) {
-	store, err := local.NewFileStorage("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Remove() })
-	fs := filesystem.Open("thread", store, store, api.FilesConfig{})
-	t.Cleanup(func() { fs.Dispose() })
-	ctx := context.WithValue(context.Background(), common.KeyController, common.Controller(testThread{fs: fs}))
+	c := testkit.NewController(t, testkit.Setup{})
+	ctx := c.Ctx()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/pdf")
 		w.Write([]byte("body"))
@@ -245,7 +175,7 @@ func TestFetchSaveAsErrorsNameSaveAs(t *testing.T) {
 	defer srv.Close()
 	m := Module(Config{HTTPClient: srv.Client()})(ctx)
 	tool, _ := m.Get("fetch")
-	_, err = tool.Agent(ctx, json.RawMessage(fmt.Sprintf(`{"url":%q,"saveAs":"user_uploads/x.pdf"}`, srv.URL)))
+	_, err := tool.Agent(ctx, json.RawMessage(fmt.Sprintf(`{"url":%q,"saveAs":"user_uploads/x.pdf"}`, srv.URL)))
 	if err == nil {
 		t.Fatal("a saveAs into uploads was accepted")
 	}

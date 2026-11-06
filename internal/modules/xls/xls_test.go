@@ -3,8 +3,6 @@ package xls
 import (
 	"archive/zip"
 	"context"
-	"errors"
-	"iter"
 	"math"
 	"reflect"
 	"slices"
@@ -14,56 +12,8 @@ import (
 
 	"github.com/xuri/excelize/v2"
 	"neui.dev/api"
-	"neui.dev/internal/common"
-	"neui.dev/internal/filesystem"
-	"neui.dev/internal/storage/local"
+	"neui.dev/internal/testkit"
 )
-
-type testThread struct{ fs api.FS }
-
-func (testThread) Context() context.Context { return context.Background() }
-
-func (testThread) ID() api.ThreadID { return "thread" }
-
-func (testThread) PageContext() context.Context { return context.Background() }
-
-func (testThread) Task(string, map[string]any, context.CancelCauseFunc) (common.Task, error) {
-	return nil, errors.New("no tasks in tests")
-}
-
-func (testThread) Ask(api.ChatAsk) (func(context.Context), error) {
-	return nil, errors.New("no asks in tests")
-}
-
-func (testThread) Rename(context.Context, string) error { return nil }
-
-func (testThread) Modules() iter.Seq[common.Module] {
-	return func(func(common.Module) bool) {}
-}
-
-func (t testThread) FS() api.FS               { return t.fs }
-func (t testThread) Model() api.Model         { return api.Model{} }
-func (t testThread) Config() api.ThreadConfig { return api.ThreadConfig{} }
-
-func (testThread) FilesConfig() api.FilesConfig {
-	return common.FilesConfigDefaults(api.FilesConfig{})
-}
-
-func threadCtx(fs api.FS) context.Context {
-	return context.WithValue(context.Background(), common.KeyController, testThread{fs: fs})
-}
-
-func newFSStore(t *testing.T) (filesystem.FS, *local.FileStorage) {
-	t.Helper()
-	store, err := local.NewFileStorage("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { store.Remove() })
-	fs := filesystem.Open("thread", store, store, api.FilesConfig{})
-	t.Cleanup(func() { fs.Dispose() })
-	return fs, store
-}
 
 func buildBook(t *testing.T, fs api.FS, name string) {
 	t.Helper()
@@ -123,9 +73,10 @@ func buildBook(t *testing.T, fs api.FS, name string) {
 }
 
 func TestSheets(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	infos, err := sheetsTool(threadCtx(fs), sheetsArg{Path: "book.xlsx"})
+	infos, err := sheetsTool(c.Ctx(), sheetsArg{Path: "book.xlsx"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,9 +92,10 @@ func TestSheets(t *testing.T) {
 }
 
 func TestProfile(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	res, err := profileTool(threadCtx(fs), profileArg{Path: "book.xlsx", Sheet: "Data"})
+	res, err := profileTool(c.Ctx(), profileArg{Path: "book.xlsx", Sheet: "Data"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,9 +117,10 @@ func TestProfile(t *testing.T) {
 }
 
 func TestProfileRange(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	res, err := profileTool(threadCtx(fs), profileArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:B3"})
+	res, err := profileTool(c.Ctx(), profileArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:B3"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,9 +133,10 @@ func TestProfileRange(t *testing.T) {
 }
 
 func TestReadPaging(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	ctx := threadCtx(fs)
+	ctx := c.Ctx()
 	res, err := readTool(ctx, readArg{Path: "book.xlsx", Sheet: "Data", Offset: 1, Limit: 2})
 	if err != nil {
 		t.Fatal(err)
@@ -206,9 +160,10 @@ func TestReadPaging(t *testing.T) {
 }
 
 func TestReadRawFormatted(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	ctx := threadCtx(fs)
+	ctx := c.Ctx()
 	res, err := readTool(ctx, readArg{Path: "book.xlsx", Sheet: "Data", Range: "C2:D2"})
 	if err != nil {
 		t.Fatal(err)
@@ -232,9 +187,10 @@ func TestReadRawFormatted(t *testing.T) {
 }
 
 func TestWrittenFormulasHaveNoSavedValue(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	ctx := threadCtx(fs)
+	ctx := c.Ctx()
 	if _, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "E2", Rows: [][]any{{"=B2*3", "=A2&\"-x\""}}}); err != nil {
 		t.Fatal(err)
 	}
@@ -262,7 +218,8 @@ func TestWrittenFormulasHaveNoSavedValue(t *testing.T) {
 }
 
 func TestReadRawMergedFormula(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	f := excelize.NewFile()
 	if err := f.SetCellFormula("Sheet1", "A1", "1+1"); err != nil {
 		t.Fatal(err)
@@ -274,7 +231,7 @@ func TestReadRawMergedFormula(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeBook(t, fs, "m.xlsx", f)
-	res, err := readTool(threadCtx(fs), readArg{Path: "m.xlsx", Sheet: "Sheet1", Range: "A1:D1", Raw: true})
+	res, err := readTool(c.Ctx(), readArg{Path: "m.xlsx", Sheet: "Sheet1", Range: "A1:D1", Raw: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -284,18 +241,20 @@ func TestReadRawMergedFormula(t *testing.T) {
 }
 
 func TestReadRefusesHugeOffset(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	_, err := readTool(threadCtx(fs), readArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:B4", Offset: math.MaxUint64})
+	_, err := readTool(c.Ctx(), readArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:B4", Offset: math.MaxUint64})
 	if err == nil || !strings.Contains(err.Error(), "offset") {
 		t.Fatalf("err = %v", err)
 	}
 }
 
 func TestFind(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	res, err := findTool(threadCtx(fs), findArg{Path: "book.xlsx", Query: "Bob"})
+	res, err := findTool(c.Ctx(), findArg{Path: "book.xlsx", Query: "Bob"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -305,7 +264,7 @@ func TestFind(t *testing.T) {
 	if res.Truncated {
 		t.Fatal("truncated on a full result")
 	}
-	res, err = findTool(threadCtx(fs), findArg{Path: "book.xlsx", Query: "note", Sheet: "Notes"})
+	res, err = findTool(c.Ctx(), findArg{Path: "book.xlsx", Query: "note", Sheet: "Notes"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -315,29 +274,32 @@ func TestFind(t *testing.T) {
 }
 
 func TestOpenReadErrors(t *testing.T) {
-	fs, store := newFSStore(t)
-	if _, err := sheetsTool(threadCtx(fs), sheetsArg{Path: "missing.xlsx"}); err == nil {
+	c := testkit.NewController(t, testkit.Setup{})
+	store := c.Store()
+	if _, err := sheetsTool(c.Ctx(), sheetsArg{Path: "missing.xlsx"}); err == nil {
 		t.Fatal("missing file: no error")
 	}
 	if _, err := store.FilePut(context.Background(), "thread", api.OriginUser, "up.xlsx", "application/octet-stream", strings.NewReader("junk"), false); err != nil {
 		t.Fatal(err)
 	}
-	_, err := sheetsTool(threadCtx(fs), sheetsArg{Path: "user_uploads/up.xlsx"})
+	_, err := sheetsTool(c.Ctx(), sheetsArg{Path: "user_uploads/up.xlsx"})
 	if err == nil || !strings.Contains(err.Error(), "virtual") {
 		t.Fatalf("virtual err = %v", err)
 	}
 }
 
 func TestFindEmptyQuery(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	if _, err := findTool(threadCtx(fs), findArg{Path: "book.xlsx", Query: ""}); err == nil {
+	if _, err := findTool(c.Ctx(), findArg{Path: "book.xlsx", Query: ""}); err == nil {
 		t.Fatal("empty query: no error")
 	}
 }
 
 func TestProfileBlankHeaderRow(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	f := excelize.NewFile()
 	if err := f.SetCellValue("Sheet1", "A2", "x"); err != nil {
 		t.Fatal(err)
@@ -351,7 +313,7 @@ func TestProfileBlankHeaderRow(t *testing.T) {
 	}
 	w.Close()
 	f.Close()
-	res, err := profileTool(threadCtx(fs), profileArg{Path: "book.xlsx", Sheet: "Sheet1"})
+	res, err := profileTool(c.Ctx(), profileArg{Path: "book.xlsx", Sheet: "Sheet1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -361,7 +323,8 @@ func TestProfileBlankHeaderRow(t *testing.T) {
 }
 
 func TestOpenRepetitiveWorkbook(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	f := excelize.NewFile()
 	sw, err := f.NewStreamWriter("Sheet1")
 	if err != nil {
@@ -398,14 +361,15 @@ func TestOpenRepetitiveWorkbook(t *testing.T) {
 	if raw <= 4*uint64(e.Size) {
 		t.Fatalf("fixture inflates only %d -> %d", e.Size, raw)
 	}
-	tight := context.WithValue(threadCtx(fs), configKey{}, Config{MaxFileSize: e.Size})
+	tight := context.WithValue(c.Ctx(), configKey{}, Config{MaxFileSize: e.Size})
 	if _, err := sheetsTool(tight, sheetsArg{Path: "big.xlsx"}); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestOpenZipBomb(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	w, err := fs.Create("bomb.xlsx")
 	if err != nil {
 		t.Fatal(err)
@@ -429,28 +393,30 @@ func TestOpenZipBomb(t *testing.T) {
 	if err := w.Close(); err != nil {
 		t.Fatal(err)
 	}
-	_, err = sheetsTool(threadCtx(fs), sheetsArg{Path: "bomb.xlsx"})
+	_, err = sheetsTool(c.Ctx(), sheetsArg{Path: "bomb.xlsx"})
 	if err == nil || !strings.Contains(err.Error(), "100x") {
 		t.Fatalf("err = %v", err)
 	}
 }
 
 func TestOpenMaxUnzipSize(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	low := context.WithValue(threadCtx(fs), configKey{}, Config{MaxUnzipSize: 1000})
+	low := context.WithValue(c.Ctx(), configKey{}, Config{MaxUnzipSize: 1000})
 	_, err := sheetsTool(low, sheetsArg{Path: "book.xlsx"})
 	if err == nil || !strings.Contains(err.Error(), "uncompressed") {
 		t.Fatalf("err = %v", err)
 	}
-	small := context.WithValue(threadCtx(fs), configKey{}, Config{MaxUnzipSize: 10 << 20})
+	small := context.WithValue(c.Ctx(), configKey{}, Config{MaxUnzipSize: 10 << 20})
 	if _, err := sheetsTool(small, sheetsArg{Path: "book.xlsx"}); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestProfileTypesPastSample(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	f := excelize.NewFile()
 	for cell, v := range map[string]any{"A1": "Late", "B1": "Mixed", "C1": "Num"} {
 		if err := f.SetCellValue("Sheet1", cell, v); err != nil {
@@ -472,7 +438,7 @@ func TestProfileTypesPastSample(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeBook(t, fs, "book.xlsx", f)
-	res, err := profileTool(threadCtx(fs), profileArg{Path: "book.xlsx", Sheet: "Sheet1"})
+	res, err := profileTool(c.Ctx(), profileArg{Path: "book.xlsx", Sheet: "Sheet1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -485,7 +451,8 @@ func TestProfileTypesPastSample(t *testing.T) {
 }
 
 func TestSheetsAutoFilter(t *testing.T) {
-	fs, _ := newFSStore(t)
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
 	f := excelize.NewFile()
 	if err := f.SetCellValue("Sheet1", "A1", "N"); err != nil {
 		t.Fatal(err)
@@ -494,7 +461,7 @@ func TestSheetsAutoFilter(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeBook(t, fs, "book.xlsx", f)
-	infos, err := sheetsTool(threadCtx(fs), sheetsArg{Path: "book.xlsx"})
+	infos, err := sheetsTool(c.Ctx(), sheetsArg{Path: "book.xlsx"})
 	if err != nil {
 		t.Fatal(err)
 	}
