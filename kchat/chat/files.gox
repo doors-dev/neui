@@ -79,22 +79,37 @@ elem (l *fileList) Main() {
 
 elem (l *fileList) content() {
 	~~
-	// drafts are what the composer is still holding, and the uploads dirs
-	// already hide them, so a listing is exactly what was sent or produced
 	entries := []api.FSEntry{}
+	var failed error
 	for _, dir := range []string{api.UserUploadsDir, api.AgentUploadsDir} {
 		found, err := l.fs.ReadDir(ctx, dir)
 		if err != nil {
 			doors.Logger(ctx).Error("kchat: files", "dir", dir, "err", err)
+			failed = err
 			continue
 		}
 		entries = append(entries, found...)
+	}
+	if failed != nil {
+		notify.Error(ctx, failed)
 	}
 	slices.SortFunc(entries, func(a api.FSEntry, b api.FSEntry) int {
 		return b.ModTime.Compare(a.ModTime)
 	})
 	~~
-	~(if len(entries) == 0 {
+	~(if failed != nil {
+		<div class="kchat-side-retry" role="alert">
+			<span>Couldn't load.</span>
+			~>doors.AClick{
+				Scope: new(doors.ScopeBlocking),
+				On: func(ctx context.Context, rp doors.RequestPointer) bool {
+					l.body.Reload(ctx)
+					return false
+				},
+				OnError: notify.OnError,
+			} <button type="button" class="kchat-btn kchat-btn_2nd">Retry</button>
+		</div>
+	} else if len(entries) == 0 {
 		<div class="kchat-side-empty">
 			<div>No files yet</div>
 			<div class="kchat-side-empty-hint">Attachments and anything the agent saves show up here</div>
@@ -203,6 +218,8 @@ func download(fs api.FS, name string) doors.Resource {
 			return
 		}
 		defer rc.Close()
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Content-Security-Policy", "sandbox")
 		if e.MIME != "" {
 			w.Header().Set("Content-Type", e.MIME)
 		}

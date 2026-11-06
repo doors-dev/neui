@@ -78,13 +78,14 @@ type Task = common.Task
 // and stored with its result; attrs become the task's meta, nil meaning none.
 // cancel is what a chat UI calls through api.Task.Cancel to stop the task
 // (kchat passes api.ErrCanceledByUser), and the cause it receives is what the
-// task should report with Err; the runtime does not call it, so the work must
-// also stop when ToolThreadContext ends. Run the work on ToolThreadContext,
-// not the call's ctx, which ends with the call. Call it before the tool
-// returns: it fails with context.Canceled when the thread is closed, with an
-// error when the thread is not running tool calls, and with an error when the
-// tool was called from a script (ToolFromJS), since scripts cannot start
-// background tasks. It panics when ctx comes from neither a tool call nor
+// task should report with Err; the runtime calls it with ErrCanceledByUser
+// when the round that started the task is rewound, and the work must also stop
+// when ToolThreadContext ends; cancel must not be nil. Run the work on
+// ToolThreadContext, not the call's ctx, which ends with the call. Call it
+// before the tool returns: it fails with context.Canceled when the thread is
+// closed, with an error when cancel is nil or the thread is not running tool
+// calls, and with an error when the tool was called from a script
+// (ToolFromJS), since scripts cannot start background tasks. It panics when ctx comes from neither a tool call nor
 // ToolThreadContext.
 func ToolTask(ctx context.Context, comment string, attrs map[string]any, cancel context.CancelCauseFunc) (Task, error) {
 	if tools.FromJS(ctx) {
@@ -148,7 +149,7 @@ func NewModule(name string, desc string) Module {
 // JSConfig.
 var ModuleJS ModuleFactory = js.Module
 
-// JSConfig tunes the js runtime; a zero field takes its default.
+// JSConfig tunes the js runtime; a zero or negative field takes its default.
 type JSConfig = js.Config
 
 // WithJSConfig tunes the js runtime of ModuleJS, as an app option for

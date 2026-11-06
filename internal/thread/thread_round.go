@@ -55,7 +55,9 @@ func (s *threadRound) on(cmd any) {
 		if cmd.backend != s.thread.link.backend {
 			defer s.thread.switchStateWait()
 			s.cancel(api.ErrUnlinked)
-			s.abort()
+			if _, err := s.abort(); err != nil {
+				s.thread.criticalErr(nil, err)
+			}
 			link, err := s.thread.connect(cmd.backend, cmd.page, true, cmd.meta)
 			if err != nil {
 				cmd.Err(err)
@@ -79,7 +81,10 @@ func (s *threadRound) on(cmd any) {
 		}
 		defer s.thread.switchStateWait()
 		s.cancel(api.ErrUnlinked)
-		s.abort()
+		if _, err := s.abort(); err != nil {
+			s.thread.criticalErr(nil, err)
+			return
+		}
 		s.thread.disconnect()
 	case commandStop:
 		if s.thread.link != cmd.link {
@@ -90,7 +95,11 @@ func (s *threadRound) on(cmd any) {
 		wasPending := s.thread.pending
 		s.thread.pending = false
 		s.cancel(api.ErrCanceledByUser)
-		usage := s.abort()
+		usage, err := s.abort()
+		if err != nil {
+			s.thread.criticalErr(cmd.intoMessage(), err)
+			return
+		}
 		if wasPending {
 			s.thread.link.send(newMessageEvent(nil, api.ChatEventInputPending{Pending: false}))
 		}
@@ -144,10 +153,9 @@ func (s *threadRound) on(cmd any) {
 	}
 }
 
-func (s *threadRound) abort() api.EventUsage {
+func (s *threadRound) abort() (api.EventUsage, error) {
 	usage, content := s.response.Abort()
-	s.thread.replay.RoundAbort(usage, content)
-	return usage
+	return usage, s.thread.replay.RoundAbort(usage, content)
 }
 
 func (s *threadRound) finalize() {

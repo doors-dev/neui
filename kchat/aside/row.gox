@@ -50,7 +50,11 @@ elem (r *row) open() {
 		~>doors.AClick{
 			Scope: new(doors.ScopeBlocking),
 			On: func(ctx context.Context, rp doors.RequestPointer) bool {
-				r.aside.Instance.ThreadOpen(ctx, r.thread.ID, nil)
+				if err := r.aside.Instance.ThreadOpen(ctx, r.thread.ID, nil); err != nil {
+					doors.Logger(ctx).Error("aside: open", "thread", r.thread.ID, "err", err)
+					notify.Error(ctx, err)
+					return false
+				}
 				rp.After(doors.ActionEmit[any]{Name: "opened"})
 				return false
 			},
@@ -103,7 +107,10 @@ elem (r *row) actions(hide func(ctx context.Context)) {
 				hide(ctx)
 				return
 			}
-			r.aside.Instance.ThreadOpen(ctx, id, nil)
+			if err := r.aside.Instance.ThreadOpen(ctx, id, nil); err != nil {
+				doors.Logger(ctx).Error("aside: open", "thread", id, "err", err)
+				notify.Error(ctx, err)
+			}
 			hide(ctx)
 		}))
 		~(r.action(icons.Trash(), "Delete chat", func(ctx context.Context) {

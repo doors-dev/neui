@@ -23,8 +23,6 @@ const (
 	chatMenuDelete
 )
 
-// chatMenu is which row has an overlay up and which one; one row at a time
-// falls out of there being a single value.
 type chatMenu struct {
 	id api.ThreadID
 	mode chatMenuMode
@@ -138,8 +136,6 @@ elem (p *Aside) aside() {
 		~(if !p.Params.Off(params.ThreadEdit) {
 			<script>
 				const side = document.currentScript.closest(".kchat-aside")
-				// touch has no hover, so a press that outlasts the timer opens the
-				// same menu the kebab does and swallows the click that follows
 				let timer = null
 				let fired = false
 				const cancel = () => {
@@ -186,7 +182,11 @@ elem (p *Aside) match(t api.Thread) {
 		~>doors.AClick{
 			Scope: new(doors.ScopeBlocking),
 			On: func(ctx context.Context, rp doors.RequestPointer) bool {
-				p.Instance.ThreadOpen(ctx, t.ID, nil)
+				if err := p.Instance.ThreadOpen(ctx, t.ID, nil); err != nil {
+					doors.Logger(ctx).Error("aside: open", "thread", t.ID, "err", err)
+					notify.Error(ctx, err)
+					return false
+				}
 				rp.After(doors.ActionEmit[any]{Name: "opened"})
 				return false
 			},

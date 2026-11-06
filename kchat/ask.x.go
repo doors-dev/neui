@@ -52,7 +52,7 @@ type AskOutput struct {
 	Picked []string `json:"picked,omitempty" description:"names of the options marked"`
 	// Typed is the user's own answer, trimmed; empty unless the own row is
 	// selected and has text.
-	Typed string `json:"typed,omitempty" description:"what the user typed instead"`
+	Typed string `json:"typed,omitempty" description:"the user's own typed answer; may come with picked when multiple"`
 }
 
 // ModuleAsk is the built-in module that lets the agent ask the user to pick

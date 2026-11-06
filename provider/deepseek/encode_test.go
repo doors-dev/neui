@@ -2,6 +2,7 @@ package deepseek
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -884,5 +885,34 @@ func TestEncodeLogsAnUnknownTypeOnce(t *testing.T) {
 	}
 	if counts[slog.LevelWarn] != 0 || counts[slog.LevelError] > 1 {
 		t.Fatalf("two encodes logged %v, want no warnings and at most one error", map[slog.Level]int(counts))
+	}
+}
+
+func TestFlashImageURLMatchesConcatenation(t *testing.T) {
+	flash := mustNew(t, Conf{Model: Flash}, WithAPIKey("k"))
+	for _, n := range []int{1, 2, 3, 4, 5, 57, 1000, 1<<20 + 1} {
+		data := make([]byte, n)
+		for i := range data {
+			data[i] = byte(i*7 + i>>8)
+		}
+		part, ok := flash.image(api.ContentImage{Data: data, Mime: " Image/PNG "}).(imagePart)
+		if !ok {
+			t.Fatalf("%d bytes: the image was noted instead of sent", n)
+		}
+		if want := "data:image/png;base64," + base64.StdEncoding.EncodeToString(data); part.ImageURL.URL != want {
+			t.Fatalf("%d bytes: the data URL differs from the concatenated one", n)
+		}
+	}
+}
+
+func BenchmarkFlashImageURL(b *testing.B) {
+	flash, err := New(Conf{Model: Flash}, WithAPIKey("k"))
+	if err != nil {
+		b.Fatal(err)
+	}
+	image := api.ContentImage{Data: make([]byte, 1<<20), Mime: "image/png"}
+	b.ReportAllocs()
+	for b.Loop() {
+		flash.image(image)
 	}
 }

@@ -355,7 +355,12 @@ func (p *Provider) image(c api.ContentImage) any {
 	if !api.ImageMime(mime).IsValid() {
 		return note(c, "the server takes JPEG, PNG, GIF and WebP only")
 	}
-	return imagePart{Type: "image_url", ImageURL: imageURL{URL: "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(c.Data)}}
+	url := make([]byte, len("data:")+len(mime)+len(";base64,")+base64.StdEncoding.EncodedLen(len(c.Data)))
+	n := copy(url, "data:")
+	n += copy(url[n:], mime)
+	n += copy(url[n:], ";base64,")
+	base64.StdEncoding.Encode(url[n:], c.Data)
+	return imagePart{Type: "image_url", ImageURL: imageURL{URL: string(url)}}
 }
 
 func note(c api.Content, why string) textPart {

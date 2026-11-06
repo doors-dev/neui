@@ -100,7 +100,7 @@ func (l LiveRound) IsErr() bool {
 	return false
 }
 
-func (l LiveRound) Done(ctx context.Context, state api.RoundState, err string) {
+func (l LiveRound) Done(ctx context.Context, state api.RoundState) {
 	l.state.Update(ctx, state)
 	l.response.Close()
 	l.tools.Close(ctx)

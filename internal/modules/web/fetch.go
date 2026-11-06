@@ -124,6 +124,25 @@ func (m *module) fetch(ctx context.Context, arg FetchArg) (string, error) {
 				}
 				return "", fmt.Errorf("%s resolves to %s, an address web__fetch does not connect to", failed, refused.addr)
 			}
+			var port badPorted
+			if errors.As(err, &port) {
+				failed := u.Host
+				if wrapped != nil {
+					if at, perr := url.Parse(wrapped.URL); perr == nil && at.Host != "" {
+						failed = at.Host
+					}
+				}
+				return "", fmt.Errorf("%s uses port %d, which web__fetch does not connect to", failed, port.port)
+			}
+			if errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil {
+				failed := u.Host
+				if wrapped != nil {
+					if at, perr := url.Parse(wrapped.URL); perr == nil && at.Host != "" {
+						failed = at.Host
+					}
+				}
+				return "", fmt.Errorf("connecting to %s timed out before the host answered", failed)
+			}
 			if errors.Is(err, context.DeadlineExceeded) {
 				return "", fmt.Errorf("fetching %s timed out after %s", u, timeout)
 			}
@@ -164,9 +183,14 @@ func (m *module) fetch(ctx context.Context, arg FetchArg) (string, error) {
 		partial := path.Join(path.Dir(arg.SaveAs), "."+path.Base(arg.SaveAs)+"."+rand.Text()+".part")
 		w, err := fs.Create(partial)
 		if err != nil {
-			return "", err
+			return "", errors.New(strings.ReplaceAll(err.Error(), partial, arg.SaveAs))
 		}
 		n, err := io.Copy(w, io.LimitReader(resp.Body, m.conf.MaxBytes+1))
+		if errors.Is(err, context.DeadlineExceeded) {
+			err = fmt.Errorf("fetching %s timed out after %s", u, timeout)
+		} else if errors.Is(err, context.Canceled) && ctx.Err() != nil {
+			err = context.Cause(ctx)
+		}
 		if cerr := w.Close(); err == nil {
 			err = cerr
 		}
@@ -178,6 +202,9 @@ func (m *module) fetch(ctx context.Context, arg FetchArg) (string, error) {
 		}
 		if err != nil {
 			fs.Remove(context.WithoutCancel(ctx), partial)
+			if strings.Contains(err.Error(), partial) {
+				err = errors.New(strings.ReplaceAll(err.Error(), partial, arg.SaveAs))
+			}
 			return "", err
 		}
 		el := gox.Elem(func(cur gox.Cursor) error {

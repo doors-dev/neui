@@ -75,3 +75,55 @@ func TestChatMainClosesTheLinkOnADeadRenderContext(t *testing.T) {
 		t.Fatal("send to the abandoned link blocked: the next broadcast parks the instance command loop")
 	}
 }
+
+func TestChatMainCancelsALinkDroppedBeforeInit(t *testing.T) {
+	for _, reload := range []bool{true, false} {
+		instCtx, instCancel := context.WithCancel(context.Background())
+		inst := &instance{ctx: instCtx, ch: make(chan command), links: make(map[*link]struct{})}
+		first := make(chan Link, 1)
+		go func() {
+			for {
+				select {
+				case <-instCtx.Done():
+					return
+				case cmd := <-inst.ch:
+					if cmd, ok := cmd.(commandLink); ok && len(first) == 0 && cap(first) == 1 {
+						first <- cmd.link
+						if reload {
+							cmd.link.send(thread.NewMessageReload(nil))
+						}
+						cmd.link.disconnect()
+						first = make(chan Link)
+					}
+				}
+			}
+		}()
+		got := first
+		renderCtx, renderCancel := context.WithCancel(context.Background())
+		c := &chat{inst: inst}
+		done := make(chan error, 1)
+		go func() {
+			done <- c.main()(gox.NewCursor(renderCtx, gox.NewPrinter(io.Discard)))
+		}()
+		var l Link
+		select {
+		case l = <-got:
+		case <-time.After(5 * time.Second):
+			t.Fatal("the render never took a link")
+		}
+		if !reload {
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				t.Fatal("the render did not return on a closed link")
+			}
+		}
+		select {
+		case <-l.ctx.Done():
+		case <-time.After(5 * time.Second):
+			t.Fatalf("reload=%v: the dropped link's context was never cancelled", reload)
+		}
+		renderCancel()
+		instCancel()
+	}
+}

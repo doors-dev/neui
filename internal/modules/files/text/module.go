@@ -61,7 +61,7 @@ type editResult struct {
 type replaceArg struct {
 	Path        string `json:"path" required:"true"`
 	Pattern     string `json:"pattern" required:"true" description:"RE2 regular expression matched against the file content; it sees lines ending in \n, as read shows them; (?s) lets . cross lines, (?m) makes ^ and $ match line boundaries"`
-	Replacement string `json:"replacement" description:"may reference capture groups as $1, $2; $$ is a literal dollar"`
+	Replacement string `json:"replacement" description:"may reference capture groups as $1, $2; write ${1} when a letter, digit or _ follows, e.g. ${1}_old; $$ is a literal dollar"`
 	All         bool   `json:"all" description:"replace every match; without it the pattern must match exactly once"`
 }
 

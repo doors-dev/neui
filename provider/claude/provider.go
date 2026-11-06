@@ -26,7 +26,6 @@
 package claude
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -254,9 +253,12 @@ func WithHTTPClient(c *http.Client) Option {
 }
 
 // WithVersion overrides the anthropic-version header, 2026-10-21 by default.
-// The adapter is written against that version.
+// The adapter is written against that version. An empty version is an error.
 func WithVersion(v string) Option {
 	return func(p *Provider) error {
+		if v == "" {
+			return errors.New("claude: WithVersion needs a version")
+		}
 		p.version = v
 		return nil
 	}
@@ -417,10 +419,11 @@ func (p *Provider) request(ctx context.Context, req api.Request) (*http.Request,
 	if err != nil {
 		return nil, 0, err
 	}
-	if p.model.RequestBytes > 0 && len(body) > p.model.RequestBytes {
-		return nil, len(body), fmt.Errorf("%w: the request is %d bytes, over the %d the model %s takes", errTooLarge, len(body), p.model.RequestBytes, p.model.Name)
+	sent := len(body.Bytes())
+	if p.model.RequestBytes > 0 && sent > p.model.RequestBytes {
+		return nil, sent, fmt.Errorf("%w: the request is %d bytes, over the %d the model %s takes", errTooLarge, sent, p.model.RequestBytes, p.model.Name)
 	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, p.baseURL+"/v1/messages", bytes.NewReader(body))
+	httpReq, err := body.Request(ctx, p.baseURL+"/v1/messages")
 	if err != nil {
 		panic(err)
 	}
@@ -433,5 +436,5 @@ func (p *Provider) request(ctx context.Context, req api.Request) (*http.Request,
 	if len(p.betas) > 0 {
 		httpReq.Header.Set("anthropic-beta", strings.Join(p.betas, ","))
 	}
-	return httpReq, len(body), nil
+	return httpReq, sent, nil
 }

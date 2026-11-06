@@ -53,12 +53,14 @@ func (c *chat) main() gox.Elem {
 			return nil
 		case m, ok = <-link.Ch():
 			if !ok {
+				link.cancel()
 				return nil
 			}
 		}
 		switch m := m.(type) {
 		case thread.MessageReload:
 			m.Ack()
+			link.cancel()
 			goto retry
 		case thread.MessageInit:
 			m.Ack()

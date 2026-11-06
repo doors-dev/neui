@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"net/http"
+	neturl "net/url"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -11,10 +12,15 @@ import (
 
 type transport struct {
 	base    http.RoundTripper
+	scheme  string
+	host    string
 	headers map[string]string
 }
 
 func (t transport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.URL.Scheme != t.scheme || req.URL.Host != t.host {
+		return t.base.RoundTrip(req)
+	}
 	req = req.Clone(req.Context())
 	for k, v := range t.headers {
 		req.Header.Set(k, v)
@@ -29,8 +35,12 @@ func connect(
 	ping time.Duration,
 	onToolChange func(*mcp.ClientSession),
 ) (*mcp.ClientSession, error) {
+	endpoint, err := neturl.Parse(url)
+	if err != nil {
+		return nil, err
+	}
 	httpClient := &http.Client{
-		Transport: transport{base: http.DefaultTransport, headers: headers},
+		Transport: transport{base: http.DefaultTransport, scheme: endpoint.Scheme, host: endpoint.Host, headers: headers},
 	}
 	transport := &mcp.StreamableClientTransport{
 		Endpoint:   url,

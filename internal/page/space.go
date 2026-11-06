@@ -116,7 +116,7 @@ func (s *space) search(name string) (int, bool) {
 	})
 }
 
-func (s *space) sync(path []string, ctx context.Context, depth uint) (*syncSpace, error) {
+func (s *space) sync(path []string, depth uint) (*syncSpace, error) {
 	if len(path) == 0 || (len(path) == 1 && path[0] == "") {
 		return s.describe(depth), nil
 	}
@@ -125,7 +125,7 @@ func (s *space) sync(path []string, ctx context.Context, depth uint) (*syncSpace
 	if !ok {
 		return nil, fmt.Errorf("space %q under %q: %w", child, s.path, errSpaceNotFound)
 	}
-	return s.children[index].sync(slices.Delete(path, 0, 1), ctx, depth)
+	return s.children[index].sync(slices.Delete(path, 0, 1), depth)
 }
 
 func (s *space) find(path []string) (*space, error) {
@@ -140,15 +140,15 @@ func (s *space) find(path []string) (*space, error) {
 	return s.children[index].find(slices.Delete(path, 0, 1))
 }
 
-func (s *space) findIsland(path []string) (island.Island, uint, error) {
+func (s *space) findIsland(path []string) (island.Island, uint, string, error) {
 	space, err := s.find(path)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, "", err
 	}
 	if space.island == nil {
-		return nil, 0, fmt.Errorf("space %q: %w", space.path, errIslandNotFound)
+		return nil, 0, "", fmt.Errorf("space %q: %w", space.path, errIslandNotFound)
 	}
-	return space.island, space.seq, nil
+	return space.island, space.seq, space.path, nil
 }
 
 func (s *space) collectChanged(since uint, out *[]*syncSpace) {

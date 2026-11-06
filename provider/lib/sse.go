@@ -38,13 +38,14 @@ var errFrameTooLarge = errors.New("neui: server sent event exceeds the frame lim
 // to be split across several, and one tool argument or reasoning delta runs
 // well past any fixed line buffer, so lines are accumulated instead of scanned.
 type frameReader struct {
-	ch   chan readFrame
-	br   *bufio.Reader
-	ctx  context.Context
-	max  int
-	line []byte
-	data []byte
-	name []byte
+	ch    chan readFrame
+	br    *bufio.Reader
+	ctx   context.Context
+	max   int
+	line  []byte
+	data  []byte
+	name  []byte
+	event string
 }
 
 type readFrame struct {
@@ -106,7 +107,10 @@ func (r *frameReader) next() (Frame, error) {
 			if len(r.data) == 0 {
 				return Frame{}, nil
 			}
-			return Frame{Event: string(r.name), Data: r.data}, nil
+			if string(r.name) != r.event {
+				r.event = string(r.name)
+			}
+			return Frame{Event: r.event, Data: r.data}, nil
 		}
 		if line[0] == ':' {
 			if len(r.data) > 0 || len(r.name) > 0 {

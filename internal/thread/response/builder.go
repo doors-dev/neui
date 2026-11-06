@@ -155,7 +155,9 @@ func (r *builder) On(e api.Event) (api.Event, bool) {
 		if r.err != nil || r.ok != nil {
 			return r.onErr(fmt.Errorf("%w: %T arrived after the end", ErrEnded, e)), false
 		}
-		e = e.Offset(r.offset)
+		if r.offset != 0 {
+			e = e.Offset(r.offset)
+		}
 		block, ok := r.blocks[e.At()]
 		if ok {
 			if err := block.append(e); err != nil {

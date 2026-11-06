@@ -145,10 +145,10 @@ func (t *thread) getState() api.ChatState {
 	return s
 }
 
-func (t *thread) taskResult(id uint, output any, err error) error {
+func (t *thread) taskResult(id uint, output any, err error) (bool, error) {
 	task, ok := t.link.taskRemove(id)
 	if !ok {
-		return nil
+		return false, nil
 	}
 	attrs := maps.Clone(task.attrs)
 	if attrs == nil {
@@ -171,10 +171,10 @@ func (t *thread) taskResult(id uint, output any, err error) error {
 		attrs,
 		output,
 	); err != nil {
-		return err
+		return true, err
 	}
 	t.link.send(newMessageEvent(nil, api.ChatEventTasks{Tasks: t.link.taskList()}))
-	return nil
+	return true, nil
 }
 
 func (t *thread) taskNotify(task linkTask, data json.RawMessage, meta map[string]any) error {
@@ -345,7 +345,7 @@ func (t *thread) on(cmd any) {
 		if t.link == nil || t.link.linkTasks != cmd.linkTasks {
 			return
 		}
-		if err := t.taskResult(cmd.id, cmd.output, cmd.err); err != nil {
+		if _, err := t.taskResult(cmd.id, cmd.output, cmd.err); err != nil {
 			t.criticalErr(nil, err)
 			return
 		}
@@ -372,6 +372,10 @@ func (t *thread) on(cmd any) {
 	case commandCompact:
 		if t.link != cmd.link {
 			cmd.Err(api.ErrUnlinked)
+			return
+		}
+		if !t.replay.IsLoaded() {
+			cmd.Err(api.ErrWrongState)
 			return
 		}
 		model := t.link.backend.Provider().Model()
@@ -407,6 +411,7 @@ func (t *thread) disconnect() {
 }
 
 func (t *thread) connect(backend *common.Backend, page page.Page, load bool, meta any) (Link, error) {
+	t.pending = false
 	t.compaction.stop()
 	if t.link != nil {
 		t.link.dispose()
@@ -567,6 +572,9 @@ func (t *thread) compact() (bool, error) {
 		b := response.NewBulder()
 		for e := range events {
 			b.On(e)
+		}
+		if ctx.Err() != nil {
+			return
 		}
 		r := b.Flush()
 		select {

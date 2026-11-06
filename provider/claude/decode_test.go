@@ -1225,3 +1225,10 @@ func TestNilHTTPClientIsRefused(t *testing.T) {
 		t.Fatalf("a refused nil client replaced the one already set")
 	}
 }
+
+func TestUnparseableErrorBodyIsCut(t *testing.T) {
+	e := readAPIError(&lib.HTTPError{Status: 502, Body: []byte(strings.Repeat("é", 2000))})
+	if n := len([]rune(e.Message)); n != maxErrorMessage+1 {
+		t.Fatalf("message has %d runes, want %d", n, maxErrorMessage+1)
+	}
+}

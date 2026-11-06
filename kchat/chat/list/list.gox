@@ -99,8 +99,6 @@ func (l List) seed(ctx context.Context, active *api.Round, anchor api.RoundID) (
 	if active != nil {
 		cursor = active.ID
 	}
-	// the live round is its own section once it has input, otherwise the
-	// newest stored section is the tail the live round appends to
 	var tail []api.Round
 	if active == nil || active.Input.Len() == 0 {
 		loaded, _, err := l.loadBefore(ctx, cursor, 1)
@@ -119,12 +117,10 @@ func (l List) seed(ctx context.Context, active *api.Round, anchor api.RoundID) (
 	var sections [][]api.Round
 	topEnded, bottomEnded := false, true
 	if anchor != api.NoRoundID {
-		// the backward walk ends at the anchor, so its own section comes back
-		// last, truncated: its head is where the log opens
 		above, aboveEnded, err := l.loadBefore(ctx, anchor + 1, margin + 1)
-		if err != nil || len(above) == 0 || above[len(above) - 1][0].Input.Len() == 0 {
+		if err != nil {
 			doors.Logger(ctx).Error("list: anchor resolve", "round", anchor, "err", err)
-		} else {
+		} else if len(above) != 0 && above[len(above) - 1][0].Input.Len() != 0 {
 			at := above[len(above) - 1][0].ID
 			below, belowEnded, err := l.loadAfter(ctx, at - 1, margin + 1, stop)
 			if err != nil {
@@ -216,7 +212,7 @@ func (l List) IndexedEvent(e api.IndexedEvent) {
 	live.On(e)
 }
 
-func (l List) RoundDone(ctx context.Context, state api.RoundState, err string) {
+func (l List) RoundDone(ctx context.Context, state api.RoundState) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.sectionAppender == nil {
@@ -224,7 +220,7 @@ func (l List) RoundDone(ctx context.Context, state api.RoundState, err string) {
 	}
 	live := l.lastSection.live
 	l.lastSection.live = nil
-	live.Done(ctx, state, err)
+	live.Done(ctx, state)
 	if live.Tools().IsEmpty() {
 		l.lastSection.tools = nil
 		return

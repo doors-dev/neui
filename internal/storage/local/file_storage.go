@@ -35,8 +35,9 @@ func NewFileStorage(dir string) (*FileStorage, error) {
 }
 
 type FileStorage struct {
-	mu   sync.Mutex
-	base string
+	mu      sync.Mutex
+	base    string
+	removed bool
 }
 
 func validName(name string) bool {
@@ -66,7 +67,10 @@ func (l *FileStorage) FilePut(ctx context.Context, threadID api.ThreadID, origin
 	originDir := filepath.Join(l.base, filesDirName, string(threadID), string(origin))
 	dst := filepath.Join(originDir, name)
 	l.mu.Lock()
-	err := os.MkdirAll(originDir, 0o755)
+	err := os.ErrClosed
+	if !l.removed {
+		err = os.MkdirAll(originDir, 0o755)
+	}
 	if err == nil {
 		err = os.Mkdir(dst, 0o755)
 	}
@@ -200,7 +204,17 @@ func (l *FileStorage) FileDiscardDrafts(ctx context.Context, threadID api.Thread
 		}
 	}
 	for _, name := range names {
-		if err := l.FileDelete(ctx, threadID, origin, name); err != nil {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		dir := filepath.Join(l.base, filesDirName, string(threadID), string(origin), name)
+		l.mu.Lock()
+		f, err := readMeta(dir)
+		if err == nil && f.Draft {
+			err = os.RemoveAll(dir)
+		}
+		l.mu.Unlock()
+		if err != nil && !errors.Is(err, api.ErrNotFound) {
 			return err
 		}
 	}
@@ -269,6 +283,14 @@ func (l *FileStorage) FileList(ctx context.Context, threadID api.ThreadID, origi
 	return func(yield func(api.File, error) bool) {
 		if err := ctx.Err(); err != nil {
 			yield(api.File{}, err)
+			return
+		}
+		if !validName(string(threadID)) {
+			yield(api.File{}, fmt.Errorf("%w: thread id %q", api.ErrInvalidName, threadID))
+			return
+		}
+		if !origin.Valid() {
+			yield(api.File{}, fmt.Errorf("unknown origin %q", origin))
 			return
 		}
 		originDir := filepath.Join(l.base, filesDirName, string(threadID), string(origin))
@@ -345,12 +367,19 @@ func (l *FileStorage) FileDeleteAll(ctx context.Context, threadID api.ThreadID) 
 func (l *FileStorage) Remove() error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	l.removed = true
 	return os.RemoveAll(l.base)
 }
 
 func (l *FileStorage) WorkspaceOpen(threadID api.ThreadID) (api.Workspace, error) {
+	if !validName(string(threadID)) {
+		return api.Workspace{}, fmt.Errorf("%w: thread id %q", api.ErrInvalidName, threadID)
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if l.removed {
+		return api.Workspace{}, os.ErrClosed
+	}
 	dir := filepath.Join(l.base, workspacesDirName, string(threadID))
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return api.Workspace{}, err
@@ -363,6 +392,9 @@ func (l *FileStorage) WorkspaceOpen(threadID api.ThreadID) (api.Workspace, error
 }
 
 func (l *FileStorage) WorkspaceDelete(threadID api.ThreadID) error {
+	if !validName(string(threadID)) {
+		return fmt.Errorf("%w: thread id %q", api.ErrInvalidName, threadID)
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return os.RemoveAll(filepath.Join(l.base, workspacesDirName, string(threadID)))

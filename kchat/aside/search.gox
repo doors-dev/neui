@@ -21,19 +21,34 @@ const overview = 5
 
 elem (p *Aside) overview(input string, open func(ctx context.Context, kind controller.SearchKind)) {
 	~~
+	body := new(doors.Door)
+	body.Inner(ctx, p.overviewBody(body, input, open))
+	~~
+	~(body)
+}
+
+elem (p *Aside) overviewBody(body *doors.Door, input string, open func(ctx context.Context, kind controller.SearchKind)) {
+	~~
 	loc := p.Instance.Location()
 	current := p.Instance.State().Get().Thread.ID
+	var failed error
 	threads, err := p.Instance.ThreadList(ctx, time.Time{}, time.Time{}, false, overview + 1, input)
 	if err != nil {
 		doors.Logger(ctx).Error("aside: search names", "err", err)
+		failed = err
 	}
 	mine, err := p.Instance.RoundSearch(ctx, current, false, input, nil, false, false, overview + 1)
 	if err != nil {
 		doors.Logger(ctx).Error("aside: search current", "err", err)
+		failed = err
 	}
 	others, err := p.Instance.RoundSearch(ctx, current, true, input, nil, false, false, overview + 1)
 	if err != nil {
 		doors.Logger(ctx).Error("aside: search others", "err", err)
+		failed = err
+	}
+	if failed != nil {
+		notify.Error(ctx, failed)
 	}
 	~~
 	~(if len(threads) != 0 {
@@ -63,7 +78,9 @@ elem (p *Aside) overview(input string, open func(ctx context.Context, kind contr
 			~(p.more(open, controller.SearchMessagesAll))
 		})
 	})
-	~(if len(threads) == 0 && len(mine) == 0 && len(others) == 0 {
+	~(if failed != nil {
+		~(retry(body))
+	} else if len(threads) == 0 && len(mine) == 0 && len(others) == 0 {
 		~(empty("No chats or messages match", "Try fewer words"))
 	})
 }
@@ -81,6 +98,20 @@ elem (p *Aside) noResults(kind controller.SearchKind) {
 	}
 	~~
 	~(empty(text, ""))
+}
+
+elem retry(door *doors.Door) {
+	<div class="kchat-side-retry" role="alert">
+		<span>Couldn't load.</span>
+		~>doors.AClick{
+			Scope: new(doors.ScopeBlocking),
+			On: func(ctx context.Context, rp doors.RequestPointer) bool {
+				door.Reload(ctx)
+				return false
+			},
+			OnError: notify.OnError,
+		} <button type="button" class="kchat-btn kchat-btn_2nd">Retry</button>
+	</div>
 }
 
 elem empty(text string, hint string) {
@@ -112,7 +143,11 @@ elem (p *Aside) hit(h api.Hit, loc *time.Location, named bool) {
 	~>doors.AClick{
 		Scope: new(doors.ScopeBlocking),
 		On: func(ctx context.Context, rp doors.RequestPointer) bool {
-			p.Instance.ThreadOpen(ctx, h.Thread, anchor.NewAnchor(h.Round))
+			if err := p.Instance.ThreadOpen(ctx, h.Thread, anchor.NewAnchor(h.Round)); err != nil {
+				doors.Logger(ctx).Error("aside: open", "thread", h.Thread, "err", err)
+				notify.Error(ctx, err)
+				return false
+			}
 			rp.After(doors.ActionEmit[any]{Name: "opened"})
 			return false
 		},

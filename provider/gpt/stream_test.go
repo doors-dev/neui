@@ -696,6 +696,28 @@ func TestStreamSequences(t *testing.T) {
 			},
 		},
 		{
+			name: "every content part of a phased message carries the phase",
+			sse: frame("response.created", createdFrame) +
+				frame("response.output_item.added", `{"type":"response.output_item.added","output_index":0,"item":{"id":"msg_1","type":"message","role":"assistant","phase":"commentary","content":[]}}`) +
+				frame("response.output_text.delta", `{"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"a"}`) +
+				frame("response.output_text.done", `{"type":"response.output_text.done","output_index":0,"content_index":0,"text":"a"}`) +
+				frame("response.output_text.delta", `{"type":"response.output_text.delta","output_index":0,"content_index":1,"delta":"b"}`) +
+				frame("response.output_text.done", `{"type":"response.output_text.done","output_index":0,"content_index":1,"text":"b"}`) +
+				frame("response.completed", `{"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.6-sol","status":"completed","usage":null}}`),
+			want: []string{
+				"start id=resp_1 model=gpt-5.6-sol",
+				`text[0] ""`,
+				`meta[0] {"model":"gpt-5.6-sol","phase":"commentary"}`,
+				`text[0] "a"`,
+				"close[0]",
+				`text[1] ""`,
+				`meta[1] {"model":"gpt-5.6-sol","phase":"commentary"}`,
+				`text[1] "b"`,
+				"close[1]",
+				"ok turn",
+			},
+		},
+		{
 			// The filter cutting in and the model declining are one code. The
 			// caller does the same thing with either, and the line between them is
 			// the service's own.

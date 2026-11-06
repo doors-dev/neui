@@ -91,11 +91,12 @@ func (s threadWait) on(cmd any) {
 		if s.thread.link == nil || s.thread.link.linkTasks != cmd.linkTasks {
 			return
 		}
-		if err := s.thread.taskResult(cmd.id, cmd.output, cmd.err); err != nil {
+		found, err := s.thread.taskResult(cmd.id, cmd.output, cmd.err)
+		if err != nil {
 			s.thread.criticalErr(nil, err)
 			return
 		}
-		if !s.thread.replay.IsPending() {
+		if !found || !s.thread.replay.IsPending() {
 			return
 		}
 		round, err := s.thread.switchStateRound()

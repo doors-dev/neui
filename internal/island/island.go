@@ -237,7 +237,7 @@ func readFile(ctx context.Context, file string) (string, error) {
 	return string(code), nil
 }
 
-func (i *island) Done(ctx context.Context, code string, contunue bool) error {
+func (i *island) Done(ctx context.Context) error {
 	i.mu.Lock()
 	if i.run == nil {
 		i.mu.Unlock()

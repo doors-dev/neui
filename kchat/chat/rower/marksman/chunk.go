@@ -147,6 +147,8 @@ func serveFile(fs api.FS, name string) doors.Resource {
 			return
 		}
 		defer rc.Close()
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Content-Security-Policy", "sandbox")
 		if e.MIME != "" {
 			w.Header().Set("Content-Type", e.MIME)
 		}

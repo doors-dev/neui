@@ -47,8 +47,8 @@ func (p *Provider) Model() api.Model {
 
 // Stream sends one turn and streams its events as api.Provider describes;
 // read until the channel closes or cancel ctx. A request that cannot be built,
-// such as one with no model, ends at once with CodeInvalid, and one larger
-// than a nonzero Model.RequestBytes with CodeTooLarge. A failure the service
+// such as one with a tool that has no name, ends at once with CodeInvalid, and
+// one larger than a nonzero Model.RequestBytes with CodeTooLarge. A failure the service
 // reports arrives as an EventErr whose Err is or wraps an *APIError.
 func (p *Provider) Stream(ctx context.Context, req api.Request) <-chan api.Event {
 	httpReq, sent, err := p.request(ctx, req)

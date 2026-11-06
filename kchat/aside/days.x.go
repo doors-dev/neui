@@ -201,6 +201,7 @@ func (d *day) content() gox.Elem {
 		threads, err = d.days.aside.Instance.ThreadList(ctx, d.start, d.end, false, 0, d.days.name)
 		if err != nil {
 			doors.Logger(ctx).Error("aside: day", "day", label, "err", err)
+			notify.Error(ctx, err)
 			failed = true
 		}
 	}
@@ -258,43 +259,48 @@ func (d *day) content() gox.Elem {
 		}
 	}
 
-//line days.gox:243
-		if today || len(threads) != 0 {
+//line days.gox:244
+		if today || len(threads) != 0 || failed {
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line days.gox:244
+//line days.gox:245
 				__e = __c.Set("class", "kchat-side-label"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line days.gox:244
+//line days.gox:245
 				__e = __c.Any(label); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		}
-//line days.gox:246
-		if today {
 //line days.gox:247
+		if failed {
+//line days.gox:248
+			__e = __c.Any(retry(d.body)); if __e != nil { return }
+		}
+//line days.gox:250
+		if today {
+//line days.gox:251
 			if fresh {
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line days.gox:248
+//line days.gox:252
 					__e = __c.Set("class", "kchat-row"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
 					__e = __c.Init("button"); if __e != nil { return }
 					{
-//line days.gox:249
+//line days.gox:253
 						__e = __c.Set("class", "kchat-thread kchat-thread_active"); if __e != nil { return }
-//line days.gox:249
+//line days.gox:253
 						__e = __c.Set("aria-current", "true"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line days.gox:250
+//line days.gox:254
 						__e = (doors.Class("kchat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 							ctx := __c.Context(); _ = ctx
-//line days.gox:250
+//line days.gox:254
 							__e = __c.Any(icons.Plus()); if __e != nil { return }
 						return })); if __e != nil { return }
 						__e = __c.Init("span"); if __e != nil { return }
 						{
-//line days.gox:251
+//line days.gox:255
 							__e = __c.Set("class", "kchat-thread-name"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.Text("New chat"); if __e != nil { return }
@@ -307,14 +313,18 @@ func (d *day) content() gox.Elem {
 			} else  {
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line days.gox:255
+//line days.gox:259
 					__e = __c.Set("class", "kchat-row"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line days.gox:256
+//line days.gox:260
 					__e = (doors.AClick{
 					Scope: new(doors.ScopeBlocking),
 					On: func(ctx context.Context, rp doors.RequestPointer) bool {
-						d.days.aside.Instance.ThreadNew(ctx)
+						if err := d.days.aside.Instance.ThreadNew(ctx); err != nil {
+							doors.Logger(ctx).Error("aside: new", "err", err)
+							notify.Error(ctx, err)
+							return false
+						}
 						rp.After(doors.ActionEmit[any]{Name: "opened"})
 						return false
 					},
@@ -323,18 +333,18 @@ func (d *day) content() gox.Elem {
 						ctx := __c.Context(); _ = ctx
 						__e = __c.Init("button"); if __e != nil { return }
 						{
-//line days.gox:264
+//line days.gox:272
 							__e = __c.Set("class", "kchat-thread kchat-thread_new"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
-//line days.gox:265
+//line days.gox:273
 							__e = (doors.Class("kchat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 								ctx := __c.Context(); _ = ctx
-//line days.gox:265
+//line days.gox:273
 								__e = __c.Any(icons.Plus()); if __e != nil { return }
 							return })); if __e != nil { return }
 							__e = __c.Init("span"); if __e != nil { return }
 							{
-//line days.gox:266
+//line days.gox:274
 								__e = __c.Set("class", "kchat-thread-name"); if __e != nil { return }
 								__e = __c.Submit(); if __e != nil { return }
 								__e = __c.Text("New chat"); if __e != nil { return }
@@ -347,11 +357,11 @@ func (d *day) content() gox.Elem {
 				__e = __c.Close(); if __e != nil { return }
 			}
 		}
-//line days.gox:271
+//line days.gox:279
 		for _, t := range threads {
-//line days.gox:272
+//line days.gox:280
 			__e = __c.Any(&row{aside: d.days.aside, thread: t, instance: all[t.ID].InstanceID, day: d.body}); if __e != nil { return }
 		}
 	return })
-//line days.gox:274
+//line days.gox:282
 }

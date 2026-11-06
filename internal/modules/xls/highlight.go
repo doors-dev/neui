@@ -3,7 +3,9 @@ package xls
 import (
 	"context"
 	"fmt"
+	"math"
 	"strconv"
+	"strings"
 
 	"github.com/xuri/excelize/v2"
 	"neui.dev/internal/common"
@@ -57,10 +59,15 @@ func highlightOpt(f *excelize.File, rule highlightRule) (excelize.ConditionalFor
 	}
 	opt := excelize.ConditionalFormatOptions{Value: rule.Value, Format: &format}
 	switch rule.Type {
-	case "gt":
-		opt.Type, opt.Criteria = "cell", ">"
-	case "lt":
-		opt.Type, opt.Criteria = "cell", "<"
+	case "gt", "lt":
+		n, err := strconv.ParseFloat(strings.TrimSpace(rule.Value), 64)
+		if err != nil || math.IsNaN(n) || math.IsInf(n, 0) {
+			return excelize.ConditionalFormatOptions{}, fmt.Errorf("rule %q needs a plain number like 500 or -2.5, got %q", rule.Type, rule.Value)
+		}
+		opt.Type, opt.Criteria, opt.Value = "cell", ">", strconv.FormatFloat(n, 'f', -1, 64)
+		if rule.Type == "lt" {
+			opt.Criteria = "<"
+		}
 	case "top", "bottom":
 		if n, err := strconv.Atoi(rule.Value); err != nil || n <= 0 {
 			return excelize.ConditionalFormatOptions{}, fmt.Errorf("rule %q needs an integer count, got %q", rule.Type, rule.Value)

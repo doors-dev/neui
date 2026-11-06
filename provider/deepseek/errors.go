@@ -73,12 +73,15 @@ type APIError struct {
 }
 
 // Error returns "deepseek: http <status> (<code>): <message>", without the code
-// when there is none, and with the body or the status text when there is no
-// message.
+// when there is none, and with the body, cut to 512 characters, or the status
+// text when there is no message.
 func (e *APIError) Error() string {
 	msg := e.Message
 	if msg == "" {
 		msg = strings.TrimSpace(e.Body)
+		if r := []rune(msg); len(r) > maxErrorMessage {
+			msg = string(r[:maxErrorMessage]) + "…"
+		}
 	}
 	if msg == "" {
 		msg = http.StatusText(e.Status)
@@ -88,6 +91,10 @@ func (e *APIError) Error() string {
 	}
 	return fmt.Sprintf("deepseek: http %d: %s", e.Status, msg)
 }
+
+// maxErrorMessage bounds how much of an unparseable error body Error shows. At
+// gateways it is frequently a whole HTML page.
+const maxErrorMessage = 512
 
 // apiError builds the failure for a non 200. The body is parsed on a best
 // effort basis into OpenAI's error envelope; whatever comes out is a hint, not

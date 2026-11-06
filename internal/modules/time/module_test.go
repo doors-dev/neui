@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"neui.dev/internal/common"
 )
 
 type fakeTask struct {
@@ -103,5 +105,54 @@ func TestTimerHugeAfterRejected(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "at most") {
 			t.Fatalf("afterMs=%d: %v", after, err)
 		}
+	}
+}
+
+type failingThread struct {
+	common.Controller
+	onTask func()
+}
+
+func (t *failingThread) Context() context.Context { return context.Background() }
+
+func (t *failingThread) Task(string, map[string]any, context.CancelCauseFunc) (common.Task, error) {
+	t.onTask()
+	return nil, errors.New("task can be issued only during tool calls round")
+}
+
+func TestCancelDuringFailedTaskReturns(t *testing.T) {
+	m := &module{}
+	cancelled := make(chan error, 1)
+	thread := &failingThread{onTask: func() {
+		go func() {
+			_, err := m.cancel(context.Background(), struct{}{})
+			cancelled <- err
+		}()
+		for m.pending.Load() != nil {
+			time.Sleep(time.Millisecond)
+		}
+	}}
+	ctx := context.WithValue(context.Background(), common.KeyController, thread)
+	if _, err := m.timer(ctx, TimerArg{After: uint(time.Hour.Milliseconds()), Comment: "c"}); err == nil {
+		t.Fatal("timer succeeded without a task")
+	}
+	select {
+	case err := <-cancelled:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("cancel hangs after a failed task")
+	}
+}
+
+func TestCancelReturnsOnCallerDone(t *testing.T) {
+	m := &module{}
+	arm(m)
+	ctx, cancel := context.WithCancelCause(context.Background())
+	stop := errors.New("stopped")
+	cancel(stop)
+	if _, err := m.cancel(ctx, struct{}{}); !errors.Is(err, stop) {
+		t.Fatalf("cancel with a done caller: %v", err)
 	}
 }

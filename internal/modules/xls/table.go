@@ -109,6 +109,21 @@ func tableTool(ctx context.Context, arg tableArg) (tableResult, error) {
 	if len(arg.Columns) == 0 {
 		return tableResult{}, fmt.Errorf("columns must not be empty")
 	}
+	for i, col := range arg.Columns {
+		if strings.TrimSpace(col.Header) == "" {
+			return tableResult{}, fmt.Errorf("column %d: header must not be empty", i)
+		}
+		for _, prev := range arg.Columns[:i] {
+			if strings.EqualFold(prev.Header, col.Header) {
+				return tableResult{}, fmt.Errorf("column %d: header %q repeats %q, table headers must be unique ignoring case", i, col.Header, prev.Header)
+			}
+		}
+		if col.Format != "" {
+			if err := applyNumFmt(&excelize.Style{}, col.Format); err != nil {
+				return tableResult{}, fmt.Errorf("column %q: %w", col.Header, err)
+			}
+		}
+	}
 	anchor := arg.Cell
 	if anchor == "" {
 		anchor = "A1"
@@ -132,6 +147,13 @@ func tableTool(ctx context.Context, arg tableArg) (tableResult, error) {
 	for i, row := range arg.Rows {
 		if len(row) > len(arg.Columns) {
 			return tableResult{}, fmt.Errorf("row %d has %d cells, table has %d columns", i, len(row), len(arg.Columns))
+		}
+		for j, v := range row {
+			switch v.(type) {
+			case nil, bool, float64, string:
+			default:
+				return tableResult{}, fmt.Errorf("row %d cell %d: %T is not a cell value, pass a number, boolean, string or null", i, j, v)
+			}
 		}
 	}
 	end, err := excelize.CoordinatesToCellName(x1+len(arg.Columns)-1, y1+max(len(arg.Rows), 1))

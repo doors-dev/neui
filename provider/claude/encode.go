@@ -12,7 +12,7 @@ import (
 	"neui.dev/provider/lib"
 )
 
-func (p *Provider) encode(req api.Request) ([]byte, error) {
+func (p *Provider) encode(req api.Request) (*lib.Body, error) {
 	if len(req.Messages) == 0 {
 		return nil, fmt.Errorf("claude: request has no messages")
 	}
@@ -45,7 +45,7 @@ func (p *Provider) encode(req api.Request) ([]byte, error) {
 	if w.Messages, err = p.encodeMessages(req.Messages); err != nil {
 		return nil, err
 	}
-	return lib.MarshalRaw(w)
+	return lib.MarshalBody(w)
 }
 
 var forcedToolRefused = []string{"opus-5-5", "sonnet-5-5", "fable-5-1", "mythos-5-1"}

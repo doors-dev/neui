@@ -80,16 +80,16 @@ func defaultSettings() settings {
 // Option configures a Provider in New. Every option has a working default.
 type Option func(*Provider) error
 
-// Conf holds what every Provider needs. Without Model.Name every turn fails
-// with CodeInvalid. Use one of the models in this package, such as GPT56Luna,
+// Conf holds what every Provider needs. Without Model.Name New returns an
+// error. Use one of the models in this package, such as GPT56Luna,
 // or an api.Model of your own for a gateway or a newer id.
 type Conf struct {
 	Model api.Model // the one model this provider streams with, spelled as it goes on the wire
 }
 
 // New builds a Provider. A nil option is skipped; an option with an invalid
-// value, or one the declared model does not take, makes New return its error.
-// An empty Conf.Model.Name fails each turn with CodeInvalid. Without
+// value, or one the declared model does not take, makes New return its error,
+// as does an empty Conf.Model.Name. Without
 // WithAPIKey, New reads the key from OPENAI_API_KEY once. If that is empty, it
 // logs a warning and requests carry no Authorization header, which
 // api.openai.com refuses with CodeAccess.
@@ -107,6 +107,9 @@ func New(conf Conf, opts ...Option) (*Provider, error) {
 		if err := o(p); err != nil {
 			return nil, err
 		}
+	}
+	if p.model.Name == "" {
+		return nil, errors.New("gpt: no model, set Conf.Model")
 	}
 	if !p.keyExplicit {
 		p.apiKey = os.Getenv(apiKeyEnv)

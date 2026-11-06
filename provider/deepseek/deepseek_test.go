@@ -572,6 +572,7 @@ func TestNewRefuses(t *testing.T) {
 		mustNew(t, pro, opts...)
 	}
 	mustNew(t, flash, key, WithTopP(0.97))
+	mustNew(t, flash, key, nil)
 	mustNew(t, flash, key, WithEffort(EffortMax), WithTopP(0.97))
 }
 
@@ -582,5 +583,16 @@ func TestNilHTTPClientIsRefused(t *testing.T) {
 	}
 	if p.client != http.DefaultClient {
 		t.Fatalf("a refused nil client replaced the one already set")
+	}
+}
+
+func TestUnparseableErrorBodyIsCut(t *testing.T) {
+	body := strings.Repeat("é", 2000)
+	e := apiError(502, nil, []byte(body))
+	if e.Body != body {
+		t.Fatal("the raw body was not kept")
+	}
+	if n := len([]rune(e.Error())); n > maxErrorMessage+100 {
+		t.Fatalf("Error has %d runes", n)
 	}
 }

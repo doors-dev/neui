@@ -59,7 +59,7 @@ type RunArg struct {
 type RunResult struct {
 	Output json.RawMessage `json:"result,omitempty" description:"the script's return value"`
 	Log    string          `json:"logFile" description:"workspace path of the script's log file"`
-	Async  bool            `json:"deferred,omitempty" description:"the script is still running in the background; when it finishes, a <task_result> element (module js, name = script file name or inline, comment as given) carrying the script's return value or error appears in the conversation; js__stop cancels the run"`
+	Async  bool            `json:"deferred,omitempty" description:"the script is still running in the background; when it finishes, a <task_result> element (module js, name run, comment as given; deferred runs are told apart by their comment) carrying the script's return value or error appears in the conversation; js__stop cancels the run"`
 }
 
 func (m *module) done() {
@@ -121,8 +121,8 @@ func (m *module) run(ctx context.Context, arg RunArg) (RunResult, error) {
 		Name:       name,
 		Script:     script,
 		Comment:    arg.Comment,
-		Timeout:    time.Duration(arg.Timeout) * time.Millisecond,
-		Memory:     int(arg.Memory) * 1024 * 1024,
+		Timeout:    time.Duration(min(arg.Timeout, uint(m.runtime.config.JobTimeout/time.Millisecond)+1)) * time.Millisecond,
+		Memory:     int(min(arg.Memory, uint(m.runtime.config.WorkerMemory>>20)+1)) * 1024 * 1024,
 		AppendLogs: arg.AppendLogs,
 		Controller: thread,
 	}, m.done)

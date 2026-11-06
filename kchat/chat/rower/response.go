@@ -11,7 +11,7 @@ import (
 	"neui.dev/kchat/params"
 )
 
-func NewResponse(p params.Params, state api.Indexed[api.Content] /* results map[string]api.ContentToolResult, */, fs api.FS) Response {
+func NewResponse(p params.Params, state api.Indexed[api.Content], fs api.FS) Response {
 	content := make(map[int]streamer[api.IndexedEvent])
 	for index, c := range state {
 		switch c := c.(type) {
@@ -54,7 +54,6 @@ func NewResponse(p params.Params, state api.Indexed[api.Content] /* results map[
 	})
 	return &response{
 		rower: r,
-		//		tools: NewTools(state, results != nil),
 	}
 }
 
@@ -62,7 +61,6 @@ type Response = *response
 
 type response struct {
 	rower *rower[api.IndexedEvent]
-	// tools Tools
 }
 
 func (r Response) IsEmpty() bool {
@@ -71,13 +69,7 @@ func (r Response) IsEmpty() bool {
 
 func (r Response) Close() {
 	r.rower.Close()
-	// r.tools.Close()
 }
-
-/*
-func (r Response) Results(results map[string]api.ContentToolResult) {
-	r.tools.Done()
-} */
 
 func (r Response) On(e api.IndexedEvent) {
 	switch e := e.(type) {
@@ -87,9 +79,6 @@ func (r Response) On(e api.IndexedEvent) {
 		r.rower.Append(e)
 	case api.EventSummary:
 		r.rower.Append(e)
-	/*
-		case api.EventTool:
-			r.tools.Append(e) */
 	case api.EventClose:
 		r.rower.Append(e)
 	default:
@@ -98,13 +87,6 @@ func (r Response) On(e api.IndexedEvent) {
 
 func (r Response) Main() gox.Elem {
 	return r.rower.Main()
-	/*
-		return func(cur gox.Cursor) error {
-			if err := cur.Comp(r.rower); err != nil {
-				return err
-			}
-			return cur.Comp(r.tools)
-		} */
 }
 
 func newTextRow(text string, fs api.FS) *textRow {

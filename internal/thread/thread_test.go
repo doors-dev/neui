@@ -956,6 +956,8 @@ func TestStopDuringCompactionReleasesPendingInput(t *testing.T) {
 	}
 	config := api.ThreadConfig{ThreadMemoryLimit: -1, CompactionPreserve: 0.25, CompactionTrigger: 0.5}
 	th, _, r := stubThread(t, "stop-compact-pending", stubProvider{api.Model{Name: "stub", Context: 1000}, summary}, config)
+	th.close = make(chan struct{})
+	t.Cleanup(func() { close(th.close) })
 	for _, name := range []string{"one", "two"} {
 		if _, _, err := r.RoundInit(api.Input{Text: name}); err != nil {
 			t.Fatalf("replay RoundInit(%q): %v", name, err)
@@ -982,7 +984,6 @@ func TestStopDuringCompactionReleasesPendingInput(t *testing.T) {
 	if th.pending || !releasedPending(events()) {
 		t.Fatalf("Stop during compaction cleared pending=%v without telling the composer", th.pending)
 	}
-	<-th.ch
 }
 
 func TestUnsendWhileWaitingReleasesPendingInput(t *testing.T) {

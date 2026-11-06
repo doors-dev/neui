@@ -34,6 +34,7 @@ func NewTask(params Params, done func(), asyncAfter time.Duration) (WaitingTask,
 		task: Input{
 			Params: params,
 		},
+		name:       params.Name,
 		memory:     params.Memory,
 		timeout:    params.Timeout,
 		ctx:        ctx,
@@ -55,6 +56,7 @@ type Result struct {
 
 type task struct {
 	task       Input
+	name       string
 	memory     int
 	timeout    time.Duration
 	ctx        context.Context
@@ -95,7 +97,7 @@ func (t *task) Execute(interrupt func()) (ExecutingTask, bool) {
 }
 
 func (t *task) Name() string {
-	return t.task.Name
+	return t.name
 }
 
 func (t *task) Memory() int {

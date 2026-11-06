@@ -95,7 +95,7 @@ func zipAdd(ctx context.Context, fs api.FS, zw *zip.Writer, name string) error {
 	if err != nil {
 		return err
 	}
-	_, err = io.Copy(w, rc)
+	_, err = io.Copy(w, ctxReader{ctx, rc})
 	if cerr := rc.Close(); err == nil {
 		err = cerr
 	}
@@ -116,9 +116,12 @@ func unzipTool(ctx context.Context, arg unzipArg) (unzipResult, error) {
 		return unzipResult{}, err
 	}
 	defer zr.Close()
-	var res unzipResult
+	res := unzipResult{Extracted: []string{}}
 	var used int64
 	for _, f := range zr.File {
+		if err := context.Cause(ctx); err != nil {
+			return res, err
+		}
 		if f.FileInfo().IsDir() || f.Mode()&os.ModeSymlink != 0 {
 			continue
 		}
@@ -133,7 +136,7 @@ func unzipTool(ctx context.Context, arg unzipArg) (unzipResult, error) {
 		if total >= 0 {
 			budget = total - used
 		}
-		n, err := unzipEntry(fs, f, path.Join(arg.Dst, name), budget)
+		n, err := unzipEntry(ctx, fs, f, path.Join(arg.Dst, name), budget)
 		if err != nil {
 			return res, err
 		}
@@ -151,12 +154,13 @@ func unzipTool(ctx context.Context, arg unzipArg) (unzipResult, error) {
 	return res, nil
 }
 
-func unzipEntry(fs api.FS, f *zip.File, target string, budget int64) (int64, error) {
-	rc, err := f.Open()
+func unzipEntry(ctx context.Context, fs api.FS, f *zip.File, target string, budget int64) (int64, error) {
+	zrc, err := f.Open()
 	if err != nil {
 		return 0, err
 	}
-	defer rc.Close()
+	defer zrc.Close()
+	rc := ctxReader{ctx, zrc}
 	w, err := fs.Create(target)
 	if err != nil {
 		return 0, err
@@ -171,4 +175,16 @@ func unzipEntry(fs api.FS, f *zip.File, target string, budget int64) (int64, err
 		err = cerr
 	}
 	return n, err
+}
+
+type ctxReader struct {
+	ctx context.Context
+	io.ReadCloser
+}
+
+func (r ctxReader) Read(p []byte) (int, error) {
+	if err := context.Cause(r.ctx); err != nil {
+		return 0, err
+	}
+	return r.ReadCloser.Read(p)
 }

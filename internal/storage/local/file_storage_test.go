@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -461,4 +462,81 @@ func must[T any](v T, err error) T {
 		panic(err)
 	}
 	return v
+}
+
+func TestFileThreadScopedMethodsRejectInvalidIDs(t *testing.T) {
+	s := newFileStore(t)
+	ctx := context.Background()
+	putText(t, s, "t1", "f1.txt", "hello")
+	if _, err := s.WorkspaceOpen("t1"); err != nil {
+		t.Fatal(err)
+	}
+	for _, thread := range []api.ThreadID{"", ".", "..", "a/b", "../escape"} {
+		if _, err := s.WorkspaceOpen(thread); !errors.Is(err, api.ErrInvalidName) {
+			t.Fatalf("WorkspaceOpen(%q) = %v, want ErrInvalidName", thread, err)
+		}
+		if err := s.WorkspaceDelete(thread); !errors.Is(err, api.ErrInvalidName) {
+			t.Fatalf("WorkspaceDelete(%q) = %v, want ErrInvalidName", thread, err)
+		}
+		for _, err := range s.FileList(ctx, thread, api.OriginUser) {
+			if !errors.Is(err, api.ErrInvalidName) {
+				t.Fatalf("FileList(%q) = %v, want ErrInvalidName", thread, err)
+			}
+		}
+	}
+	listed := false
+	for _, err := range s.FileList(ctx, "t1", api.Origin("..")) {
+		if err == nil {
+			t.Fatal("FileList with an unknown origin yielded a file")
+		}
+		listed = true
+	}
+	if !listed {
+		t.Fatal("FileList with an unknown origin yielded no error")
+	}
+	if _, err := os.Stat(filepath.Join(s.base, workspacesDirName, "t1")); err != nil {
+		t.Fatalf("workspace of t1 gone: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(s.base), "escape")); err == nil {
+		t.Fatal("workspace created outside the base")
+	}
+}
+
+func TestFileDiscardDraftsKeepsCommitted(t *testing.T) {
+	s := newFileStore(t)
+	ctx := context.Background()
+	for _, name := range []string{"a", "b"} {
+		if _, err := s.FilePut(ctx, "t1", api.OriginUser, name, "text/plain", strings.NewReader(name), true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.FileCommit(ctx, "t1", api.OriginUser, "a"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.FileDiscardDrafts(ctx, "t1", api.OriginUser, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.FileStat(ctx, "t1", api.OriginUser, "a"); err != nil {
+		t.Fatalf("committed file: %v", err)
+	}
+	if _, err := s.FileStat(ctx, "t1", api.OriginUser, "b"); !errors.Is(err, api.ErrNotFound) {
+		t.Fatalf("draft: %v, want ErrNotFound", err)
+	}
+}
+
+func TestFileStorageClosedAfterRemove(t *testing.T) {
+	s := newFileStore(t)
+	ctx := context.Background()
+	if err := s.Remove(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.FilePut(ctx, "t1", api.OriginUser, "f", "text/plain", strings.NewReader("x"), true); !errors.Is(err, os.ErrClosed) {
+		t.Fatalf("FilePut after Remove = %v, want ErrClosed", err)
+	}
+	if _, err := s.WorkspaceOpen("t1"); !errors.Is(err, os.ErrClosed) {
+		t.Fatalf("WorkspaceOpen after Remove = %v, want ErrClosed", err)
+	}
+	if _, err := os.Stat(s.base); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("base recreated after Remove: %v", err)
+	}
 }

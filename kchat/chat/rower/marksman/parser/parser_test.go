@@ -17,8 +17,6 @@ import (
 	"github.com/yuin/goldmark/text"
 )
 
-// CommonMark 0.31.2 spec.json examples plus the GFM spec.txt examples.
-//
 //go:embed testdata/examples.json
 var examplesJSON []byte
 
@@ -34,8 +32,6 @@ var unsafeMarkdown = goldmark.New(
 	goldmark.WithRendererOptions(html.WithUnsafe()),
 )
 
-// render converts source with the given link reference definitions
-// already known, the way a consumer hoisting definitions would.
 func render(t *testing.T, source string, references []gmparser.Reference) string {
 	context := gmparser.NewContext()
 	for _, reference := range references {
@@ -48,7 +44,6 @@ func render(t *testing.T, source string, references []gmparser.Reference) string
 	return buf.String()
 }
 
-// references parses the whole document for its link reference definitions.
 func references(source string) []gmparser.Reference {
 	context := gmparser.NewContext()
 	unsafeMarkdown.Parser().Parse(text.NewReader([]byte(source)), gmparser.WithContext(context))
@@ -64,10 +59,6 @@ func split(source string, step int) (blocks []string) {
 	return blocks
 }
 
-// Rendering every emitted block on its own and concatenating must give the
-// same HTML as rendering the whole document: block boundaries are the only
-// thing the streamer decides. Link reference definitions are document-global,
-// so each block is rendered with the whole document's definitions known.
 func TestSpecExamples(t *testing.T) {
 	var examples []example
 	if err := json.Unmarshal(examplesJSON, &examples); err != nil {
@@ -92,8 +83,6 @@ func TestSpecExamples(t *testing.T) {
 	t.Logf("%d examples", len(examples))
 }
 
-// Random documents built from block-level tokens: no panics, chunking does
-// not change the blocks, every non-blank line comes out once and in order.
 func TestRandomDocuments(t *testing.T) {
 	tokens := []string{"", "", "foo", "bar baz", "# h", "## h2", "```", "~~~", "    code", "\tcode", "> ", "> > ", "- ", "* ", "+ ", "1. ", "2) ", "  ", "   ", "    ", "---", "***", "===", "- - -", "-", ">", "  - ", "  > ", "     x", "1.", "10)  ", "  ```", "  ---", "foo  ", "  *", "-   ", "1) ", "| a |", "|---|", "a | b", "-|-", "| - |", "  | x |", "\\|", "|", "<div>", "</div>", "<!--", "-->", "<span>", "<pre>", "</pre>"}
 	r := rand.New(rand.NewSource(1))
@@ -154,7 +143,7 @@ func TestPartial(t *testing.T) {
 	s.Write("re\n\n")
 	check("", false)
 	s.Write("| a |\n")
-	check("<p>| a |</p>\n", true) // held back as a possible table header
+	check("<p>| a |</p>\n", true)
 	s.Write("|---|\nrow")
 	check(table, true)
 	s.Close()
@@ -164,9 +153,6 @@ func TestPartial(t *testing.T) {
 	}
 }
 
-// Emitted HTML concatenated must equal converting the whole document, for
-// every example without link reference definitions: only backward references
-// can resolve in a stream.
 func TestHTML(t *testing.T) {
 	var examples []example
 	if err := json.Unmarshal(examplesJSON, &examples); err != nil {

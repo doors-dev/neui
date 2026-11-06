@@ -75,11 +75,13 @@ type toolChoiceFunction struct {
 // The other message form is the output message, and it is the only one that
 // takes an output_text part. It wants an id and a status on the message and
 // annotations and logprobs on every part, none of which api.Content keeps,
-// so assistant text goes back as input_text on the easy form instead. Both
-// serialize as {"type":"message"} and the service reads the shape.
+// so assistant text goes back on the easy form instead, as output_text parts
+// with the message's phase; the easy form takes output_text from the assistant
+// and refuses input_text there. Both serialize as {"type":"message"} and the
+// service reads the shape.
 type inputMessage struct {
 	Role    string `json:"role"`
-	Content any    `json:"content"` // string, or an array of input_text, input_image and input_file
+	Content any    `json:"content"` // string, or an array: output_text for the assistant, input_text, input_image and input_file for the user
 	Phase   string `json:"phase,omitempty"`
 }
 

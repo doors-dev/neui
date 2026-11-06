@@ -5,8 +5,12 @@ import (
 	"context"
 	"errors"
 	"image"
+	"image/color"
+	"image/gif"
+	"image/jpeg"
 	"image/png"
 	"iter"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -121,5 +125,56 @@ func TestResultUndeclaredStructuredIsBlocks(t *testing.T) {
 	}
 	if _, ok := result(context.Background(), res, true).(map[string]any); !ok {
 		t.Fatal("declared structured content not returned")
+	}
+}
+
+func TestResultOmitsAnimatedGIF(t *testing.T) {
+	frame := image.NewPaletted(image.Rect(0, 0, 4, 4), color.Palette{color.Black, color.White})
+	var animated, still bytes.Buffer
+	if err := gif.EncodeAll(&animated, &gif.GIF{Image: []*image.Paletted{frame, frame}, Delay: []int{10, 10}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := gif.EncodeAll(&still, &gif.GIF{Image: []*image.Paletted{frame}, Delay: []int{0}}); err != nil {
+		t.Fatal(err)
+	}
+	out := result(modelCtx(api.Model{}), &mcp.CallToolResult{
+		Content: []mcp.Content{
+			&mcp.ImageContent{MIMEType: "image/gif", Data: animated.Bytes()},
+			&mcp.ImageContent{MIMEType: "image/gif", Data: still.Bytes()},
+			&mcp.ImageContent{MIMEType: "image/gif", Data: still.Bytes()[:still.Len()-1]},
+		},
+	}, false)
+	contents := out.(blocks)
+	if len(contents) != 3 {
+		t.Fatalf("got %d blocks, want 3", len(contents))
+	}
+	if text, ok := contents[0].(api.ContentText); !ok || !strings.Contains(text.Text, "<omitted type=\"image\"") {
+		t.Fatalf("animated GIF: got %#v", contents[0])
+	}
+	if img, ok := contents[1].(api.ContentImage); !ok || img.Mime != string(api.ImageGIF) {
+		t.Fatalf("still GIF: got %#v", contents[1])
+	}
+	if _, ok := contents[2].(api.ContentText); !ok {
+		t.Fatalf("truncated GIF: got %#v", contents[2])
+	}
+}
+
+func TestResultImageMimeFromBytes(t *testing.T) {
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 8, 8)), nil); err != nil {
+		t.Fatal(err)
+	}
+	out := result(modelCtx(api.Model{}), &mcp.CallToolResult{
+		Content: []mcp.Content{
+			&mcp.ImageContent{MIMEType: "image/png", Data: buf.Bytes()},
+			&mcp.ImageContent{MIMEType: "image/png", Data: []byte("GIF89a but not really")},
+		},
+	}, false)
+	contents := out.(blocks)
+	if img, ok := contents[0].(api.ContentImage); !ok || img.Mime != string(api.ImageJPEG) {
+		t.Fatalf("got %#v, want image/jpeg", contents[0])
+	}
+	if _, ok := contents[1].(api.ContentText); !ok {
+		t.Fatalf("got %#v, want omitted note", contents[1])
 	}
 }

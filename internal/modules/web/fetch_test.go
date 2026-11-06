@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"github.com/JohannesKaufmann/html-to-markdown/v2/converter"
@@ -192,7 +193,7 @@ func TestFetchRefusals(t *testing.T) {
 		{`{"url":"http://203.0.113.1/x"}`, "an address web__fetch does not connect to"},
 		{`{"url":"http://100.64.0.1/x"}`, "an address web__fetch does not connect to"},
 		{`{"url":"http://[fe80::1%25lo0]/x"}`, "an address web__fetch does not connect to"},
-		{`{"url":"http://8.8.8.8:25/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://8.8.8.8:25/x"}`, "uses port 25, which web__fetch does not connect to"},
 	} {
 		if _, err := guarded(c.arg); err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: got %v, want %q", c.arg, err, c.want)
@@ -467,11 +468,41 @@ func TestGuardPolicy(t *testing.T) {
 			t.Errorf("%s refused: %v", address, err)
 		}
 	}
-	for _, address := range []string{"127.0.0.1:80", "[64:ff9b::7f00:1]:80", "[::ffff:10.0.0.1]:443", "8.8.8.8:25", "8.8.8.8:6667", "8.8.8.8:0", "bogus"} {
+	for _, address := range []string{"127.0.0.1:80", "[64:ff9b::7f00:1]:80", "[::ffff:10.0.0.1]:443", "bogus"} {
 		var refused blocked
 		if err := guard("tcp", address, nil); !errors.As(err, &refused) {
 			t.Errorf("%s allowed: %v", address, err)
 		}
+	}
+	for _, address := range []string{"8.8.8.8:25", "8.8.8.8:6667", "8.8.8.8:0", "[64:ff9b::808:808]:25"} {
+		var port badPorted
+		if err := guard("tcp", address, nil); !errors.As(err, &port) {
+			t.Errorf("%s not refused as a bad port: %v", address, err)
+		}
+	}
+}
+
+func TestFetchBadPortNamesThePort(t *testing.T) {
+	_, err := fetchTool(t, Config{})(`{"url":"http://8.8.8.8:25/"}`)
+	if err == nil {
+		t.Fatal("port 25 was fetched")
+	}
+	if !strings.Contains(err.Error(), "8.8.8.8:25 uses port 25, which web__fetch does not connect to") || strings.Contains(err.Error(), "resolves to") {
+		t.Errorf("a bad port must be reported as a port, not an address: %v", err)
+	}
+}
+
+func TestFetchConnectTimeoutIsNotAFetchTimeout(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer srv.Close()
+	dialer := &net.Dialer{Timeout: time.Nanosecond}
+	client := &http.Client{Transport: &http.Transport{DialContext: dialer.DialContext}}
+	_, err := fetchTool(t, Config{HTTPClient: client})(fmt.Sprintf(`{"url":%q}`, srv.URL))
+	if err == nil {
+		t.Fatal("a dial that timed out was reported as success")
+	}
+	if !strings.Contains(err.Error(), "connecting to "+srv.Listener.Addr().String()+" timed out") || strings.Contains(err.Error(), "timed out after") {
+		t.Errorf("a connect timeout must not be reported as the fetch timeout: %v", err)
 	}
 }
 

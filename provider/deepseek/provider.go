@@ -23,7 +23,6 @@
 package deepseek
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -119,6 +118,9 @@ func New(conf Conf, opts ...Option) (*Provider, error) {
 		client: &http.Client{},
 	}
 	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
 		if err := opt(p); err != nil {
 			return nil, err
 		}
@@ -325,21 +327,22 @@ func (p *Provider) request(ctx context.Context, req api.Request) (*http.Request,
 	if err != nil {
 		return nil, 0, err
 	}
-	raw, err := lib.MarshalRaw(body)
+	raw, err := lib.MarshalBody(body)
 	if err != nil {
 		return nil, 0, fmt.Errorf("deepseek: encoding request: %w", err)
 	}
-	if p.model.RequestBytes > 0 && len(raw) > p.model.RequestBytes {
-		return nil, len(raw), fmt.Errorf("%w: the request is %d bytes, over the %d the model %s takes", errTooLarge, len(raw), p.model.RequestBytes, p.model.Name)
+	sent := len(raw.Bytes())
+	if p.model.RequestBytes > 0 && sent > p.model.RequestBytes {
+		return nil, sent, fmt.Errorf("%w: the request is %d bytes, over the %d the model %s takes", errTooLarge, sent, p.model.RequestBytes, p.model.Name)
 	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, p.base+completionPath, bytes.NewReader(raw))
+	httpReq, err := raw.Request(ctx, p.base+completionPath)
 	if err != nil {
 		panic(err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "text/event-stream")
 	httpReq.Header.Set("Authorization", "Bearer "+p.key)
-	return httpReq, len(raw), nil
+	return httpReq, sent, nil
 }
 
 // errorCodeFor classifies a turn that never left this process.

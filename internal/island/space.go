@@ -9,7 +9,6 @@ import (
 type space interface {
 	AddData(ctx context.Context, text string, object any) error
 	AddSpace(ctx context.Context, name string, desc string) (context.Context, error)
-	AddIsland(ctx context.Context, name string, desc string, island Island) (context.Context, error)
 }
 
 func getSpace(ctx context.Context) space {

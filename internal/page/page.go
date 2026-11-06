@@ -162,11 +162,11 @@ func (s *page) Module(ctx context.Context) common.Module {
 		if !synced.Load() {
 			return islandSpecResult{}, errSync
 		}
-		island, seq, err := s.island(ctx, arg.Path)
+		island, seq, path, err := s.island(ctx, arg.Path)
 		if err != nil {
 			return islandSpecResult{}, err
 		}
-		return islandSpecResult{Seq: seq, Spec: island.Spec(ctx, arg.Path)}, nil
+		return islandSpecResult{Seq: seq, Spec: island.Spec(ctx, path)}, nil
 	})
 	if err != nil {
 		panic(err)
@@ -181,7 +181,7 @@ func (s *page) Module(ctx context.Context) common.Module {
 		if (arg.File == "") == (arg.Code == "") {
 			return islandRunResult{}, errFileOrCode
 		}
-		island, seq, err := s.island(ctx, arg.Path)
+		island, seq, path, err := s.island(ctx, arg.Path)
 		if err != nil {
 			return islandRunResult{}, err
 		}
@@ -190,9 +190,9 @@ func (s *page) Module(ctx context.Context) common.Module {
 		}
 		var task, script uint
 		if arg.File != "" {
-			task, script, err = island.StartFile(ctx, arg.Path, arg.Comment, arg.File)
+			task, script, err = island.StartFile(ctx, path, arg.Comment, arg.File)
 		} else {
-			task, script, err = island.StartCode(ctx, arg.Path, arg.Comment, arg.Code)
+			task, script, err = island.StartCode(ctx, path, arg.Comment, arg.Code)
 		}
 		return islandRunResult{Task: task, Script: script}, err
 	})
@@ -209,7 +209,7 @@ func (s *page) Module(ctx context.Context) common.Module {
 		if (arg.File == "") == (arg.Code == "") {
 			return islandRunResult{}, errFileOrCode
 		}
-		island, _, err := s.island(ctx, arg.Path)
+		island, _, _, err := s.island(ctx, arg.Path)
 		if err != nil {
 			return islandRunResult{}, err
 		}
@@ -231,11 +231,11 @@ func (s *page) Module(ctx context.Context) common.Module {
 		if !synced.Load() {
 			return struct{}{}, errSync
 		}
-		island, _, err := s.island(ctx, arg.Path)
+		island, _, _, err := s.island(ctx, arg.Path)
 		if err != nil {
 			return struct{}{}, err
 		}
-		return struct{}{}, island.Done(ctx, "", false)
+		return struct{}{}, island.Done(ctx)
 	})
 	if err != nil {
 		panic(err)
@@ -243,11 +243,11 @@ func (s *page) Module(ctx context.Context) common.Module {
 	return pageModule
 }
 
-func (s *page) island(ctx context.Context, path string) (island.Island, uint, error) {
+func (s *page) island(ctx context.Context, path string) (island.Island, uint, string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if ctx.Err() != nil {
-		return nil, 0, context.Cause(ctx)
+		return nil, 0, "", context.Cause(ctx)
 	}
 	return s.space.findIsland(strings.Split(path, "."))
 }
@@ -320,7 +320,7 @@ func dispatch[T any](s *page, ctx context.Context, ref inputRef, action string, 
 func (s *page) sync(ctx context.Context, arg syncArg) (syncResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	target, err := s.space.sync(strings.Split(arg.Path, "."), ctx, arg.Depth+1)
+	target, err := s.space.sync(strings.Split(arg.Path, "."), arg.Depth+1)
 	if err != nil {
 		return syncResult{}, err
 	}

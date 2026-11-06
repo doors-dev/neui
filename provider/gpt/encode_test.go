@@ -2,6 +2,7 @@ package gpt
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -912,11 +913,6 @@ func TestEncodeRejections(t *testing.T) {
 		wantSub string
 	}{
 		{
-			name:    "no model",
-			req:     api.Request{Messages: []api.Message{user(api.ContentText{Text: "hi"})}},
-			wantSub: "no model",
-		},
-		{
 			// The result answering it says the call succeeded, so the arguments
 			// the model sent are unaccounted for, and an empty object in their
 			// place would replay as a legitimate call that takes none.
@@ -1023,6 +1019,12 @@ func TestProviderOptions(t *testing.T) {
 			if p, err := New(Conf{Model: GPT56Sol}, WithAPIKey("k"), o); err == nil || p != nil {
 				t.Errorf("%s: New returned %v, %v, want only an error", name, p, err)
 			}
+		}
+	})
+
+	t.Run("an empty model name fails New", func(t *testing.T) {
+		if p, err := New(Conf{}, WithAPIKey("k")); err == nil || p != nil {
+			t.Fatalf("New returned %v, %v, want only an error", p, err)
 		}
 	})
 
@@ -1240,5 +1242,28 @@ func TestEveryDocumentMimeEncodes(t *testing.T) {
 		if raw, _ := json.Marshal(body["input"]); !strings.Contains(string(raw), `"type":"input_file"`) {
 			t.Fatalf("%s: input %s carries no file", mime, raw)
 		}
+	}
+}
+
+func TestDataURLMatchesConcatenation(t *testing.T) {
+	for _, n := range []int{0, 1, 2, 3, 4, 5, 57, 1000, 1 << 16, 1<<20 + 1} {
+		data := make([]byte, n)
+		for i := range data {
+			data[i] = byte(i*7 + i>>8)
+		}
+		for _, mime := range []string{"image/png", "application/pdf", ""} {
+			want := "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data)
+			if got := dataURL(mime, data); got != want {
+				t.Fatalf("%d bytes of %q: the data URL differs from the concatenated one", n, mime)
+			}
+		}
+	}
+}
+
+func BenchmarkDataURL(b *testing.B) {
+	data := make([]byte, 1<<20)
+	b.ReportAllocs()
+	for b.Loop() {
+		dataURL("image/png", data)
 	}
 }

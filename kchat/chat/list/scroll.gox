@@ -7,6 +7,7 @@ import (
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
 	"neui.dev/api"
+	"neui.dev/kchat/notify"
 )
 
 func (l *list) updateRange(ctx context.Context, first api.RoundID, last api.RoundID) {
@@ -84,6 +85,8 @@ func (l *list) sync(ctx context.Context) (more bool) {
 			return true
 		}
 		if err != nil {
+			doors.Logger(ctx).Error("list: load before", "err", err)
+			notify.Error(ctx, err)
 			l.scrollState.first = api.NoRoundID
 			l.scrollState.last = api.NoRoundID
 			l.scrollState.synced = true
@@ -128,6 +131,8 @@ func (l *list) sync(ctx context.Context) (more bool) {
 			return true
 		}
 		if err != nil {
+			doors.Logger(ctx).Error("list: load after", "err", err)
+			notify.Error(ctx, err)
 			l.scrollState.first = api.NoRoundID
 			l.scrollState.last = api.NoRoundID
 			l.scrollState.synced = true

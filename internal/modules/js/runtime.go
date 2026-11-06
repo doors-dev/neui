@@ -47,7 +47,7 @@ func getRuntime(ctx context.Context) *runtime {
 	return rt.(*runtime)
 }
 
-// Config tunes the js runtime; a zero field takes its default. The limits
+// Config tunes the js runtime; a zero or negative field takes its default. The limits
 // are shared by every session of an app that sets WithJSConfig, and by every
 // app in the process that does not: a script waits to start until a
 // worker and enough of TotalMemory are free.
@@ -84,31 +84,31 @@ type Config struct {
 const minMemory = 4 * 1024 * 1024
 
 func (c *Config) initDefaults() {
-	if c.DefaultMemory == 0 {
+	if c.DefaultMemory <= 0 {
 		c.DefaultMemory = 16 * 1024 * 1024
 	}
 	c.DefaultMemory = max(c.DefaultMemory, minMemory)
-	if c.WorkerMemory == 0 {
+	if c.WorkerMemory <= 0 {
 		c.WorkerMemory = 128 * 1024 * 1024
 	}
 	c.WorkerMemory = max(c.WorkerMemory, c.DefaultMemory)
-	if c.TotalMemory == 0 {
+	if c.TotalMemory <= 0 {
 		c.TotalMemory = 512 * 1024 * 1024
 	}
 	c.TotalMemory = max(c.TotalMemory, c.WorkerMemory)
-	if c.MaxWorkers == 0 {
+	if c.MaxWorkers <= 0 {
 		c.MaxWorkers = 16
 	}
-	if c.JobTimeout == 0 {
+	if c.JobTimeout <= 0 {
 		c.JobTimeout = 30 * time.Second
 	}
-	if c.AsyncAfter == 0 {
+	if c.AsyncAfter <= 0 {
 		c.AsyncAfter = 10 * time.Second
 	}
-	if c.MaxQueue == 0 {
+	if c.MaxQueue <= 0 {
 		c.MaxQueue = 100
 	}
-	if c.MaxCallDepth == 0 {
+	if c.MaxCallDepth <= 0 {
 		c.MaxCallDepth = 1000
 	}
 }
@@ -204,6 +204,9 @@ func (r *runtime) execute(vm *quickjs.VM, input task.Input) (out string, err err
 			out = ""
 			err = fmt.Errorf("%q: %v: %w", input.Name, rec, errRuntime)
 		}
+		if err != nil && errors.Is(context.Cause(input.Context), task.ErrTimeout) {
+			err = fmt.Errorf("%q: limit %v: %w", input.Name, input.Timeout, task.ErrTimeout)
+		}
 	}()
 	vm.SetMemoryLimit(uintptr(input.Memory))
 	vm.SetMaxStackSize(uintptr(r.config.MaxCallDepth))
@@ -223,9 +226,6 @@ func (r *runtime) execute(vm *quickjs.VM, input task.Input) (out string, err err
 	}
 	res, err := vm.Eval(input.Script, quickjs.EvalGlobal)
 	if err != nil {
-		if errors.Is(context.Cause(input.Context), task.ErrTimeout) {
-			return "", fmt.Errorf("%q: limit %v: %w", input.Name, input.Timeout, task.ErrTimeout)
-		}
 		return "", fmt.Errorf("%q: %v: %w", input.Name, err, errScript)
 	}
 	s, ok := res.(string)

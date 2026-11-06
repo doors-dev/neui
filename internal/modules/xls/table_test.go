@@ -19,7 +19,7 @@ func TestTable(t *testing.T) {
 			{Header: "Amount", Format: "currency"},
 			{Header: "Qty", Format: "integer"},
 		},
-		Rows:   [][]any{{"Widget", 12.5, 3}, {"Gadget", 99.99, 1}},
+		Rows:   [][]any{{"Widget", 12.5, 3.0}, {"Gadget", 99.99, 1.0}},
 		Preset: "report",
 		Name:   "Sales",
 	})
@@ -93,10 +93,10 @@ func TestTableSecondSheet(t *testing.T) {
 	fs, _ := newFSStore(t)
 	ctx := threadCtx(fs)
 	cols := []columnSpec{{Header: "K"}, {Header: "V", Format: "number"}}
-	if _, err := tableTool(ctx, tableArg{Path: "multi.xlsx", Sheet: "First", Columns: cols, Rows: [][]any{{"a", 1}}}); err != nil {
+	if _, err := tableTool(ctx, tableArg{Path: "multi.xlsx", Sheet: "First", Columns: cols, Rows: [][]any{{"a", 1.0}}}); err != nil {
 		t.Fatal(err)
 	}
-	res, err := tableTool(ctx, tableArg{Path: "multi.xlsx", Sheet: "Second", Cell: "B2", Columns: cols, Rows: [][]any{{"b", 2}, {"c", 3}}})
+	res, err := tableTool(ctx, tableArg{Path: "multi.xlsx", Sheet: "Second", Cell: "B2", Columns: cols, Rows: [][]any{{"b", 2.0}, {"c", 3.0}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -384,5 +384,28 @@ func TestTableParsesNumbers(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "not a number") {
 			t.Fatalf("%s %q: err = %v", bad.format, bad.value, err)
 		}
+	}
+}
+
+func TestTableRefusesBadColumnsAndCells(t *testing.T) {
+	fs, _ := newFSStore(t)
+	for _, c := range []struct {
+		cols    []columnSpec
+		rows    [][]any
+		wantErr string
+	}{
+		{cols: []columnSpec{{Header: "Amount"}, {Header: "amount"}}, rows: [][]any{{1.0, 2.0}}, wantErr: "unique"},
+		{cols: []columnSpec{{Header: "K"}, {Header: " "}}, rows: [][]any{{"a", "b"}}, wantErr: "header must not be empty"},
+		{cols: []columnSpec{{Header: "Total", Format: "money"}}, rows: [][]any{}, wantErr: "format \"money\""},
+		{cols: []columnSpec{{Header: "K"}, {Header: "V"}}, rows: [][]any{{"a", map[string]any{"v": 1.0}}}, wantErr: "not a cell value"},
+		{cols: []columnSpec{{Header: "K"}}, rows: [][]any{{[]any{"a"}}}, wantErr: "not a cell value"},
+	} {
+		_, err := tableTool(threadCtx(fs), tableArg{Path: "bad.xlsx", Sheet: "S", Columns: c.cols, Rows: c.rows})
+		if err == nil || !strings.Contains(err.Error(), c.wantErr) {
+			t.Fatalf("%+v: err = %v", c.cols, err)
+		}
+	}
+	if _, err := fs.Stat(threadCtx(fs), "bad.xlsx"); err == nil {
+		t.Fatal("bad.xlsx was written")
 	}
 }

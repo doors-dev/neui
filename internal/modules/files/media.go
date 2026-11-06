@@ -49,12 +49,8 @@ func readImageTool(ctx context.Context, arg PathArg) (api.Image, error) {
 		return api.Image{}, fmt.Errorf("%q is %s, not a supported image", arg.Path, mimeType)
 	}
 	if mimeType == api.ImageGIF {
-		cfg, err := gif.DecodeConfig(bytes.NewReader(data))
-		if err != nil {
+		if _, err := gif.DecodeConfig(bytes.NewReader(data)); err != nil {
 			return api.Image{}, err
-		}
-		if int64(cfg.Width)*int64(cfg.Height) > media.MaxDecodePixels {
-			return api.Image{}, fmt.Errorf("%q is %dx%d, over the %d pixels that can be decoded", arg.Path, cfg.Width, cfg.Height, media.MaxDecodePixels)
 		}
 		i, frames := 13, 0
 		if data[10]&0x80 != 0 {

@@ -531,3 +531,38 @@ func TestConnectClearsStaleDesc(t *testing.T) {
 		t.Fatalf("got %q, want empty desc after reconnect", d)
 	}
 }
+
+func TestHeadersNotSentAcrossRedirect(t *testing.T) {
+	var leaked, reached atomic.Int64
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reached.Add(1)
+		if r.Header.Get("Authorization") != "" || r.Header.Get("X-Secret") != "" {
+			leaked.Add(1)
+		}
+		http.Error(w, "no", http.StatusNotFound)
+	}))
+	t.Cleanup(other.Close)
+	var authed atomic.Int64
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "Bearer secret" {
+			authed.Add(1)
+		}
+		http.Redirect(w, r, other.URL+r.URL.Path, http.StatusTemporaryRedirect)
+	}))
+	t.Cleanup(origin.Close)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	s, err := connect(ctx, origin.URL, map[string]string{"Authorization": "Bearer secret", "X-Secret": "x"}, time.Minute, func(*mcp.ClientSession) {})
+	if err == nil {
+		s.Close()
+	}
+	if authed.Load() == 0 {
+		t.Fatal("configured headers never reached the configured server")
+	}
+	if reached.Load() == 0 {
+		t.Fatal("redirect target never reached")
+	}
+	if leaked.Load() != 0 {
+		t.Fatal("configured headers sent to the redirect target")
+	}
+}

@@ -19,14 +19,7 @@ type Section struct {
 }
 
 type Driver interface {
-	// Compare orders two keys, negative when a is older than b. Keys are
-	// opaque to the window, so their order comes from here.
 	Compare(a string, b string) int
-	// Sections returns at most limit sections from the one keyed from,
-	// taking it when inclusive and starting past it otherwise, going newer
-	// when asc and older when not; an empty from starts at the end the
-	// direction runs from, and inclusive says nothing there. The second
-	// result reports that the walk ran out.
 	Sections(ctx context.Context, from string, inclusive bool, asc bool, limit int) ([]Section, bool, error)
 }
 
@@ -138,7 +131,6 @@ func (w *WindowList) seed(ctx context.Context) (gox.Comp, error) {
 	w.scrollState.newestReached = true
 	above := []Section{}
 	if w.last != "" {
-		// past the anchor: the descending walk below carries it
 		newer, ended, err := w.Driver.Sections(ctx, w.last, false, true, w.Margin)
 		if err != nil {
 			return nil, err
@@ -156,8 +148,6 @@ func (w *WindowList) seed(ctx context.Context) (gox.Comp, error) {
 		sections = fresh
 		w.scrollState.oldestReached = ended
 	} else {
-		// down to the oldest section that was visible, then a margin past it,
-		// so the window matches what sync would have converged on
 		from := w.last
 		take := true
 		beyond := 0
@@ -189,8 +179,6 @@ func (w *WindowList) seed(ctx context.Context) (gox.Comp, error) {
 	for _, s := range sections {
 		w.history.PushBack(w.intoSlot(w.ctx, s, 0, nil))
 	}
-	// the newest section was on screen, so the list belongs at the top and
-	// the script has nothing to restore
 	if w.scrollState.newestReached && w.history.Len() != 0 && w.history.Front().key == w.last {
 		w.first, w.last = "", ""
 	}
@@ -284,6 +272,8 @@ func (w *WindowList) sync(ctx context.Context) (more bool) {
 		sections, ended, err := w.Driver.Sections(ctx, anchor, false, false, wantOlder - older)
 		w.mu.Lock()
 		if err != nil {
+			doors.Logger(ctx).Error("window: load older", "err", err)
+			notify.Error(ctx, err)
 			w.scrollState.first = ""
 			w.scrollState.last = ""
 			w.scrollState.synced = true
@@ -318,6 +308,8 @@ func (w *WindowList) sync(ctx context.Context) (more bool) {
 		sections, ended, err := w.Driver.Sections(ctx, anchor, false, true, wantNewer - newer)
 		w.mu.Lock()
 		if err != nil {
+			doors.Logger(ctx).Error("window: load newer", "err", err)
+			notify.Error(ctx, err)
 			w.scrollState.first = ""
 			w.scrollState.last = ""
 			w.scrollState.synced = true
@@ -375,8 +367,6 @@ elem (w *WindowList) script() {
 		const body = script.closest(".kchat-side-body")
 		const seedFirst = $data("first")
 		const seedLast = $data("last")
-		// the seeded window already matches this range, so an identical first
-		// report needs no round trip
 		let sent = seedLast ? `${seedFirst}:${seedLast}` : ""
 		const widget = body.closest(".kchat-widget")
 		let reported = false
@@ -388,7 +378,6 @@ elem (w *WindowList) script() {
 				if (s.hasAttribute("data-pending")) continue
 				const r = s.getBoundingClientRect()
 				if (r.height === 0 || r.bottom <= b.top || r.top >= b.bottom) continue
-				// sections run newest first, so the topmost on screen is last
 				if (last === "") last = s.dataset.id
 				first = s.dataset.id
 			}
@@ -424,10 +413,6 @@ elem (w *WindowList) script() {
 		requestAnimationFrame(() => {
 			const top = body.querySelector(`.kchat-day[data-id="${seedLast}"]`)
 			if (seedLast && top) {
-				// first and last are the sections whose boxes met the viewport,
-				// so last.top <= scrollTop < last.bottom and
-				// first.top < scrollTop + height <= first.bottom; the position
-				// satisfying both is where the viewport sat
 				const base = body.scrollTop - body.getBoundingClientRect().top
 				const t = top.getBoundingClientRect()
 				let lo = t.top + base
@@ -438,7 +423,6 @@ elem (w *WindowList) script() {
 					lo = Math.max(lo, f.top + base - body.clientHeight)
 					hi = Math.min(hi, f.bottom + base - body.clientHeight)
 				}
-				// a resize can leave no position satisfying both: keep the top
 				body.scrollTop = lo <= hi ? (lo + hi) / 2 : t.top + base
 			}
 			body.addEventListener("scroll", report, { passive: true })

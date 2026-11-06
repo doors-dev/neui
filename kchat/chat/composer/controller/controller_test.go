@@ -183,3 +183,38 @@ func TestCutKeepsRunes(t *testing.T) {
 		t.Fatalf("textBytes: want %d, got %d", len(text), c.origin.Get().textBytes)
 	}
 }
+
+func TestVisibleInputResetsSizes(t *testing.T) {
+	ctx := context.Background()
+	thread := &fakeThread{}
+	c := newTestController(thread)
+	c.UpdateInputText(ctx, strings.Repeat("a", inputLimit+1))
+	c.InitRewind(ctx, 1, api.Input{Text: "short"})
+	c.Send(ctx)
+	if len(thread.rewound) != 1 {
+		t.Fatalf("rewind of a short message after an over-limit draft: want one rewind, got %d", len(thread.rewound))
+	}
+
+	c.CancelRewind(ctx)
+	c.UpdateInputText(ctx, "draft")
+	c.InitRewind(ctx, 2, api.Input{Text: "edit"})
+	c.UpdateInputText(ctx, strings.Repeat("b", inputLimit+1))
+	c.CancelRewind(ctx)
+	c.Send(ctx)
+	if len(thread.sent) != 1 {
+		t.Fatalf("main draft after an over-limit rewind: want one send, got %d", len(thread.sent))
+	}
+
+	c.UpdateInputText(ctx, strings.Repeat("c", inputLimit-10))
+	c.FlushInput(ctx)
+	before := len(thread.inputs)
+	c.UpdateAttachments(ctx, c.origin.Get().inputSeq, []string{"user_uploads/report.pdf"})
+	if len(thread.inputs) != before+1 {
+		t.Fatalf("attachment after a flushed near-limit draft: want the draft saved")
+	}
+
+	restored := NewComposerController(thread, api.ChatInput{Input: api.Input{Text: strings.Repeat("d", inputLimit+1)}}, false, api.EventUsage{}, nil, false, nil)
+	if restored.ExcessBytes().Get() == 0 {
+		t.Fatalf("restored over-limit draft: want excess bytes")
+	}
+}

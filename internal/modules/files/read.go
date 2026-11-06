@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"unicode/utf8"
 
 	"neui.dev/internal/common"
 )
@@ -45,7 +46,7 @@ func readTool(ctx context.Context, arg readArg) (string, error) {
 		return "", err
 	}
 	defer rc.Close()
-	br := bufio.NewReaderSize(rc, 64<<10)
+	br := bufio.NewReaderSize(ctxReader{ctx, rc}, 64<<10)
 	head, _ := br.Peek(4096)
 	if bytes.IndexByte(head, 0) >= 0 {
 		return "", fmt.Errorf("%q is a binary file, use readBytes", arg.Path)
@@ -115,7 +116,13 @@ func readLine(br *bufio.Reader, keep int) ([]byte, bool, error) {
 			return nil, false, err
 		}
 		started = true
+		if cut {
+			chunk = nil
+		}
 		if room := keep - len(line); len(chunk) > room {
+			for room > 0 && !utf8.RuneStart(chunk[room]) {
+				room--
+			}
 			chunk = chunk[:room]
 			cut = true
 		}

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"modernc.org/quickjs"
 	"neui.dev/api"
 	"neui.dev/internal/common"
 	"neui.dev/internal/filesystem"
@@ -386,5 +387,67 @@ func TestRunArgProtoKey(t *testing.T) {
 	}
 	if string(res.Output) != `["__proto__","y"]` {
 		t.Fatalf("output = %s", res.Output)
+	}
+}
+
+func TestConfigNonPositiveTakesDefaults(t *testing.T) {
+	got := Config{-1, -1, -1, -1, -1, -1, -1, -1}
+	got.initDefaults()
+	want := Config{}
+	want.initDefaults()
+	if got != want {
+		t.Fatalf("config = %+v, want %+v", got, want)
+	}
+}
+
+func TestRunHugeLimitsApplyTheLimit(t *testing.T) {
+	ctx, _ := newCtx(t)
+	m := &module{runtime: getRuntime(context.Background())}
+	res, err := m.run(ctx, RunArg{
+		Code:    "const end = Date.now() + 50;\nwhile (Date.now() < end) {}\nreturn 1;",
+		Timeout: 18446744073710,
+		Memory:  17592186044417,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(res.Output) != "1" {
+		t.Fatalf("res = %+v", res)
+	}
+}
+
+func TestExecuteSetupTimeout(t *testing.T) {
+	_, f := newCtx(t)
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cancel(task.ErrTimeout)
+	rt := getRuntime(context.Background())
+	vm, err := quickjs.NewVM()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer vm.Close()
+	_, err = rt.execute(vm, task.Input{
+		Params:  task.Params{Name: "../escape", Script: "return 1;", Controller: testThread{fs: f}},
+		Context: ctx,
+	})
+	if !errors.Is(err, task.ErrTimeout) || errors.Is(err, errRuntime) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestTaskNameAfterCancel(t *testing.T) {
+	_, f := newCtx(t)
+	done := make(chan struct{})
+	w, _, cancel := task.NewTask(task.Params{Name: "a.js", Controller: testThread{fs: f}}, func() { close(done) }, time.Hour)
+	cancel(errStopped)
+	for {
+		if w.Name() != "a.js" {
+			t.Fatalf("name = %q", w.Name())
+		}
+		select {
+		case <-done:
+			return
+		default:
+		}
 	}
 }

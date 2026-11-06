@@ -21,13 +21,14 @@ type InputState struct {
 	Ask *api.ChatAsk
 }
 
-// should come from conf in constructor
 const inputLimit = 256 * 1024
 
 func NewComposerController(thread api.ChatThread, input api.ChatInput, active bool, settled api.EventUsage, tasks []api.Task, compaction bool, ask *api.ChatAsk) ComposerController {
 	limit := inputLimit
 	origin := doors.NewSourceEqual(state{
 		input: input.Input,
+		textBytes: len(input.Input.Text),
+		attachBytes: attachBytes(input.Input.Attachments),
 		pending: input.Pending,
 		rewind: invalidRewind,
 		active: active,
@@ -157,6 +158,16 @@ func NewComposerController(thread api.ChatThread, input api.ChatInput, active bo
 	}
 }
 
+func attachBytes(files []string) int {
+	n := 0
+	for _, c := range (api.Input{Attachments: files}).Content() {
+		if t, ok := c.(api.ContentText); ok {
+			n += len(t.Text)
+		}
+	}
+	return n
+}
+
 func sameTasks(a, b []api.Task) bool {
 	return slices.EqualFunc(a, b, func(x, y api.Task) bool {
 		return x.ID == y.ID
@@ -235,6 +246,8 @@ func (s ComposerController) FlushInput(ctx context.Context) {
 		d.inputSeq += 1
 		d.uploading = 0
 		d.input = api.Input{}
+		d.textBytes = 0
+		d.attachBytes = 0
 		return d
 	})
 }
@@ -247,6 +260,8 @@ func (s ComposerController) CancelRewind(ctx context.Context) {
 		s.rewind = invalidRewind
 		s.inputSeq += 1
 		s.uploading = 0
+		s.textBytes = len(s.input.Text)
+		s.attachBytes = attachBytes(s.input.Attachments)
 		return s
 	})
 }
@@ -259,6 +274,8 @@ func (s ComposerController) InitRewind(ctx context.Context, round api.RoundID, i
 		}
 		s.inputSeq += 1
 		s.uploading = 0
+		s.textBytes = len(input.Text)
+		s.attachBytes = attachBytes(input.Attachments)
 		return s
 	})
 }
@@ -438,12 +455,7 @@ func (s ComposerController) UpdateAttachments(ctx context.Context, seq int, file
 		} else {
 			d.input.Attachments = files
 		}
-		d.attachBytes = 0
-		for _, c := range (api.Input{Attachments: files}).Content() {
-			if t, ok := c.(api.ContentText); ok {
-				d.attachBytes += len(t.Text)
-			}
-		}
+		d.attachBytes = attachBytes(files)
 		if d.rewind.isValid() || d.textBytes + d.attachBytes > s.inputLimit {
 			return d
 		}

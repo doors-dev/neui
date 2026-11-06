@@ -549,4 +549,4 @@ func (r *rangeReadCloser) Close() error {
 	return r.file.Close()
 }
 
-var _ FS = (FS)(nil)
+var _ api.FS = (FS)(nil)

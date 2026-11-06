@@ -58,9 +58,6 @@ type inputItem struct {
 // its value, including the default, so there is nothing to send that would
 // work; at none the docs keep it.
 func encodeRequest(model string, set settings, req api.Request) (*requestBody, error) {
-	if model == "" {
-		return nil, errors.New("gpt: provider has no model, set Conf.Model")
-	}
 	reasoner := isReasoningModel(model)
 	b := &requestBody{
 		Model:         model,
@@ -675,11 +672,10 @@ func documentBlock(c api.ContentDocument) inputFile {
 // dataURL is the form every current example uses for both image_url and
 // file_data, and the only one that carries the media type alongside the bytes.
 func dataURL(mime string, data []byte) string {
-	var sb strings.Builder
-	sb.Grow(len(mime) + base64.StdEncoding.EncodedLen(len(data)) + 16)
-	sb.WriteString("data:")
-	sb.WriteString(mime)
-	sb.WriteString(";base64,")
-	sb.WriteString(base64.StdEncoding.EncodeToString(data))
-	return sb.String()
+	buf := make([]byte, len("data:")+len(mime)+len(";base64,")+base64.StdEncoding.EncodedLen(len(data)))
+	n := copy(buf, "data:")
+	n += copy(buf[n:], mime)
+	n += copy(buf[n:], ";base64,")
+	base64.StdEncoding.Encode(buf[n:], data)
+	return string(buf)
 }

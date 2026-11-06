@@ -38,7 +38,6 @@ type session struct {
 	localMessageStorage api.MessageStorage
 	localFileStorage    *local.FileStorage
 	backend             *common.Backend
-	cancel              context.CancelFunc
 	instances           map[*instance]struct{}
 	chats               ui.Chats
 	zone                atomic.Pointer[time.Location]

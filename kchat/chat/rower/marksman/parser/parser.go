@@ -21,9 +21,6 @@ var markdown = goldmark.New(
 	),
 )
 
-// fileLinkRenderer replaces the default link and image renderers to let
-// file:/// destinations through goldmark's dangerous-URL filter; everything
-// the filter rejects otherwise (javascript:, data:, vbscript:) stays stripped.
 type fileLinkRenderer struct{}
 
 func (fileLinkRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {

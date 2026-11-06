@@ -31,7 +31,9 @@ func (s *threadCompact) on(cmd any) {
 	case commandLink:
 		if cmd.backend != s.thread.link.backend {
 			defer s.thread.switchStateWait()
-			s.abort()
+			if err := s.abort(); err != nil {
+				s.thread.criticalErr(nil, err)
+			}
 			link, err := s.thread.connect(cmd.backend, cmd.page, true, cmd.meta)
 			if err != nil {
 				cmd.Err(err)
@@ -54,7 +56,10 @@ func (s *threadCompact) on(cmd any) {
 			return
 		}
 		defer s.thread.switchStateWait()
-		s.abort()
+		if err := s.abort(); err != nil {
+			s.thread.criticalErr(nil, err)
+			return
+		}
 		s.thread.disconnect()
 	case commandStop:
 		if s.thread.link != cmd.link {
@@ -73,7 +78,10 @@ func (s *threadCompact) on(cmd any) {
 			s.thread.link.send(newMessageEvent(nil, api.ChatEventInputPending{Pending: false}))
 		}
 		s.thread.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}}))
-		s.abort()
+		if err := s.abort(); err != nil {
+			s.thread.criticalErr(nil, err)
+			return
+		}
 		s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundEnd{Round: s.round.ID, State: api.RoundAbort, Error: "", Usage: s.usage, Final: true}))
 		s.thread.switchStateWait()
 	case commandRewind:
@@ -155,6 +163,9 @@ func (s *threadCompact) on(cmd any) {
 	}
 }
 
-func (s *threadCompact) abort() {
-	s.thread.replay.RoundAbort(s.usage, s.content)
+func (s *threadCompact) abort() error {
+	if !s.thread.replay.IsRetriable() {
+		return nil
+	}
+	return s.thread.replay.RoundAbort(s.usage, s.content)
 }

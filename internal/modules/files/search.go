@@ -9,6 +9,7 @@ import (
 	"path"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"neui.dev/api"
 	"neui.dev/internal/common"
@@ -107,10 +108,13 @@ func grepFile(ctx context.Context, fs api.FS, name string, re *regexp.Regexp, li
 		return err
 	}
 	defer rc.Close()
-	br := bufio.NewReaderSize(rc, 64<<10)
+	br := bufio.NewReaderSize(ctxReader{ctx, rc}, 64<<10)
 	head, _ := br.Peek(4096)
 	if bytes.IndexByte(head, 0) >= 0 {
 		return nil
+	}
+	if bytes.HasPrefix(head, []byte("\ufeff")) {
+		br.Discard(3)
 	}
 	var line uint
 	for {
@@ -131,7 +135,11 @@ func grepFile(ctx context.Context, fs api.FS, name string, re *regexp.Regexp, li
 			return nil
 		}
 		if len(text) > grepLineMax {
-			text = text[:grepLineMax] + "... (line truncated)"
+			n := grepLineMax
+			for n > 0 && !utf8.RuneStart(text[n]) {
+				n--
+			}
+			text = text[:n] + "... (line truncated)"
 		}
 		res.Matches = append(res.Matches, grepMatch{Path: name, Line: line, Text: text})
 	}
@@ -171,6 +179,9 @@ func walkFiles(ctx context.Context, fs api.FS, root string, virtual bool, fn fun
 		return err
 	}
 	for _, e := range entries {
+		if err := context.Cause(ctx); err != nil {
+			return err
+		}
 		if e.Dir {
 			if !virtual && e.Virtual {
 				continue

@@ -180,6 +180,7 @@ func (m *module) timer(ctx context.Context, arg TimerArg) (TimerResult, error) {
 	if err != nil {
 		cancel(err)
 		m.pending.CompareAndSwap(p, nil)
+		close(p.done)
 		return TimerResult{}, err
 	}
 	go m.wait(waitCtx, p, task, fires)
@@ -221,6 +222,10 @@ func (m *module) cancel(ctx context.Context, _ struct{}) (struct{}, error) {
 	}
 	m.pending.CompareAndSwap(p, nil)
 	p.cancel(nil)
-	<-p.done
-	return struct{}{}, nil
+	select {
+	case <-p.done:
+		return struct{}{}, nil
+	case <-ctx.Done():
+		return struct{}{}, context.Cause(ctx)
+	}
 }

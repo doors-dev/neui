@@ -213,7 +213,7 @@ func (c *chat) Update(ctx context.Context, e api.ChatEvent) {
 			c.name.Update(ctx, e.Name)
 		case api.ChatEventRoundEnd:
 			c.composer.RoundDone(ctx, e.State, e.Usage)
-			c.list.RoundDone(ctx, e.State, e.Error)
+			c.list.RoundDone(ctx, e.State)
 		case api.ChatEventRoundStart:
 			c.composer.UpdateActive(ctx, true)
 			if e.Round.Input.Len() != 0 {

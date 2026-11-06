@@ -42,7 +42,7 @@ func mustEncode(t *testing.T, p *Provider, req api.Request) map[string]json.RawM
 		t.Fatalf("encode: %v", err)
 	}
 	var out map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &out); err != nil {
+	if err := json.Unmarshal(raw.Bytes(), &out); err != nil {
 		t.Fatalf("encoded request is not an object: %v", err)
 	}
 	return out
@@ -839,8 +839,8 @@ func TestRequestOverModelRequestBytes(t *testing.T) {
 	if e.Code != api.CodeTooLarge {
 		t.Fatalf("code = %q, want %q (err %v)", e.Code, api.CodeTooLarge, e.Err)
 	}
-	if msg := e.Err.Error(); !strings.Contains(msg, fmt.Sprint(len(body))) || !strings.Contains(msg, "4096") {
-		t.Fatalf("error %q names neither the %d bytes encoded nor the 4096 byte limit", msg, len(body))
+	if msg := e.Err.Error(); !strings.Contains(msg, fmt.Sprint(len(body.Bytes()))) || !strings.Contains(msg, "4096") {
+		t.Fatalf("error %q names neither the %d bytes encoded nor the 4096 byte limit", msg, len(body.Bytes()))
 	}
 
 	sends := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1000,6 +1000,7 @@ func TestNewRefusesInvalidSettings(t *testing.T) {
 	mustRefuse(t, model, "base URL", WithBaseURL(""))
 	mustRefuse(t, model, "needs a client", WithHTTPClient(nil))
 	mustRefuse(t, model, "negative", WithMaxTokens(-1))
+	mustRefuse(t, model, "needs a version", WithVersion(""))
 	if got := mustNew(t, model, WithMaxTokens(100), WithMaxTokens(0)).maxToken; got != defaultMaxTokens {
 		t.Errorf("WithMaxTokens(0) left %d, want the default %d", got, defaultMaxTokens)
 	}

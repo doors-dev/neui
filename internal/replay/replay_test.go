@@ -1051,3 +1051,107 @@ func TestRequestBytesBudgetUndoesBase64(t *testing.T) {
 		t.Fatalf("budget with RequestBytes unknown: got %d, want ThreadMemoryLimit %d", got, config.ThreadMemoryLimit)
 	}
 }
+
+func pdfThread(t *testing.T, s api.MessageStorage) {
+	t.Helper()
+	r := NewReplay(context.Background(), "a", s, unboundedConfig, api.Model{})
+	mustCreate(t, r)
+	toolRound(t, r, "pdf 2", "start", api.ContentDocument{Data: pdfDoc(2), Mime: string(api.DocumentPDF), Name: "a.pdf"})
+	toolRound(t, r, "pdf 3", "", api.ContentDocument{Data: pdfDoc(3), Mime: string(api.DocumentPDF), Name: "b.pdf"}, api.ContentImage{Data: make([]byte, 64), Mime: "image/png"})
+	toolRound(t, r, "pdf 5", "", api.ContentDocument{Data: pdfDoc(5), Mime: string(api.DocumentPDF), Name: "c.pdf"})
+	toolRound(t, r, "broken", "", api.ContentDocument{Data: []byte("%PDF-1.4 truncated"), Mime: string(api.DocumentPDF), Name: "d.pdf"})
+	okRound(t, r, "fold", 10)
+}
+
+func TestStoredPDFPagesAreCountedOnce(t *testing.T) {
+	model := api.Model{ImagesPerRequest: 8}
+	reference := local.NewMessageStorage()
+	pdfThread(t, reference)
+	cached := local.NewMessageStorage()
+	pdfThread(t, cached)
+	want := NewReplay(context.Background(), "a", reference, unboundedConfig, model)
+	if err := want.Load(); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	r := NewReplay(context.Background(), "a", cached, unboundedConfig, model)
+	if err := r.Load(); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := historyImages(r); got != 11 {
+		t.Fatalf("the loaded thread charges %d images, want 2+3+1+5 = 11", got)
+	}
+	for i, round := range r.messages.rounds {
+		if got := countImages(round.user...); round.images != got {
+			t.Fatalf("round %d keeps %d images, but its content charges %d", i, round.images, got)
+		}
+	}
+	for _, round := range r.messages.rounds {
+		for _, block := range round.user {
+			res, ok := block.(api.ContentToolResult)
+			if !ok {
+				continue
+			}
+			for _, nested := range res.Content {
+				if doc, ok := nested.(api.ContentDocument); ok {
+					clear(doc.Data)
+				}
+			}
+		}
+	}
+	if got := historyImages(r); got != 1 {
+		t.Fatalf("the cleared PDFs still charge %d images, so clearing them says nothing about re-parsing", got)
+	}
+	_, wantMessages, err := want.RoundInit(api.Input{Text: "next"})
+	if err != nil {
+		t.Fatalf("RoundInit: %v", err)
+	}
+	_, gotMessages, err := r.RoundInit(api.Input{Text: "next"})
+	if err != nil {
+		t.Fatalf("RoundInit: %v", err)
+	}
+	if len(gotMessages) != len(wantMessages) {
+		t.Fatalf("got %d messages, want %d", len(gotMessages), len(wantMessages))
+	}
+	evicted := 0
+	for i := range wantMessages {
+		for j := range wantMessages[i].Content {
+			w, _ := json.Marshal(omitAllMedia([]api.Content{wantMessages[i].Content[j]}, "x"))
+			g, _ := json.Marshal(omitAllMedia([]api.Content{gotMessages[i].Content[j]}, "x"))
+			if string(w) != string(g) {
+				t.Fatalf("message %d block %d: got %s, want %s", i, j, g, w)
+			}
+			if strings.Contains(string(w), "removed to fit") {
+				evicted++
+			}
+		}
+	}
+	if evicted == 0 {
+		t.Fatalf("nothing was evicted, so the 11 images over the 8 the model takes were not what the replay measured")
+	}
+	for i, round := range want.messages.rounds {
+		if got := countImages(round.user...); round.images != got {
+			t.Fatalf("after eviction round %d keeps %d images, but its content charges %d", i, round.images, got)
+		}
+	}
+}
+
+func BenchmarkReplayOverStoredPDFs(b *testing.B) {
+	s := newMessages(api.Compaction{}, unboundedConfig, api.Model{ImagesPerRequest: 1 << 20}, 1)
+	doc := api.ContentDocument{Data: pdfDoc(50), Mime: string(api.DocumentPDF), Name: "report.pdf"}
+	for i := range 21 {
+		id := fmt.Sprintf("call %d", i)
+		s.appendRound(api.Round{
+			ID:       api.RoundID(i + 1),
+			State:    api.RoundOk,
+			Input:    api.Input{Text: "go"},
+			Response: api.Indexed[api.Content]{0: api.ContentToolUse{ID: id, Name: "attach", Input: json.RawMessage(`{}`)}},
+			Results:  map[string]api.ContentToolResult{id: {ID: id, Content: api.UserContents{doc}}},
+		})
+	}
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := s.replay(api.Input{Text: "next"}); err != nil {
+			b.Fatal(err)
+		}
+	}
+}

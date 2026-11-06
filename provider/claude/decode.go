@@ -500,6 +500,10 @@ func stopEvent(native string) api.Event {
 	return api.EventErr{Code: code, Err: fmt.Errorf("claude: stop_reason %q", native)}
 }
 
+// maxErrorMessage bounds how much of an unparseable error body is kept. At
+// gateways it is frequently a whole HTML page.
+const maxErrorMessage = 512
+
 // readAPIError decodes a refused request, tolerating a body that is not JSON: a
 // 413 is returned by the edge before the request reaches the API and need not
 // use the documented envelope at all. The whole error is returned rather than
@@ -512,6 +516,9 @@ func readAPIError(h *lib.HTTPError) *APIError {
 	}
 	e := newAPIError(h.Status, h.Header, nil)
 	if text := strings.TrimSpace(string(h.Body)); text != "" {
+		if r := []rune(text); len(r) > maxErrorMessage {
+			text = string(r[:maxErrorMessage]) + "…"
+		}
 		e.Message = text
 	}
 	return e

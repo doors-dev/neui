@@ -1,7 +1,6 @@
 package gpt
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -24,7 +23,8 @@ var errTooLarge = errors.New("gpt: request too large")
 // idx is the protocol Index, or -1 until the block opens. A message has no index
 // of its own; its content parts are in parts, which maps a message's
 // content_index to a protocol Index for the parts that are open, and an entry is
-// dropped when its part closes.
+// dropped when its part closes. phase is the meta of a message that announced
+// one, which every content part of that message opens with.
 //
 // sawArgs says a fragment of a function call's arguments was emitted. It is what
 // tells a call that takes no arguments from one whose arguments never arrived,
@@ -32,6 +32,7 @@ var errTooLarge = errors.New("gpt: request too large")
 type block struct {
 	idx     int
 	parts   map[int]int
+	phase   json.RawMessage
 	sawArgs bool
 }
 
@@ -278,11 +279,12 @@ func (c *converter) item(oi int) *block {
 // opens the opaque block that carries it.
 //
 // A message carries a phase, which separates a preamble before a tool call from
-// a final answer, and the codex models want it back on replay. It goes on the
-// first content part of that message, which is the block the message produces
-// and the block the phase is a label on; a message that announces no phase
-// leaves nothing behind, because a value the adapter cannot replay anyway would
-// be noise.
+// a final answer, and the codex models want it back on replay. It goes on every
+// content part of that message, each of which is a block of its own, so replay
+// keeps the parts in one message under the one phase; part zero opens with it
+// here and a later part as it opens. A message that announces no phase leaves
+// nothing behind, because a value the adapter cannot replay anyway would be
+// noise.
 //
 // The meta stores the phase and the model that claimed it, because those two are
 // what replay reads: a phase is one model's label and protocol stamps no model
@@ -306,9 +308,8 @@ func (c *converter) itemAdded(ev streamEvent) {
 			return
 		}
 		data, _ := json.Marshal(messageMeta{Model: c.model, Phase: item.Phase})
-		idx := c.textIndex(ev.OutputIndex, 0)
-		c.emit(api.EventText{Index: idx})
-		c.emit(api.EventMeta{Index: idx, Data: data})
+		c.item(ev.OutputIndex).phase = data
+		c.textIndex(ev.OutputIndex, 0)
 	case "function_call":
 		b := c.tool(ev.OutputIndex)
 		c.emit(api.EventTool{Index: b.idx, ID: c.callID(item, ev.OutputIndex), Name: item.Name})
@@ -386,6 +387,10 @@ func (c *converter) textIndex(oi, ci int) int {
 		b.parts = map[int]int{}
 	}
 	b.parts[ci] = idx
+	if b.phase != nil {
+		c.emit(api.EventText{Index: idx})
+		c.emit(api.EventMeta{Index: idx, Data: b.phase})
+	}
 	return idx
 }
 
@@ -563,14 +568,15 @@ func (p *Provider) request(ctx context.Context, req api.Request) (*http.Request,
 	if err != nil {
 		return nil, 0, err
 	}
-	payload, err := lib.MarshalRaw(body)
+	payload, err := lib.MarshalBody(body)
 	if err != nil {
 		return nil, 0, fmt.Errorf("gpt: encoding the request: %w", err)
 	}
-	if p.model.RequestBytes > 0 && len(payload) > p.model.RequestBytes {
-		return nil, len(payload), fmt.Errorf("%w: the request is %d bytes, over the %d the model %s takes", errTooLarge, len(payload), p.model.RequestBytes, p.model.Name)
+	sent := len(payload.Bytes())
+	if p.model.RequestBytes > 0 && sent > p.model.RequestBytes {
+		return nil, sent, fmt.Errorf("%w: the request is %d bytes, over the %d the model %s takes", errTooLarge, sent, p.model.RequestBytes, p.model.Name)
 	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, p.baseURL+"/responses", bytes.NewReader(payload))
+	httpReq, err := payload.Request(ctx, p.baseURL+"/responses")
 	if err != nil {
 		panic(err)
 	}
@@ -585,5 +591,5 @@ func (p *Provider) request(ctx context.Context, req api.Request) (*http.Request,
 	if p.project != "" {
 		httpReq.Header.Set("OpenAI-Project", p.project)
 	}
-	return httpReq, len(payload), nil
+	return httpReq, sent, nil
 }

@@ -29,7 +29,3 @@ func (b *backoff) wait() bool {
 	b.delay = min(b.delay*2, b.limit)
 	return true
 }
-
-func (b *backoff) reset() {
-	b.delay = 0
-}

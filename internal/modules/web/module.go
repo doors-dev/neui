@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -133,7 +134,7 @@ func guard(_ string, address string, _ syscall.RawConn) error {
 		a = netip.AddrFrom4([4]byte(b[12:]))
 	}
 	if badPort[ap.Port()] {
-		return blocked{addr: netip.AddrPortFrom(a, ap.Port()).String()}
+		return badPorted{port: ap.Port()}
 	}
 	if guardian.SafeAddrPort(netip.AddrPortFrom(a, ap.Port())) != nil {
 		return blocked{addr: a.String()}
@@ -188,6 +189,14 @@ type blocked struct {
 
 func (b blocked) Error() string {
 	return "connections to " + b.addr + " are refused"
+}
+
+type badPorted struct {
+	port uint16
+}
+
+func (b badPorted) Error() string {
+	return "connections to port " + strconv.Itoa(int(b.port)) + " are refused"
 }
 
 type redirected struct {

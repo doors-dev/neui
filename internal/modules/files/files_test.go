@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"image"
 	"image/color"
@@ -681,5 +682,80 @@ func TestReadHidesTheBOMAndAgreesWithGrepOnLoneCR(t *testing.T) {
 	}
 	if len(res.Matches) != 1 || res.Matches[0].Line != 2 {
 		t.Fatalf("got %+v", res.Matches)
+	}
+	res, err = grepTool(threadCtx(fs), grepArg{Pattern: "^a", Path: "b.txt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Matches) != 1 || res.Matches[0].Line != 1 || res.Matches[0].Text != "a\rb" {
+		t.Fatalf("BOM line: got %+v", res.Matches)
+	}
+}
+
+func TestLineCutsKeepWholeRunes(t *testing.T) {
+	fs := newFS(t)
+	write(t, fs, "u.txt", "x"+strings.Repeat("é", 1500)+"\n")
+	out, err := readTool(threadCtx(fs), readArg{Path: "u.txt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "1: x" + strings.Repeat("é", 999) + "... (line truncated)\n(end of file, 1 lines)"; out != want {
+		t.Fatalf("read: got %q", out)
+	}
+	res, err := grepTool(threadCtx(fs), grepArg{Pattern: "x", Path: "u.txt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Matches) != 1 || res.Matches[0].Text != "x"+strings.Repeat("é", 199)+"... (line truncated)" {
+		t.Fatalf("grep: got %+v", res.Matches)
+	}
+}
+
+func TestLongToolsStopOnCancel(t *testing.T) {
+	fs := newFS(t)
+	write(t, fs, "a/b.txt", "needle\n")
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	w, _ := zw.Create("inner.txt")
+	io.WriteString(w, "x")
+	zw.Close()
+	if _, err := writeBytesTool(threadCtx(fs), writeBytesArg{Path: "a.zip", Data: buf.Bytes()}); err != nil {
+		t.Fatal(err)
+	}
+	stop := errors.New("stopped")
+	ctx, cancel := context.WithCancelCause(threadCtx(fs))
+	cancel(stop)
+	if _, err := grepTool(ctx, grepArg{Pattern: "needle"}); !errors.Is(err, stop) {
+		t.Fatalf("grep: %v", err)
+	}
+	if _, err := grepTool(ctx, grepArg{Pattern: "needle", Path: "a/b.txt"}); !errors.Is(err, stop) {
+		t.Fatalf("grep file: %v", err)
+	}
+	if _, err := readTool(ctx, readArg{Path: "a/b.txt"}); !errors.Is(err, stop) {
+		t.Fatalf("read: %v", err)
+	}
+	if _, err := zipTool(ctx, zipArg{Paths: []string{"a"}, Dst: "out.zip"}); !errors.Is(err, stop) {
+		t.Fatalf("zip: %v", err)
+	}
+	if _, err := unzipTool(ctx, unzipArg{Src: "a.zip", Dst: "out"}); !errors.Is(err, stop) {
+		t.Fatalf("unzip: %v", err)
+	}
+}
+
+func TestUnzipWithoutFilesListsAnEmptyArray(t *testing.T) {
+	fs := newFS(t)
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	zw.Create("dir/")
+	zw.Close()
+	if _, err := writeBytesTool(threadCtx(fs), writeBytesArg{Path: "d.zip", Data: buf.Bytes()}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := unzipTool(threadCtx(fs), unzipArg{Src: "d.zip"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out, _ := json.Marshal(res); !strings.Contains(string(out), `"extracted":[]`) {
+		t.Fatalf("got %s", out)
 	}
 }

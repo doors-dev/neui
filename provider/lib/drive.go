@@ -106,7 +106,9 @@ func Drain(events ...api.Event) <-chan api.Event {
 // Convert returns false or End has run, once their events are delivered.
 // Cancelling parentCtx ends the turn, and the channel closes without waiting
 // for queued events to be read; otherwise the caller must read the channel
-// until it closes, or the streaming goroutine leaks.
+// until it closes, or the streaming goroutine leaks. A req built by
+// Body.Request gives its Body back to the pool once the response is closed and
+// the transport has closed every reader it opened on it.
 func Stream(parentCtx context.Context, client *http.Client, req *http.Request, conv Converter, opt Options) <-chan api.Event {
 	ctx, cancel := context.WithCancelCause(parentCtx)
 	if opt.Idle <= 0 {
@@ -141,13 +143,13 @@ type streamer struct {
 }
 
 func (s *streamer) resetTimer() {
-	if s.ctx.Err() != nil {
-		return
-	}
 	if s.timer == nil {
 		s.timer = time.AfterFunc(s.opt.Idle, func() {
 			s.cancel(ErrIdle)
 		})
+		return
+	}
+	if s.ctx.Err() != nil {
 		return
 	}
 	if !s.timer.Stop() {
@@ -161,6 +163,9 @@ func (s *streamer) run(req *http.Request) {
 	defer s.drain()
 	defer s.timer.Stop()
 	defer s.cancel(nil)
+	if body, ok := req.Body.(*bodyReader); ok {
+		defer body.body.release()
+	}
 	resp, err := s.client.Do(req.WithContext(s.ctx))
 	if err != nil {
 		if context.Cause(s.ctx) == ErrIdle {

@@ -183,6 +183,7 @@ elem (d *day) content() {
 		threads, err = d.days.aside.Instance.ThreadList(ctx, d.start, d.end, false, 0, d.days.name)
 		if err != nil {
 			doors.Logger(ctx).Error("aside: day", "day", label, "err", err)
+			notify.Error(ctx, err)
 			failed = true
 		}
 	}
@@ -240,8 +241,11 @@ elem (d *day) content() {
 		}
 	}
 	~~
-	~(if today || len(threads) != 0 {
+	~(if today || len(threads) != 0 || failed {
 		<div class="kchat-side-label">~(label)</div>
+	})
+	~(if failed {
+		~(retry(d.body))
 	})
 	~(if today {
 		~(if fresh {
@@ -256,7 +260,11 @@ elem (d *day) content() {
 				~>doors.AClick{
 					Scope: new(doors.ScopeBlocking),
 					On: func(ctx context.Context, rp doors.RequestPointer) bool {
-						d.days.aside.Instance.ThreadNew(ctx)
+						if err := d.days.aside.Instance.ThreadNew(ctx); err != nil {
+							doors.Logger(ctx).Error("aside: new", "err", err)
+							notify.Error(ctx, err)
+							return false
+						}
 						rp.After(doors.ActionEmit[any]{Name: "opened"})
 						return false
 					},

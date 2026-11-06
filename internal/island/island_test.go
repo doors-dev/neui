@@ -100,7 +100,7 @@ func TestUnmountWhileStartAndStopWaitOnHungRun(t *testing.T) {
 	waitFor(t, i, func() bool { return i.seq == old.seq+1 })
 	stop := make(chan error, 1)
 	go func() {
-		stop <- i.Done(ctx, "", false)
+		stop <- i.Done(ctx)
 	}()
 	time.Sleep(20 * time.Millisecond)
 	unmounted := make(chan struct{}, 1)
@@ -124,7 +124,7 @@ func TestStopReturnsOnCanceledCall(t *testing.T) {
 	callCtx, cancel := context.WithCancel(ctx)
 	stop := make(chan error, 1)
 	go func() {
-		stop <- i.Done(callCtx, "", false)
+		stop <- i.Done(callCtx)
 	}()
 	time.Sleep(20 * time.Millisecond)
 	cancel()
@@ -135,4 +135,60 @@ func TestStopReturnsOnCanceledCall(t *testing.T) {
 		t.Fatalf("the run was not stopped: %v", context.Cause(old.ctx))
 	}
 	close(old.end)
+}
+
+func TestOvertakeCanceledShowsPlaceholderOnceOldRunEnds(t *testing.T) {
+	i, ctx := newTestIsland(t)
+	old := hungRun(i)
+	callCtx, cancel := context.WithCancel(ctx)
+	start := make(chan error, 1)
+	go func() {
+		_, _, err := i.StartCode(callCtx, "app", "", "1")
+		start <- err
+	}()
+	waitFor(t, i, func() bool { return i.seq == old.seq+1 })
+	cancel()
+	if err := waitDone(t, start); !errors.Is(err, context.Canceled) {
+		t.Fatalf("want canceled, got %v", err)
+	}
+	i.mu.Lock()
+	kept := i.run == old
+	i.mu.Unlock()
+	if !kept {
+		t.Fatal("the old run was dropped before it ended")
+	}
+	close(old.end)
+	waitFor(t, i, func() bool { return i.run == nil })
+}
+
+func TestOvertakeCanceledKeepsNewerStart(t *testing.T) {
+	i, ctx := newTestIsland(t)
+	old := hungRun(i)
+	callCtx, cancel := context.WithCancel(ctx)
+	start := make(chan error, 1)
+	go func() {
+		_, _, err := i.StartCode(callCtx, "app", "", "1")
+		start <- err
+	}()
+	waitFor(t, i, func() bool { return i.seq == old.seq+1 })
+	cancel()
+	if err := waitDone(t, start); !errors.Is(err, context.Canceled) {
+		t.Fatalf("want canceled, got %v", err)
+	}
+	newer := &run{end: make(chan struct{})}
+	i.mu.Lock()
+	i.seq++
+	i.run = newer
+	i.mu.Unlock()
+	close(old.end)
+	time.Sleep(50 * time.Millisecond)
+	i.mu.Lock()
+	kept := i.run == newer
+	i.mu.Unlock()
+	if !kept {
+		t.Fatal("the canceled start cleared a newer start's run")
+	}
+	i.mu.Lock()
+	i.run = nil
+	i.mu.Unlock()
 }

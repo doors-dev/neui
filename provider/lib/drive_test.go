@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unsafe"
 
 	"neui.dev/api"
 )
@@ -105,6 +106,55 @@ func TestFraming(t *testing.T) {
 	want := []string{"one|{\"a\":1}", "|line1\nline2"}
 	if fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+// The event name is kept across frames and reused while it repeats, so each
+// frame has to carry its own name whatever the frame before it was called: one
+// that only shares a prefix, a bare event: that dispatched nothing, or none.
+func TestFrameNamesAcrossChangingEvents(t *testing.T) {
+	body := "event: delta\ndata: 1\n\n" +
+		"event: delta\ndata: 2\n\n" +
+		"event: del\ndata: 3\n\n" +
+		"data: 4\n\n" +
+		"event: deltas\n\n" +
+		"data: 5\n\n" +
+		"event: delta\ndata: 6\n\n" +
+		"event: done\ndata: 7\n\n" +
+		"event: done\ndata: 8\n\n"
+	want := []string{"delta|1", "delta|2", "del|3", "|4", "|5", "delta|6", "done|7", "done|8"}
+	var got []string
+	var frames []Frame
+	for fr := range read(context.Background(), strings.NewReader(body), 0) {
+		if fr.err != nil {
+			if !errors.Is(fr.err, io.EOF) {
+				t.Fatalf("read: %v", fr.err)
+			}
+			break
+		}
+		if fr.frame.isKeepAlive() {
+			continue
+		}
+		frames = append(frames, fr.frame)
+		got = append(got, fr.frame.Event+"|"+string(fr.frame.Data))
+	}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+	if unsafe.StringData(frames[0].Event) != unsafe.StringData(frames[1].Event) || unsafe.StringData(frames[6].Event) != unsafe.StringData(frames[7].Event) {
+		t.Fatalf("a repeated event name was allocated again instead of reused")
+	}
+}
+
+func BenchmarkFrameNames(b *testing.B) {
+	body := strings.Repeat("event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"hi\"}}\n\n", 1000)
+	b.ReportAllocs()
+	for b.Loop() {
+		for fr := range read(context.Background(), strings.NewReader(body), 0) {
+			if fr.err != nil {
+				break
+			}
+		}
 	}
 }
 
@@ -304,6 +354,14 @@ func TestCancelDeliversNoTerminalEvent(t *testing.T) {
 			t.Fatalf("a cancelled turn delivered %v", e)
 		}
 	}
+}
+
+// A turn whose context is already cancelled when Stream is called ends without
+// a panic and closes its channel.
+func TestStreamWithCancelledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	serve(t, ctx, echo(nil), Options{}, sse("data:stop\n\n"))
 }
 
 // Drain is a turn that ended before it began. Nothing blocks on it.
