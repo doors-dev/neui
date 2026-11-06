@@ -133,7 +133,7 @@ func Browser(t *testing.T, h Host) *Chat {
 			}
 			return cur.Close()
 		}
-	}, doors.WithID(doors.IDRand()), neui.WithThreadConfig(h.Config))
+	}, doors.WithID(doors.IDRand()), neui.WithThreadConfig(h.Config), neui.WithIslandConfig(h.Island))
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)

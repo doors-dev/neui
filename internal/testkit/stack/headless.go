@@ -19,6 +19,7 @@ import (
 type Host struct {
 	Provider *testkit.Provider
 	Config   api.ThreadConfig
+	Island   api.IslandConfig
 	Options  []common.Option
 	Page     gox.Elem
 }
@@ -42,7 +43,7 @@ type linked struct {
 
 func Headless(t *testing.T, h Host) *Chat {
 	t.Helper()
-	ctx := context.WithValue(context.Background(), common.ConfigKey{}, h.Config)
+	ctx := context.WithValue(context.WithValue(context.Background(), common.ConfigKey{}, h.Config), common.IslandConfigKey{}, h.Island)
 	return open(t, h, ctx, page.NewPage(ctx))
 }
 

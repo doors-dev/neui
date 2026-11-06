@@ -30,7 +30,7 @@ func Page(t *testing.T, h Host) *Chat {
 	}
 	select {
 	case p := <-rendered:
-		return open(t, h, context.WithValue(context.Background(), common.ConfigKey{}, h.Config), p)
+		return open(t, h, context.WithValue(context.WithValue(context.Background(), common.ConfigKey{}, h.Config), common.IslandConfigKey{}, h.Island), p)
 	default:
 		t.Fatal("the app served no page")
 		return nil

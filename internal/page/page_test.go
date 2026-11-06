@@ -248,3 +248,71 @@ func TestInputRightsRefused(t *testing.T) {
 		refused(t, r, "rights do not allow")
 	}
 }
+
+func radio(name string, value string, changes chan<- string) gox.Elem {
+	return func(cur gox.Cursor) error {
+		return (neui.Input{Desc: "size " + value}).Proxy(cur, func(cur gox.Cursor) error {
+			if err := cur.InitVoid("input"); err != nil {
+				return err
+			}
+			if err := cur.Set("type", "radio"); err != nil {
+				return err
+			}
+			if name != "" {
+				if err := cur.Set("name", name); err != nil {
+					return err
+				}
+			}
+			if err := cur.Set("value", value); err != nil {
+				return err
+			}
+			if err := cur.Modify(doors.AChange{On: func(ctx context.Context, r doors.RequestChange) bool {
+				changes <- value
+				return false
+			}}); err != nil {
+				return err
+			}
+			return cur.Submit()
+		})
+	}
+}
+
+func TestUnnamedRadiosAreSeparateInputs(t *testing.T) {
+	changes := make(chan string, 4)
+	p := testkit.NewProvider(api.Model{}, testkit.Call("page__sync", map[string]any{"path": "", "depth": 1}), testkit.Say("done"))
+	c := stack.Page(t, stack.Host{Provider: p, Page: func(cur gox.Cursor) error {
+		return (neui.Space{Name: "sizes", Desc: "the sizes"}).Proxy(cur, func(cur gox.Cursor) error {
+			for _, r := range []gox.Elem{radio("", "s", changes), radio("", "m", changes), radio("size", "l", changes), radio("size", "xl", changes)} {
+				if err := cur.Any(r); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	}})
+	c.Send("look")
+	c.Wait()
+	var s struct {
+		Space struct {
+			Children map[string]struct {
+				Inputs []struct {
+					ID   uint
+					Kind string
+					Name string
+					Desc string
+				}
+			}
+		}
+	}
+	testkit.Decode(t, testkit.Results(p.Request(t, 1))[0], &s)
+	var got []string
+	ids := map[uint]bool{}
+	for _, in := range s.Space.Children["sizes"].Inputs {
+		got = append(got, in.Kind+" "+in.Name+" "+in.Desc)
+		ids[in.ID] = true
+	}
+	want := []string{"radio  size s", "radio  size m", "radio size size l"}
+	if fmt.Sprint(got) != fmt.Sprint(want) || len(ids) != 3 {
+		t.Fatalf("the radios synced as %q, want %q with distinct ids", got, want)
+	}
+}
