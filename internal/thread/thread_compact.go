@@ -73,16 +73,12 @@ func (s *threadCompact) on(cmd any) {
 		if wasPending {
 			s.thread.link.send(newMessageEvent(nil, api.ChatEventInputPending{Pending: false}))
 		}
-		s.thread.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}, CanCompact: s.thread.canCompact()}))
 		if !s.thread.replay.IsRetriable() {
-			if s.round.Results != nil {
-				s.thread.link.send(newMessageEvent(nil, api.ChatEventToolResults{Round: s.round.ID, Results: s.round.Results, Final: true}))
-			} else {
-				s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundEnd{Round: s.round.ID, State: api.RoundOk, Error: "", Usage: s.usage, Final: true, CanCompact: s.thread.canCompact()}))
-			}
+			s.thread.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}, Final: true, CanCompact: s.thread.canCompact()}))
 			s.thread.switchStateWait()
 			return
 		}
+		s.thread.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}, Final: false, CanCompact: s.thread.canCompact()}))
 		if err := s.abort(); err != nil {
 			s.thread.criticalErr(nil, err)
 			return
@@ -112,7 +108,7 @@ func (s *threadCompact) on(cmd any) {
 		wasPending := s.thread.pending
 		s.thread.pending = false
 		if s.thread.compaction.cut(cmd.round) {
-			s.thread.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}, CanCompact: s.thread.canCompact()}))
+			s.thread.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}, Final: false, CanCompact: s.thread.canCompact()}))
 		}
 		if err != nil {
 			s.thread.criticalErr(cmd.intoMessage(), err)

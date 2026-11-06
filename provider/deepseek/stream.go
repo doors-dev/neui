@@ -50,6 +50,7 @@ type converter struct {
 	reasoning int         // -1 until reasoning_content is seen
 	tools     map[int]int // tool_calls[].index to block index
 	ids       map[string]bool
+	real      map[int]string
 	stopped   bool
 	sent      int
 	declared  int
@@ -65,6 +66,7 @@ func newConverter(model string, sent int, declared int) *converter {
 		reasoning: -1,
 		tools:     make(map[int]int),
 		ids:       make(map[string]bool),
+		real:      make(map[int]string),
 		sent:      sent,
 		declared:  declared,
 	}
@@ -199,7 +201,8 @@ func (c *converter) chunk(k *chunk) error {
 // put an empty text block in front of every reply.
 //
 // A tool call fragment without an index cannot be correlated and fails the
-// turn.
+// turn, and so does a later fragment naming a different real id than the call
+// already has.
 func (c *converter) delta(d *delta) error {
 	if d.ReasoningContent != "" {
 		if c.reasoning < 0 {
@@ -217,7 +220,11 @@ func (c *converter) delta(d *delta) error {
 		if d.ToolCalls[i].Index == nil {
 			return errors.New("deepseek: tool call fragment without an index")
 		}
-		if e, ok := c.toolCall(&d.ToolCalls[i]); ok {
+		e, ok, err := c.toolCall(&d.ToolCalls[i])
+		if err != nil {
+			return err
+		}
+		if ok {
 			c.events = append(c.events, e)
 		}
 	}
@@ -243,32 +250,40 @@ func (c *converter) delta(d *delta) error {
 // carrying a minted handle, and api.EventTool.ID replaces, so the real one
 // arriving late replaces it rather than being dropped: the id is what a tool
 // result is matched by. A handle another block already claimed is never taken,
-// on either path.
-func (c *converter) toolCall(t *toolDelta) (api.EventTool, bool) {
+// on either path. Once a call has a real id, a fragment naming another one is a
+// broken frame.
+func (c *converter) toolCall(t *toolDelta) (api.EventTool, bool, error) {
 	e := api.EventTool{}
 	index, seen := c.tools[*t.Index]
 	switch {
 	case !seen:
 		index = c.alloc()
 		c.tools[*t.Index] = index
+		c.real[*t.Index] = t.ID
 		id := t.ID
 		if id == "" || c.ids[id] {
 			id = c.mintID(index)
 		}
 		c.ids[id] = true
 		e.ID = id
-	case t.ID != "" && !c.ids[t.ID]:
-		c.ids[t.ID] = true
-		e.ID = t.ID
+	case t.ID == "" || t.ID == c.real[*t.Index]:
+	case c.real[*t.Index] != "":
+		return e, false, fmt.Errorf("deepseek: tool call %d named %q after %q", *t.Index, t.ID, c.real[*t.Index])
+	default:
+		c.real[*t.Index] = t.ID
+		if !c.ids[t.ID] {
+			c.ids[t.ID] = true
+			e.ID = t.ID
+		}
 	}
 	e.Index = index
 	if t.Function != nil {
 		e.Name, e.Args = t.Function.Name, t.Function.Arguments
 	}
 	if e.ID == "" && e.Name == "" && e.Args == "" {
-		return e, false
+		return e, false, nil
 	}
-	return e, true
+	return e, true, nil
 }
 
 // mintID names a call whose id was missing or already used. It is derived from

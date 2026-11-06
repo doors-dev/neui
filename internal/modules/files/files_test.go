@@ -199,6 +199,14 @@ func TestWriteBytes(t *testing.T) {
 	}
 }
 
+func TestWriteBytesErrorsNameThePath(t *testing.T) {
+	fs, _ := newFSStore(t)
+	_, err := writeBytesTool(threadCtx(fs), writeBytesArg{Path: "agent_uploads/x.bin", Data: []byte{1}})
+	if !errors.Is(err, api.ErrReadOnly) || !strings.HasPrefix(err.Error(), `"agent_uploads/x.bin": `) {
+		t.Fatalf("%v", err)
+	}
+}
+
 func pngBytes(t *testing.T, w, h int) []byte {
 	t.Helper()
 	var buf bytes.Buffer

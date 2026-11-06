@@ -7,13 +7,16 @@ type ChatEvent interface {
 }
 
 // Final reports whether the event ends the current activity: true on a
-// ChatEventRoundEnd or ChatEventToolResults with Final set, and on every
-// ChatEventCriticalError. A chat uses it to switch its controls back to idle.
+// ChatEventRoundEnd, ChatEventToolResults or ChatEventCompacting with Final
+// set, and on every ChatEventCriticalError. A chat uses it to switch its
+// controls back to idle.
 func Final(e ChatEvent) bool {
 	switch v := e.(type) {
 	case ChatEventRoundEnd:
 		return v.Final
 	case ChatEventToolResults:
+		return v.Final
+	case ChatEventCompacting:
 		return v.Final
 	case ChatEventCriticalError:
 		return true
@@ -126,6 +129,10 @@ type ChatEventCompacting struct {
 	// Usage is the estimated usage of the compacted context on the end of an
 	// applied compaction, zero otherwise.
 	Usage EventUsage
+	// Final is true when the activity ends here: Stop canceled a compaction
+	// the turn waited on after its round end or tool results were already
+	// reported, so no other Final event follows; see Final.
+	Final bool
 	// CanCompact is ChatState.CanCompact after this event; always false while
 	// Running.
 	CanCompact bool

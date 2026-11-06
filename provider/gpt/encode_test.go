@@ -858,7 +858,7 @@ func TestEncodeTopLevel(t *testing.T) {
 		}
 	})
 
-	t.Run("a non reasoning model gets sampling and no reasoning block", func(t *testing.T) {
+	t.Run("an undeclared model gets sampling and no include", func(t *testing.T) {
 		set := defaultSettings()
 		temp := 0.2
 		set.temperature = &temp
@@ -867,10 +867,10 @@ func TestEncodeTopLevel(t *testing.T) {
 			t.Fatalf("temperature %v, want 0.2", body["temperature"])
 		}
 		if _, ok := body["reasoning"]; ok {
-			t.Fatal("a reasoning block reached a non reasoning model")
+			t.Fatal("a reasoning block was sent without a reasoning option")
 		}
 		if _, ok := body["include"]; ok {
-			t.Fatal("encrypted reasoning was requested from a model that has none")
+			t.Fatal("encrypted reasoning was requested from an undeclared model")
 		}
 	})
 
@@ -944,27 +944,16 @@ func TestEncodeRejections(t *testing.T) {
 }
 
 func TestModelClassification(t *testing.T) {
-	reasoning := []string{
-		"gpt-5.6-sol", "gpt-5.6", "gpt-5", "gpt-5-mini", "gpt-5.1-codex-max",
-		"gpt-5.4-2026-01-01", "o1", "o1-pro", "o3-mini", "o4-mini",
-		"codex-mini-latest",
-		"gpt-6-astra", "gpt-6-sol", "gpt-6-luna",
-	}
-	for _, m := range reasoning {
-		if got := classify(m); got != reasoningModel {
-			t.Errorf("%q classified as %d, want reasoning", m, got)
+	for _, m := range []api.Model{GPT56Sol, GPT56Luna, GPT6Astra, GPT6Sol, GPT6Luna, GPT61Sol, GPT61Terra} {
+		if got := classify(m.Name); got != reasoningModel {
+			t.Errorf("%q classified as %d, want reasoning", m.Name, got)
 		}
 	}
-	plain := []string{
-		"gpt-4o", "gpt-4o-mini", "gpt-4.1", "gpt-4-turbo", "gpt-3.5-turbo",
-		"chatgpt-4o-latest", "gpt-5-chat-latest", "gpt-5.3-chat-latest",
-	}
-	for _, m := range plain {
-		if got := classify(m); got != plainModel {
-			t.Errorf("%q classified as %d, want non reasoning", m, got)
-		}
-	}
-	for _, m := range []string{"gpt-60", "gpt-40", "o10", "my-model", "llama-3", "", "openai/gpt-5.6-terra", "GPT-5.6-LUNA", "openai/gpt-6-sol", "openai/gpt-4.1"} {
+	for _, m := range []string{
+		"gpt-5.6", "gpt-5", "gpt-5.1-codex-max", "gpt-5.4-2026-01-01", "o1", "o3-mini", "codex-mini-latest",
+		"gpt-4o", "gpt-4.1", "gpt-3.5-turbo", "chatgpt-4o-latest", "gpt-5-chat-latest",
+		"gpt-6-sol-2026-11-01", "my-model", "", "openai/gpt-6-sol", "GPT-5.6-LUNA",
+	} {
 		if got := classify(m); got != unknownModel {
 			t.Errorf("%q classified as %d, want unknown", m, got)
 		}
@@ -1024,32 +1013,29 @@ func TestProviderOptions(t *testing.T) {
 		}
 	})
 
-	t.Run("New refuses sampling on a reasoning model and reasoning on any other", func(t *testing.T) {
+	t.Run("New refuses sampling on a declared reasoning model", func(t *testing.T) {
 		for name, tc := range map[string]struct {
 			model string
 			opts  []Option
 		}{
 			"temperature on a reasoning model": {testModel, []Option{WithTemperature(0.2)}},
 			"top_p on a reasoning model":       {testModel, []Option{WithTopP(0.9), WithReasoningEffort(EffortHigh)}},
-			"effort on gpt-4o":                 {"gpt-4o", []Option{WithReasoningEffort(EffortHigh)}},
-			"summary on gpt-4o":                {"gpt-4o", []Option{WithReasoningSummary(SummaryAuto)}},
-			"mode on gpt-4o":                   {"gpt-4o", []Option{WithReasoningMode(ReasoningPro)}},
-			"context on gpt-4o":                {"gpt-4o", []Option{WithReasoningContext(ContextAllTurns)}},
 		} {
 			if p, err := New(Conf{Model: api.Model{Name: tc.model}}, append([]Option{WithAPIKey("k")}, tc.opts...)...); err == nil || p != nil {
 				t.Errorf("%s: New returned %v, %v, want only an error", name, p, err)
 			}
 		}
 		build(t, api.Model{Name: testModel}, WithAPIKey("k"), WithTemperature(0.2), WithReasoningEffort(EffortNone))
-		build(t, api.Model{Name: "gpt-4o"}, WithAPIKey("k"), WithTemperature(0.2), WithTopP(0.9))
 	})
 
 	t.Run("New checks no combination on an unknown model", func(t *testing.T) {
-		p := build(t, api.Model{Name: "my-model"}, WithAPIKey("k"), WithTemperature(0.2), WithTopP(0.9),
-			WithReasoningEffort(EffortHigh), WithReasoningSummary(SummaryAuto), WithReasoningMode(ReasoningPro), WithReasoningContext(ContextAllTurns))
-		if p.set.temperature == nil || p.set.topP == nil || p.set.effort != string(EffortHigh) || p.set.summary != string(SummaryAuto) ||
-			p.set.reasoningMode != string(ReasoningPro) || p.set.reasoningContext != string(ContextAllTurns) {
-			t.Fatalf("settings %+v, want every option kept", p.set)
+		for _, name := range []string{"my-model", "gpt-4o", "o3", "gpt-5.6", "openai/gpt-5.6-sol"} {
+			p := build(t, api.Model{Name: name}, WithAPIKey("k"), WithTemperature(0.2), WithTopP(0.9),
+				WithReasoningEffort(EffortHigh), WithReasoningSummary(SummaryAuto), WithReasoningMode(ReasoningPro), WithReasoningContext(ContextAllTurns))
+			if p.set.temperature == nil || p.set.topP == nil || p.set.effort != string(EffortHigh) || p.set.summary != string(SummaryAuto) ||
+				p.set.reasoningMode != string(ReasoningPro) || p.set.reasoningContext != string(ContextAllTurns) {
+				t.Fatalf("%s: settings %+v, want every option kept", name, p.set)
+			}
 		}
 	})
 

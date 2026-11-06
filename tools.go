@@ -211,12 +211,11 @@ type XLSConfig struct {
 	// opens; a larger one is refused. Default 50 MiB.
 	MaxFileSize int64
 	// MaxUnzipSize caps the uncompressed contents of a workbook in bytes; a
-	// workbook that expands past it, or holds a part compressed over 100x, is
-	// refused. Default 1 GiB.
+	// workbook that expands past it, or holds a part over 1 MiB compressed
+	// more than 100x, is refused. Default 1 GiB.
 	MaxUnzipSize int64
 	// MaxReadRows caps the rows returned, or matches collected, by one call;
-	// it also caps the rows profile reads to guess column types and the
-	// errors check reports. Default 200.
+	// it also caps the rows profile reads to guess column types. Default 200.
 	MaxReadRows uint
 }
 

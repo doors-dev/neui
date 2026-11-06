@@ -212,6 +212,56 @@ func TestStreamReasoningTextAndToolCallEachTakeABlock(t *testing.T) {
 }
 
 // A fragment carrying only an id has no function object at all, which is why
+func TestStreamToolCallChangingIDFails(t *testing.T) {
+	for name, frames := range map[string][]string{
+		"real then another": {
+			`{"tool_calls":[{"index":0,"id":"call_a","type":"function","function":{"name":"ping","arguments":"{"}}]}`,
+			`{"tool_calls":[{"index":0,"id":"call_b","function":{"arguments":"}"}}]}`,
+		},
+		"late real then another": {
+			`{"tool_calls":[{"index":0,"function":{"arguments":"{"}}]}`,
+			`{"tool_calls":[{"index":0,"id":"call_a","type":"function","function":{"name":"ping"}}]}`,
+			`{"tool_calls":[{"index":0,"id":"call_b","function":{"arguments":"}"}}]}`,
+		},
+		"duplicate first then another": {
+			`{"tool_calls":[{"index":0,"id":"call_a","type":"function","function":{"name":"ping","arguments":"{}"}}]}`,
+			`{"tool_calls":[{"index":1,"id":"call_a","type":"function","function":{"name":"ping","arguments":"{"}}]}`,
+			`{"tool_calls":[{"index":1,"id":"call_b","function":{"arguments":"}"}}]}`,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			bodies := []string{chunkFrame(openingFrame, "")}
+			for _, f := range frames {
+				bodies = append(bodies, chunkFrame(f, ""))
+			}
+			events := collect(t, serve(t, stringHandler(append(bodies, chunkFrame(`{}`, "tool_calls"), doneFrame)...)), turn("ping"))
+			checkGrammar(t, events)
+			last, ok := events[len(events)-1].(api.EventErr)
+			if !ok || last.Code != api.CodeNetwork {
+				t.Fatalf("ended with %#v, want err network", events[len(events)-1])
+			}
+		})
+	}
+}
+
+func TestStreamToolCallRepeatingItsIDPasses(t *testing.T) {
+	p := serve(t, stringHandler(
+		chunkFrame(openingFrame, ""),
+		chunkFrame(`{"tool_calls":[{"index":0,"id":"call_a","type":"function","function":{"name":"ping","arguments":"{"}}]}`, ""),
+		chunkFrame(`{"tool_calls":[{"index":0,"id":"call_a","function":{"arguments":"}"}}]}`, ""),
+		chunkFrame(`{}`, "tool_calls"),
+		doneFrame,
+	))
+	events := collect(t, p, turn("ping"))
+	checkGrammar(t, events)
+	wantTrace(t, events,
+		"start chatcmpl-1 deepseek-v4-pro",
+		`tool 0 id="call_a" name="ping" args="{"`,
+		`tool 0 id="" name="" args="}"`,
+		"ok turn",
+	)
+}
+
 // toolDelta.Function is a pointer, so a call's name can start arriving after
 // its id and nothing says it arrives whole — and the pieces can land the other
 // way round too. Every piece goes out as it lands: api.EventTool appends

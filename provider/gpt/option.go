@@ -89,13 +89,10 @@ type Conf struct {
 // New builds a Provider. A nil option is skipped; an option with an invalid
 // value, or one the declared model does not take, makes New return its error,
 // as does an empty Conf.Model.Name. So do WithTemperature or WithTopP on a
-// known reasoning model, an id in the gpt-5, gpt-6, o1, o3, o4 or codex
-// families other than *-chat-latest, unless the reasoning effort is
-// EffortNone, and any of WithReasoningEffort, WithReasoningSummary,
-// WithReasoningMode or WithReasoningContext on a known non reasoning model, an
-// id in the gpt-4, gpt-4o, gpt-3.5 or chatgpt families or a *-chat-latest
-// alias. Any other id is unknown: New checks no combination for it and every
-// option is sent as configured, so what the model refuses fails the turn.
+// known reasoning model, one whose Name is exactly that of a model declared in
+// this package, unless the reasoning effort is EffortNone. Any other id is
+// unknown: New checks no combination for it and every option is sent as
+// configured, so what the model refuses fails the turn.
 // Without WithAPIKey, New reads the key from OPENAI_API_KEY once. If that is
 // empty, it logs a warning and requests carry no Authorization header, which
 // api.openai.com refuses with CodeAccess.
@@ -117,15 +114,8 @@ func New(conf Conf, opts ...Option) (*Provider, error) {
 	if p.model.Name == "" {
 		return nil, errors.New("gpt: no model, set Conf.Model")
 	}
-	switch classify(p.model.Name) {
-	case reasoningModel:
-		if (p.set.temperature != nil || p.set.topP != nil) && p.set.effort != string(EffortNone) {
-			return nil, fmt.Errorf("gpt: %s is a reasoning model and takes temperature and top_p only with reasoning effort none", p.model.Name)
-		}
-	case plainModel:
-		if p.set.effort != "" || p.set.summary != "" || p.set.reasoningMode != "" || p.set.reasoningContext != "" {
-			return nil, fmt.Errorf("gpt: %s is not a reasoning model and takes no reasoning options", p.model.Name)
-		}
+	if classify(p.model.Name) == reasoningModel && (p.set.temperature != nil || p.set.topP != nil) && p.set.effort != string(EffortNone) {
+		return nil, fmt.Errorf("gpt: %s is a reasoning model and takes temperature and top_p only with reasoning effort none", p.model.Name)
 	}
 	if !p.keyExplicit {
 		p.apiKey = os.Getenv(apiKeyEnv)
@@ -279,8 +269,7 @@ const (
 // When Conf.Model is one of the models declared in this package, the values
 // its docs leave out are rejected: EffortMinimal on all of them, and EffortNone
 // on gpt-6-astra and gpt-6.1-sol. For any other model nothing is checked, and
-// an unsupported value fails the turn with a 400. New refuses it on a known non
-// reasoning model (see New).
+// an unsupported value fails the turn with a 400.
 func WithReasoningEffort(effort Effort) Option {
 	return func(p *Provider) error {
 		switch m := p.model.Name; m {
@@ -308,8 +297,7 @@ const (
 // WithReasoningSummary asks for readable reasoning summaries, which arrive
 // as EventSummary and fill ContentReasoning.Summary. Off by default, so
 // Summary stays empty. Recent models require a verified organization and
-// answer 400 otherwise. Like WithReasoningEffort, New refuses it on a known non
-// reasoning model.
+// answer 400 otherwise.
 func WithReasoningSummary(summary Summary) Option {
 	return func(p *Provider) error {
 		p.set.summary = string(summary)
@@ -328,8 +316,7 @@ const (
 )
 
 // WithReasoningMode sets reasoning.mode, standard or pro, for the gpt-5.6 and
-// gpt-6 families. Like WithReasoningEffort, New refuses it on a known non
-// reasoning model.
+// gpt-6 families.
 func WithReasoningMode(mode ReasoningMode) Option {
 	return func(p *Provider) error {
 		p.set.reasoningMode = string(mode)
@@ -353,8 +340,7 @@ const (
 
 // WithReasoningContext sets reasoning.context: auto, current_turn or all_turns.
 // all_turns only does anything if the earlier reasoning items are actually in
-// the request, which here means WithReasoningReplay is not ReplayNever. Like
-// WithReasoningEffort, New refuses it on a known non reasoning model.
+// the request, which here means WithReasoningReplay is not ReplayNever.
 func WithReasoningContext(context ReasoningContext) Option {
 	return func(p *Provider) error {
 		p.set.reasoningContext = string(context)
@@ -426,10 +412,10 @@ func WithStore(store bool) Option {
 }
 
 // WithInclude replaces the include list. Without it, or with a nil list as
-// WithInclude() gives, known reasoning models are sent
+// WithInclude() gives, known reasoning models (see New) are sent
 // "reasoning.encrypted_content", which older models need for reasoning
-// replay; keep it in a list of your own. Leaving it out while store is off
-// drops reasoning from replay.
+// replay; keep it in a list of your own, and pass it for any other model that
+// reasons. Leaving it out while store is off drops reasoning from replay.
 func WithInclude(values ...string) Option {
 	return func(p *Provider) error {
 		p.set.include = values

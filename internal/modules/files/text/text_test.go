@@ -466,6 +466,24 @@ func TestWriteToAnUploadIsReadOnly(t *testing.T) {
 	}
 }
 
+func TestRewriteErrorsNameThePath(t *testing.T) {
+	store, err := local.NewFileStorage("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Remove() })
+	fs := filesystem.Open("thread", store, store, api.FilesConfig{MaxFiles: 1})
+	t.Cleanup(func() { fs.Dispose() })
+	ctx := threadCtx(fs)
+	if _, err := writeTool(ctx, writeArg{Path: "agent_uploads/r.md", Content: "b\n"}); !errors.Is(err, api.ErrReadOnly) || !strings.HasPrefix(err.Error(), `"agent_uploads/r.md": `) {
+		t.Fatalf("upload: %v", err)
+	}
+	raw(t, fs, "a.txt", "0123456789\n")
+	if _, err := writeTool(ctx, writeArg{Path: "a.txt", Content: "y\n"}); !errors.Is(err, api.ErrQuota) || !strings.HasPrefix(err.Error(), `"a.txt": `) || strings.Contains(err.Error(), ".tmp-") {
+		t.Fatalf("quota: %v", err)
+	}
+}
+
 func TestFailedRewriteKeepsTheOriginal(t *testing.T) {
 	store, err := local.NewFileStorage("")
 	if err != nil {

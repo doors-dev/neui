@@ -301,7 +301,7 @@ type Island struct {
 	// Calling close shows Placeholder.
 	Failure func(close func(ctx context.Context), err error) gox.Elem
 	// Library fills l with what scripts may use; it runs on every render.
-	// IslandLayouts adds the built-in layouts.
+	// Package ui has built-in layouts and widgets to add.
 	Library func(l Library) error
 }
 

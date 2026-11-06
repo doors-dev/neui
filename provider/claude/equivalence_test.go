@@ -268,8 +268,6 @@ func corpusStreams() []corpusStream {
 		"content_block_delta", `{"type":"content_block_delta","index":3,"delta":{"type":"citations_delta","citation":{"type":"char_location","cited_text":"x"}}}`,
 		"content_block_delta", `{"type":"content_block_delta","index":3,"delta":{"type":"future_delta","text":"ignored"}}`,
 		"content_block_delta", `{"type":"content_block_delta","index":3,"delta":{"type":"text_delta","text":""}}`,
-		"content_block_delta", `{"type":"content_block_delta","index":3,"delta":null}`,
-		"content_block_delta", `{"type":"content_block_delta","index":3}`,
 		"content_block_delta", `{"type":"content_block_delta","index":3,"delta":{"type":"text_delta","text":"world "}}`,
 		"content_block_stop", `{"type":"content_block_stop","index":3}`,
 		"content_block_start", `{"type":"content_block_start","index":4,"content_block":{"type":"text","text":""}}`,

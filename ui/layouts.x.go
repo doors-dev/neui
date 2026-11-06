@@ -1,7 +1,7 @@
 // Managed by GoX v0.3.3
 
 //line layouts.gox:1
-package layouts
+package ui
 
 import (
 	"strconv"
@@ -9,7 +9,8 @@ import (
 	"github.com/doors-dev/gox"
 )
 
-func Column(p ColumnParams, children []gox.Comp) gox.Comp {
+// Column stacks children top to bottom, for Library.Layout.
+func Column(p columnParams, children []gox.Comp) gox.Comp {
 	gap := p.Gap
 	if gap == "" {
 		gap = "md"
@@ -22,18 +23,19 @@ func Column(p ColumnParams, children []gox.Comp) gox.Comp {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line layouts.gox:18
+//line layouts.gox:19
 			__e = __c.Set("class", class); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line layouts.gox:18
+//line layouts.gox:19
 			__e = __c.Any(children); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
-//line layouts.gox:18
+//line layouts.gox:19
 	return })
 }
 
-func Row(p RowParams, children []gox.Comp) gox.Comp {
+// Row places children side by side and wraps them, for Library.Layout.
+func Row(p rowParams, children []gox.Comp) gox.Comp {
 	gap := p.Gap
 	if gap == "" {
 		gap = "md"
@@ -50,18 +52,19 @@ func Row(p RowParams, children []gox.Comp) gox.Comp {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line layouts.gox:34
+//line layouts.gox:36
 			__e = __c.Set("class", "kisland-row kisland-gap-" + gap + " kisland-align-" + align + " kisland-justify-" + justify); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line layouts.gox:34
+//line layouts.gox:36
 			__e = __c.Any(children); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
-//line layouts.gox:34
+//line layouts.gox:36
 	return })
 }
 
-func Grid(p GridParams, children []gox.Comp) gox.Comp {
+// Grid lays children out in equal-width cells, for Library.Layout.
+func Grid(p gridParams, children []gox.Comp) gox.Comp {
 	gap := p.Gap
 	if gap == "" {
 		gap = "md"
@@ -74,23 +77,23 @@ func Grid(p GridParams, children []gox.Comp) gox.Comp {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line layouts.gox:46
+//line layouts.gox:49
 			__e = __c.Set("class", "kisland-grid kisland-gap-" + gap + " kisland-item-" + item); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line layouts.gox:47
+//line layouts.gox:50
 			for _, c := range children {
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line layouts.gox:48
+//line layouts.gox:51
 					__e = __c.Set("class", "kisland-grid-cell"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line layouts.gox:48
+//line layouts.gox:51
 					__e = __c.Any(c); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
 			}
 		}
 		__e = __c.Close(); if __e != nil { return }
-//line layouts.gox:50
+//line layouts.gox:53
 	return })
 }

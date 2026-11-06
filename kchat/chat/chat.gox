@@ -180,15 +180,18 @@ elem (c *chat) Main() {
 			const widget = main.closest(".kchat-widget")
 			const id = $data("id")
 			const pasteAsFile = $data("paste")
-			main.addEventListener("keydown", (e) => {
+			const keydown = (e) => {
 				if (e.key !== "Escape") return
 				const escape = new CustomEvent("kchat_escape", { cancelable: true })
 				if (!widget.dispatchEvent(escape)) return
+				if (!main.contains(e.target)) return
 				$hook("escape", true).catch((err) => {
 					if (err instanceof HookErr)
 						widget.dispatchEvent(new CustomEvent("kchat_error", { detail: err.kind }))
 				})
-			})
+			}
+			widget.addEventListener("keydown", keydown)
+			$sys.clean(() => widget.removeEventListener("keydown", keydown))
 			const attach = (files) => {
 				const composer = main.querySelector("#composer" + id)
 				if (!composer || composer.getAttribute("aria-busy") === "true") return false

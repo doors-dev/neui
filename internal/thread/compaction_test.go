@@ -164,20 +164,69 @@ func TestStopDuringACompactionAfterToolsEndsTheTurn(t *testing.T) {
 	if th.compaction.isActive() || th.pending {
 		t.Fatalf("Stop left the compaction running or the input pending")
 	}
-	var final bool
+	var final []api.ChatEvent
 	for _, e := range events() {
 		if api.Final(e) {
-			final = true
+			final = append(final, e)
 		}
-		if _, ok := e.(api.ChatEventRoundEnd); ok {
-			t.Fatalf("Stop after the tools round ended a round: %+v", e)
+		switch e.(type) {
+		case api.ChatEventRoundEnd, api.ChatEventToolResults:
+			t.Fatalf("Stop after the tools round repeated %+v", e)
 		}
 	}
-	if !final {
-		t.Fatalf("Stop sent no Final event")
+	if len(final) != 1 || final[0] != (api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}, Final: true, CanCompact: th.canCompact()}) {
+		t.Fatalf("Stop sent the Final events %+v, want one final Compacting", final)
 	}
 	if !r.IsPending() {
 		t.Fatalf("Stop dropped the stashed tool results")
+	}
+}
+
+func TestStopDuringACompactionAfterAnOkRoundEndsTheTurn(t *testing.T) {
+	th, r, events := compactionThread(t, "compact-stop-ok", api.Model{Name: "stub", Context: 1000}, 2)
+	round, _, err := r.RoundInit(api.Input{Text: "answer me"})
+	if err != nil {
+		t.Fatalf("replay RoundInit: %v", err)
+	}
+	if _, err := r.RoundOk(api.EventUsage{Input: 900}, api.Indexed[api.Content]{0: api.ContentText{Text: "answer"}}); err != nil {
+		t.Fatalf("replay RoundOk: %v", err)
+	}
+	if _, err := th.compact(); err != nil || !th.compaction.isActive() {
+		t.Fatalf("compact: %v", err)
+	}
+	held := round
+	held.State = api.RoundOk
+	th.pending = true
+	th.input = api.Input{Text: "queued"}
+	state := th.switchStateCompact(held, api.EventUsage{Input: 900}, held.Response)
+	events()
+	op := NewOperation(context.Background())
+	state.on(commandStop{link: th.link, Operation: op})
+	if err := op.Receive(); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+	if _, ok := th.state.(threadWait); !ok {
+		t.Fatalf("the thread is in %T after Stop, want idle", th.state)
+	}
+	if th.compaction.isActive() || th.pending {
+		t.Fatalf("Stop left the compaction running or the input pending")
+	}
+	got := events()
+	var final []api.ChatEvent
+	for _, e := range got {
+		if api.Final(e) {
+			final = append(final, e)
+		}
+		switch e.(type) {
+		case api.ChatEventRoundEnd, api.ChatEventToolResults:
+			t.Fatalf("Stop after the ok round repeated %+v", e)
+		}
+	}
+	if len(final) != 1 || final[0] != (api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}, Final: true, CanCompact: th.canCompact()}) {
+		t.Fatalf("Stop sent the Final events %+v, want one final Compacting", final)
+	}
+	if !releasedPending(got) {
+		t.Fatalf("the pending input was not released")
 	}
 }
 

@@ -1548,6 +1548,8 @@ func TestBrokenKnownFramesFail(t *testing.T) {
 		"item without a type":           {createdFrame, `{"type":"response.output_item.added","output_index":0,"item":{"id":"x"}}`},
 		"absent item":                   {createdFrame, `{"type":"response.output_item.added","output_index":0}`},
 		"done item without a type":      {createdFrame, `{"type":"response.output_item.done","output_index":0,"item":null}`},
+		"done for an unannounced item":  {createdFrame, `{"type":"response.output_item.done","output_index":0,"item":{"type":"reasoning","encrypted_content":"SEALED"}}`},
+		"done after only arguments":     {createdFrame, `{"type":"response.function_call_arguments.delta","output_index":0,"delta":"{}"}`, `{"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","call_id":"call_1","name":"f"}}`},
 		"call without a call_id":        {createdFrame, `{"type":"response.output_item.added","output_index":0,"item":{"id":"fc_1","type":"function_call","name":"f"}}`},
 		"item without output_index":     {createdFrame, `{"type":"response.output_item.added","item":{"type":"message"}}`},
 		"text without content_index":    {createdFrame, msg, `{"type":"response.output_text.delta","output_index":0,"delta":"x"}`},
@@ -1570,12 +1572,15 @@ func TestBrokenKnownFramesFail(t *testing.T) {
 }
 
 // TestUnknownAndToleratedFrames is the other half: a type this adapter does not
-// handle is not decoded past its type, arguments that match their deltas pass,
+// handle, an empty one after the first frame included, is not decoded past its
+// type, arguments that match their deltas pass,
 // and arguments that arrive before their call is announced are still taken.
 func TestUnknownAndToleratedFrames(t *testing.T) {
 	got := convertAll(
 		createdFrame,
 		`{"type":"response.future_thing","output_index":"x","delta":{"a":1},"item":7}`,
+		`{"type":"","output_index":"x","item":7}`,
+		`{"output_index":0,"delta":"x"}`,
 		`{"type":"response.function_call_arguments.delta","output_index":0,"delta":"{\"a\":"}`,
 		`{"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","call_id":"call_1","name":"f"}}`,
 		`{"type":"response.function_call_arguments.delta","output_index":0,"delta":"1}"}`,

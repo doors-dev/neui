@@ -91,8 +91,9 @@ func (c *converter) take() int {
 // with a response, an index the event needs that is absent, an item that does
 // not parse or names no type, a function call with no call_id, a text,
 // reasoning or hosted tool fragment for an item that was announced as another
-// kind or not at all, arguments done that differ from the fragments that
-// streamed, and a completed frame with no response.
+// kind or not at all, an item done that was never announced, arguments done
+// that differ from the fragments that streamed, and a completed frame with no
+// response.
 //
 // The terminal frames read the usage before they emit their own event, because
 // the final usage rides the same frame and the terminal event is the last thing
@@ -413,10 +414,16 @@ func (c *converter) itemAdded(ev *streamEvent) error {
 // A hosted tool item arrives complete, results and all, and every field that
 // streamed is filled in on it, so this is the payload a later turn sends back
 // and it replaces what the item opened with. The block ends where the item does.
+//
+// An item output_item.added never announced is a broken frame and fails the
+// turn.
 func (c *converter) itemDone(ev *streamEvent) error {
 	var item outputItem
 	if err := json.Unmarshal(ev.Item, &item); err != nil {
 		return fmt.Errorf("gpt: %s item did not parse: %w", ev.Type, err)
+	}
+	if b := c.out[*ev.OutputIndex]; b == nil || b.kind == "" {
+		return fmt.Errorf("gpt: %s for output %d, which was never announced", ev.Type, *ev.OutputIndex)
 	}
 	switch item.Type {
 	case "":

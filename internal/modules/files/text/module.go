@@ -155,6 +155,11 @@ func put(ctx context.Context, fs api.FS, arg writeArg, rewrite bool) (writeResul
 	if rewrite {
 		tmp = fmt.Sprintf("%s.tmp-%016x~", arg.Path, rand.Uint64())
 		w, err = fs.Create(tmp)
+		if errors.Is(err, api.ErrReadOnly) {
+			err = fmt.Errorf("%q: %w", arg.Path, api.ErrReadOnly)
+		} else if errors.Is(err, api.ErrQuota) {
+			err = fmt.Errorf("%q: %w", arg.Path, api.ErrQuota)
+		}
 	} else {
 		w, err = fs.Append(arg.Path)
 	}

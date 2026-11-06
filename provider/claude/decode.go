@@ -307,8 +307,9 @@ func (c *converter) onBlockStart(ev *sseMessage) ([]api.Event, bool) {
 // nowhere for a citation to go. Unknown delta types are features this adapter
 // has no type for. Both are dropped without opening a block.
 //
-// A delta with no index or for no open block, or a known delta on a text, tool
-// or reasoning block of another kind, is a broken frame and fails the turn. An
+// A delta with no index, for no open block, or with a null, absent or untyped
+// delta, or a known delta on a text, tool or reasoning block of another kind, is
+// a broken frame and fails the turn. An
 // opaque block takes no known delta but input_json_delta, and the rest are
 // dropped as they always were: what it carries is the provider's own content.
 func (c *converter) onBlockDelta(ev *sseMessage) ([]api.Event, bool) {
@@ -328,6 +329,11 @@ func (c *converter) onBlockDelta(ev *sseMessage) ([]api.Event, bool) {
 	d := &ev.Delta
 	var want blockKind
 	switch d.Type {
+	case "":
+		return append(c.events, api.EventErr{
+			Code: api.CodeNetwork,
+			Err:  fmt.Errorf("claude: content_block_delta %d without a delta type", *ev.Index),
+		}), false
 	case "text_delta":
 		want = kindText
 	case "input_json_delta":

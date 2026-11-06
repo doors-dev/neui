@@ -129,7 +129,7 @@ func (s *threadRound) on(cmd any) {
 		s.thread.pending = false
 		s.cancel(api.ErrCanceledByUser)
 		if s.thread.compaction.cut(cmd.round) {
-			s.thread.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}, CanCompact: s.thread.canCompact()}))
+			s.thread.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}, Final: false, CanCompact: s.thread.canCompact()}))
 		}
 		if err != nil {
 			s.thread.criticalErr(cmd.intoMessage(), err)

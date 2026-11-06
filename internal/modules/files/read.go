@@ -11,6 +11,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"neui.dev/api"
 	"neui.dev/internal/common"
 )
 
@@ -163,6 +164,12 @@ func writeBytesTool(ctx context.Context, arg writeBytesArg) (Entry, error) {
 	fs := common.GetController(ctx).FS()
 	tmp := fmt.Sprintf("%s.tmp-%016x~", arg.Path, rand.Uint64())
 	w, err := fs.Create(tmp)
+	if errors.Is(err, api.ErrReadOnly) {
+		return Entry{}, fmt.Errorf("%q: %w", arg.Path, api.ErrReadOnly)
+	}
+	if errors.Is(err, api.ErrQuota) {
+		return Entry{}, fmt.Errorf("%q: %w", arg.Path, api.ErrQuota)
+	}
 	if err != nil {
 		return Entry{}, err
 	}

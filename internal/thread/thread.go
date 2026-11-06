@@ -508,7 +508,7 @@ func (t *thread) applyCompaction(cmd commandApplyCompaction) bool {
 	}
 	if code, isErr := cmd.resp.Err(); isErr && code != api.CodeCapped {
 		t.replay.CompactionFailed()
-		t.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}, CanCompact: t.canCompact()}))
+		t.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}, Final: false, CanCompact: t.canCompact()}))
 		switch code {
 		case api.CodeAccess, api.CodeBusy, api.CodeNetwork, api.CodeUnknown, api.CodeInvalid:
 			doors.Logger(t.link.backend.Context()).Error("thread: compaction failed", "thread", t.id, "code", code, "err", cmd.resp.Cause)
@@ -518,7 +518,7 @@ func (t *thread) applyCompaction(cmd commandApplyCompaction) bool {
 	err := t.replay.ApplyCompaction(compaction, cmd.resp.Content, cmd.resp.Usage)
 	if errors.Is(err, replay.ErrEmptySummary) {
 		t.replay.CompactionFailed()
-		t.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}, CanCompact: t.canCompact()}))
+		t.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}, Final: false, CanCompact: t.canCompact()}))
 		return false
 	}
 	if err != nil {
@@ -526,7 +526,7 @@ func (t *thread) applyCompaction(cmd commandApplyCompaction) bool {
 		return false
 	}
 	usage := t.replay.Usage()
-	t.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: usage, CanCompact: t.canCompact()}))
+	t.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: usage, Final: false, CanCompact: t.canCompact()}))
 	return true
 }
 
@@ -555,7 +555,7 @@ func (t *thread) compact() (bool, error) {
 		return false, nil
 	}
 	ctx, seq := t.compaction.start(t.link.backend.Context(), c)
-	t.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: true, Usage: api.EventUsage{}, CanCompact: t.canCompact()}))
+	t.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: true, Usage: api.EventUsage{}, Final: false, CanCompact: t.canCompact()}))
 	events := t.link.backend.Provider().Stream(ctx, api.Request{
 		System:   t.link.system(),
 		Messages: m,

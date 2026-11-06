@@ -130,7 +130,7 @@ func (s *threadTools) on(cmd any) {
 			s.ask = nil
 		}
 		if s.thread.compaction.cut(cmd.round) {
-			s.thread.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}, CanCompact: s.thread.canCompact()}))
+			s.thread.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}, Final: false, CanCompact: s.thread.canCompact()}))
 		}
 		if err != nil {
 			s.thread.criticalErr(cmd.intoMessage(), err)
