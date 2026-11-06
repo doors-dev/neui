@@ -101,8 +101,9 @@ type Instance interface {
 	// State is this instance's own chat.
 	State() doors.Beam[InstanceState]
 	// Chats is every chat open in the session, keyed by thread. A tab with no
-	// thread yet has no key, so it is absent; two tabs on one thread collapse
-	// into a single entry, and which of them it carries is unspecified.
+	// thread yet has no key, so it is absent. A thread is open in at most one
+	// tab: when a tab opens a thread another tab has open, that other tab
+	// moves to a fresh thread, so each entry is the one tab that has it.
 	Chats() doors.Beam[map[ThreadID]InstanceChat]
 	// Location is the session's time zone, a fixed UTC offset read from the
 	// client clock while an instance syncs and kept for the session once a
@@ -123,9 +124,11 @@ type Instance interface {
 	// not list it.
 	ThreadNew(ctx context.Context) error
 	// ThreadRename sets the thread's name, replacing whatever it was named
-	// before. The name is trimmed; one that is then empty, or holds line
-	// breaks, control or format characters, is refused. A thread that is not
-	// in storage, a New one included, returns ErrNotFound. The instance stays on
+	// before. The name is trimmed; one that is then empty leaves the thread
+	// unnamed, and one that holds line breaks, control or format characters is
+	// refused. A name over 80 runes is cut to its first 80 and trimmed again.
+	// A thread that is not in storage, a New one included, returns
+	// ErrNotFound. The instance stays on
 	// the thread it has open, whichever thread was renamed, and a chat that
 	// has the renamed thread open sees the new name at once.
 	ThreadRename(ctx context.Context, id ThreadID, name string) error
@@ -207,9 +210,11 @@ type ChatThread interface {
 	// resumes); ErrInputTooLarge when its text is over
 	// ThreadConfig.InputBytes.
 	Send(ctx context.Context, input Input) error
-	// Stop aborts the running round or cancels the running tool calls with
-	// ErrCanceledByUser, and drops any pending input. ErrWrongState when
-	// nothing is running.
+	// Stop aborts the running round, cancels the running tool calls with
+	// ErrCanceledByUser, or cancels a compaction the turn waits on (results
+	// already stashed stay for the next round), and drops any pending input;
+	// the activity ends with a Final event. ErrWrongState when nothing is
+	// running.
 	Stop(ctx context.Context) error
 	// Unsend withdraws the pending input back into the draft.
 	// ErrWrongState when nothing is pending.
@@ -220,10 +225,8 @@ type ChatThread interface {
 	// otherwise, including after an ok or refused round.
 	Retry(ctx context.Context) error
 	// Compact starts a compaction of the history in the background. It
-	// returns ErrWrongState when one is already running, when the context's
-	// usage is below Config().CompactionAllowed times Model().Context (not
-	// checked when Model().Context is 0), or when there is nothing to compact
-	// yet; any other failure to start it is returned as is.
+	// returns ErrWrongState when ChatState.CanCompact, as last reported, is
+	// false; any other failure to start it is returned as is.
 	Compact(ctx context.Context) error
 	// Rewind deletes round and every round after it, then starts a new round
 	// with input in its place; it works in any state and stops whatever is

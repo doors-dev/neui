@@ -365,12 +365,22 @@ func TestFileListCorruptMeta(t *testing.T) {
 		t.Fatal(err)
 	}
 	files, errs := collect(t, s, "t1", api.OriginUser)
-	if len(errs) != 1 {
-		t.Fatalf("errs = %v, want exactly one", errs)
+	if len(errs) != 0 {
+		t.Fatalf("errs = %v, want none", errs)
 	}
 	if len(files) != 2 || files[0].Name != "good1" || files[1].Name != "good2" {
 		t.Fatalf("files = %+v, want good1, good2", files)
 	}
+}
+
+func TestFilePutRefusesNamesTheDiskCannotHold(t *testing.T) {
+	s := newFileStore(t)
+	for _, name := range []string{strings.Repeat("a", 256), strings.Repeat("界", 86), "a\x00b"} {
+		if _, err := s.FilePut(context.Background(), "t1", api.OriginUser, name, "", strings.NewReader("x"), false); !errors.Is(err, api.ErrInvalidName) {
+			t.Errorf("FilePut %q = %v, want ErrInvalidName", name, err)
+		}
+	}
+	putText(t, s, "t1", strings.Repeat("a", 255), "x")
 }
 
 func TestFileMetalessDirInvisible(t *testing.T) {

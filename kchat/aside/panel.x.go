@@ -44,7 +44,7 @@ func (p Aside) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 //line panel.gox:41
-		p.controller = controller.New()
+		p.controller = controller.New(p.Params.Off(params.MessageSearch))
 	p.menu = p.Pops.Popup[chatMenu]()
 
 //line panel.gox:44

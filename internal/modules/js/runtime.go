@@ -189,7 +189,7 @@ func (r *runtime) execute(vm *quickjs.VM, input task.Input) (out string, err err
 	vm.SetMaxStackSize(uintptr(r.config.MaxCallDepth))
 	if !input.AppendLogs {
 		if err := ClearLog(input.Controller.FS(), logName(input.Name)); err != nil {
-			return "", fmt.Errorf("%q: %v: %w", input.Name, err, errRuntime)
+			return "", fmt.Errorf("%q: clearing log %q: %w", input.Name, logName(input.Name), err)
 		}
 	}
 	if err := RegisterSerializers(vm); err != nil {

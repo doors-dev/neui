@@ -159,7 +159,7 @@ func TestFetchPagesByLine(t *testing.T) {
 func TestFetchRefusals(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/pdf")
-		fmt.Fprint(w, "%PDF-1.7 not really")
+		fmt.Fprint(w, "%PDF-1.7\n%\xe2\xe3\xcf\xd3\n")
 	}))
 	defer srv.Close()
 	guarded := fetchTool(t, Config{})
@@ -703,5 +703,93 @@ func TestModuleDescriptionNamesTheCacheTTL(t *testing.T) {
 		if !strings.Contains(m.Desc(), "costs no second request for "+want+".") {
 			t.Errorf("ttl %s: description does not say %q: %s", ttl, want, m.Desc())
 		}
+	}
+}
+
+func TestFetchSniffsUnlistedTypes(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/yaml":
+			w.Header().Set("Content-Type", "application/x-yaml")
+			fmt.Fprint(w, "key: value\nlist:\n  - one\n")
+		case "/nul":
+			w.Header().Set("Content-Type", "application/x-thing")
+			w.Write([]byte("abc\x00def"))
+		}
+	}))
+	defer srv.Close()
+	fetch := fetchTool(t, Config{HTTPClient: srv.Client()})
+	out, err := fetch(fmt.Sprintf(`{"url":%q}`, srv.URL+"/yaml"))
+	if err != nil || !strings.Contains(out, "key: value\nlist:") {
+		t.Errorf("yaml: %v %q", err, out)
+	}
+	if _, err := fetch(fmt.Sprintf(`{"url":%q}`, srv.URL+"/nul")); err == nil || !strings.Contains(err.Error(), "which web__fetch does not convert") {
+		t.Errorf("binary: %v", err)
+	}
+}
+
+func TestFetchReindentsJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"items":[%s{"id":0}]}`, strings.Repeat(`{"id":1,"name":"a long enough name"},`, 200))
+	}))
+	defer srv.Close()
+	out, err := fetchTool(t, Config{HTTPClient: srv.Client()})(fmt.Sprintf(`{"url":%q}`, srv.URL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "line truncated") || !strings.Contains(out, "\n      \"id\": 0\n") {
+		t.Errorf("not re-indented: %q", out[:min(len(out), 300)])
+	}
+}
+
+func TestFetchLongLineNotePointsToSaveAs(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		fmt.Fprint(w, strings.Repeat("x", 3000))
+	}))
+	defer srv.Close()
+	out, err := fetchTool(t, Config{HTTPClient: srv.Client()})(fmt.Sprintf(`{"url":%q}`, srv.URL))
+	if err != nil || !strings.Contains(out, "fetch again with saveAs") {
+		t.Errorf("%v %q", err, out[len(out)-300:])
+	}
+}
+
+func TestFetchTitleIgnoresSVG(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<html><body><svg><title>Close menu</title></svg><p>Body text of the page.</p></body></html>`)
+	}))
+	defer srv.Close()
+	out, err := fetchTool(t, Config{HTTPClient: srv.Client()})(fmt.Sprintf(`{"url":%q}`, srv.URL))
+	if err != nil || strings.Contains(out, `title="Close menu"`) {
+		t.Errorf("%v %q", err, out)
+	}
+}
+
+func TestFetchHugeTimeoutAppliesTheLimit(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(1500 * time.Millisecond)
+		fmt.Fprint(w, "slow")
+	}))
+	defer srv.Close()
+	if _, err := fetchTool(t, Config{HTTPClient: srv.Client()})(fmt.Sprintf(`{"url":%q,"timeoutMs":10000000000000}`, srv.URL)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestFetchParentDeadlineIsNotTheFetchTimeout(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.(http.Flusher).Flush()
+		time.Sleep(2 * time.Second)
+	}))
+	defer srv.Close()
+	tool, _ := Module(Config{HTTPClient: srv.Client()})(context.Background()).Get("fetch")
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	_, err := tool.Agent(ctx, json.RawMessage(fmt.Sprintf(`{"url":%q,"timeoutMs":20000}`, srv.URL)))
+	if !errors.Is(err, context.DeadlineExceeded) || strings.Contains(err.Error(), "timed out after 20s") {
+		t.Fatalf("err = %v", err)
 	}
 }

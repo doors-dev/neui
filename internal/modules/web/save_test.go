@@ -60,7 +60,7 @@ func TestFetchSaveAsStreamsToWorkspace(t *testing.T) {
 	}
 	t.Cleanup(func() { store.Remove() })
 	fs := filesystem.Open("thread", store, store, api.FilesConfig{})
-	t.Cleanup(fs.Dispose)
+	t.Cleanup(func() { fs.Dispose() })
 	ctx := context.WithValue(context.Background(), common.KeyController, common.Controller(testThread{fs: fs}))
 	body := "%PDF-1.7\x00 binary-ish payload"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -106,7 +106,7 @@ func TestFetchSaveAsOverTheCapKeepsNothing(t *testing.T) {
 	}
 	t.Cleanup(func() { store.Remove() })
 	fs := filesystem.Open("thread", store, store, api.FilesConfig{})
-	t.Cleanup(fs.Dispose)
+	t.Cleanup(func() { fs.Dispose() })
 	ctx := context.WithValue(context.Background(), common.KeyController, common.Controller(testThread{fs: fs}))
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/pdf")
@@ -142,7 +142,7 @@ func TestFetchSaveAsFailureKeepsExistingFile(t *testing.T) {
 	}
 	t.Cleanup(func() { store.Remove() })
 	fs := filesystem.Open("thread", store, store, api.FilesConfig{})
-	t.Cleanup(fs.Dispose)
+	t.Cleanup(func() { fs.Dispose() })
 	ctx := context.WithValue(context.Background(), common.KeyController, common.Controller(testThread{fs: fs}))
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/pdf")
@@ -207,7 +207,7 @@ func TestFetchSaveAsTimeoutNamesTheFetch(t *testing.T) {
 	}
 	t.Cleanup(func() { store.Remove() })
 	fs := filesystem.Open("thread", store, store, api.FilesConfig{})
-	t.Cleanup(fs.Dispose)
+	t.Cleanup(func() { fs.Dispose() })
 	ctx := context.WithValue(context.Background(), common.KeyController, common.Controller(testThread{fs: fs}))
 	release := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -236,7 +236,7 @@ func TestFetchSaveAsErrorsNameSaveAs(t *testing.T) {
 	}
 	t.Cleanup(func() { store.Remove() })
 	fs := filesystem.Open("thread", store, store, api.FilesConfig{})
-	t.Cleanup(fs.Dispose)
+	t.Cleanup(func() { fs.Dispose() })
 	ctx := context.WithValue(context.Background(), common.KeyController, common.Controller(testThread{fs: fs}))
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/pdf")

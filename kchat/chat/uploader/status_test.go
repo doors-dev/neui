@@ -50,6 +50,10 @@ func TestUploadRefusalStatus(t *testing.T) {
 		{api.ErrQuota, http.StatusUnprocessableEntity},
 		{api.ErrExists, http.StatusUnprocessableEntity},
 		{api.ErrInvalidName, http.StatusUnprocessableEntity},
+		{api.ErrNotFound, http.StatusUnprocessableEntity},
+		{context.Canceled, http.StatusRequestTimeout},
+		{context.DeadlineExceeded, http.StatusRequestTimeout},
+		{io.ErrUnexpectedEOF, http.StatusRequestTimeout},
 		{errors.New("disk"), http.StatusInternalServerError},
 	}
 	for _, c := range cases {

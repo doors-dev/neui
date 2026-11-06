@@ -16,3 +16,14 @@ func TestNameToolRejectsLineBreaksAndControls(t *testing.T) {
 		}
 	}
 }
+
+func TestNameToolRejectsEmptyButCheckNameAccepts(t *testing.T) {
+	for _, name := range []string{"", "  ", "\t "} {
+		if _, err := nameTool(context.Background(), NameArg{Name: name}); err == nil || err.Error() != "name is empty: pass a short title naming the topic" {
+			t.Errorf("%q: nameTool got %v, want the empty error", name, err)
+		}
+		if got, err := CheckName(name); err != nil || got != "" {
+			t.Errorf("%q: CheckName got %q, %v, want an empty name", name, got, err)
+		}
+	}
+}

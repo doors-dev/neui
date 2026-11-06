@@ -30,23 +30,25 @@ type days struct {
 	window controller.Window
 	save func(ctx context.Context, w controller.Window)
 	name string
+	empty gox.Comp
 	pinned api.ThreadID
 	active api.ThreadID
 }
 
-//line days.gox:34
+//line days.gox:35
 func (d *days) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line days.gox:35
+//line days.gox:36
 		__e = __c.Any(&window.WindowList{
 		Margin: margin,
 		Driver: d,
 		InitialWindow: d.window,
 		SaveWindow: d.save,
+		Empty: d.empty,
 	}); if __e != nil { return }
 	return })
-//line days.gox:41
+//line days.gox:43
 }
 
 func (d *days) Compare(a string, b string) int {
@@ -163,24 +165,24 @@ type day struct {
 	rows []api.Thread
 }
 
-//line days.gox:157
+//line days.gox:159
 func (d *day) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line days.gox:159
+//line days.gox:161
 		d.body.Inner(ctx, d.content())
 
-//line days.gox:161
+//line days.gox:163
 		__e = __c.Any(d.body); if __e != nil { return }
 	return })
-//line days.gox:162
+//line days.gox:164
 }
 
-//line days.gox:164
+//line days.gox:166
 func (d *day) content() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line days.gox:166
+//line days.gox:168
 		today := d.days.name == "" && d.start.Equal(d.days.today())
 	label := ""
 	switch {
@@ -201,7 +203,6 @@ func (d *day) content() gox.Elem {
 		threads, err = d.days.aside.Instance.ThreadList(ctx, d.start, d.end, false, 0, d.days.name)
 		if err != nil {
 			doors.Logger(ctx).Error("aside: day", "day", label, "err", err)
-			notify.Error(ctx, err)
 			failed = true
 		}
 	}
@@ -259,48 +260,48 @@ func (d *day) content() gox.Elem {
 		}
 	}
 
-//line days.gox:244
+//line days.gox:245
 		if today || len(threads) != 0 || failed {
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line days.gox:245
+//line days.gox:246
 				__e = __c.Set("class", "kchat-side-label"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line days.gox:245
+//line days.gox:246
 				__e = __c.Any(label); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		}
-//line days.gox:247
-		if failed {
 //line days.gox:248
+		if failed {
+//line days.gox:249
 			__e = __c.Any(retry(d.body)); if __e != nil { return }
 		}
-//line days.gox:250
-		if today {
 //line days.gox:251
+		if today {
+//line days.gox:252
 			if fresh {
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line days.gox:252
+//line days.gox:253
 					__e = __c.Set("class", "kchat-row"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
 					__e = __c.Init("button"); if __e != nil { return }
 					{
-//line days.gox:253
+//line days.gox:254
 						__e = __c.Set("class", "kchat-thread kchat-thread_active"); if __e != nil { return }
-//line days.gox:253
+//line days.gox:254
 						__e = __c.Set("aria-current", "true"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line days.gox:254
+//line days.gox:255
 						__e = (doors.Class("kchat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 							ctx := __c.Context(); _ = ctx
-//line days.gox:254
+//line days.gox:255
 							__e = __c.Any(icons.Plus()); if __e != nil { return }
 						return })); if __e != nil { return }
 						__e = __c.Init("span"); if __e != nil { return }
 						{
-//line days.gox:255
+//line days.gox:256
 							__e = __c.Set("class", "kchat-thread-name"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.Text("New chat"); if __e != nil { return }
@@ -313,10 +314,10 @@ func (d *day) content() gox.Elem {
 			} else  {
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line days.gox:259
+//line days.gox:260
 					__e = __c.Set("class", "kchat-row"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line days.gox:260
+//line days.gox:261
 					__e = (doors.AClick{
 					Scope: new(doors.ScopeBlocking),
 					On: func(ctx context.Context, rp doors.RequestPointer) bool {
@@ -333,18 +334,18 @@ func (d *day) content() gox.Elem {
 						ctx := __c.Context(); _ = ctx
 						__e = __c.Init("button"); if __e != nil { return }
 						{
-//line days.gox:272
+//line days.gox:273
 							__e = __c.Set("class", "kchat-thread kchat-thread_new"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
-//line days.gox:273
+//line days.gox:274
 							__e = (doors.Class("kchat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 								ctx := __c.Context(); _ = ctx
-//line days.gox:273
+//line days.gox:274
 								__e = __c.Any(icons.Plus()); if __e != nil { return }
 							return })); if __e != nil { return }
 							__e = __c.Init("span"); if __e != nil { return }
 							{
-//line days.gox:274
+//line days.gox:275
 								__e = __c.Set("class", "kchat-thread-name"); if __e != nil { return }
 								__e = __c.Submit(); if __e != nil { return }
 								__e = __c.Text("New chat"); if __e != nil { return }
@@ -357,11 +358,11 @@ func (d *day) content() gox.Elem {
 				__e = __c.Close(); if __e != nil { return }
 			}
 		}
-//line days.gox:279
-		for _, t := range threads {
 //line days.gox:280
+		for _, t := range threads {
+//line days.gox:281
 			__e = __c.Any(&row{aside: d.days.aside, thread: t, instance: all[t.ID].InstanceID, day: d.body}); if __e != nil { return }
 		}
 	return })
-//line days.gox:282
+//line days.gox:283
 }

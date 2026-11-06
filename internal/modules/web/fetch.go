@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -38,7 +39,7 @@ const fetchDesc = `Fetch one http or https URL with a GET and return its content
 
 type FetchArg struct {
 	URL     string `json:"url" required:"true" description:"absolute http or https URL, credentials not allowed in it"`
-	Format  string `json:"format" enum:"markdown,text,html" description:"markdown (default) converts the document, text strips it to prose, html returns the markup re-serialised, with scripts, styles, embeds, form controls, meta, links and comments removed; unless full is set it is the same main content the other formats pick, without navigation, headers, footers and sidebars"`
+	Format  string `json:"format" enum:"markdown,text,html" description:"markdown (default) converts the document, text strips it to prose, html returns the markup re-serialised, with scripts, styles, embeds, form controls, meta, link tags and comments removed; unless full is set it is the same main content the other formats pick, without navigation, headers, footers and sidebars"`
 	Full    bool   `json:"full" description:"the page as a whole, including navigation, sidebars and comments; use it when the default came back missing something you saw referenced"`
 	Offset  uint   `json:"offset" description:"1-based line of the converted content to start from, for continuing a long page"`
 	Limit   uint   `json:"limit" description:"max lines to return, default 2000"`
@@ -92,8 +93,9 @@ func (m *module) fetch(ctx context.Context, arg FetchArg) (string, error) {
 	}
 	timeout := m.conf.Timeout
 	if arg.Timeout != 0 {
-		timeout = min(max(time.Duration(arg.Timeout)*time.Millisecond, time.Second), m.conf.MaxTimeout)
+		timeout = min(max(time.Duration(min(arg.Timeout, uint(m.conf.MaxTimeout/time.Millisecond)+1))*time.Millisecond, time.Second), m.conf.MaxTimeout)
 	}
+	parent := ctx
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	var resp *http.Response
@@ -144,6 +146,9 @@ func (m *module) fetch(ctx context.Context, arg FetchArg) (string, error) {
 				return "", fmt.Errorf("connecting to %s timed out before the host answered", failed)
 			}
 			if errors.Is(err, context.DeadlineExceeded) {
+				if parent.Err() != nil {
+					return "", context.Cause(parent)
+				}
 				return "", fmt.Errorf("fetching %s timed out after %s", u, timeout)
 			}
 			if errors.Is(err, context.Canceled) && ctx.Err() != nil {
@@ -186,7 +191,9 @@ func (m *module) fetch(ctx context.Context, arg FetchArg) (string, error) {
 			return "", errors.New(strings.ReplaceAll(err.Error(), partial, arg.SaveAs))
 		}
 		n, err := io.Copy(w, io.LimitReader(resp.Body, m.conf.MaxBytes+1))
-		if errors.Is(err, context.DeadlineExceeded) {
+		if errors.Is(err, context.DeadlineExceeded) && parent.Err() != nil {
+			err = context.Cause(parent)
+		} else if errors.Is(err, context.DeadlineExceeded) {
 			err = fmt.Errorf("fetching %s timed out after %s", u, timeout)
 		} else if errors.Is(err, context.Canceled) && ctx.Err() != nil {
 			err = context.Cause(ctx)
@@ -234,12 +241,12 @@ func (m *module) fetch(ctx context.Context, arg FetchArg) (string, error) {
 		media == "application/json" || media == "application/xml" ||
 		media == "application/javascript" || media == "application/x-javascript" ||
 		strings.HasSuffix(media, "+json") || strings.HasSuffix(media, "+xml")
-	if !markup && !textual && media != "" {
-		return "", fmt.Errorf("%s is %s, which web__fetch does not convert; pass saveAs to keep the bytes in the workspace and read them with the files tools", final, media)
-	}
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, m.conf.MaxBytes+1))
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
+			if parent.Err() != nil {
+				return "", context.Cause(parent)
+			}
 			return "", fmt.Errorf("fetching %s timed out after %s", u, timeout)
 		}
 		if errors.Is(err, context.Canceled) && ctx.Err() != nil {
@@ -249,6 +256,9 @@ func (m *module) fetch(ctx context.Context, arg FetchArg) (string, error) {
 	}
 	if int64(len(raw)) > m.conf.MaxBytes {
 		return "", fmt.Errorf("%s is over the %d-byte cap", final, m.conf.MaxBytes)
+	}
+	if !markup && !textual && media != "" && (bytes.IndexByte(raw, 0) >= 0 || !utf8.Valid(raw)) {
+		return "", fmt.Errorf("%s is %s, which web__fetch does not convert; pass saveAs to keep the bytes in the workspace and read them with the files tools", final, media)
 	}
 	if media == "" {
 		probe := raw
@@ -267,6 +277,12 @@ func (m *module) fetch(ctx context.Context, arg FetchArg) (string, error) {
 	}
 	if !markup {
 		e.text = string(decoded)
+		if media == "application/json" || strings.HasSuffix(media, "+json") {
+			var b bytes.Buffer
+			if json.Indent(&b, decoded, "", "  ") == nil {
+				e.text = b.String()
+			}
+		}
 	} else {
 		doc, err := html.Parse(bytes.NewReader(decoded))
 		if err != nil {
@@ -392,7 +408,7 @@ func page(e *entry, offset uint, limit uint, kept bool) (string, error) {
 		return "", fmt.Errorf("offset %d is beyond the end of the page, %d lines", start, total)
 	default:
 		if cut {
-			fmt.Fprintf(&b, "(lines longer than %d characters were cut; what was cut cannot be reached with offset)\n", fetchLineMax)
+			fmt.Fprintf(&b, "(lines longer than %d characters were cut; what was cut cannot be reached with offset; fetch again with saveAs to read it whole with the files tools)\n", fetchLineMax)
 		}
 		if last == total {
 			fmt.Fprintf(&b, "(end of page, %d lines)", total)

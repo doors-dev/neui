@@ -2,11 +2,11 @@ package aside
 
 import (
 	"context"
-	"strings"
 	
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
 	"neui.dev/api"
+	chatmod "neui.dev/internal/modules/chat"
 	"neui.dev/kchat/icons"
 	"neui.dev/kchat/params"
 	"neui.dev/kchat/notify"
@@ -137,8 +137,8 @@ elem (r *row) rename(hide func(ctx context.Context)) {
 	~>doors.ASubmit[renameForm]{
 		Scope: new(doors.ScopeBlocking),
 		On: func(ctx context.Context, rf doors.RequestForm[renameForm]) bool {
-			n := strings.TrimSpace(rf.Data().Name)
-			if n != r.thread.Name {
+			n, err := chatmod.CheckName(rf.Data().Name)
+			if err == nil && n != r.thread.Name {
 				if err := r.aside.Instance.ThreadRename(ctx, r.thread.ID, n); err != nil {
 					doors.Logger(ctx).Error("aside: rename", "thread", r.thread.ID, "err", err)
 					notify.Error(ctx, err)
@@ -164,6 +164,7 @@ elem (r *row) rename(hide func(ctx context.Context)) {
 				class="kchat-text"
 				name="name"
 				value=(r.thread.Name)
+				maxlength="80"
 				autofocus
 				autocomplete="off"
 				aria-label="Chat name"/>

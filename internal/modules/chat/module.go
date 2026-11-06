@@ -31,9 +31,6 @@ type NameArg struct {
 
 func CheckName(name string) (string, error) {
 	name = strings.TrimSpace(name)
-	if name == "" {
-		return "", errors.New("name is empty: pass a short title naming the topic")
-	}
 	if strings.ContainsFunc(name, func(r rune) bool {
 		return unicode.IsControl(r) || unicode.Is(unicode.Cf, r) || r == '\u2028' || r == '\u2029'
 	}) {
@@ -46,6 +43,9 @@ func nameTool(ctx context.Context, arg NameArg) (struct{}, error) {
 	name, err := CheckName(arg.Name)
 	if err != nil {
 		return struct{}{}, err
+	}
+	if name == "" {
+		return struct{}{}, errors.New("name is empty: pass a short title naming the topic")
 	}
 	if utf8.RuneCountInString(name) > nameLimit {
 		return struct{}{}, fmt.Errorf("name must be at most %d characters, shorten it to a few words", nameLimit)

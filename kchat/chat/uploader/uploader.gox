@@ -109,7 +109,7 @@ func (u *uploader) upload(ctx context.Context, r doors.RequestRawHook) bool {
 	}
 	name := part.FileName()
 	if !u.reserve() {
-		u.refuse(ctx, r, name, http.StatusConflict, api.ErrTooMany)
+		u.refuse(ctx, r, name, http.StatusUnprocessableEntity, api.ErrTooMany)
 		return false
 	}
 	total, _ := strconv.ParseInt(r.RequestHeader().Get("Content-Length"), 10, 64)
@@ -186,25 +186,20 @@ elem (u *uploader) Form(pending doors.Beam[bool]) {
 					document.currentScript.previousElementSibling.querySelector("input")
 				const text = document.getElementById("text" + $data("id"))
 				const widget = input.closest(".kchat-widget")
-				input.addEventListener("change", async () => {
+				input.addEventListener("change", () => {
 					const files = [...input.files]
 					input.value = ""
 					text?.focus()
-					await Promise.all(
-						files.map(async (file) => {
+					Promise.allSettled(
+						files.map((file) => {
 							const form = new FormData()
 							form.append("file", file)
-							try {
-								await $fetch("upload", form)
-							} catch (err) {
-								if (err?.status === 408) return
-								console.error("upload failed", file.name, err)
-								if (err instanceof HookErr && (err.network() || err.server())) {
+							return $fetch("upload", form).catch((err) => {
+								if (err instanceof HookErr && err.network())
 									widget.dispatchEvent(
 										new CustomEvent("kchat_error", { detail: err.kind }),
 									)
-								}
-							}
+							})
 						}),
 					)
 				})

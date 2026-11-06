@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
@@ -15,6 +17,8 @@ import (
 )
 
 var _ api.Instance = (*instance)(nil)
+
+const nameLimit = 80
 
 func (inst *instance) ID() string {
 	return inst.id
@@ -105,6 +109,9 @@ func (inst *instance) ThreadRename(ctx context.Context, id api.ThreadID, name st
 	if err != nil {
 		return err
 	}
+	if utf8.RuneCountInString(name) > nameLimit {
+		name = strings.TrimSpace(string([]rune(name)[:nameLimit]))
+	}
 	if _, err := backend.Storage().ThreadGet(ctx, id); err != nil {
 		return err
 	}
@@ -170,6 +177,11 @@ func (inst *instance) ThreadDelete(ctx context.Context, id api.ThreadID) error {
 		return err
 	}
 	if err := op.Receive(); err != nil {
+		return err
+	}
+	if _, err := backend.Storage().ThreadGet(ctx, id); errors.Is(err, api.ErrNotFound) {
+		return nil
+	} else if err != nil {
 		return err
 	}
 	if err := thread.Delete(context.WithoutCancel(ctx), backend.Storage(), id); err != nil {

@@ -26,7 +26,7 @@ func newTestFS(t *testing.T) (*workFS, *local.FileStorage) {
 	}
 	t.Cleanup(func() { store.Remove() })
 	w := Open(testThread, store, store, api.FilesConfig{})
-	t.Cleanup(w.Dispose)
+	t.Cleanup(func() { w.Dispose() })
 	if _, err := w.root(); err != nil {
 		t.Fatal(err)
 	}
@@ -742,6 +742,27 @@ func TestUserUploadDedupsName(t *testing.T) {
 	}
 }
 
+func TestUserUploadTrimsLongNamesToFit(t *testing.T) {
+	w, store := newTestFS(t)
+	long := strings.Repeat("界", 90) + ".txt"
+	first, err := w.UserUpload(context.Background(), long, strings.NewReader("first"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stem := strings.Repeat("界", 83)
+	if first.Name != "user_uploads/"+stem+".txt" {
+		t.Fatalf("first: %q", first.Name)
+	}
+	commitUpload(t, store, stem+".txt")
+	second, err := w.UserUpload(context.Background(), long, strings.NewReader("second"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Name != "user_uploads/"+strings.Repeat("界", 82)+"(1).txt" {
+		t.Fatalf("second: %q", second.Name)
+	}
+}
+
 func TestDeleteUpload(t *testing.T) {
 	w, store := newTestFS(t)
 	putUpload(t, store, "doc.txt", "text/plain", "old")
@@ -891,10 +912,10 @@ func TestUserUploadRetriesOnlyUnreadBody(t *testing.T) {
 			_, store := newTestFS(t)
 			clash := &clashStorage{FileStorage: store, drains: tc.drains}
 			w := Open(testThread, store, clash, api.FilesConfig{})
-			t.Cleanup(w.Dispose)
+			t.Cleanup(func() { w.Dispose() })
 			e, err := w.UserUpload(ctx, "f.txt", strings.NewReader(tc.body))
 			if !tc.ok {
-				if err == nil || errors.Is(err, api.ErrExists) || !strings.Contains(err.Error(), "upload it again") {
+				if !errors.Is(err, api.ErrExists) || !strings.Contains(err.Error(), "upload it again") {
 					t.Fatalf("got %+v, %v", e, err)
 				}
 				if clash.calls != 1 {
@@ -1229,7 +1250,7 @@ func newLazyFS(t *testing.T, fails int) (*workFS, *flakyStorage, *local.FileStor
 	t.Cleanup(func() { store.Remove() })
 	storage := &flakyStorage{dir: t.TempDir(), fails: fails}
 	w := Open(testThread, storage, store, api.FilesConfig{})
-	t.Cleanup(w.Dispose)
+	t.Cleanup(func() { w.Dispose() })
 	return w, storage, store
 }
 

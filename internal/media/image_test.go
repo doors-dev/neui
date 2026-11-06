@@ -286,3 +286,11 @@ func TestShapeFlattensTransparencyOntoWhiteForJPEG(t *testing.T) {
 		}
 	}
 }
+
+func TestShapeZeroSizeImageHasNoPixels(t *testing.T) {
+	data := []byte("GIF89a\x00\x00\x00\x00\x00\x00\x00;")
+	_, err := Shape(data, api.ImageGIF, api.Model{})
+	if err == nil || !strings.Contains(err.Error(), "no pixels (0x0)") {
+		t.Fatalf("err = %v", err)
+	}
+}

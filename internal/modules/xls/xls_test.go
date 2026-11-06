@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"iter"
+	"math"
 	"reflect"
 	"slices"
 	"strconv"
@@ -60,7 +61,7 @@ func newFSStore(t *testing.T) (filesystem.FS, *local.FileStorage) {
 	}
 	t.Cleanup(func() { store.Remove() })
 	fs := filesystem.Open("thread", store, store, api.FilesConfig{})
-	t.Cleanup(fs.Dispose)
+	t.Cleanup(func() { fs.Dispose() })
 	return fs, store
 }
 
@@ -228,31 +229,66 @@ func TestReadRawFormatted(t *testing.T) {
 	if raw.Rows[0][1] != "=B2*2" {
 		t.Fatalf("raw formula = %q", raw.Rows[0][1])
 	}
-	if res.Rows[0][1] != "21" {
-		t.Fatalf("uncached formula = %q", res.Rows[0][1])
-	}
 }
 
-func TestReadFindUncachedFormulas(t *testing.T) {
+func TestWrittenFormulasHaveNoSavedValue(t *testing.T) {
 	fs, _ := newFSStore(t)
 	buildBook(t, fs, "book.xlsx")
 	ctx := threadCtx(fs)
-	if _, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "E2", Rows: [][]any{{"=B2/0", "=A2&\"-x\""}}}); err != nil {
+	if _, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "E2", Rows: [][]any{{"=B2*3", "=A2&\"-x\""}}}); err != nil {
 		t.Fatal(err)
 	}
-	res, err := readTool(ctx, readArg{Path: "book.xlsx", Sheet: "Data", Range: "D2:F2"})
+	res, err := readTool(ctx, readArg{Path: "book.xlsx", Sheet: "Data", Range: "E2:F2"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{"21", "#DIV/0!", "Alice-x"}; !reflect.DeepEqual(res.Rows[0], want) {
+	if want := []string{"", ""}; !reflect.DeepEqual(res.Rows[0], want) {
 		t.Fatalf("rows = %q, want %q", res.Rows[0], want)
+	}
+	raw, err := readTool(ctx, readArg{Path: "book.xlsx", Sheet: "Data", Range: "E2:F2", Raw: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"=B2*3", "=A2&\"-x\""}; !reflect.DeepEqual(raw.Rows[0], want) {
+		t.Fatalf("raw = %q, want %q", raw.Rows[0], want)
 	}
 	hits, err := findTool(ctx, findArg{Path: "book.xlsx", Query: "Alice-"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(hits.Hits) != 1 || hits.Hits[0].Cell != "F2" || hits.Hits[0].Value != "Alice-x" {
+	if len(hits.Hits) != 0 {
 		t.Fatalf("hits = %+v", hits.Hits)
+	}
+}
+
+func TestReadRawMergedFormula(t *testing.T) {
+	fs, _ := newFSStore(t)
+	f := excelize.NewFile()
+	if err := f.SetCellFormula("Sheet1", "A1", "1+1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.MergeCell("Sheet1", "A1", "C1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.SetCellValue("Sheet1", "D1", "x"); err != nil {
+		t.Fatal(err)
+	}
+	writeBook(t, fs, "m.xlsx", f)
+	res, err := readTool(threadCtx(fs), readArg{Path: "m.xlsx", Sheet: "Sheet1", Range: "A1:D1", Raw: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"=1+1", "", "", "x"}; !reflect.DeepEqual(res.Rows[0], want) {
+		t.Fatalf("raw = %q, want %q", res.Rows[0], want)
+	}
+}
+
+func TestReadRefusesHugeOffset(t *testing.T) {
+	fs, _ := newFSStore(t)
+	buildBook(t, fs, "book.xlsx")
+	_, err := readTool(threadCtx(fs), readArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:B4", Offset: math.MaxUint64})
+	if err == nil || !strings.Contains(err.Error(), "offset") {
+		t.Fatalf("err = %v", err)
 	}
 }
 

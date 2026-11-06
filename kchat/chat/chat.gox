@@ -32,7 +32,7 @@ func (c Chat) Main() gox.Elem {
 }
 
 func (c Chat) Chat(thread api.ChatThread, s api.ChatState) api.Chat {
-	controller := controller.NewComposerController(thread, s.Input, s.Round != nil, s.Usage, s.Tasks, s.Compaction, s.Ask)
+	controller := controller.NewComposerController(thread, s.Input, s.Round != nil, s.Usage, s.Tasks, s.Compaction, s.CanCompact, s.Ask)
 	at := anchor.Read(s.Meta)
 	dead := doors.NewSource(alive)
 	return &chat{
@@ -120,10 +120,10 @@ func (c *chat) Update(ctx context.Context, e api.ChatEvent) {
 		case api.ChatEventName:
 			c.name.Update(ctx, e.Name)
 		case api.ChatEventRoundEnd:
-			c.composer.RoundDone(ctx, e.State, e.Usage)
+			c.composer.RoundDone(ctx, e.State, e.Usage, e.CanCompact)
 			c.list.RoundDone(ctx, e.State)
 		case api.ChatEventRoundStart:
-			c.composer.UpdateActive(ctx, true)
+			c.composer.RoundStart(ctx, e.Usage, e.CanCompact)
 			if e.Round.Input.Len() != 0 {
 				c.composer.FlushInput(ctx)
 			}
@@ -133,7 +133,7 @@ func (c *chat) Update(ctx context.Context, e api.ChatEvent) {
 		case api.ChatEventTasks:
 			c.composer.UpdateTasks(ctx, e.Tasks)
 		case api.ChatEventCompacting:
-			c.composer.UpdateCompaction(ctx, e.Running, e.Usage)
+			c.composer.UpdateCompaction(ctx, e.Running, e.Usage, e.CanCompact)
 		case api.ChatEventRoundUsage:
 			c.composer.UpdateUsage(ctx, e.Usage)
 		case api.ChatEventAsk:
@@ -152,15 +152,7 @@ func (c *chat) Update(ctx context.Context, e api.ChatEvent) {
 }
 
 elem (c *chat) Main() {
-	~>doors.AKeyDown{
-		Key: doors.Key{Key: "Escape"},
-		Scope: new(doors.ScopeBlocking),
-		On: func(ctx context.Context, rk doors.RequestKeyboard) bool {
-			c.composer.Escape(ctx)
-			return false
-		},
-		OnError: notify.OnError,
-	} <div
+	<div
 		class="kchat-pane"
 		data-attach=({
 			if c.params.Off(params.Attachments) {
@@ -176,10 +168,27 @@ elem (c *chat) Main() {
 		</div>
 		~(notify.Toasts())
 		~(c.dead.Bind(c.body))
-		<script data:id=(c.params.ID) data:paste=(pasteAsFile)>
+		~>doors.AHook[bool]{
+			Name: "escape",
+			Scope: new(doors.ScopeBlocking),
+			On: func(ctx context.Context, r doors.RequestHook[bool]) (any, bool) {
+				c.composer.Escape(ctx)
+				return nil, false
+			},
+		} <script data:id=(c.params.ID) data:paste=(pasteAsFile)>
 			const main = document.currentScript.parentElement
+			const widget = main.closest(".kchat-widget")
 			const id = $data("id")
 			const pasteAsFile = $data("paste")
+			main.addEventListener("keydown", (e) => {
+				if (e.key !== "Escape") return
+				const escape = new CustomEvent("kchat_escape", { cancelable: true })
+				if (!widget.dispatchEvent(escape)) return
+				$hook("escape", true).catch((err) => {
+					if (err instanceof HookErr)
+						widget.dispatchEvent(new CustomEvent("kchat_error", { detail: err.kind }))
+				})
+			})
 			const attach = (files) => {
 				const composer = main.querySelector("#composer" + id)
 				if (!composer || composer.getAttribute("aria-busy") === "true") return false
@@ -291,9 +300,5 @@ elem (c *chat) closed(kind closedKind) {
 }
 
 elem title(name string) {
-	~(if name == "" {
-		<span class="kchat-top-title kchat-top-title_quiet">New Chat</span>
-	} else {
-		<span class="kchat-top-title">~(name)</span>
-	})
+	<span class="kchat-top-title">~(name)</span>
 }

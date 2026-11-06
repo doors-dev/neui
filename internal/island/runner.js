@@ -24,6 +24,7 @@ const __run = (() => {
 		freeze(Object.getPrototypeOf(o))
 	}
 	freeze(globalThis)
+	freeze(app)
 	freeze(function* () { })
 	freeze(async function () { })
 	freeze(async function* () { })

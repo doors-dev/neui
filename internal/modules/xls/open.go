@@ -95,6 +95,10 @@ func openWrite(ctx context.Context, fs api.FS, name string, create bool) (*excel
 	var f *excelize.File
 	created := false
 	if _, err := fs.Stat(ctx, name); create && errors.Is(err, api.ErrNotFound) {
+		if strings.ToLower(path.Ext(name)) != ".xlsx" {
+			unlock()
+			return nil, false, nil, fmt.Errorf("%q does not end in .xlsx: new workbooks are created as .xlsx only", name)
+		}
 		f, created = excelize.NewFile(), true
 	} else if f, err = openRead(ctx, fs, name); err != nil {
 		unlock()

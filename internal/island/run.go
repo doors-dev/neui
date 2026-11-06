@@ -277,7 +277,7 @@ func (r *run) run() {
 			if !stop() {
 				<-exited
 			}
-			if errors.Is(context.Cause(exec), errTurnTime) {
+			if err != nil && errors.Is(context.Cause(exec), errTurnTime) {
 				err = context.Cause(exec)
 			}
 			cancelExec(nil)

@@ -16,8 +16,11 @@ import (
 )
 
 // Frame is one dispatched server sent event: the value of its event: line and
-// its data: lines joined with newlines. Data belongs to whoever received it and
-// stays valid for as long as they keep it.
+// its data: lines joined with newlines. Data is valid only until
+// Converter.Convert returns: Stream then hands the buffer back to the reader,
+// which fills it with a later frame. A converter keeps nothing of Data past
+// Convert but copies, which is all json.Unmarshal ever stores in a string,
+// []byte or json.RawMessage.
 type Frame struct {
 	Event string // value of the event: line; "" when absent
 	Data  []byte // data: lines joined with "\n"; never empty
@@ -39,6 +42,7 @@ var errFrameTooLarge = errors.New("neui: server sent event exceeds the frame lim
 // well past any fixed line buffer, so lines are accumulated instead of scanned.
 type frameReader struct {
 	ch    chan readFrame
+	free  <-chan []byte
 	br    *bufio.Reader
 	ctx   context.Context
 	max   int
@@ -53,12 +57,13 @@ type readFrame struct {
 	err   error
 }
 
-func read(ctx context.Context, r io.Reader, max int) <-chan readFrame {
+func read(ctx context.Context, r io.Reader, max int, free <-chan []byte) <-chan readFrame {
 	reader := frameReader{
-		ch:  make(chan readFrame),
-		br:  bufio.NewReaderSize(r, 64<<10),
-		max: max,
-		ctx: ctx,
+		ch:   make(chan readFrame),
+		free: free,
+		br:   bufio.NewReaderSize(r, 64<<10),
+		max:  max,
+		ctx:  ctx,
 	}
 	go reader.run()
 	return reader.ch
@@ -92,8 +97,12 @@ func (r *frameReader) run() {
 // A body that ends in the middle of an event took its last frame with it: the
 // format says an event without its blank line was never dispatched, so what
 // arrived is a cut connection and not a shorter reply.
+//
+// A dispatched frame takes the data buffer with it. The next one starts in a
+// buffer a consumer handed back on free once it was done with it, or in a new
+// one when none has come back yet.
 func (r *frameReader) next() (Frame, error) {
-	r.data = nil
+	r.data = r.data[:0]
 	r.name = r.name[:0]
 	for {
 		line, err := r.readLine()
@@ -110,7 +119,9 @@ func (r *frameReader) next() (Frame, error) {
 			if string(r.name) != r.event {
 				r.event = string(r.name)
 			}
-			return Frame{Event: r.event, Data: r.data}, nil
+			data := r.data
+			r.data = nil
+			return Frame{Event: r.event, Data: data}, nil
 		}
 		if line[0] == ':' {
 			if len(r.data) > 0 || len(r.name) > 0 {
@@ -123,6 +134,13 @@ func (r *frameReader) next() (Frame, error) {
 		case "event":
 			r.name = append(r.name[:0], value...)
 		case "data":
+			if r.data == nil {
+				select {
+				case buf := <-r.free:
+					r.data = buf[:0]
+				default:
+				}
+			}
 			if len(r.data) > 0 {
 				r.data = append(r.data, '\n')
 			}

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/doors-dev/doors"
+
 	"neui.dev/api"
 	"neui.dev/internal/common"
 	"neui.dev/internal/filesystem"
@@ -79,7 +81,7 @@ func (l *link) tools() []api.Tool {
 
 func (l *link) useTools(roundID api.RoundID, tools []api.ContentToolUse) (<-chan api.ContentToolResult, context.CancelCauseFunc) {
 	ch := make(chan api.ContentToolResult, len(tools))
-	stop, stopCancel := context.WithCancelCause(context.Background())
+	stop, stopCancel := context.WithCancelCause(l.ctx)
 	var mu sync.Mutex
 	var running context.CancelCauseFunc
 	limit := l.backend.Config().ToolCallLimit
@@ -140,7 +142,9 @@ func (l *link) useTools(roundID api.RoundID, tools []api.ContentToolUse) (<-chan
 func (l *link) dispose() {
 	l.once.Do(func() {
 		l.cancel()
-		l.fs.Dispose()
+		if err := l.fs.Dispose(); err != nil {
+			doors.Logger(l.backend.Context()).Error("thread: workspace dispose failed", "thread", l.thread.id, "err", err)
+		}
 	})
 }
 

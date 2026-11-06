@@ -35,7 +35,10 @@ func Shape(data []byte, mimeType api.ImageMime, model api.Model) (api.Image, err
 		side = fallbackImageSide
 	}
 	w, h := cfg.Width, cfg.Height
-	if w <= 0 || h <= 0 || int64(w)*int64(h) > MaxDecodePixels {
+	if w <= 0 || h <= 0 {
+		return api.Image{}, fmt.Errorf("image has no pixels (%dx%d)", w, h)
+	}
+	if int64(w)*int64(h) > MaxDecodePixels {
 		return api.Image{}, fmt.Errorf("image is %dx%d, over the %d pixels that can be decoded", w, h, MaxDecodePixels)
 	}
 	fits := w <= side && h <= side

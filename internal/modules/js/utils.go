@@ -1,8 +1,10 @@
 package js
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"iter"
@@ -13,6 +15,12 @@ import (
 	"modernc.org/quickjs"
 	"neui.dev/api"
 	"neui.dev/internal/common"
+)
+
+const (
+	scriptLimit = 4 << 20
+	logCap      = 1 << 20
+	logKeep     = 512 << 10
 )
 
 func logName(name string) string {
@@ -39,7 +47,7 @@ func ClearLog(fs api.FS, file string) error {
 
 func RegisterLoggers(vm *quickjs.VM, fs api.FS, file string) error {
 	err := vm.RegisterFunc("__log", func(level string, s string) {
-		if err := Log(fs, file, level, s); err != nil {
+		if err := Log(fs, file, level, s); err != nil && !errors.Is(err, api.ErrQuota) {
 			slog.Error("js: script log write failed", "log", file, "err", err)
 		}
 	}, false)
@@ -58,7 +66,7 @@ const loggers = `(function () {
 	function fmt(v) {
 		if (typeof v === 'string') return v;
 		if (v instanceof Error) return String(v) + (v.stack ? '\n' + v.stack : '');
-		try { return JSON.stringify(v); } catch (e) { return String(v); }
+		try { const s = JSON.stringify(v); return s === undefined ? String(v) : s; } catch (e) { return String(v); }
 	}
 	const join = (a) => a.map(fmt).join(' ');
 	globalThis.console = {
@@ -113,11 +121,44 @@ func RegisterModules(vm *quickjs.VM, ctx context.Context, modules iter.Seq[commo
 }
 
 func Log(fs api.FS, name string, level string, entry string) error {
+	line := fmt.Sprintf("%s %s %s\n", time.Now().UTC().Format(time.RFC3339), level, entry)
+	if e, err := fs.Stat(context.Background(), name); err == nil && e.Size+int64(len(line)) > logCap {
+		rc, err := fs.ReadRange(context.Background(), name, max(e.Size-logKeep, 0), -1)
+		if err != nil {
+			return err
+		}
+		tail, err := io.ReadAll(rc)
+		if cerr := rc.Close(); err == nil {
+			err = cerr
+		}
+		if err != nil {
+			return err
+		}
+		if i := bytes.IndexByte(tail, '\n'); i >= 0 {
+			tail = tail[i+1:]
+		} else {
+			tail = nil
+		}
+		w, err := fs.Create(name)
+		if err != nil {
+			return err
+		}
+		_, err = fmt.Fprintf(w, "%s INFO earlier output dropped\n", time.Now().UTC().Format(time.RFC3339))
+		if err == nil {
+			_, err = w.Write(tail)
+		}
+		if cerr := w.Close(); err == nil {
+			err = cerr
+		}
+		if err != nil {
+			return err
+		}
+	}
 	w, err := fs.Append(name)
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(w, "%s %s %s\n", time.Now().UTC().Format(time.RFC3339), level, entry)
+	_, err = io.WriteString(w, line)
 	if cerr := w.Close(); err == nil {
 		err = cerr
 	}
@@ -125,6 +166,10 @@ func Log(fs api.FS, name string, level string, entry string) error {
 }
 
 func readScript(ctx context.Context, fs api.FS, file string, code string, arg json.RawMessage) (string, error) {
+	label := file
+	if file == "" {
+		label = "inline code"
+	}
 	var src io.Reader = strings.NewReader(code)
 	if file != "" {
 		rc, err := fs.ReadAll(ctx, file)
@@ -139,8 +184,12 @@ func readScript(ctx context.Context, fs api.FS, file string, code string, arg js
 	}
 	b := strings.Builder{}
 	b.WriteString("(() => { try { const res = ((arg) => { \"use strict\";\n")
-	if _, err := io.Copy(&b, src); err != nil {
+	n, err := io.Copy(&b, io.LimitReader(src, scriptLimit+1))
+	if err != nil {
 		return "", err
+	}
+	if n > scriptLimit {
+		return "", fmt.Errorf("%q is over the %d MiB script size limit", label, scriptLimit>>20)
 	}
 	quoted, err := json.Marshal(string(arg))
 	if err != nil {

@@ -72,7 +72,7 @@ func newCallTestRun(t *testing.T, config api.IslandConfig, lib Library) (*run, *
 	}
 	t.Cleanup(func() { storage.Remove() })
 	fs := filesystem.Open("thread", storage, storage, api.FilesConfig{})
-	t.Cleanup(fs.Dispose)
+	t.Cleanup(func() { fs.Dispose() })
 	ctx, cancel := context.WithCancelCause(context.Background())
 	task := &callTestTask{}
 	r := &run{
@@ -439,6 +439,21 @@ func TestCallIsolation(t *testing.T) {
 	vm := r.runner.vm
 	if _, err := callFrom[int, int](t, "(a) => a + 1").Call(ctx, 1); err != nil || r.runner.vm != vm {
 		t.Fatalf("vm not reused: %v", err)
+	}
+}
+
+func TestCallCannotLeaveStateOnApp(t *testing.T) {
+	lib := NewLibrary()
+	if err := fetch(lib, "price", func(ctx context.Context, sku string) (float64, error) { return 1, nil }); err != nil {
+		t.Fatal(err)
+	}
+	_, _, ctx := newCallTestRun(t, api.IslandConfig{}, lib)
+	if _, err := callFrom[int, int](t, "(a) => { app.price.leak = a; return a }").Call(ctx, 1); err == nil {
+		t.Fatal("a property set on an app function was accepted")
+	}
+	got, err := callFrom[int, string](t, "(a) => typeof app.price.leak").Call(ctx, 1)
+	if err != nil || got != "undefined" {
+		t.Fatalf("got %q, %v", got, err)
 	}
 }
 

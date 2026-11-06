@@ -66,10 +66,6 @@ func (s *threadCompact) on(cmd any) {
 			cmd.Err(api.ErrUnlinked)
 			return
 		}
-		if !s.thread.replay.IsRetriable() {
-			cmd.Err(api.ErrWrongState)
-			return
-		}
 		cmd.NoMessage()
 		s.thread.compaction.stop()
 		wasPending := s.thread.pending
@@ -77,12 +73,21 @@ func (s *threadCompact) on(cmd any) {
 		if wasPending {
 			s.thread.link.send(newMessageEvent(nil, api.ChatEventInputPending{Pending: false}))
 		}
-		s.thread.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}}))
+		s.thread.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}, CanCompact: s.thread.canCompact()}))
+		if !s.thread.replay.IsRetriable() {
+			if s.round.Results != nil {
+				s.thread.link.send(newMessageEvent(nil, api.ChatEventToolResults{Round: s.round.ID, Results: s.round.Results, Final: true}))
+			} else {
+				s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundEnd{Round: s.round.ID, State: api.RoundOk, Error: "", Usage: s.usage, Final: true, CanCompact: s.thread.canCompact()}))
+			}
+			s.thread.switchStateWait()
+			return
+		}
 		if err := s.abort(); err != nil {
 			s.thread.criticalErr(nil, err)
 			return
 		}
-		s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundEnd{Round: s.round.ID, State: api.RoundAbort, Error: "", Usage: s.usage, Final: true}))
+		s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundEnd{Round: s.round.ID, State: api.RoundAbort, Error: "", Usage: s.usage, Final: true, CanCompact: s.thread.canCompact()}))
 		s.thread.switchStateWait()
 	case commandRewind:
 		if cmd.link != s.thread.link {
@@ -107,7 +112,7 @@ func (s *threadCompact) on(cmd any) {
 		wasPending := s.thread.pending
 		s.thread.pending = false
 		if s.thread.compaction.cut(cmd.round) {
-			s.thread.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}}))
+			s.thread.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}, CanCompact: s.thread.canCompact()}))
 		}
 		if err != nil {
 			s.thread.criticalErr(cmd.intoMessage(), err)
@@ -124,7 +129,7 @@ func (s *threadCompact) on(cmd any) {
 		if wasPending {
 			s.thread.link.send(newMessageEvent(nil, api.ChatEventInputPending{Pending: false}))
 		}
-		s.thread.link.send(newMessageEvent(cmd.intoMessage(), api.ChatEventRoundStart{Round: round, Truncate: cmd.round}))
+		s.thread.link.send(newMessageEvent(cmd.intoMessage(), api.ChatEventRoundStart{Round: round, Truncate: cmd.round, Usage: s.thread.replay.Usage(), CanCompact: s.thread.canCompact()}))
 	case commandApplyCompaction:
 		if cmd.seq != s.thread.compaction.seq {
 			return
@@ -143,7 +148,7 @@ func (s *threadCompact) on(cmd any) {
 				s.thread.criticalErr(nil, err)
 				return
 			}
-			s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundStart{Round: round, Truncate: api.NoRoundID}))
+			s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundStart{Round: round, Truncate: api.NoRoundID, Usage: s.thread.replay.Usage(), CanCompact: s.thread.canCompact()}))
 			return
 		}
 		if !applied {
@@ -151,7 +156,12 @@ func (s *threadCompact) on(cmd any) {
 				s.thread.criticalErr(nil, err)
 				return
 			}
-			s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundEnd{Round: s.round.ID, State: api.RoundError, Error: string(api.CodeContextLength), Usage: s.usage, Final: true}))
+			s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundEnd{Round: s.round.ID, State: api.RoundError, Error: string(api.CodeContextLength), Usage: s.usage, Final: true, CanCompact: s.thread.canCompact()}))
+			wasPending := s.thread.pending
+			s.thread.pending = false
+			if wasPending {
+				s.thread.link.send(newMessageEvent(nil, api.ChatEventInputPending{Pending: false}))
+			}
 			s.thread.switchStateWait()
 			return
 		}
@@ -161,7 +171,7 @@ func (s *threadCompact) on(cmd any) {
 			return
 		}
 		s.thread.switchStateRoundReplay(round, replay)
-		s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundStart{Round: round, Truncate: truncate}))
+		s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundStart{Round: round, Truncate: truncate, Usage: s.thread.replay.Usage(), CanCompact: s.thread.canCompact()}))
 	default:
 		s.thread.on(cmd)
 	}

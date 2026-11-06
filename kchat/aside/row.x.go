@@ -5,11 +5,11 @@ package aside
 
 import (
 	"context"
-	"strings"
 	
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
 	"neui.dev/api"
+	chatmod "neui.dev/internal/modules/chat"
 	"neui.dev/kchat/icons"
 	"neui.dev/kchat/params"
 	"neui.dev/kchat/notify"
@@ -298,8 +298,8 @@ func (r *row) rename(hide func(ctx context.Context)) gox.Elem {
 		__e = (doors.ASubmit[renameForm]{
 		Scope: new(doors.ScopeBlocking),
 		On: func(ctx context.Context, rf doors.RequestForm[renameForm]) bool {
-			n := strings.TrimSpace(rf.Data().Name)
-			if n != r.thread.Name {
+			n, err := chatmod.CheckName(rf.Data().Name)
+			if err == nil && n != r.thread.Name {
 				if err := r.aside.Instance.ThreadRename(ctx, r.thread.ID, n); err != nil {
 					doors.Logger(ctx).Error("aside: rename", "thread", r.thread.ID, "err", err)
 					notify.Error(ctx, err)
@@ -344,10 +344,12 @@ func (r *row) rename(hide func(ctx context.Context)) gox.Elem {
 							__e = __c.Set("name", "name"); if __e != nil { return }
 //line row.gox:166
 							__e = __c.Set("value", r.thread.Name); if __e != nil { return }
+//line row.gox:167
+							__e = __c.Set("maxlength", "80"); if __e != nil { return }
 							__e = __c.Set("autofocus", true); if __e != nil { return }
-//line row.gox:168
-							__e = __c.Set("autocomplete", "off"); if __e != nil { return }
 //line row.gox:169
+							__e = __c.Set("autocomplete", "off"); if __e != nil { return }
+//line row.gox:170
 							__e = __c.Set("aria-label", "Chat name"); if __e != nil { return }
 						}
 						__e = __c.Submit(); if __e != nil { return }
@@ -362,10 +364,10 @@ func (r *row) rename(hide func(ctx context.Context)) gox.Elem {
 				__e = __c.Close(); if __e != nil { return }
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line row.gox:176
+//line row.gox:177
 					__e = __c.Set("class", "kchat-form-actions"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line row.gox:177
+//line row.gox:178
 					__e = (doors.AClick{
 				Scope: new(doors.ScopeBlocking),
 				On: func(ctx context.Context, rp doors.RequestPointer) bool {
@@ -377,9 +379,9 @@ func (r *row) rename(hide func(ctx context.Context)) gox.Elem {
 						ctx := __c.Context(); _ = ctx
 						__e = __c.Init("button"); if __e != nil { return }
 						{
-//line row.gox:184
+//line row.gox:185
 							__e = __c.Set("type", "button"); if __e != nil { return }
-//line row.gox:184
+//line row.gox:185
 							__e = __c.Set("class", "kchat-btn kchat-btn_2nd"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.Text("Cancel"); if __e != nil { return }
@@ -388,9 +390,9 @@ func (r *row) rename(hide func(ctx context.Context)) gox.Elem {
 					return })); if __e != nil { return }
 					__e = __c.Init("button"); if __e != nil { return }
 					{
-//line row.gox:185
+//line row.gox:186
 						__e = __c.Set("type", "submit"); if __e != nil { return }
-//line row.gox:185
+//line row.gox:186
 						__e = __c.Set("class", "kchat-btn"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 						__e = __c.Text("Save"); if __e != nil { return }
@@ -402,14 +404,14 @@ func (r *row) rename(hide func(ctx context.Context)) gox.Elem {
 			__e = __c.Close(); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
-//line row.gox:188
+//line row.gox:189
 }
 
-//line row.gox:190
+//line row.gox:191
 func (r *row) confirm(hide func(ctx context.Context)) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line row.gox:192
+//line row.gox:193
 		label := r.thread.Name
 	if label == "" {
 		label = "Untitled"
@@ -417,23 +419,23 @@ func (r *row) confirm(hide func(ctx context.Context)) gox.Elem {
 
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line row.gox:197
+//line row.gox:198
 			__e = __c.Set("class", "kchat-form"); if __e != nil { return }
-//line row.gox:197
+//line row.gox:198
 			__e = __c.Set("role", "group"); if __e != nil { return }
-//line row.gox:197
+//line row.gox:198
 			__e = __c.Set("aria-label", "Delete chat"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line row.gox:198
+//line row.gox:199
 				__e = __c.Set("class", "kchat-form-text"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Text("Delete "); if __e != nil { return }
 				__e = __c.Init("b"); if __e != nil { return }
 				{
 					__e = __c.Submit(); if __e != nil { return }
-//line row.gox:198
+//line row.gox:199
 					__e = __c.Any(label); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
@@ -442,10 +444,10 @@ func (r *row) confirm(hide func(ctx context.Context)) gox.Elem {
 			__e = __c.Close(); if __e != nil { return }
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line row.gox:199
+//line row.gox:200
 				__e = __c.Set("class", "kchat-form-actions"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line row.gox:200
+//line row.gox:201
 				__e = (doors.AClick{
 				Scope: new(doors.ScopeBlocking),
 				On: func(ctx context.Context, rp doors.RequestPointer) bool {
@@ -457,16 +459,16 @@ func (r *row) confirm(hide func(ctx context.Context)) gox.Elem {
 					ctx := __c.Context(); _ = ctx
 					__e = __c.Init("button"); if __e != nil { return }
 					{
-//line row.gox:207
+//line row.gox:208
 						__e = __c.Set("type", "button"); if __e != nil { return }
-//line row.gox:207
+//line row.gox:208
 						__e = __c.Set("class", "kchat-btn kchat-btn_2nd"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 						__e = __c.Text("Cancel"); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
 				return })); if __e != nil { return }
-//line row.gox:208
+//line row.gox:209
 				__e = (doors.AClick{
 				Scope: new(doors.ScopeBlocking),
 				On: func(ctx context.Context, rp doors.RequestPointer) bool {
@@ -484,9 +486,9 @@ func (r *row) confirm(hide func(ctx context.Context)) gox.Elem {
 					ctx := __c.Context(); _ = ctx
 					__e = __c.Init("button"); if __e != nil { return }
 					{
-//line row.gox:221
+//line row.gox:222
 						__e = __c.Set("type", "button"); if __e != nil { return }
-//line row.gox:221
+//line row.gox:222
 						__e = __c.Set("class", "kchat-btn kchat-btn_del"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 						__e = __c.Text("Delete"); if __e != nil { return }
@@ -498,5 +500,5 @@ func (r *row) confirm(hide func(ctx context.Context)) gox.Elem {
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line row.gox:224
+//line row.gox:225
 }

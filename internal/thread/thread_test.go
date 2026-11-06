@@ -71,6 +71,7 @@ func probeLink(limit int, calls *atomic.Int64) *link {
 	m := probeModule{probeTool{calls}}
 	return &link{
 		backend:     common.NewBackend(ctx, nil, nil, nil, nil),
+		ctx:         ctx,
 		linkToolkit: toolkit.NewToolkit(ctx, func(context.Context) common.Module { return m }),
 	}
 }
@@ -115,6 +116,27 @@ func TestToolCallLimitAnswersEveryCallPastIt(t *testing.T) {
 		text, ok := r.Content[0].(api.ContentText)
 		if !ok || !strings.Contains(text.Text, strconv.Itoa(limit)) {
 			t.Fatalf("call %d past the limit: %#v does not name the limit", i, r.Content)
+		}
+	}
+}
+
+func TestDisposedLinkRunsNoMoreTools(t *testing.T) {
+	var calls atomic.Int64
+	l := probeLink(-1, &calls)
+	ctx, cancel := context.WithCancel(l.ctx)
+	l.ctx = ctx
+	cancel()
+	use := []api.ContentToolUse{
+		{ID: "a", Name: "probe__run", Input: json.RawMessage(`{}`)},
+		{ID: "b", Name: "probe__run", Input: json.RawMessage(`{}`)},
+	}
+	results := useProbe(t, l, use)
+	if got := calls.Load(); got != 0 {
+		t.Fatalf("the tool ran %d times after the link was disposed", got)
+	}
+	for _, u := range use {
+		if results[u.ID].Error == api.ToolOk {
+			t.Fatalf("call %s was answered ok after the link was disposed", u.ID)
 		}
 	}
 }
@@ -220,7 +242,7 @@ func TestToolRoundEndWipesScratch(t *testing.T) {
 	backend := common.NewBackend(ctx, messages, store, store, nil)
 	const id api.ThreadID = "scratch-round"
 	fs := filesystem.Open(id, store, store, api.FilesConfig{})
-	t.Cleanup(fs.Dispose)
+	t.Cleanup(func() { fs.Dispose() })
 	scratch, err := fs.TempDir()
 	if err != nil {
 		t.Fatalf("TempDir: %v", err)
@@ -312,7 +334,7 @@ func stubThread(t *testing.T, id api.ThreadID, p api.Provider, config api.Thread
 	messages := local.NewMessageStorage()
 	backend := common.NewBackend(ctx, messages, store, store, []common.Option{common.OptionProvider(p)})
 	fs := filesystem.Open(id, store, store, api.FilesConfig{})
-	t.Cleanup(fs.Dispose)
+	t.Cleanup(func() { fs.Dispose() })
 	linkCtx, linkCancel := context.WithCancel(ctx)
 	linkCancel()
 	th := &thread{id: id, ch: make(chan Command)}

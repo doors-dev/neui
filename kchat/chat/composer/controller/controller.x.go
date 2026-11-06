@@ -23,8 +23,8 @@ type InputState struct {
 
 const inputLimit = 256 * 1024
 
-func NewComposerController(thread api.ChatThread, input api.ChatInput, active bool, settled api.EventUsage, tasks []api.Task, compaction bool, ask *api.ChatAsk) ComposerController {
-	limit := inputLimit
+func NewComposerController(thread api.ChatThread, input api.ChatInput, active bool, settled api.EventUsage, tasks []api.Task, compaction bool, canCompact bool, ask *api.ChatAsk) ComposerController {
+	limit := min(thread.Config().InputBytes, inputLimit)
 	origin := doors.NewSourceEqual(state{
 		input: input.Input,
 		textBytes: len(input.Input.Text),
@@ -35,6 +35,7 @@ func NewComposerController(thread api.ChatThread, input api.ChatInput, active bo
 		settled: settled,
 		tasks: tasks,
 		compaction: compaction,
+		canCompact: canCompact,
 		ask: ask,
 	}, func(old, new state) bool {
 		if old.inputSeq != new.inputSeq {
@@ -55,7 +56,7 @@ func NewComposerController(thread api.ChatThread, input api.ChatInput, active bo
 		if old.settled != new.settled || old.unsettled != new.unsettled {
 			return false
 		}
-		if old.compaction != new.compaction {
+		if old.compaction != new.compaction || old.canCompact != new.canCompact {
 			return false
 		}
 		if !sameTasks(old.tasks, new.tasks) {
@@ -103,7 +104,7 @@ func NewComposerController(thread api.ChatThread, input api.ChatInput, active bo
 		return d.settled.Total() != 0
 	})
 	usage := doors.DeriveBeam(origin, func(d state) Context {
-		return Context{d.settled, d.compaction}
+		return Context{d.settled, d.compaction, d.canCompact}
 	})
 	hasTasks := doors.DeriveBeam(origin, func(d state) bool {
 		return len(d.tasks) != 0
@@ -201,6 +202,7 @@ type state struct {
 	reported int
 	tasks []api.Task
 	compaction bool
+	canCompact bool
 	ask *api.ChatAsk
 }
 
@@ -214,6 +216,7 @@ type Bar struct {
 type Context struct {
 	Usage api.EventUsage
 	Compaction bool
+	CanCompact bool
 }
 
 type ComposerController struct {
@@ -304,9 +307,10 @@ func (s ComposerController) UpdatePending(ctx context.Context, value bool) {
 	})
 }
 
-func (s ComposerController) UpdateCompaction(ctx context.Context, active bool, usage api.EventUsage) {
+func (s ComposerController) UpdateCompaction(ctx context.Context, active bool, usage api.EventUsage, canCompact bool) {
 	s.origin.Mutate(ctx, func(d state) state {
 		d.compaction = active
+		d.canCompact = canCompact
 		if usage.Total() != 0 {
 			d.settled = usage
 		}
@@ -325,6 +329,15 @@ func (s ComposerController) UpdateActive(ctx context.Context, value bool) {
 	})
 }
 
+func (s ComposerController) RoundStart(ctx context.Context, usage api.EventUsage, canCompact bool) {
+	s.origin.Mutate(ctx, func(d state) state {
+		d.active = true
+		d.settled = usage
+		d.canCompact = canCompact
+		return d
+	})
+}
+
 func (s ComposerController) UpdateUsage(ctx context.Context, usage api.EventUsage) {
 	s.origin.Mutate(ctx, func(d state) state {
 		if !d.active {
@@ -337,9 +350,10 @@ func (s ComposerController) UpdateUsage(ctx context.Context, usage api.EventUsag
 	})
 }
 
-func (s ComposerController) RoundDone(ctx context.Context, roundState api.RoundState, usage api.EventUsage) {
+func (s ComposerController) RoundDone(ctx context.Context, roundState api.RoundState, usage api.EventUsage, canCompact bool) {
 	s.origin.Mutate(ctx, func(d state) state {
 		d.reported = 0
+		d.canCompact = canCompact
 		if roundState == api.RoundOk {
 			d.settled = usage
 		}
@@ -542,12 +556,6 @@ func (s ComposerController) Model() api.Model {
 
 func (s ComposerController) Config() api.ThreadConfig {
 	return s.thread.Config()
-}
-
-func (s ComposerController) BindAttach(el func(enabled bool) gox.Elem) gox.Elem {
-	return s.pending.Bind(func(b bool) gox.Elem {
-		return el(!b)
-	})
 }
 
 func (s ComposerController) BindSend(el func(enabled bool) gox.Elem) gox.Elem {

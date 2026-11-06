@@ -241,6 +241,45 @@ func TestTableBadDate(t *testing.T) {
 	}
 }
 
+func TestTableRefusesEarlyDates(t *testing.T) {
+	fs, _ := newFSStore(t)
+	for _, v := range []string{"1899-12-31", "1899-12-31T12:00:00", "1850-06-01"} {
+		_, err := tableTool(threadCtx(fs), tableArg{Path: "d.xlsx", Sheet: "S", Columns: []columnSpec{{Header: "Day", Format: "date"}}, Rows: [][]any{{v}}})
+		if err == nil || !strings.Contains(err.Error(), "before 1900-01-01") {
+			t.Fatalf("%s: err = %v", v, err)
+		}
+	}
+	if _, err := tableTool(threadCtx(fs), tableArg{Path: "d.xlsx", Sheet: "S", Columns: []columnSpec{{Header: "Day", Format: "date"}}, Rows: [][]any{{"1900-01-01"}}}); err != nil {
+		t.Fatal(err)
+	}
+	f := excelize.NewFile()
+	on := true
+	if err := f.SetWorkbookProps(&excelize.WorkbookPropsOptions{Date1904: &on}); err != nil {
+		t.Fatal(err)
+	}
+	writeBook(t, fs, "e.xlsx", f)
+	_, err := tableTool(threadCtx(fs), tableArg{Path: "e.xlsx", Sheet: "Sheet1", Columns: []columnSpec{{Header: "Day", Format: "date"}}, Rows: [][]any{{"1903-12-31"}}})
+	if err == nil || !strings.Contains(err.Error(), "before 1904-01-01") {
+		t.Fatalf("1904 err = %v", err)
+	}
+}
+
+func TestTableCreatesXLSXOnly(t *testing.T) {
+	fs, _ := newFSStore(t)
+	for _, name := range []string{"r.csv", "r.xlsm", "report"} {
+		_, err := tableTool(threadCtx(fs), tableArg{Path: name, Sheet: "S", Columns: []columnSpec{{Header: "K"}}, Rows: [][]any{{"a"}}})
+		if err == nil || !strings.Contains(err.Error(), "does not end in .xlsx") {
+			t.Fatalf("%s: err = %v", name, err)
+		}
+		if _, err := fs.Stat(threadCtx(fs), name); err == nil {
+			t.Fatalf("%s was created", name)
+		}
+	}
+	if _, err := tableTool(threadCtx(fs), tableArg{Path: "R.XLSX", Sheet: "S", Columns: []columnSpec{{Header: "K"}}, Rows: [][]any{{"a"}}}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestTableFormulas(t *testing.T) {
 	fs, _ := newFSStore(t)
 	ctx := threadCtx(fs)
@@ -411,7 +450,7 @@ func TestTableParsesNumbers(t *testing.T) {
 	for _, bad := range []struct {
 		format string
 		value  any
-	}{{"number", "abc"}, {"number", "1,23"}, {"number", "$5"}, {"integer", "1e5"}, {"percent", "15 %%"}, {"currency", "€5"}, {"number", "-"}} {
+	}{{"number", "abc"}, {"number", "1,23"}, {"number", "$5"}, {"integer", "1e5"}, {"percent", "15 %%"}, {"currency", "€5"}, {"number", "-"}, {"number", "15%"}, {"integer", "15%"}, {"currency", "15%"}} {
 		_, err := tableTool(threadCtx(fs), tableArg{Path: "bad.xlsx", Sheet: "S", Columns: []columnSpec{{Header: "X", Format: bad.format}}, Rows: [][]any{{bad.value}}})
 		if err == nil || !strings.Contains(err.Error(), "not a number") {
 			t.Fatalf("%s %q: err = %v", bad.format, bad.value, err)

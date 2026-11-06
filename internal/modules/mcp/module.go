@@ -205,6 +205,7 @@ func (m *module) on(cmd command) {
 			w.reply(nil)
 		}
 		m.waiters = nil
+		m.touch()
 	case toolsCommand:
 		if m.seq != cmd.seq {
 			return
@@ -253,15 +254,15 @@ func (m *module) on(cmd command) {
 }
 
 func (m *module) touch() {
+	d := m.conf.IdleTimeout
+	if m.toolCalls == 0 {
+		d = min(1*time.Minute, d)
+	}
 	if m.idle == nil {
-		if m.toolCalls == 0 {
-			m.idle = time.NewTimer(min(1*time.Minute, m.conf.IdleTimeout))
-		} else {
-			m.idle = time.NewTimer(m.conf.IdleTimeout)
-		}
+		m.idle = time.NewTimer(d)
 		return
 	}
-	m.idle.Reset(m.conf.IdleTimeout)
+	m.idle.Reset(d)
 }
 
 func (m *module) buildModule(list []*mcp.Tool) tools.Module {
@@ -372,7 +373,7 @@ func (m *module) connect(delayed bool) {
 		return
 	}
 	m.seq += 1
-	m.connErrored = false
+	m.connErrored = delayed
 	seq := m.seq
 	ctx, cancel := context.WithCancel(context.Background())
 	m.cancelConnection = cancel
@@ -387,7 +388,7 @@ func (m *module) connect(delayed bool) {
 	retry:
 		attemptCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		changed := make(chan struct{}, 1)
-		s, err = connect(attemptCtx, m.conf.URL, m.conf.Headers, m.conf.Ping, func(session *mcp.ClientSession) {
+		s, err = connect(attemptCtx, m.conf.URL, m.conf.Headers, m.conf.Ping, func() {
 			select {
 			case changed <- struct{}{}:
 			default:

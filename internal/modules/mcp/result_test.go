@@ -18,7 +18,10 @@ import (
 	"neui.dev/internal/common"
 )
 
-type testThread struct{ model api.Model }
+type testThread struct {
+	model api.Model
+	files api.FilesConfig
+}
 
 func (testThread) ID() api.ThreadID { return "thread" }
 
@@ -32,8 +35,8 @@ func (testThread) Modules() iter.Seq[common.Module] {
 
 func (testThread) Config() api.ThreadConfig { return api.ThreadConfig{} }
 
-func (testThread) FilesConfig() api.FilesConfig {
-	return common.FilesConfigDefaults(api.FilesConfig{})
+func (t testThread) FilesConfig() api.FilesConfig {
+	return common.FilesConfigDefaults(t.files)
 }
 
 func (t testThread) Model() api.Model { return t.model }
@@ -176,5 +179,28 @@ func TestResultImageMimeFromBytes(t *testing.T) {
 	}
 	if _, ok := contents[1].(api.ContentText); !ok {
 		t.Fatalf("got %#v, want omitted note", contents[1])
+	}
+}
+
+func TestResultEmbeddedDocumentChecks(t *testing.T) {
+	ctx := context.WithValue(context.Background(), common.KeyController, common.Controller(testThread{files: api.FilesConfig{DocumentLimit: 16}}))
+	res := &mcp.CallToolResult{Content: []mcp.Content{
+		&mcp.EmbeddedResource{Resource: &mcp.ResourceContents{URI: "ok.pdf", MIMEType: "application/pdf", Blob: []byte("%PDF-1.7 small")}},
+		&mcp.EmbeddedResource{Resource: &mcp.ResourceContents{URI: "big.pdf", MIMEType: "application/pdf", Blob: []byte("%PDF-1.7 over the limit")}},
+		&mcp.EmbeddedResource{Resource: &mcp.ResourceContents{URI: "fake.pdf", MIMEType: "application/pdf", Blob: []byte("<html>")}},
+		&mcp.EmbeddedResource{Resource: &mcp.ResourceContents{URI: "fake.docx", MIMEType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", Blob: []byte("<html>")}},
+	}}
+	out := result(ctx, res, false).(blocks)
+	if _, ok := out[0].(api.ContentDocument); !ok {
+		t.Fatalf("block 0: got %T", out[0])
+	}
+	for i, c := range out[1:] {
+		if text, ok := c.(api.ContentText); !ok || !strings.Contains(text.Text, "omitted") {
+			t.Fatalf("block %d: got %#v", i+1, c)
+		}
+	}
+	out = result(context.Background(), res, false).(blocks)
+	if text, ok := out[0].(api.ContentText); !ok || !strings.Contains(text.Text, "omitted") {
+		t.Fatalf("no controller: got %#v", out[0])
 	}
 }

@@ -122,8 +122,8 @@ func TestStreamToolCallFragmentsInterleave(t *testing.T) {
 	)
 }
 
-// A whole call in one fragment, with the index left off. Absent reads as the
-// first call, which is what it is.
+// A whole call in one fragment, with the index left off. Fragments are
+// correlated by the index, so one without it fails the turn.
 func TestStreamToolCallWithoutIndex(t *testing.T) {
 	p := serve(t, stringHandler(
 		chunkFrame(openingFrame, ""),
@@ -135,7 +135,24 @@ func TestStreamToolCallWithoutIndex(t *testing.T) {
 	checkGrammar(t, events)
 	wantTrace(t, events,
 		"start chatcmpl-1 deepseek-v4-pro",
-		`tool 0 id="call_x" name="ping" args="{}"`,
+		"err network",
+	)
+}
+
+// Only the choice at index 0 is this turn. Another choice in the same frame,
+// its finish reason included, is ignored rather than folded in.
+func TestStreamReadsOnlyChoiceZero(t *testing.T) {
+	p := serve(t, stringHandler(
+		chunkFrame(openingFrame, ""),
+		frame(`{"id":"chatcmpl-1","choices":[{"index":1,"delta":{"content":"other"},"finish_reason":"length"},{"index":0,"delta":{"content":"mine"},"finish_reason":null}],"usage":null}`),
+		chunkFrame(`{}`, "stop"),
+		doneFrame,
+	))
+	events := collect(t, p, turn("hi"))
+	checkGrammar(t, events)
+	wantTrace(t, events,
+		"start chatcmpl-1 deepseek-v4-pro",
+		`text 0 "mine"`,
 		"ok turn",
 	)
 }
@@ -835,16 +852,11 @@ func TestStreamDisconnectBeforeFinishReason(t *testing.T) {
 }
 
 // The mirror image — a socket that dies after the finish reason — is
-// TestStreamDisconnectCarriesTheFinishReason, with the rest of the End
+// TestStreamDisconnectAfterTheFinishReasonFails, with the rest of the End
 // behaviour.
 
 // The sentinel with no finish_reason before it: the server said the stream was
-// over but never said why. Absent is not the same as unrecognized, and only a
-// named value nobody knows is an unknown, so nothing was cut and this is an
-// ordinary completion rather than a failure invented from a silence.
-//
-// The text block gets no close, as no block here ever does, and the terminal event
-// is what completes it.
+// over but never said why. The flow requires a reason, so the turn fails.
 func TestStreamDoneWithoutFinishReason(t *testing.T) {
 	p := serve(t, stringHandler(
 		chunkFrame(openingFrame, ""),
@@ -856,7 +868,7 @@ func TestStreamDoneWithoutFinishReason(t *testing.T) {
 	wantTrace(t, events,
 		"start chatcmpl-1 deepseek-v4-pro",
 		`text 0 "hello"`,
-		"ok turn",
+		"err network",
 	)
 }
 

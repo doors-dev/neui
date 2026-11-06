@@ -12,9 +12,17 @@ import (
 
 type fakeThread struct {
 	api.ChatThread
-	sent    []api.Input
-	rewound []api.Input
-	inputs  []api.Input
+	inputBytes int
+	sent       []api.Input
+	rewound    []api.Input
+	inputs     []api.Input
+}
+
+func (f *fakeThread) Config() api.ThreadConfig {
+	if f.inputBytes == 0 {
+		return api.ThreadConfig{InputBytes: inputLimit}
+	}
+	return api.ThreadConfig{InputBytes: f.inputBytes}
 }
 
 func (f *fakeThread) Send(ctx context.Context, input api.Input) error {
@@ -33,7 +41,7 @@ func (f *fakeThread) Input(ctx context.Context, input api.Input) error {
 }
 
 func newTestController(thread *fakeThread) ComposerController {
-	return NewComposerController(thread, api.ChatInput{}, false, api.EventUsage{}, nil, false, nil)
+	return NewComposerController(thread, api.ChatInput{}, false, api.EventUsage{}, nil, false, false, nil)
 }
 
 func TestSendRefusedWhileUploading(t *testing.T) {
@@ -213,8 +221,56 @@ func TestVisibleInputResetsSizes(t *testing.T) {
 		t.Fatalf("attachment after a flushed near-limit draft: want the draft saved")
 	}
 
-	restored := NewComposerController(thread, api.ChatInput{Input: api.Input{Text: strings.Repeat("d", inputLimit+1)}}, false, api.EventUsage{}, nil, false, nil)
+	restored := NewComposerController(thread, api.ChatInput{Input: api.Input{Text: strings.Repeat("d", inputLimit+1)}}, false, api.EventUsage{}, nil, false, false, nil)
 	if restored.ExcessBytes().Get() == 0 {
 		t.Fatalf("restored over-limit draft: want excess bytes")
+	}
+}
+
+func TestLimitFollowsThreadInputBytes(t *testing.T) {
+	ctx := context.Background()
+	thread := &fakeThread{inputBytes: 1000}
+	c := newTestController(thread)
+	c.UpdateInputText(ctx, strings.Repeat("a", 1001))
+	if got := c.ExcessBytes().Get(); got != 1 {
+		t.Fatalf("1001 bytes over a 1000-byte thread limit: want 1 excess byte, got %d", got)
+	}
+	c.Send(ctx)
+	if len(thread.sent) != 0 {
+		t.Fatalf("over the thread limit: want no send, got %d", len(thread.sent))
+	}
+
+	wide := &fakeThread{inputBytes: 4 * inputLimit}
+	c = newTestController(wide)
+	c.UpdateInputText(ctx, strings.Repeat("a", inputLimit+1))
+	if got := c.ExcessBytes().Get(); got != 1 {
+		t.Fatalf("thread limit above the UI ceiling: want the ceiling to apply, got %d excess bytes", got)
+	}
+}
+
+func TestCanCompactFollowsEvents(t *testing.T) {
+	ctx := context.Background()
+	thread := &fakeThread{}
+	c := NewComposerController(thread, api.ChatInput{}, false, api.EventUsage{}, nil, false, true, nil)
+	if !c.Context().Get().CanCompact {
+		t.Fatalf("constructor: want CanCompact")
+	}
+	c.UpdateCompaction(ctx, true, api.EventUsage{}, false)
+	if c.Context().Get().CanCompact {
+		t.Fatalf("compaction started: want no CanCompact")
+	}
+	c.UpdateCompaction(ctx, false, api.EventUsage{Input: 10}, true)
+	if !c.Context().Get().CanCompact {
+		t.Fatalf("compaction failed: want CanCompact")
+	}
+	c.RoundDone(ctx, api.RoundError, api.EventUsage{}, false)
+	if c.Context().Get().CanCompact {
+		t.Fatalf("round end: want CanCompact from the event")
+	}
+	usage := api.EventUsage{Input: 7}
+	c.RoundStart(ctx, usage, true)
+	got := c.Context().Get()
+	if !got.CanCompact || got.Usage != usage || !c.Active().Get() {
+		t.Fatalf("round start: want active, CanCompact and the event usage, got %+v active=%v", got, c.Active().Get())
 	}
 }

@@ -87,7 +87,7 @@ func (s threadWait) on(cmd any) {
 			return
 		}
 		cmd.NoMessage()
-		s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundStart{Round: round, Truncate: api.NoRoundID}))
+		s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundStart{Round: round, Truncate: api.NoRoundID, Usage: s.thread.replay.Usage(), CanCompact: s.thread.canCompact()}))
 	case commandTaskResult:
 		if s.thread.link == nil || s.thread.link.linkTasks != cmd.linkTasks {
 			return
@@ -105,7 +105,7 @@ func (s threadWait) on(cmd any) {
 			s.thread.criticalErr(nil, err)
 			return
 		}
-		s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundStart{Round: round, Truncate: api.NoRoundID}))
+		s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundStart{Round: round, Truncate: api.NoRoundID, Usage: s.thread.replay.Usage(), CanCompact: s.thread.canCompact()}))
 	case commandTaskNotify:
 		if s.thread.link == nil || s.thread.link.linkTasks != cmd.linkTasks {
 			return
@@ -126,7 +126,7 @@ func (s threadWait) on(cmd any) {
 			s.thread.criticalErr(nil, err)
 			return
 		}
-		s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundStart{Round: round, Truncate: api.NoRoundID}))
+		s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundStart{Round: round, Truncate: api.NoRoundID, Usage: s.thread.replay.Usage(), CanCompact: s.thread.canCompact()}))
 	case commandSend:
 		if s.thread.link != cmd.link {
 			cmd.Err(api.ErrUnlinked)
@@ -153,7 +153,7 @@ func (s threadWait) on(cmd any) {
 			s.thread.criticalErr(cmd.intoMessage(), err)
 			return
 		}
-		s.thread.link.send(newMessageEvent(cmd.intoMessage(), api.ChatEventRoundStart{Round: round, Truncate: api.NoRoundID}))
+		s.thread.link.send(newMessageEvent(cmd.intoMessage(), api.ChatEventRoundStart{Round: round, Truncate: api.NoRoundID, Usage: s.thread.replay.Usage(), CanCompact: s.thread.canCompact()}))
 	case commandRewind:
 		if cmd.link != s.thread.link {
 			cmd.Err(api.ErrUnlinked)
@@ -177,7 +177,7 @@ func (s threadWait) on(cmd any) {
 		wasPending := s.thread.pending
 		s.thread.pending = false
 		if s.thread.compaction.cut(cmd.round) {
-			s.thread.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}}))
+			s.thread.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}, CanCompact: s.thread.canCompact()}))
 		}
 		if err != nil {
 			s.thread.criticalErr(cmd.intoMessage(), err)
@@ -194,7 +194,7 @@ func (s threadWait) on(cmd any) {
 		if wasPending {
 			s.thread.link.send(newMessageEvent(nil, api.ChatEventInputPending{Pending: false}))
 		}
-		s.thread.link.send(newMessageEvent(cmd.intoMessage(), api.ChatEventRoundStart{Round: round, Truncate: cmd.round}))
+		s.thread.link.send(newMessageEvent(cmd.intoMessage(), api.ChatEventRoundStart{Round: round, Truncate: cmd.round, Usage: s.thread.replay.Usage(), CanCompact: s.thread.canCompact()}))
 	case commandRetry:
 		if s.thread.link != cmd.link {
 			cmd.Err(api.ErrUnlinked)
@@ -210,7 +210,7 @@ func (s threadWait) on(cmd any) {
 			return
 		}
 		s.thread.switchStateRoundReplay(round, replay)
-		s.thread.link.send(newMessageEvent(cmd.intoMessage(), api.ChatEventRoundStart{Round: round, Truncate: truncate}))
+		s.thread.link.send(newMessageEvent(cmd.intoMessage(), api.ChatEventRoundStart{Round: round, Truncate: truncate, Usage: s.thread.replay.Usage(), CanCompact: s.thread.canCompact()}))
 	default:
 		s.thread.on(cmd)
 	}

@@ -560,11 +560,9 @@ func TestStreamSequences(t *testing.T) {
 			},
 		},
 		{
-			// A content_block with no type names nothing: the field is absent
-			// here, and null reads the same. No block is kept for it, so its
-			// delta fills nothing, its stop closes nothing, and the text after it
-			// is the first block of the turn.
-			name: "a block that names no type is no block",
+			// A content_block_start with no content_block is a broken frame,
+			// and only a reply that arrived whole is kept.
+			name: "a block that names no type fails the turn",
 			body: sse(
 				"message_start", fixStart,
 				"content_block_start", `{"type":"content_block_start","index":0}`,
@@ -579,10 +577,7 @@ func TestStreamSequences(t *testing.T) {
 			want: []string{
 				"start msg_01 claude-opus-5",
 				"usage in=25 out=1 rsn=0 cr=0 cw=0",
-				`text 0 "done"`,
-				"close 0",
-				"usage in=25 out=4 rsn=0 cr=0 cw=0",
-				"ok turn",
+				"err network",
 			},
 		},
 		{
@@ -649,9 +644,8 @@ func TestStreamSequences(t *testing.T) {
 		},
 		{
 			// message_stop with no message_delta before it, so no stop value was
-			// ever named. Absent is not unrecognized: this API ending a message
-			// without saying why is an ordinary completion and the turn is kept.
-			name: "a turn that ends without naming a reason is a completion",
+			// ever named. The flow requires one, so the turn fails.
+			name: "a turn that ends without naming a reason fails",
 			body: sse(
 				"message_start", fixStart,
 				"content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`,
@@ -664,7 +658,7 @@ func TestStreamSequences(t *testing.T) {
 				"usage in=25 out=1 rsn=0 cr=0 cw=0",
 				`text 0 "all of it"`,
 				"close 0",
-				"ok turn",
+				"err network",
 			},
 		},
 		{
@@ -1120,6 +1114,58 @@ func TestMalformedFrame(t *testing.T) {
 	}
 }
 
+// TestBrokenKnownFramesFail pins the strict half of decoding: a frame of a known
+// type that breaks the flow fails the turn with CodeNetwork rather than being
+// salvaged.
+func TestBrokenKnownFramesFail(t *testing.T) {
+	text0 := `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`
+	stop := `{"type":"message_delta","delta":{"stop_reason":"end_turn"}}`
+	for name, frames := range map[string][]string{
+		"no type":                      {"message_start", `{"message":{"id":"m"}}`},
+		"start without message":        {"message_start", `{"type":"message_start"}`},
+		"block start without index":    {"content_block_start", `{"type":"content_block_start","content_block":{"type":"text"}}`},
+		"block start with null block":  {"content_block_start", `{"type":"content_block_start","index":0,"content_block":null}`},
+		"second start for open index":  {"content_block_start", text0, "content_block_start", text0},
+		"tool without id":              {"content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","name":"f","input":{}}}`},
+		"delta without index":          {"content_block_start", text0, "content_block_delta", `{"type":"content_block_delta","delta":{"type":"text_delta","text":"x"}}`},
+		"delta for no block":           {"content_block_delta", `{"type":"content_block_delta","index":3,"delta":{"type":"text_delta","text":"x"}}`},
+		"text delta on a tool":         {"content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"t","name":"f","input":{}}}`, "content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"x"}}`},
+		"json delta on text":           {"content_block_start", text0, "content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{"}}`},
+		"thinking delta on text":       {"content_block_start", text0, "content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"x"}}`},
+		"stop without index":           {"content_block_start", text0, "content_block_stop", `{"type":"content_block_stop"}`},
+		"stop for no block":            {"content_block_stop", `{"type":"content_block_stop","index":2}`},
+		"message stop with open block": {"content_block_start", text0, "message_delta", stop, "message_stop", fixStopFrame},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := collect(t, testProvider(t, sseServer(sse(append([]string{"message_start", fixStart}, frames...)...))), hello())
+			checkGrammar(t, got)
+			if last := render(got[len(got)-1]); last != "err network" {
+				t.Fatalf("last event %s, want err network\n%s", last, strings.Join(renderAll(got), "\n"))
+			}
+		})
+	}
+}
+
+// TestUnknownFramesAreIgnored is the forward half: a frame type this adapter
+// does not know is not decoded past its type, so fields that reuse a known name
+// with another shape do not end the turn, and a text delta on an opaque block is
+// dropped rather than failing.
+func TestUnknownFramesAreIgnored(t *testing.T) {
+	got := collect(t, testProvider(t, sseServer(sse(
+		"message_start", fixStart,
+		"future_frame", `{"type":"future_frame","index":"x","delta":"scalar","message":7}`,
+		"content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"connector_text","text":""}}`,
+		"content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"x"}}`,
+		"content_block_stop", `{"type":"content_block_stop","index":0}`,
+		"message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn"}}`,
+		"message_stop", fixStopFrame,
+	))), hello())
+	checkGrammar(t, got)
+	if last := render(got[len(got)-1]); last != "ok turn" {
+		t.Fatalf("last event %s, want ok turn\n%s", last, strings.Join(renderAll(got), "\n"))
+	}
+}
+
 func TestUnreachableHost(t *testing.T) {
 	p := mustNew(t, Conf{Model: api.Model{Name: testModel}}, WithAPIKey("k"), WithBaseURL("http://127.0.0.1:1"))
 	got := collect(t, p, hello())
@@ -1146,16 +1192,14 @@ func TestEncodeFailureIsATerminalEvent(t *testing.T) {
 // whether the turn is stored, so a table that pinned only the code would be
 // pinning half of the answer.
 //
-// The empty value and something_new are the two rows that carry the rule. An
-// absent stop is this API not saying why a message ended, which is an ordinary
-// completion; a named value nobody knows is unclassified and never rounded to
-// the nearest completion.
+// something_new is the row that carries the rule: a named value nobody knows is
+// unclassified and never rounded to the nearest completion. An absent stop never
+// reaches stopEvent; message_stop fails the turn first.
 func TestStopValues(t *testing.T) {
 	for native, want := range map[string]string{
 		"end_turn":                      "ok turn",
 		"stop_sequence":                 "ok turn",
 		"tool_use":                      "ok turn",
-		"":                              "ok turn",
 		"pause_turn":                    "ok turn",
 		"max_tokens":                    "err capped",
 		"model_context_window_exceeded": "err context_length",

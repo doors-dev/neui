@@ -103,7 +103,7 @@ func (s *threadRound) on(cmd any) {
 		if wasPending {
 			s.thread.link.send(newMessageEvent(nil, api.ChatEventInputPending{Pending: false}))
 		}
-		s.thread.link.send(newMessageEvent(cmd.intoMessage(), api.ChatEventRoundEnd{Round: s.round.ID, State: api.RoundAbort, Error: "", Usage: usage, Final: true}))
+		s.thread.link.send(newMessageEvent(cmd.intoMessage(), api.ChatEventRoundEnd{Round: s.round.ID, State: api.RoundAbort, Error: "", Usage: usage, Final: true, CanCompact: s.thread.canCompact()}))
 		s.thread.applyHeldCompaction()
 	case commandRewind:
 		if cmd.link != s.thread.link {
@@ -129,7 +129,7 @@ func (s *threadRound) on(cmd any) {
 		s.thread.pending = false
 		s.cancel(api.ErrCanceledByUser)
 		if s.thread.compaction.cut(cmd.round) {
-			s.thread.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}}))
+			s.thread.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}, CanCompact: s.thread.canCompact()}))
 		}
 		if err != nil {
 			s.thread.criticalErr(cmd.intoMessage(), err)
@@ -146,7 +146,7 @@ func (s *threadRound) on(cmd any) {
 		if wasPending {
 			s.thread.link.send(newMessageEvent(nil, api.ChatEventInputPending{Pending: false}))
 		}
-		s.thread.link.send(newMessageEvent(cmd.intoMessage(), api.ChatEventRoundStart{Round: round, Truncate: cmd.round}))
+		s.thread.link.send(newMessageEvent(cmd.intoMessage(), api.ChatEventRoundStart{Round: round, Truncate: cmd.round, Usage: s.thread.replay.Usage(), CanCompact: s.thread.canCompact()}))
 	case commandApplyCompaction:
 		if cmd.seq != s.thread.compaction.seq {
 			return
@@ -193,7 +193,7 @@ func (s *threadRound) ok(code api.OkCode, content api.Indexed[api.Content], usag
 	}
 	toolCalls := filterTools(content)
 	if len(toolCalls) != 0 {
-		s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundEnd{Round: origin, State: api.RoundOk, Error: "", Usage: usage, Final: false}))
+		s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundEnd{Round: origin, State: api.RoundOk, Error: "", Usage: usage, Final: false, CanCompact: s.thread.canCompact()}))
 		s.thread.applyHeldCompaction()
 		if s.thread.replay == nil {
 			return
@@ -204,7 +204,7 @@ func (s *threadRound) ok(code api.OkCode, content api.Indexed[api.Content], usag
 		s.thread.switchStateTools(round, toolCalls)
 		return
 	}
-	s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundEnd{Round: origin, State: api.RoundOk, Error: "", Usage: usage, Final: !s.thread.replay.IsPending()}))
+	s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundEnd{Round: origin, State: api.RoundOk, Error: "", Usage: usage, Final: !s.thread.replay.IsPending(), CanCompact: s.thread.canCompact()}))
 	s.thread.applyHeldCompaction()
 	if s.thread.replay == nil {
 		return
@@ -225,7 +225,7 @@ func (s *threadRound) ok(code api.OkCode, content api.Indexed[api.Content], usag
 		s.thread.criticalErr(nil, err)
 		return
 	}
-	s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundStart{Round: round, Truncate: api.NoRoundID}))
+	s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundStart{Round: round, Truncate: api.NoRoundID, Usage: s.thread.replay.Usage(), CanCompact: s.thread.canCompact()}))
 }
 
 func (s *threadRound) err(code api.ErrCode, cause error, content api.Indexed[api.Content], usage api.EventUsage) {
@@ -242,14 +242,14 @@ func (s *threadRound) err(code api.ErrCode, cause error, content api.Indexed[api
 			s.thread.criticalErr(nil, err)
 			return
 		}
-		s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundEnd{Round: s.round.ID, State: api.RoundError, Error: string(code), Usage: usage, Final: true}))
+		s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundEnd{Round: s.round.ID, State: api.RoundError, Error: string(code), Usage: usage, Final: true, CanCompact: s.thread.canCompact()}))
 	case api.CodeInvalid:
 		doors.Logger(s.thread.link.backend.Context()).Error("thread: turn failed", "thread", s.thread.id, "code", code, "err", cause)
 		if err := s.thread.replay.RoundReject(code, usage, content); err != nil {
 			s.thread.criticalErr(nil, err)
 			return
 		}
-		s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundEnd{Round: s.round.ID, State: api.RoundError, Error: string(code), Usage: usage, Final: true}))
+		s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundEnd{Round: s.round.ID, State: api.RoundError, Error: string(code), Usage: usage, Final: true, CanCompact: s.thread.canCompact()}))
 	case api.CodeContextLength:
 		if held := s.thread.compaction.held; held != nil {
 			s.thread.compaction.held = nil
@@ -267,7 +267,7 @@ func (s *threadRound) err(code api.ErrCode, cause error, content api.Indexed[api
 			s.thread.criticalErr(nil, err)
 			return
 		}
-		s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundEnd{Round: s.round.ID, State: api.RoundError, Error: string(code), Usage: usage, Final: true}))
+		s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundEnd{Round: s.round.ID, State: api.RoundError, Error: string(code), Usage: usage, Final: true, CanCompact: s.thread.canCompact()}))
 	case api.CodeTooLarge:
 		if !errors.Is(cause, api.ErrMeasuredTooLarge) && s.thread.replay.Tighten() {
 			round, truncate, messages, err := s.thread.replay.Retry()
@@ -276,20 +276,20 @@ func (s *threadRound) err(code api.ErrCode, cause error, content api.Indexed[api
 				return
 			}
 			s.thread.switchStateRoundReplay(round, messages)
-			s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundStart{Round: round, Truncate: truncate}))
+			s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundStart{Round: round, Truncate: truncate, Usage: s.thread.replay.Usage(), CanCompact: s.thread.canCompact()}))
 			return
 		}
 		if err := s.thread.replay.RoundReject(code, usage, content); err != nil {
 			s.thread.criticalErr(nil, err)
 			return
 		}
-		s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundEnd{Round: s.round.ID, State: api.RoundError, Error: string(code), Usage: usage, Final: true}))
+		s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundEnd{Round: s.round.ID, State: api.RoundError, Error: string(code), Usage: usage, Final: true, CanCompact: s.thread.canCompact()}))
 	case api.CodeRefused:
 		if err := s.thread.replay.RoundRefuse(usage, content); err != nil {
 			s.thread.criticalErr(nil, err)
 			return
 		}
-		s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundEnd{Round: s.round.ID, State: api.RoundRefuse, Error: "", Usage: usage, Final: true}))
+		s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundEnd{Round: s.round.ID, State: api.RoundRefuse, Error: "", Usage: usage, Final: true, CanCompact: s.thread.canCompact()}))
 	default:
 		panic("unknown errror code")
 	}

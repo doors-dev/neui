@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -558,7 +559,7 @@ func TestHeadersNotSentAcrossRedirect(t *testing.T) {
 	t.Cleanup(origin.Close)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	s, err := connect(ctx, origin.URL, map[string]string{"Authorization": "Bearer secret", "X-Secret": "x"}, time.Minute, func(*mcp.ClientSession) {})
+	s, err := connect(ctx, origin.URL, map[string]string{"Authorization": "Bearer secret", "X-Secret": "x"}, time.Minute, func() {})
 	if err == nil {
 		s.Close()
 	}
@@ -571,4 +572,47 @@ func TestHeadersNotSentAcrossRedirect(t *testing.T) {
 	if leaked.Load() != 0 {
 		t.Fatal("configured headers sent to the redirect target")
 	}
+}
+
+func TestFailingConnectionStopsRetryingWhenIdle(t *testing.T) {
+	var attempts atomic.Int64
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts.Add(1)
+		http.Error(w, "down", http.StatusInternalServerError)
+	}))
+	t.Cleanup(ts.Close)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	Module(Config{Name: "down", URL: ts.URL, IdleTimeout: 200 * time.Millisecond, Ping: time.Second})(ctx)
+	if !waitFor(5*time.Second, func() bool { return attempts.Load() > 0 }) {
+		t.Fatal("never connected")
+	}
+	time.Sleep(500 * time.Millisecond)
+	seen := attempts.Load()
+	time.Sleep(3 * time.Second)
+	if got := attempts.Load(); got != seen {
+		t.Fatalf("retried after idle: %d requests, then %d", seen, got)
+	}
+}
+
+func TestIdleBeforeAnyCallStaysShortOnReset(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		m := &module{conf: Config{IdleTimeout: 10 * time.Minute}}
+		m.idle = time.NewTimer(time.Hour)
+		m.touch()
+		time.Sleep(time.Minute + time.Second)
+		select {
+		case <-m.idle.C:
+		default:
+			t.Fatal("idle reset to the full timeout before any call")
+		}
+		m.toolCalls = 1
+		m.touch()
+		time.Sleep(time.Minute + time.Second)
+		select {
+		case <-m.idle.C:
+			t.Fatal("idle shorter than IdleTimeout after a call")
+		default:
+		}
+	})
 }

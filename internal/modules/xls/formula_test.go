@@ -2,7 +2,6 @@ package xls
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
 
@@ -263,75 +262,5 @@ func TestTotalRefusesInsideAutoFilter(t *testing.T) {
 	_, err := totalTool(threadCtx(fs), totalArg{Path: "book.xlsx", Sheet: "Sheet1", Range: "A1:B3", Aggs: []aggSpec{{Column: "P", Fn: "sum"}}})
 	if err == nil || !strings.Contains(err.Error(), "autofilter") {
 		t.Fatalf("err = %v", err)
-	}
-}
-
-func TestCheck(t *testing.T) {
-	fs, _ := newFSStore(t)
-	buildBook(t, fs, "book.xlsx")
-	ctx := threadCtx(fs)
-	res, err := checkTool(ctx, checkArg{Path: "book.xlsx"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Formulas != 1 || len(res.Errors) != 0 || len(res.Uncalculated) != 0 || res.Skipped != 0 {
-		t.Fatalf("clean book: %+v", res)
-	}
-	if _, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "E2", Rows: [][]any{{"=B{row}/0", "=NOPEFN(B{row})", "=F{row}*2"}}, Repeat: 3}); err != nil {
-		t.Fatal(err)
-	}
-	res, err = checkTool(ctx, checkArg{Path: "book.xlsx"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Formulas != 4 || res.Skipped != 6 {
-		t.Fatalf("formulas = %d, skipped = %d", res.Formulas, res.Skipped)
-	}
-	if len(res.Uncalculated) != 1 || res.Uncalculated[0] != "NOPEFN" {
-		t.Fatalf("uncalculated = %v", res.Uncalculated)
-	}
-	if len(res.Errors) != 3 || res.Errors[0].Cell != "'Data'!E2" || !strings.Contains(res.Errors[0].Error, "DIV/0") {
-		t.Fatalf("errors = %+v", res.Errors)
-	}
-	if res.Truncated {
-		t.Fatal("truncated")
-	}
-}
-
-func TestCheckStructuredRef(t *testing.T) {
-	fs, _ := newFSStore(t)
-	salesTable(t, fs)
-	ctx := threadCtx(fs)
-	if _, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "E1", Rows: [][]any{{"=SUBTOTAL(109,T[Price])"}}}); err != nil {
-		t.Fatal(err)
-	}
-	res, err := checkTool(ctx, checkArg{Path: "book.xlsx"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Formulas != 0 || res.Skipped != 1 || len(res.Uncalculated) != 1 || !strings.Contains(res.Uncalculated[0], "Table[Column]") || len(res.Errors) != 0 {
-		t.Fatalf("res = %+v", res)
-	}
-}
-
-func TestCheckCaps(t *testing.T) {
-	fs, _ := newFSStore(t)
-	buildBook(t, fs, "book.xlsx")
-	ctx := threadCtx(fs)
-	if _, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "E2", Rows: [][]any{{"=1/0"}}, Repeat: 3}); err != nil {
-		t.Fatal(err)
-	}
-	low := context.WithValue(ctx, configKey{}, Config{MaxReadRows: 2})
-	res, err := checkTool(low, checkArg{Path: "book.xlsx"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !res.Truncated || len(res.Errors) != 2 {
-		t.Fatalf("res = %+v", res)
-	}
-	canceled, cancel := context.WithCancel(ctx)
-	cancel()
-	if _, err := checkTool(canceled, checkArg{Path: "book.xlsx"}); !errors.Is(err, context.Canceled) {
-		t.Fatalf("canceled err = %v", err)
 	}
 }

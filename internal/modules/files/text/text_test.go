@@ -23,7 +23,7 @@ func newFS(t *testing.T) filesystem.FS {
 	}
 	t.Cleanup(func() { store.Remove() })
 	fs := filesystem.Open("thread", store, store, api.FilesConfig{})
-	t.Cleanup(fs.Dispose)
+	t.Cleanup(func() { fs.Dispose() })
 	return fs
 }
 
@@ -454,7 +454,7 @@ func TestWriteToAnUploadIsReadOnly(t *testing.T) {
 	}
 	t.Cleanup(func() { store.Remove() })
 	fs := filesystem.Open("thread", store, store, api.FilesConfig{})
-	t.Cleanup(fs.Dispose)
+	t.Cleanup(func() { fs.Dispose() })
 	if _, err := store.FilePut(context.Background(), "thread", api.OriginUser, "up.txt", "text/plain", strings.NewReader("a\r\n"), false); err != nil {
 		t.Fatal(err)
 	}
@@ -463,5 +463,83 @@ func TestWriteToAnUploadIsReadOnly(t *testing.T) {
 	}
 	if _, err := appendTool(threadCtx(fs), writeArg{Path: "user_uploads/up.txt", Content: "b\n"}); !errors.Is(err, api.ErrReadOnly) {
 		t.Fatalf("append: %v", err)
+	}
+}
+
+func TestFailedRewriteKeepsTheOriginal(t *testing.T) {
+	store, err := local.NewFileStorage("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Remove() })
+	fs := filesystem.Open("thread", store, store, api.FilesConfig{MaxBytes: 30})
+	t.Cleanup(func() { fs.Dispose() })
+	ctx := threadCtx(fs)
+	raw(t, fs, "a.txt", "0123456789\n")
+	if _, err := editTool(ctx, editArg{Path: "a.txt", Old: "0123456789", New: strings.Repeat("x", 25)}); !errors.Is(err, api.ErrQuota) {
+		t.Fatalf("edit: %v", err)
+	}
+	if _, err := writeTool(ctx, writeArg{Path: "a.txt", Content: strings.Repeat("y", 25)}); !errors.Is(err, api.ErrQuota) {
+		t.Fatalf("write: %v", err)
+	}
+	if got := content(t, fs, "a.txt"); got != "0123456789\n" {
+		t.Fatalf("got %q", got)
+	}
+	entries, err := fs.ReadDir(ctx, ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if !e.Dir && e.Name != "a.txt" {
+			t.Fatalf("left behind %q", e.Name)
+		}
+	}
+	if _, err := editTool(ctx, editArg{Path: "a.txt", Old: "0123", New: "abcd"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := content(t, fs, "a.txt"); got != "abcd456789\n" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestConcurrentEditsOnOnePathSerialize(t *testing.T) {
+	fs := newFS(t)
+	ctx := threadCtx(fs)
+	raw(t, fs, "a.txt", "end\n")
+	const n = 20
+	errs := make(chan error, n)
+	for range n {
+		go func() {
+			_, err := insertTool(ctx, insertArg{Path: "a.txt", Line: 0, Text: "line\n"})
+			errs <- err
+		}()
+	}
+	for range n {
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := strings.Count(content(t, fs, "a.txt"), "line\n"); got != n {
+		t.Fatalf("got %d lines, want %d", got, n)
+	}
+}
+
+func TestEditOfAnUploadIsReadOnlyBeforeReading(t *testing.T) {
+	store, err := local.NewFileStorage("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Remove() })
+	fs := filesystem.Open("thread", store, store, api.FilesConfig{})
+	t.Cleanup(func() { fs.Dispose() })
+	if _, err := store.FilePut(context.Background(), "thread", api.OriginUser, "up.txt", "text/plain", strings.NewReader("a long upload\n"), false); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.WithValue(context.Background(), common.KeyController, testThread{fs: fs, files: api.FilesConfig{EditLimit: 4}})
+	if _, err := editTool(ctx, editArg{Path: "user_uploads/up.txt", Old: "long", New: "short"}); !errors.Is(err, api.ErrReadOnly) {
+		t.Fatalf("edit: %v", err)
+	}
+	if _, err := insertTool(ctx, insertArg{Path: "user_uploads/up.txt", Text: "x\n"}); !errors.Is(err, api.ErrReadOnly) {
+		t.Fatalf("insert: %v", err)
 	}
 }

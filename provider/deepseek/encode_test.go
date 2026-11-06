@@ -599,9 +599,10 @@ func TestEncodeToolChoice(t *testing.T) {
 	}
 }
 
-// DeepSeek answers a forced choice in thinking mode with a 400, so it is
-// refused here with a sentence saying how to get one. Choices that force
-// nothing still go out.
+// DeepSeek answers a forced choice in thinking mode with a 400, so on a
+// declared model it is refused here with a sentence saying how to get one.
+// Choices that force nothing still go out, and a model not declared here is sent
+// the forced choice as it is.
 func TestEncodeForcedToolChoiceInThinkingMode(t *testing.T) {
 	p := mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k"))
 	for _, choice := range []api.ToolChoice{api.ToolChoiceAny, "get_weather"} {
@@ -621,6 +622,10 @@ func TestEncodeForcedToolChoiceInThinkingMode(t *testing.T) {
 	}); !strings.Contains(err.Error(), "WithEffort(EffortNone)") {
 		t.Fatalf("error %q", err)
 	}
+	encodeBody(t, mustNew(t, Conf{Model: api.Model{Name: "deepseek-v5"}}, WithAPIKey("k")), api.Request{
+		ToolChoice: api.ToolChoiceAny,
+		Messages:   []api.Message{{Role: api.RoleUser, Content: text("hi")}},
+	})
 	for _, choice := range []api.ToolChoice{"", api.ToolChoiceAuto, api.ToolChoiceNone} {
 		t.Run(string(choice), func(t *testing.T) {
 			encodeBody(t, p, api.Request{

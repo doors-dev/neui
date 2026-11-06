@@ -6,8 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
+	"path"
 	"regexp"
 	"strings"
+	"sync"
 
 	"neui.dev/api"
 	"neui.dev/internal/common"
@@ -21,6 +24,16 @@ const replaceDesc = `Replace text matching an RE2 regular expression. Without al
 const insertDesc = `Insert text at a line position; 0 is the top of the file, N goes after line N from the read tool.`
 
 const bom = "\ufeff"
+
+type pathLock struct {
+	mu   sync.Mutex
+	refs int
+}
+
+var (
+	locksMu sync.Mutex
+	locks   = map[string]*pathLock{}
+)
 
 func Register(m tools.Module) {
 	add(m, "write", writeDesc, writeTool)
@@ -70,8 +83,38 @@ type insertArg struct {
 	Text string `json:"text" required:"true"`
 }
 
+func lock(fs api.FS, name string) (func(), error) {
+	tmp, err := fs.TempDir()
+	if err != nil {
+		return nil, err
+	}
+	key := tmp + "\x00" + path.Clean(name)
+	locksMu.Lock()
+	l := locks[key]
+	if l == nil {
+		l = &pathLock{}
+		locks[key] = l
+	}
+	l.refs++
+	locksMu.Unlock()
+	l.mu.Lock()
+	return func() {
+		l.mu.Unlock()
+		locksMu.Lock()
+		if l.refs--; l.refs == 0 {
+			delete(locks, key)
+		}
+		locksMu.Unlock()
+	}, nil
+}
+
 func writeTool(ctx context.Context, arg writeArg) (writeResult, error) {
 	fs := common.GetController(ctx).FS()
+	unlock, err := lock(fs, arg.Path)
+	if err != nil {
+		return writeResult{}, err
+	}
+	defer unlock()
 	s, exists, err := existingStyle(ctx, fs, arg.Path)
 	if err != nil {
 		return writeResult{}, err
@@ -82,11 +125,16 @@ func writeTool(ctx context.Context, arg writeArg) (writeResult, error) {
 	case s.bom && !strings.HasPrefix(arg.Content, bom):
 		arg.Content = bom + arg.Content
 	}
-	return put(ctx, fs, fs.Create, arg)
+	return put(ctx, fs, arg, true)
 }
 
 func appendTool(ctx context.Context, arg writeArg) (writeResult, error) {
 	fs := common.GetController(ctx).FS()
+	unlock, err := lock(fs, arg.Path)
+	if err != nil {
+		return writeResult{}, err
+	}
+	defer unlock()
 	s, exists, err := existingStyle(ctx, fs, arg.Path)
 	if err != nil {
 		return writeResult{}, err
@@ -97,11 +145,19 @@ func appendTool(ctx context.Context, arg writeArg) (writeResult, error) {
 			arg.Content = strings.ReplaceAll(arg.Content, "\n", "\r\n")
 		}
 	}
-	return put(ctx, fs, fs.Append, arg)
+	return put(ctx, fs, arg, false)
 }
 
-func put(ctx context.Context, fs api.FS, open func(name string) (io.WriteCloser, error), arg writeArg) (writeResult, error) {
-	w, err := open(arg.Path)
+func put(ctx context.Context, fs api.FS, arg writeArg, rewrite bool) (writeResult, error) {
+	var w io.WriteCloser
+	var err error
+	tmp := ""
+	if rewrite {
+		tmp = fmt.Sprintf("%s.tmp-%016x~", arg.Path, rand.Uint64())
+		w, err = fs.Create(tmp)
+	} else {
+		w, err = fs.Append(arg.Path)
+	}
 	if err != nil {
 		return writeResult{}, err
 	}
@@ -109,7 +165,13 @@ func put(ctx context.Context, fs api.FS, open func(name string) (io.WriteCloser,
 	if cerr := w.Close(); err == nil {
 		err = cerr
 	}
+	if err == nil && rewrite {
+		err = fs.Rename(tmp, arg.Path)
+	}
 	if err != nil {
+		if rewrite {
+			err = errors.Join(err, fs.Remove(context.WithoutCancel(ctx), tmp))
+		}
 		return writeResult{}, err
 	}
 	e, err := fs.Stat(ctx, arg.Path)
@@ -128,6 +190,11 @@ func editTool(ctx context.Context, arg editArg) (editResult, error) {
 	if arg.Old == arg.New {
 		return editResult{}, fmt.Errorf("old and new are identical")
 	}
+	unlock, err := lock(fs, arg.Path)
+	if err != nil {
+		return editResult{}, err
+	}
+	defer unlock()
 	content, s, err := readCapped(ctx, fs, arg.Path)
 	if err != nil {
 		return editResult{}, err
@@ -143,7 +210,7 @@ func editTool(ctx context.Context, arg editArg) (editResult, error) {
 		count = 1
 	}
 	content = strings.Replace(content, arg.Old, arg.New, count)
-	if _, err := put(ctx, fs, fs.Create, writeArg{Path: arg.Path, Content: s.format(content)}); err != nil {
+	if _, err := put(ctx, fs, writeArg{Path: arg.Path, Content: s.format(content)}, true); err != nil {
 		return editResult{}, err
 	}
 	return editResult{Replacements: count}, nil
@@ -155,6 +222,11 @@ func replaceTool(ctx context.Context, arg replaceArg) (editResult, error) {
 	if err != nil {
 		return editResult{}, fmt.Errorf("bad pattern: %w", err)
 	}
+	unlock, err := lock(fs, arg.Path)
+	if err != nil {
+		return editResult{}, err
+	}
+	defer unlock()
 	content, s, err := readCapped(ctx, fs, arg.Path)
 	if err != nil {
 		return editResult{}, err
@@ -167,7 +239,7 @@ func replaceTool(ctx context.Context, arg replaceArg) (editResult, error) {
 		return editResult{}, fmt.Errorf("pattern matches %d places in %q: tighten it or set all", count, arg.Path)
 	}
 	content = re.ReplaceAllString(content, toLF(arg.Replacement))
-	if _, err := put(ctx, fs, fs.Create, writeArg{Path: arg.Path, Content: s.format(content)}); err != nil {
+	if _, err := put(ctx, fs, writeArg{Path: arg.Path, Content: s.format(content)}, true); err != nil {
 		return editResult{}, err
 	}
 	return editResult{Replacements: count}, nil
@@ -175,6 +247,11 @@ func replaceTool(ctx context.Context, arg replaceArg) (editResult, error) {
 
 func insertTool(ctx context.Context, arg insertArg) (writeResult, error) {
 	fs := common.GetController(ctx).FS()
+	unlock, err := lock(fs, arg.Path)
+	if err != nil {
+		return writeResult{}, err
+	}
+	defer unlock()
 	content, s, err := readCapped(ctx, fs, arg.Path)
 	if err != nil {
 		return writeResult{}, err
@@ -196,11 +273,18 @@ func insertTool(ctx context.Context, arg insertArg) (writeResult, error) {
 	if endsNL {
 		out += "\n"
 	}
-	return put(ctx, fs, fs.Create, writeArg{Path: arg.Path, Content: s.format(out)})
+	return put(ctx, fs, writeArg{Path: arg.Path, Content: s.format(out)}, true)
 }
 
 func readCapped(ctx context.Context, fs api.FS, path string) (string, style, error) {
 	limit := common.GetController(ctx).FilesConfig().EditLimit
+	e, err := fs.Stat(ctx, path)
+	if err != nil {
+		return "", style{}, err
+	}
+	if e.Virtual {
+		return "", style{}, api.ErrReadOnly
+	}
 	rc, err := fs.ReadAll(ctx, path)
 	if err != nil {
 		return "", style{}, err

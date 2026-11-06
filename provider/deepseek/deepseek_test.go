@@ -454,24 +454,18 @@ func TestContextOverflow(t *testing.T) {
 	}
 }
 
-// A turn whose finish reason arrived and whose socket then died is a turn that
-// finished. [DONE] is what this adapter ends a turn on, so Convert never saw the
-// ending and End has to deliver it: swallowing the EOF discards a complete reply
-// and reads to the caller as a reply that was cut off, which is a retry of a
-// turn that already succeeded and was already paid for.
-//
-// A reason that ends the turn in failure travels the same way. Reporting nothing
-// there turns a capped or filtered turn into silence, which the caller reads as
-// cut off and retries unchanged.
-func TestStreamDisconnectCarriesTheFinishReason(t *testing.T) {
+// A turn whose finish reason arrived and whose socket then died before [DONE]
+// lost its usage frame and its sentinel. Only a reply that arrived whole is
+// kept, so it fails as a network failure whatever the reason said.
+func TestStreamDisconnectAfterTheFinishReasonFails(t *testing.T) {
 	for _, tc := range []struct {
 		finish string
 		want   string
 	}{
-		{"stop", "ok turn"},
-		{"tool_calls", "ok turn"},
-		{"length", "err capped"},
-		{"content_filter", "err refused"},
+		{"stop", "err network"},
+		{"tool_calls", "err network"},
+		{"length", "err network"},
+		{"content_filter", "err network"},
 	} {
 		t.Run(tc.finish, func(t *testing.T) {
 			p := serve(t, func(w http.ResponseWriter, r *http.Request) {
@@ -500,7 +494,7 @@ func TestModelDeclarations(t *testing.T) {
 			t.Errorf("%s declares context %d and request bytes %d", m.Name, m.Context, m.RequestBytes)
 		}
 	}
-	if Flash.ImagePixels != 1300*1300 || Flash.ImageSide != 4096 || Flash.ImageBytes != 24*1024*1024 || Flash.ImagesPerRequest != 600 {
+	if Flash.ImagePixels != 1300*1300 || Flash.ImageSide != 8192 || Flash.ImageBytes != 24*1024*1024 || Flash.ImagesPerRequest != 600 {
 		t.Errorf("Flash image fields %+v", Flash)
 	}
 	if V4Pro.ImagePixels != 0 || V4Pro.ImageSide != 0 || V4Pro.ImageBytes != 0 || V4Pro.ImagesPerRequest != 0 {
@@ -514,7 +508,7 @@ func TestFamily(t *testing.T) {
 		"deepseek-v4-flash":            familyFlash,
 		"deepseek-v4-flash-vision-exp": familyFlash,
 		"deepseek-v4-pro":              familyPro,
-		"my-flash-proxy":               familyPro,
+		"my-flash-proxy":               familyUnknown,
 	} {
 		if got := mustNew(t, Conf{Model: api.Model{Name: name}}, WithAPIKey("k")).family; got != want {
 			t.Errorf("%s: family %d, want %d", name, got, want)
@@ -541,7 +535,6 @@ func TestNewRefuses(t *testing.T) {
 		{"temperature above range", pro, []Option{key, WithEffort(EffortNone), WithTemperature(2.1)}, "range"},
 		{"top_p on pro with thinking on", pro, []Option{key, WithTopP(0.9)}, "ignores top_p"},
 		{"top_p on pro with an effort", pro, []Option{key, WithEffort(EffortLow), WithTopP(0.9)}, "ignores top_p"},
-		{"top_p on an unknown id with thinking on", Conf{Model: api.Model{Name: "my-flash-proxy"}}, []Option{key, WithTopP(0.9)}, "ignores top_p"},
 		{"top_p on flash with thinking off", flash, []Option{key, WithEffort(EffortNone), WithTopP(0.97)}, "fixes top_p"},
 		{"top_p of zero", flash, []Option{key, WithTopP(0)}, "range"},
 		{"top_p above one", flash, []Option{key, WithTopP(1.1)}, "range"},
@@ -574,6 +567,10 @@ func TestNewRefuses(t *testing.T) {
 	mustNew(t, flash, key, WithTopP(0.97))
 	mustNew(t, flash, key, nil)
 	mustNew(t, flash, key, WithEffort(EffortMax), WithTopP(0.97))
+	own := mustNew(t, Conf{Model: api.Model{Name: "my-flash-proxy"}}, key, WithEffort("medium"), WithTemperature(0.2), WithTopP(0.9), WithMaxTokens(maxOutputTokens+1))
+	if own.effort != "medium" || own.temperature == nil || own.topP == nil || own.maxTokens != maxOutputTokens+1 {
+		t.Errorf("an unknown model lost an option: %+v", own)
+	}
 }
 
 func TestNilHTTPClientIsRefused(t *testing.T) {

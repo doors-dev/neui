@@ -60,7 +60,7 @@ func newCtx(t *testing.T) (context.Context, api.FS) {
 	}
 	t.Cleanup(func() { store.Remove() })
 	fs := filesystem.Open("thread", store, store, api.FilesConfig{})
-	t.Cleanup(fs.Dispose)
+	t.Cleanup(func() { fs.Dispose() })
 	return context.WithValue(context.Background(), common.KeyController, testThread{fs: fs}), fs
 }
 
@@ -449,5 +449,75 @@ func TestTaskNameAfterCancel(t *testing.T) {
 			return
 		default:
 		}
+	}
+}
+
+func TestConsoleLogsUnserializableValues(t *testing.T) {
+	ctx, fs := newCtx(t)
+	m := &module{runtime: getRuntime(context.Background())}
+	if _, err := m.run(ctx, RunArg{Code: "console.log(undefined, Symbol('s'), 1); return null;"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := read(t, fs, "inline.log"); !strings.Contains(got, "INFO undefined Symbol(s) 1\n") {
+		t.Fatalf("log = %q", got)
+	}
+}
+
+func TestRunRefusesAnOversizedScript(t *testing.T) {
+	ctx, fs := newCtx(t)
+	write(t, fs, "big.js", "return 1;\n//"+strings.Repeat("x", scriptLimit))
+	m := &module{runtime: getRuntime(context.Background())}
+	if _, err := m.run(ctx, RunArg{File: "big.js"}); err == nil || !strings.Contains(err.Error(), "4 MiB script size limit") {
+		t.Fatalf("err = %v", err)
+	}
+	write(t, fs, "ok.js", "return 1;\n//"+strings.Repeat("x", scriptLimit-100))
+	if _, err := m.run(ctx, RunArg{File: "ok.js"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRunRefusesWhileRunningBeforeReading(t *testing.T) {
+	ctx, _ := newCtx(t)
+	m := &module{runtime: getRuntime(context.Background()), running: &running{name: "other.js"}}
+	if _, err := m.run(ctx, RunArg{File: "missing.js"}); err == nil || !strings.Contains(err.Error(), "already running") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestLogKeepsTheNewestMegabyte(t *testing.T) {
+	_, fs := newCtx(t)
+	entry := strings.Repeat("x", 100<<10)
+	for i := range 25 {
+		if err := Log(fs, "a.log", "INFO", entry+string(rune('a'+i))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := read(t, fs, "a.log")
+	if len(got) > logCap {
+		t.Fatalf("log is %d bytes", len(got))
+	}
+	first, _, _ := strings.Cut(got, "\n")
+	if !strings.HasSuffix(first, "INFO earlier output dropped") {
+		t.Fatalf("first line %q", first)
+	}
+	if !strings.HasSuffix(got, "xy\n") || strings.Count(got, "\n") < 6 {
+		t.Fatalf("tail lost: %d lines", strings.Count(got, "\n"))
+	}
+}
+
+func TestClearLogQuotaIsNotARuntimeFailure(t *testing.T) {
+	store, err := local.NewFileStorage("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Remove() })
+	fs := filesystem.Open("thread", store, store, api.FilesConfig{MaxFiles: 1})
+	t.Cleanup(func() { fs.Dispose() })
+	ctx := context.WithValue(context.Background(), common.KeyController, testThread{fs: fs})
+	write(t, fs, "a.js", "return 1;")
+	m := &module{runtime: getRuntime(context.Background())}
+	_, err = m.run(ctx, RunArg{File: "a.js"})
+	if !errors.Is(err, api.ErrQuota) || errors.Is(err, errRuntime) {
+		t.Fatalf("err = %v", err)
 	}
 }

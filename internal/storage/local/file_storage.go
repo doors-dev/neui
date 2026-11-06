@@ -41,7 +41,7 @@ type FileStorage struct {
 }
 
 func validName(name string) bool {
-	return name != "" && name != "." && name != ".." && !strings.ContainsRune(name, '/')
+	return name != "" && name != "." && name != ".." && len(name) <= 255 && !strings.ContainsAny(name, "/\x00")
 }
 
 func checkFile(threadID api.ThreadID, origin api.Origin, name string) error {
@@ -297,18 +297,13 @@ func (l *FileStorage) FileList(ctx context.Context, threadID api.ThreadID, origi
 		l.mu.Lock()
 		entries, dirErr := os.ReadDir(originDir)
 		var files []api.File
-		var bad []error
 		for _, e := range entries {
 			if !e.IsDir() {
 				continue
 			}
 			entryDir := filepath.Join(originDir, e.Name())
 			f, err := readMeta(entryDir)
-			if errors.Is(err, api.ErrNotFound) {
-				continue
-			}
 			if err != nil {
-				bad = append(bad, err)
 				continue
 			}
 			files = append(files, f)
@@ -323,11 +318,6 @@ func (l *FileStorage) FileList(ctx context.Context, threadID api.ThreadID, origi
 		})
 		for _, f := range files {
 			if !yield(f, nil) {
-				return
-			}
-		}
-		for _, err := range bad {
-			if !yield(api.File{}, err) {
 				return
 			}
 		}

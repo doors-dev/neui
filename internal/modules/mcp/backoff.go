@@ -18,12 +18,14 @@ func (b *backoff) wait(ctx context.Context) bool {
 		b.delay = time.Second
 	}
 	delay := b.delay
-	b.delay = min(b.delay*2, 30*time.Second)
 	b.mu.Unlock()
 	select {
 	case <-ctx.Done():
 		return false
 	case <-time.After(delay + rand.N(delay/2)):
+		b.mu.Lock()
+		b.delay = min(b.delay*2, 30*time.Second)
+		b.mu.Unlock()
 		return true
 	}
 }

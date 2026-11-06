@@ -175,3 +175,41 @@ func TestNowZoneIsAbbreviation(t *testing.T) {
 		t.Fatalf("unnamed zone %q", got.Zone)
 	}
 }
+
+func TestScriptTimerPastTheDeadlineErrorsAtOnce(t *testing.T) {
+	tool, ok := Module(context.Background()).Get("timer")
+	if !ok {
+		t.Fatal("no timer tool")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	start := time.Now()
+	_, err := tool.JS(ctx)([]any{`{"afterMs":60000,"comment":"c"}`})
+	if err == nil || !strings.Contains(err.Error(), "script's time limit") {
+		t.Fatalf("err = %v", err)
+	}
+	if time.Since(start) > time.Second {
+		t.Fatal("did not error at once")
+	}
+	if _, err := tool.JS(ctx)([]any{`{"afterMs":10,"comment":"c"}`}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestTimerWhilePendingNamesTheComment(t *testing.T) {
+	m := &module{}
+	arm(m)
+	ctx := context.WithValue(context.Background(), common.KeyController, &failingThread{onTask: func() { t.Fatal("task issued") }})
+	if _, err := m.timer(ctx, TimerArg{After: uint(time.Hour.Milliseconds()), Comment: "d"}); err == nil || !strings.Contains(err.Error(), "already pending (c)") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestCancelOfAClaimedTimerIsNeutral(t *testing.T) {
+	m := &module{}
+	p, _ := arm(m)
+	p.claimed.Store(true)
+	if _, err := m.cancel(context.Background(), struct{}{}); err == nil || !strings.Contains(err.Error(), "already ending") {
+		t.Fatalf("err = %v", err)
+	}
+}

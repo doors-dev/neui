@@ -281,6 +281,104 @@ func TestNeedCompactionUnavailable(t *testing.T) {
 	}
 }
 
+func TestCanCompact(t *testing.T) {
+	config := api.ThreadConfig{CompactionAllowed: 0.2, CompactionTrigger: 0.9, CompactionPreserve: 0.25}
+	s := local.NewMessageStorage()
+	r := NewReplay(context.Background(), "a", s, config, api.Model{Context: 1000})
+	if r.CanCompact() {
+		t.Fatalf("not loaded: CanCompact is true")
+	}
+	mustCreate(t, r)
+	okRound(t, r, "one", 500)
+	if r.CanCompact() {
+		t.Fatalf("one round: CanCompact is true")
+	}
+	if _, _, err := r.RoundInit(api.Input{Text: "failed"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.RoundError(errors.New("network"), api.EventUsage{}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if r.CanCompact() {
+		t.Fatalf("an error round counted as a completed round")
+	}
+	okRound(t, r, "two", 100)
+	if r.CanCompact() {
+		t.Fatalf("two rounds below CompactionAllowed: CanCompact is true")
+	}
+	okRound(t, r, "three", 200)
+	if !r.CanCompact() {
+		t.Fatalf("rounds at CompactionAllowed: CanCompact is false")
+	}
+	c, _, err := r.PrepareCompaction()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.ApplyCompaction(c, api.Indexed[api.Content]{0: api.ContentText{Text: "the summary"}}, api.EventUsage{Output: 50}); err != nil {
+		t.Fatal(err)
+	}
+	if r.CanCompact() {
+		t.Fatalf("right after a compaction: CanCompact is true")
+	}
+	okRound(t, r, "four", 300)
+	okRound(t, r, "five", 300)
+	if !r.CanCompact() {
+		t.Fatalf("two rounds past the tail: CanCompact is false")
+	}
+	loaded := NewReplay(context.Background(), "a", s, config, api.Model{Context: 1000})
+	if err := loaded.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if !loaded.CanCompact() {
+		t.Fatalf("after a reload: CanCompact is false")
+	}
+	unknown := NewReplay(context.Background(), "b", local.NewMessageStorage(), config, api.Model{})
+	mustCreate(t, unknown)
+	okRound(t, unknown, "one", 1)
+	if unknown.CanCompact() {
+		t.Fatalf("unknown context, one round: CanCompact is true")
+	}
+	okRound(t, unknown, "two", 1)
+	if !unknown.CanCompact() {
+		t.Fatalf("unknown context, two rounds: CanCompact is false")
+	}
+}
+
+func TestFailedCompactionWaitsForTheHistoryToGrow(t *testing.T) {
+	config := api.ThreadConfig{CompactionTrigger: 0.5, CompactionPreserve: 0.25}
+	r := NewReplay(context.Background(), "a", local.NewMessageStorage(), config, api.Model{Context: 1000})
+	mustCreate(t, r)
+	okRound(t, r, strings.Repeat("long history ", 100), 600)
+	okRound(t, r, strings.Repeat("long history ", 100), 800)
+	if got := r.NeedCompaction(); got != CompactionTokens {
+		t.Fatalf("got %v, want %v", got, CompactionTokens)
+	}
+	r.CompactionFailed()
+	if got := r.NeedCompaction(); got != CompactionNone {
+		t.Fatalf("right after a failure: got %v", got)
+	}
+	okRound(t, r, "a little more", 900)
+	if got := r.NeedCompaction(); got != CompactionNone {
+		t.Fatalf("history grew under 25%%: got %v", got)
+	}
+	okRound(t, r, "much more", 1001)
+	if got := r.NeedCompaction(); got != CompactionTokens {
+		t.Fatalf("history grew past 25%%: got %v, want %v", got, CompactionTokens)
+	}
+	r.CompactionFailed()
+	c, _, err := r.PrepareCompaction()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.ApplyCompaction(c, api.Indexed[api.Content]{0: api.ContentText{Text: "the summary"}}, api.EventUsage{Output: 50}); err != nil {
+		t.Fatal(err)
+	}
+	growingRounds(t, r, 600, 700)
+	if got := r.NeedCompaction(); got != CompactionTokens {
+		t.Fatalf("an applied compaction clears the backoff: got %v, want %v", got, CompactionTokens)
+	}
+}
+
 func TestPDFPagesChargeImageBudget(t *testing.T) {
 	doc := api.ContentDocument{Data: pdfDoc(4), Mime: string(api.DocumentPDF), Name: "report.pdf"}
 	if got := countImages(doc); got != 4 {

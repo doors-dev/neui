@@ -29,15 +29,18 @@ func NewReplay(ctx context.Context, thread api.ThreadID, s api.MessageStorage, c
 }
 
 type replay struct {
-	ctx       context.Context
-	id        api.ThreadID
-	storage   api.MessageStorage
-	config    api.ThreadConfig
-	model     api.Model
-	factor    float32
-	thread    api.Thread
-	messages  *messages
-	lastRound lastRound
+	ctx          context.Context
+	id           api.ThreadID
+	storage      api.MessageStorage
+	config       api.ThreadConfig
+	model        api.Model
+	factor       float32
+	thread       api.Thread
+	messages     *messages
+	lastRound    lastRound
+	failed       bool
+	failedWeight int64
+	failedTokens int
 }
 
 func (r Replay) Tighten() bool {
@@ -95,6 +98,9 @@ func (r Replay) NeedCompaction() CompactionCause {
 	if last < 1 || rounds[last].id <= tail || rounds[last-1].id <= tail {
 		return CompactionNone
 	}
+	if r.failed && r.messages.weight*4 <= r.failedWeight*5 && r.Usage().Total()*4 <= r.failedTokens*5 {
+		return CompactionNone
+	}
 	limit := memoryLimit(r.config, r.model, r.factor)
 	if limit > 0 && r.messages.weight+weigh(r.messages.pendingContent(api.Input{})...) > limit {
 		return CompactionBytes
@@ -103,6 +109,28 @@ func (r Replay) NeedCompaction() CompactionCause {
 		return CompactionTokens
 	}
 	return CompactionNone
+}
+
+func (r Replay) CanCompact() bool {
+	if !r.IsLoaded() {
+		return false
+	}
+	rounds := r.messages.rounds
+	last := len(rounds) - 1
+	tail := r.messages.compaction.Tail
+	if last < 1 || rounds[last].id <= tail || rounds[last-1].id <= tail {
+		return false
+	}
+	return r.model.Context == 0 || float32(r.Usage().Total()) >= r.config.CompactionAllowed*float32(r.model.Context)
+}
+
+func (r Replay) CompactionFailed() {
+	if !r.IsLoaded() {
+		return
+	}
+	r.failed = true
+	r.failedWeight = r.messages.weight
+	r.failedTokens = r.Usage().Total()
 }
 
 func (r Replay) PrepareCompaction() (Compaction, []api.Message, error) {
@@ -151,6 +179,7 @@ func (r Replay) ApplyCompaction(c Compaction, content api.Indexed[api.Content], 
 	}
 	r.updateSeq(seq)
 	r.messages.applyCompaction(c, record)
+	r.failed = false
 	return nil
 }
 

@@ -371,12 +371,6 @@
 		px-1
 	}
 
-	.kchat-top-title_quiet {
-		@apply
-		font-normal
-		text-(--app-ink-quiet)
-	}
-
 	.kchat-ic {
 		@apply
 		w-4

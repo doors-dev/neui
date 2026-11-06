@@ -100,8 +100,6 @@ type state struct {
 	stash              *submit
 	handover           bool
 	root               slot
-	ch                 chan string
-	task               common.Task
 	seeded             bool
 	applied            chan struct{}
 }
@@ -179,7 +177,7 @@ func (s *state) toolRelease(ctx context.Context, id uint) (struct{}, error) {
 	delete(s.widgets, id)
 	w.released = true
 	if w.holders == 0 {
-		s.dropWidget(w)
+		s.dropWidget()
 	}
 	return struct{}{}, nil
 }
@@ -249,7 +247,7 @@ func (s *state) toolReleaseSlot(ctx context.Context, id uint) (struct{}, error) 
 	return struct{}{}, nil
 }
 
-func (s *state) dropWidget(w *placedWidget) {
+func (s *state) dropWidget() {
 	s.items--
 }
 
@@ -264,7 +262,7 @@ func (r *state) dropSlot(s *slot) {
 	for _, w := range s.widgets {
 		w.holders--
 		if w.holders == 0 && w.released {
-			r.dropWidget(w)
+			r.dropWidget()
 		}
 	}
 }
@@ -363,11 +361,17 @@ func (s *state) toolDraw(ctx context.Context, ms int) (*Result, error) {
 	}
 	select {
 	case <-ctx.Done():
+		s.mu.Lock()
+		s.hook = nil
+		s.mu.Unlock()
 		return &Result{Interrupt: true}, nil
 	case <-timeout:
 	case <-ch:
 	}
 	if err := s.run.Rearm(); err != nil {
+		s.mu.Lock()
+		s.hook = nil
+		s.mu.Unlock()
 		return nil, err
 	}
 	return s.collect()
@@ -594,7 +598,7 @@ func (s *state) updateSlot(id uint, content []content) (func(ctx context.Context
 	for _, w := range target.widgets {
 		w.holders--
 		if w.holders == 0 && w.released {
-			s.dropWidget(w)
+			s.dropWidget()
 		}
 	}
 	target.children = children

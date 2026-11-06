@@ -38,7 +38,7 @@ type Aside struct {
 
 elem (p Aside) Main() {
 	~~
-	p.controller = controller.New()
+	p.controller = controller.New(p.Params.Off(params.MessageSearch))
 	p.menu = p.Pops.Popup[chatMenu]()
 	~~
 	~(p.controller.Show(p.aside()))

@@ -396,14 +396,58 @@ func TestThreadDeleteRemovesTheThreadsFiles(t *testing.T) {
 	}
 }
 
-func TestRenameRefusesEmptyAndNonPlainNames(t *testing.T) {
+func TestThreadDeleteOfAThreadNotInStorageTouchesNothing(t *testing.T) {
+	inst := deadTestInstance(t)
+	ctx := context.Background()
+	go func() {
+		for {
+			select {
+			case <-inst.ctx.Done():
+				return
+			case cmd := <-inst.ch:
+				inst.onCommand(cmd)
+			}
+		}
+	}()
+	backend := inst.backend.Load()
+	if _, err := backend.FileStorage().FilePut(ctx, "delete-foreign", api.OriginUser, "a.txt", "text/plain", strings.NewReader("a"), false); err != nil {
+		t.Fatalf("FilePut: %v", err)
+	}
+	if err := inst.ThreadDelete(ctx, "delete-foreign"); err != nil {
+		t.Fatalf("ThreadDelete: %v", err)
+	}
+	if _, err := backend.FileStorage().FileStat(ctx, "delete-foreign", api.OriginUser, "a.txt"); err != nil {
+		t.Fatalf("a delete of a thread not in storage removed its files: %v", err)
+	}
+}
+
+func TestRenameCutsLongNamesTo80Runes(t *testing.T) {
+	inst := deadTestInstance(t)
+	ctx := context.Background()
+	storage := inst.backend.Load().Storage()
+	if _, err := storage.ThreadCreate(ctx, "rename-long"); err != nil {
+		t.Fatalf("ThreadCreate: %v", err)
+	}
+	if err := inst.ThreadRename(ctx, "rename-long", strings.Repeat("界", 79)+" tail"); err != nil {
+		t.Fatalf("ThreadRename: %v", err)
+	}
+	th, err := storage.ThreadGet(ctx, "rename-long")
+	if err != nil {
+		t.Fatalf("ThreadGet: %v", err)
+	}
+	if th.Name != strings.Repeat("界", 79) {
+		t.Fatalf("the thread is named %q", th.Name)
+	}
+}
+
+func TestRenameRefusesNonPlainNamesAndUnnamesOnEmpty(t *testing.T) {
 	inst := deadTestInstance(t)
 	ctx := context.Background()
 	storage := inst.backend.Load().Storage()
 	if _, err := storage.ThreadCreate(ctx, "rename-plain"); err != nil {
 		t.Fatalf("ThreadCreate: %v", err)
 	}
-	for _, name := range []string{"", "  ", "​", "a‮b", "a\nb", "a\x00b"} {
+	for _, name := range []string{"​", "a‮b", "a\nb", "a\x00b"} {
 		if err := inst.ThreadRename(ctx, "rename-plain", name); err == nil {
 			t.Errorf("%q: the rename was accepted", name)
 		}
@@ -417,6 +461,16 @@ func TestRenameRefusesEmptyAndNonPlainNames(t *testing.T) {
 	}
 	if th.Name != "Trip plan" {
 		t.Fatalf("the thread is named %q", th.Name)
+	}
+	if err := inst.ThreadRename(ctx, "rename-plain", "   "); err != nil {
+		t.Fatalf("ThreadRename to empty: %v", err)
+	}
+	th, err = storage.ThreadGet(ctx, "rename-plain")
+	if err != nil {
+		t.Fatalf("ThreadGet: %v", err)
+	}
+	if th.Name != "" {
+		t.Fatalf("the thread is named %q after an empty rename", th.Name)
 	}
 }
 

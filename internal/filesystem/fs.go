@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"neui.dev/api"
 )
@@ -62,18 +63,17 @@ func (w *workFS) root() (api.Workspace, error) {
 	return workspace, nil
 }
 
-func (w *workFS) Dispose() {
+func (w *workFS) Dispose() error {
 	w.wsMu.Lock()
 	defer w.wsMu.Unlock()
 	if w.closed {
-		return
+		return nil
 	}
 	w.closed = true
 	if !w.opened {
-		return
+		return nil
 	}
-	w.workspace.Close()
-	w.storage.WorkspaceDelete(w.threadID)
+	return errors.Join(w.workspace.Close(), w.storage.WorkspaceDelete(w.threadID))
 }
 
 func (w *workFS) Append(name string) (io.WriteCloser, error) {
@@ -259,6 +259,9 @@ func (w *workFS) ReadDir(ctx context.Context, name string) ([]api.FSEntry, error
 			continue
 		}
 		info, err := de.Info()
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -421,8 +424,17 @@ func (w *workFS) UserUpload(ctx context.Context, name string, r io.Reader) (api.
 	base := strings.TrimSuffix(display, ext)
 	mime := sniffMIME(head[:n])
 	rest := &countingReader{r: r}
-	fileName := display
-	for i := 1; ; i++ {
+	for i := 0; ; i++ {
+		suffix := ""
+		if i > 0 {
+			suffix = fmt.Sprintf("(%d)", i)
+		}
+		stem := base
+		for stem != "" && len(stem)+len(suffix)+len(ext) > 255 {
+			_, size := utf8.DecodeLastRuneInString(stem)
+			stem = stem[:len(stem)-size]
+		}
+		fileName := stem + suffix + ext
 		body := io.MultiReader(bytes.NewReader(head[:n]), rest)
 		file, err := w.files.FilePut(ctx, w.threadID, userUploads.origin, fileName, mime, body, true)
 		if err == nil {
@@ -432,9 +444,8 @@ func (w *workFS) UserUpload(ctx context.Context, name string, r io.Reader) (api.
 			return api.FSEntry{}, err
 		}
 		if rest.n > 0 {
-			return api.FSEntry{}, fmt.Errorf("%q: another file with the same name was uploaded at the same time; upload it again", display)
+			return api.FSEntry{}, fmt.Errorf("%q: another file with the same name was uploaded at the same time; upload it again: %w", display, api.ErrExists)
 		}
-		fileName = fmt.Sprintf("%s(%d)%s", base, i, ext)
 	}
 }
 

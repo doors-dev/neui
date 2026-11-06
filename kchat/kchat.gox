@@ -43,6 +43,8 @@ const (
 	Sidebar = Feature(params.Sidebar)
 	// ThreadEdit hides rename, clone and delete in the chat list.
 	ThreadEdit = Feature(params.ThreadEdit)
+	// MessageSearch limits search to chat names; message contents are not searched.
+	MessageSearch = Feature(params.MessageSearch)
 )
 
 // Simple is the preset for non-technical users. It grows as technical features are added.

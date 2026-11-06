@@ -29,11 +29,12 @@ var bodies = sync.Pool{New: func() any { return new(bytes.Buffer) }}
 var errBodyReleased = errors.New("neui: request body already released")
 
 // Body is a request body encoded the way MarshalRaw encodes, into a buffer
-// taken from a pool. The buffer goes back to the pool once the request built by
-// Request has gone through Stream: after the response body is closed and the
-// transport has closed every reader it opened on it, so no redirect, retry or
-// late body write can read it after. A Body that never reaches Stream is left
-// to the garbage collector.
+// taken from a pool. Once the request built by Request has gone through Stream,
+// the buffer goes back to the pool only after the response body is closed and
+// the transport has closed every reader it opened on it, so no redirect, retry
+// or late body write can read it after. A reader the transport never closes
+// leaves the buffer to the garbage collector instead, as does a Body that never
+// reaches Stream. A buffer that grew past 4 MiB is never pooled.
 type Body struct {
 	mu   sync.Mutex
 	buf  *bytes.Buffer

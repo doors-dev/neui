@@ -239,7 +239,7 @@ elem (c *Composer) context(has bool) {
 						</span>
 						~(if s.Compaction {
 							<span class="kchat-pop-foot"><button type="button" class="kchat-btn" disabled>compacting…</button></span>
-						} else if window == 0 || float32(settled) >= config.CompactionAllowed * float32(window) {
+						} else if s.CanCompact {
 							<span class="kchat-pop-foot">
 								~>doors.AClick{
 									Scope: new(doors.ScopeBlocking),

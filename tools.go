@@ -256,9 +256,9 @@ func ModuleWeb(c WebConfig) ModuleFactory {
 // name__tool, and follow the server's list-changed notifications. Each thread
 // gets its own connection, opened when the thread opens and retried with
 // backoff while it fails; a call made while it is failing fails at once. The
-// connection closes after IdleTimeout without a call, or after at most a
-// minute when no call has been made yet; the next call reconnects and waits
-// for it.
+// connection, live or still retrying, closes after IdleTimeout without a call,
+// or after at most a minute when no call has been made yet, which also stops
+// the retries; the next call reconnects and waits for it.
 func ModuleMCP(c MCPConfig) ModuleFactory {
 	return mcp.Module(mcp.Config(c))
 }

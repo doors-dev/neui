@@ -12,24 +12,24 @@ import (
 	"neui.dev/internal/common"
 )
 
-const writeDesc = `Write values or formulas into empty cells, row by row from a top-left cell. A string starting with = is a formula; functions newer than Excel 2007, such as IFS, SWITCH, MAXIFS, TEXTJOIN or CONCAT, get Excel's _xlfn. prefix automatically, and links outside the workbook (WEBSERVICE, FILTERXML, RTD, DDE) are refused. {row} in a formula becomes the row number of the cell it lands in, so one row repeated fills a column: cell E2, rows [["=B{row}*C{row}"]], repeat 19 fills E2:E20. Every target cell must be empty, and the block must sit wholly inside or wholly outside each table and the sheet's autofilter; merged cells and array formulas are refused. Cells written next to a table stay outside it — tables are never resized.`
+const writeDesc = `Write values or formulas into empty cells, row by row from a top-left cell. A string starting with = is a formula; functions newer than Excel 2007, such as IFS, SWITCH, MAXIFS, TEXTJOIN or CONCAT, get Excel's _xlfn. prefix automatically, and links outside the workbook (WEBSERVICE, FILTERXML, IMAGE, RTD, DDE) are refused. {row} in a formula becomes the row number of the cell it lands in, so one row repeated fills a column: cell E2, rows [["=B{row}*C{row}"]], repeat 19 fills E2:E20. Every target cell must be empty, and the block must sit wholly inside or wholly outside each table and the sheet's autofilter; merged cells and array formulas are refused. Cells written next to a table stay outside it — tables are never resized.`
 
 var futureFn = map[string]bool{
 	"ACOT": true, "ACOTH": true, "AGGREGATE": true, "ARABIC": true, "ARRAYTOTEXT": true, "BASE": true, "BETA.DIST": true, "BETA.INV": true,
 	"BINOM.DIST": true, "BINOM.DIST.RANGE": true, "BINOM.INV": true, "BITAND": true, "BITLSHIFT": true, "BITOR": true, "BITRSHIFT": true, "BITXOR": true,
 	"CEILING.MATH": true, "CEILING.PRECISE": true, "CHISQ.DIST": true, "CHISQ.DIST.RT": true, "CHISQ.INV": true, "CHISQ.INV.RT": true, "CHISQ.TEST": true, "COMBINA": true,
 	"CONCAT": true, "CONFIDENCE.NORM": true, "CONFIDENCE.T": true, "COT": true, "COTH": true, "COVARIANCE.P": true, "COVARIANCE.S": true, "CSC": true,
-	"CSCH": true, "DAYS": true, "DECIMAL": true, "ERF.PRECISE": true, "ERFC.PRECISE": true, "EXPON.DIST": true, "F.DIST": true, "F.DIST.RT": true,
+	"CSCH": true, "DAYS": true, "DECIMAL": true, "ECMA.CEILING": true, "ERF.PRECISE": true, "ERFC.PRECISE": true, "EXPON.DIST": true, "F.DIST": true, "F.DIST.RT": true,
 	"F.INV": true, "F.INV.RT": true, "F.TEST": true, "FLOOR.MATH": true, "FLOOR.PRECISE": true, "FORECAST.ETS": true, "FORECAST.ETS.CONFINT": true, "FORECAST.ETS.SEASONALITY": true,
 	"FORECAST.ETS.STAT": true, "FORECAST.LINEAR": true, "FORMULATEXT": true, "GAMMA": true, "GAMMA.DIST": true, "GAMMA.INV": true, "GAMMALN.PRECISE": true, "GAUSS": true,
 	"HYPGEOM.DIST": true, "IFNA": true, "IFS": true, "IMCOSH": true, "IMCOT": true, "IMCSC": true, "IMCSCH": true, "IMSEC": true,
-	"IMSECH": true, "IMSINH": true, "IMTAN": true, "ISFORMULA": true, "ISOWEEKNUM": true, "LOGNORM.DIST": true, "LOGNORM.INV": true, "MAXIFS": true,
-	"MINIFS": true, "MODE.MULT": true, "MODE.SNGL": true, "MUNIT": true, "NEGBINOM.DIST": true, "NORM.DIST": true, "NORM.INV": true, "NORM.S.DIST": true,
+	"IMSECH": true, "IMSINH": true, "IMTAN": true, "ISFORMULA": true, "ISO.CEILING": true, "ISOWEEKNUM": true, "LOGNORM.DIST": true, "LOGNORM.INV": true, "MAXIFS": true,
+	"MINIFS": true, "MODE.MULT": true, "MODE.SNGL": true, "MUNIT": true, "NEGBINOM.DIST": true, "NETWORKDAYS.INTL": true, "NORM.DIST": true, "NORM.INV": true, "NORM.S.DIST": true,
 	"NORM.S.INV": true, "NUMBERVALUE": true, "PDURATION": true, "PERCENTILE.EXC": true, "PERCENTILE.INC": true, "PERCENTRANK.EXC": true, "PERCENTRANK.INC": true, "PERMUTATIONA": true,
 	"PHI": true, "POISSON.DIST": true, "QUARTILE.EXC": true, "QUARTILE.INC": true, "RANK.AVG": true, "RANK.EQ": true, "RRI": true, "SEC": true,
 	"SECH": true, "SHEET": true, "SHEETS": true, "SKEW.P": true, "STDEV.P": true, "STDEV.S": true, "SWITCH": true, "T.DIST": true,
 	"T.DIST.2T": true, "T.DIST.RT": true, "T.INV": true, "T.INV.2T": true, "T.TEST": true, "TEXTJOIN": true, "UNICHAR": true, "UNICODE": true,
-	"VALUETOTEXT": true, "VAR.P": true, "VAR.S": true, "WEIBULL.DIST": true, "XOR": true, "Z.TEST": true,
+	"VALUETOTEXT": true, "VAR.P": true, "VAR.S": true, "WEIBULL.DIST": true, "WORKDAY.INTL": true, "XOR": true, "Z.TEST": true,
 }
 
 var newerFn = map[string]bool{
@@ -41,12 +41,10 @@ var newerFn = map[string]bool{
 }
 
 var outsideFn = map[string]bool{
-	"WEBSERVICE": true, "FILTERXML": true, "RTD": true, "CALL": true, "REGISTER.ID": true,
+	"WEBSERVICE": true, "FILTERXML": true, "IMAGE": true, "RTD": true, "CALL": true, "REGISTER.ID": true,
 }
 
 var fnName = regexp.MustCompile(`[A-Za-z_][\w.]*`)
-
-var stringLit = regexp.MustCompile(`"[^"]*"`)
 
 var externalRef = regexp.MustCompile(`(?i)\[[^\[\]]*\.(xlsx|xlsm|xlsb|xltx|xls|csv)\]|\[\d+\][^\[\]()]*!`)
 
@@ -89,6 +87,9 @@ func writeTool(ctx context.Context, arg writeArg) (writeResult, error) {
 	}
 	if width == 0 {
 		return writeResult{}, fmt.Errorf("rows hold no cells")
+	}
+	if arg.Repeat > maxFormatCells {
+		return writeResult{}, fmt.Errorf("repeat %d is over the limit %d — split it into several writes, such as from a js script", arg.Repeat, maxFormatCells)
 	}
 	height := len(arg.Rows) * int(max(arg.Repeat, 1))
 	if cells := width * height; cells > maxFormatCells {
@@ -150,11 +151,35 @@ func formula(s string) (string, error) {
 	if strings.TrimSpace(body) == "" {
 		return "", fmt.Errorf("formula %q is empty", s)
 	}
-	code := stringLit.ReplaceAllStringFunc(body, func(lit string) string {
-		return `"` + strings.Repeat(" ", len(lit)-2) + `"`
-	})
+	lits, blank := []byte(body), []byte(body)
+	var quote byte
+	for i := 0; i < len(body); i++ {
+		switch c := body[i]; {
+		case quote == 0:
+			if c == '"' || c == '\'' {
+				quote = c
+			}
+		case c == quote && i+1 < len(body) && body[i+1] == quote:
+			blank[i], blank[i+1] = ' ', ' '
+			if quote == '"' {
+				lits[i], lits[i+1] = ' ', ' '
+			}
+			i++
+		case c == quote:
+			quote = 0
+		default:
+			blank[i] = ' '
+			if quote == '"' {
+				lits[i] = ' '
+			}
+		}
+	}
 	outside := fmt.Errorf("formula %q reaches outside this workbook (another workbook, a web service, a DDE link or another program), and external links are not supported — copy the data into this workbook first", s)
-	if externalRef.MatchString(code) || strings.Contains(code, "|") {
+	if externalRef.Match(lits) {
+		return "", outside
+	}
+	code := string(blank)
+	if strings.Contains(code, "|") {
 		return "", outside
 	}
 	var b strings.Builder

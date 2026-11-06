@@ -11,8 +11,9 @@
 // The key comes from ANTHROPIC_API_KEY unless WithAPIKey sets it. A provider
 // serves one model with one set of options; build two for two settings. New
 // refuses an option it cannot apply and a setting the declared model does not
-// take, so a provider that builds sends nothing the API refuses for its
-// configuration alone.
+// take, so a provider for a declared model that builds sends nothing the API
+// refuses for its configuration alone. For a model not declared here New
+// checks no combination and every option is sent as configured.
 //
 // Only the Anthropic API is supported: api.anthropic.com, or a gateway or proxy
 // that speaks it unchanged, set with WithBaseURL. Amazon Bedrock and Google
@@ -85,11 +86,11 @@ const (
 // thinking field at all, which is not the same as disabling it: on the newest
 // models thinking is on by default.
 //
-// New refuses what the docs refuse on every model: a Budget outside extended
-// thinking, a Budget under 1024 or not below max_tokens (unless WithBeta adds
-// interleaved-thinking-2025-05-14, under which it may exceed it), and a Display
-// with no Type or with ThinkingDisabled. On a declared model it also refuses
-// the types that model rejects: enabled on Fable 5.1, Opus 5.5, Sonnet 5.5,
+// On a declared model New refuses what the docs refuse on every model: a
+// Budget outside extended thinking, a Budget under 1024 or not below
+// max_tokens (unless WithBeta adds interleaved-thinking-2025-05-14, under which
+// it may exceed it), and a Display with no Type or with ThinkingDisabled. It
+// also refuses the types that model rejects: enabled on Fable 5.1, Opus 5.5, Sonnet 5.5,
 // Haiku 5.5 and Sonnet 5; disabled on Fable 5.1, Opus 5.5 and Sonnet 5.5, and
 // on Haiku 5.5 at EffortXHigh or EffortMax; adaptive on Haiku 4.5. A model not
 // declared here is not checked.
@@ -97,10 +98,6 @@ type Thinking struct {
 	Type    ThinkingType    // adaptive, enabled or disabled; empty sends nothing
 	Budget  int             // budget_tokens, extended thinking only
 	Display ThinkingDisplay // summarized or omitted; empty leaves the model default
-}
-
-func (t Thinking) active() bool {
-	return t.Type != "" && t.Type != ThinkingDisabled
 }
 
 // summarized reports whether the thinking this configuration asks for is a
@@ -126,6 +123,7 @@ const (
 // and holds no per turn state.
 type Provider struct {
 	key         string
+	keyExplicit bool
 	model       api.Model
 	baseURL     string
 	version     string
@@ -152,13 +150,13 @@ type Conf struct {
 
 // New builds a provider for one model. The key defaults to ANTHROPIC_API_KEY.
 // A nil option is skipped. New returns the error of the first option that
-// fails, and an error for a configuration the API would refuse on every
-// request: an empty Model.Name, the thinking settings Thinking lists, and, on a
-// model this package declares, an effort the model does not take or a
-// WithMaxTokens over its output ceiling.
+// fails, and an error for an empty Model.Name. On a model this package
+// declares it also returns one for a configuration the API would refuse on
+// every request: the thinking settings Thinking lists, an effort the model
+// does not take, or a WithMaxTokens over its output ceiling. On any other
+// model nothing is checked.
 func New(conf Conf, opts ...Option) (*Provider, error) {
 	p := &Provider{
-		key:      os.Getenv("ANTHROPIC_API_KEY"),
 		model:    conf.Model,
 		baseURL:  defaultBaseURL,
 		version:  defaultVersion,
@@ -176,20 +174,20 @@ func New(conf Conf, opts ...Option) (*Provider, error) {
 	if p.model.Name == "" {
 		return nil, errors.New("claude: Conf.Model has no name")
 	}
-	t := p.thinking
-	if t.Budget != 0 && t.Type != ThinkingEnabled {
-		return nil, fmt.Errorf("claude: a thinking budget is taken only with %s thinking, not %q", ThinkingEnabled, t.Type)
-	}
-	if t.Type == ThinkingEnabled && t.Budget < 1024 {
-		return nil, fmt.Errorf("claude: thinking budget %d is under the 1024 this API takes", t.Budget)
-	}
-	if t.Type == ThinkingEnabled && t.Budget >= p.maxToken && !slices.Contains(p.betas, "interleaved-thinking-2025-05-14") {
-		return nil, fmt.Errorf("claude: thinking budget %d is not below max tokens %d", t.Budget, p.maxToken)
-	}
-	if t.Display != "" && (t.Type == "" || t.Type == ThinkingDisabled) {
-		return nil, fmt.Errorf("claude: thinking display %q needs thinking that is on; set Thinking.Type", t.Display)
-	}
 	if m, ok := declared[p.model.Name]; ok {
+		t := p.thinking
+		if t.Budget != 0 && t.Type != ThinkingEnabled {
+			return nil, fmt.Errorf("claude: a thinking budget is taken only with %s thinking, not %q", ThinkingEnabled, t.Type)
+		}
+		if t.Type == ThinkingEnabled && t.Budget < 1024 {
+			return nil, fmt.Errorf("claude: thinking budget %d is under the 1024 this API takes", t.Budget)
+		}
+		if t.Type == ThinkingEnabled && t.Budget >= p.maxToken && !slices.Contains(p.betas, "interleaved-thinking-2025-05-14") {
+			return nil, fmt.Errorf("claude: thinking budget %d is not below max tokens %d", t.Budget, p.maxToken)
+		}
+		if t.Display != "" && (t.Type == "" || t.Type == ThinkingDisabled) {
+			return nil, fmt.Errorf("claude: thinking display %q needs thinking that is on; set Thinking.Type", t.Display)
+		}
 		if p.maxToken > m.maxTokens {
 			return nil, fmt.Errorf("claude: max tokens %d is over the %d model %s returns", p.maxToken, m.maxTokens, p.model.Name)
 		}
@@ -203,16 +201,22 @@ func New(conf Conf, opts ...Option) (*Provider, error) {
 			return nil, fmt.Errorf("claude: model %s refuses disabled thinking at effort %s; use %s or below", p.model.Name, p.effort, EffortHigh)
 		}
 	}
-	if p.key == "" {
-		slog.Warn("claude: no API key: set ANTHROPIC_API_KEY or pass WithAPIKey")
+	if !p.keyExplicit {
+		p.key = os.Getenv("ANTHROPIC_API_KEY")
+		if p.key == "" {
+			slog.Warn("claude: no API key: set ANTHROPIC_API_KEY or pass WithAPIKey")
+		}
 	}
 	return p, nil
 }
 
-// WithAPIKey overrides the key read from the environment.
+// WithAPIKey overrides the key read from the environment. An empty key sends
+// no x-api-key header, for a gateway that authenticates through its own
+// transport.
 func WithAPIKey(key string) Option {
 	return func(p *Provider) error {
 		p.key = key
+		p.keyExplicit = true
 		return nil
 	}
 }
@@ -302,7 +306,8 @@ func WithStopSequences(seqs ...string) Option {
 }
 
 // WithThinking sets the thinking configuration; the zero value sends none and
-// leaves the model default. New refuses the settings Thinking lists. It is part of the cached prompt, so switching
+// leaves the model default. On a declared model New refuses the settings
+// Thinking lists. It is part of the cached prompt, so switching
 // providers with different settings mid thread starts a new cache prefix, and
 // mid tool use the API silently drops thinking for that request. Keep one
 // setting per thread.

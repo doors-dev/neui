@@ -90,9 +90,6 @@ elem (l *fileList) content() {
 		}
 		entries = append(entries, found...)
 	}
-	if failed != nil {
-		notify.Error(ctx, failed)
-	}
 	slices.SortFunc(entries, func(a api.FSEntry, b api.FSEntry) int {
 		return b.ModTime.Compare(a.ModTime)
 	})

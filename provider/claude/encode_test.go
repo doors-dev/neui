@@ -112,14 +112,18 @@ func TestEncodeToolChoice(t *testing.T) {
 	}
 }
 
-// Forcing a tool is refused only alongside manual extended thinking. Adaptive
-// thinking accepts it, including on models that think by default.
+// Forcing a tool is refused only alongside manual extended thinking, and only on
+// a declared model. Adaptive thinking accepts it, including on models that think
+// by default.
 func TestForcedToolChoiceWithExtendedThinking(t *testing.T) {
 	req := api.Request{
 		ToolChoice: api.ToolChoiceAny,
 		Messages:   []api.Message{userText("hi")},
 	}
-	mustFail(t, mustNew(t, Conf{Model: api.Model{Name: "claude-sonnet-4-5"}}, WithThinking(Thinking{Type: "enabled", Budget: 4096})), req, "extended thinking")
+	mustFail(t, mustNew(t, Conf{Model: Haiku45}, WithThinking(Thinking{Type: "enabled", Budget: 4096})), req, "extended thinking")
+	if got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: "claude-sonnet-4-5"}}, WithThinking(Thinking{Type: "enabled", Budget: 4096})), req); string(got["tool_choice"]) != `{"type":"any"}` {
+		t.Fatalf("unknown model: tool_choice = %s", got["tool_choice"])
+	}
 
 	p := mustNew(t, Conf{Model: api.Model{Name: testModel}}, WithThinking(Thinking{Type: "adaptive"}))
 	if got := mustEncode(t, p, api.Request{
@@ -131,7 +135,7 @@ func TestForcedToolChoiceWithExtendedThinking(t *testing.T) {
 }
 
 func TestForcedToolChoiceRefusedByModel(t *testing.T) {
-	for _, model := range []string{"claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5-1", "claude-mythos-5-1", "anthropic.claude-opus-5-5"} {
+	for _, model := range []string{"claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5-1"} {
 		for _, choice := range []api.ToolChoice{api.ToolChoiceAny, api.ToolChoice("f")} {
 			mustFail(t, mustNew(t, Conf{Model: api.Model{Name: model}}), api.Request{ToolChoice: choice, Messages: []api.Message{userText("hi")}}, "refuses tool choice")
 		}
@@ -142,7 +146,7 @@ func TestForcedToolChoiceRefusedByModel(t *testing.T) {
 			}
 		}
 	}
-	for _, model := range []string{"claude-opus-5", "claude-sonnet-5", "claude-fable-5", "claude-haiku-5-5"} {
+	for _, model := range []string{"claude-opus-5", "claude-sonnet-5", "claude-fable-5", "claude-haiku-5-5", "claude-mythos-5-1", "anthropic.claude-opus-5-5"} {
 		got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: model}}), api.Request{ToolChoice: api.ToolChoiceAny, Messages: []api.Message{userText("hi")}})
 		if string(got["tool_choice"]) != `{"type":"any"}` {
 			t.Errorf("%s: tool_choice = %s, want any", model, got["tool_choice"])
@@ -799,24 +803,6 @@ func TestToolSchemaDefaults(t *testing.T) {
 	}, "not a JSON object")
 }
 
-func TestInjectCacheControlKeepsTheRestVerbatim(t *testing.T) {
-	block := json.RawMessage(`{"type":"text","text":"a \"quoted\" thing"}`)
-	out, err := injectCacheControl(block, cacheControl{Type: "ephemeral"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := `{"cache_control":{"type":"ephemeral"},"type":"text","text":"a \"quoted\" thing"}`
-	if string(out) != want {
-		t.Fatalf("got %s, want %s", out, want)
-	}
-	if !json.Valid(out) {
-		t.Fatalf("result is not valid JSON: %s", out)
-	}
-	if _, err := injectCacheControl(json.RawMessage(`[]`), cacheControl{Type: "ephemeral"}); err == nil {
-		t.Fatalf("marking a non object succeeded")
-	}
-}
-
 func TestRequestOverModelRequestBytes(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Errorf("a body over the model's byte limit reached the API")
@@ -1005,14 +991,15 @@ func TestNewRefusesInvalidSettings(t *testing.T) {
 		t.Errorf("WithMaxTokens(0) left %d, want the default %d", got, defaultMaxTokens)
 	}
 
-	mustRefuse(t, model, "only with enabled", WithThinking(Thinking{Type: ThinkingAdaptive, Budget: 2048}))
-	mustRefuse(t, model, "only with enabled", WithThinking(Thinking{Budget: 2048}))
-	mustRefuse(t, model, "under the 1024", WithThinking(Thinking{Type: ThinkingEnabled, Budget: 1023}))
-	mustRefuse(t, model, "not below max tokens", WithMaxTokens(4096), WithThinking(Thinking{Type: ThinkingEnabled, Budget: 4096}))
-	mustNew(t, model, WithMaxTokens(4096), WithThinking(Thinking{Type: ThinkingEnabled, Budget: 4095}))
-	mustNew(t, model, WithMaxTokens(4096), WithBeta("interleaved-thinking-2025-05-14"), WithThinking(Thinking{Type: ThinkingEnabled, Budget: 8192}))
-	mustRefuse(t, model, "needs thinking that is on", WithThinking(Thinking{Display: DisplaySummarized}))
-	mustRefuse(t, model, "needs thinking that is on", WithThinking(Thinking{Type: ThinkingDisabled, Display: DisplayOmitted}))
+	haiku := Conf{Model: Haiku45}
+	mustRefuse(t, haiku, "only with enabled", WithThinking(Thinking{Type: ThinkingAdaptive, Budget: 2048}))
+	mustRefuse(t, haiku, "only with enabled", WithThinking(Thinking{Budget: 2048}))
+	mustRefuse(t, haiku, "under the 1024", WithThinking(Thinking{Type: ThinkingEnabled, Budget: 1023}))
+	mustRefuse(t, haiku, "not below max tokens", WithMaxTokens(4096), WithThinking(Thinking{Type: ThinkingEnabled, Budget: 4096}))
+	mustNew(t, haiku, WithMaxTokens(4096), WithThinking(Thinking{Type: ThinkingEnabled, Budget: 4095}))
+	mustNew(t, haiku, WithMaxTokens(4096), WithBeta("interleaved-thinking-2025-05-14"), WithThinking(Thinking{Type: ThinkingEnabled, Budget: 8192}))
+	mustRefuse(t, haiku, "needs thinking that is on", WithThinking(Thinking{Display: DisplaySummarized}))
+	mustRefuse(t, haiku, "needs thinking that is on", WithThinking(Thinking{Type: ThinkingDisabled, Display: DisplayOmitted}))
 
 	enabled := WithThinking(Thinking{Type: ThinkingEnabled, Budget: 2048})
 	disabled := WithThinking(Thinking{Type: ThinkingDisabled})
@@ -1041,6 +1028,9 @@ func TestNewRefusesInvalidSettings(t *testing.T) {
 	own := Conf{Model: api.Model{Name: Opus55.Name}}
 	mustRefuse(t, own, "refuses disabled thinking", disabled)
 	mustNew(t, Conf{Model: api.Model{Name: "claude-opus-4-6"}}, disabled, WithEffort(EffortMax), WithMaxTokens(1_000_000))
+	mustNew(t, model, WithThinking(Thinking{Type: ThinkingAdaptive, Budget: 512, Display: DisplaySummarized}))
+	mustNew(t, model, WithMaxTokens(4096), WithThinking(Thinking{Type: ThinkingEnabled, Budget: 8192}))
+	mustNew(t, model, WithThinking(Thinking{Type: ThinkingDisabled, Display: DisplayOmitted}))
 }
 
 func TestDocumentInAssistantMessageIsANote(t *testing.T) {
@@ -1167,5 +1157,29 @@ func TestEncodeLogsOnlyAnUnknownTypeOnce(t *testing.T) {
 	}
 	if counts[slog.LevelWarn] != 0 || counts[slog.LevelError] > 1 {
 		t.Fatalf("two encodes logged %v, want no warnings and at most one error", map[slog.Level]int(counts))
+	}
+}
+
+func TestAPIKeySource(t *testing.T) {
+	counts := levelCounter{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(counts))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	t.Setenv("ANTHROPIC_API_KEY", "env-key")
+	if p := mustNew(t, Conf{Model: api.Model{Name: testModel}}); p.key != "env-key" {
+		t.Fatalf("key %q, want the environment's", p.key)
+	}
+	if p := mustNew(t, Conf{Model: api.Model{Name: testModel}}, WithAPIKey("")); p.key != "" {
+		t.Fatalf("key %q, want the explicit empty one", p.key)
+	}
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	mustNew(t, Conf{Model: api.Model{Name: testModel}}, WithAPIKey(""))
+	if counts[slog.LevelWarn] != 0 {
+		t.Fatalf("an explicit key warned %d times", counts[slog.LevelWarn])
+	}
+	mustNew(t, Conf{Model: api.Model{Name: testModel}})
+	if counts[slog.LevelWarn] != 1 {
+		t.Fatalf("no key at all warned %d times, want 1", counts[slog.LevelWarn])
 	}
 }

@@ -379,21 +379,16 @@ func TestStreamSequences(t *testing.T) {
 			},
 		},
 		{
-			// A call the service named with neither a call_id nor an item id
-			// gets a minted handle. The response id is in it because
-			// output_index counts within one turn: on that alone, the first call
-			// of every turn in a thread would answer to the same string.
-			name: "a call named with neither id gets a handle scoped to the turn",
+			// call_id is what a tool result is matched by, so a call announced
+			// without one is a broken item and fails the turn.
+			name: "a call without a call_id fails the turn",
 			sse: frame("response.created", createdFrame) +
-				frame("response.output_item.added", `{"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","name":"now","arguments":""}}`) +
+				frame("response.output_item.added", `{"type":"response.output_item.added","output_index":0,"item":{"id":"fc_1","type":"function_call","name":"now","arguments":""}}`) +
 				frame("response.function_call_arguments.done", `{"type":"response.function_call_arguments.done","output_index":0,"arguments":""}`) +
 				frame("response.completed", `{"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.6-sol","status":"completed","usage":null}}`),
 			want: []string{
 				"start id=resp_1 model=gpt-5.6-sol",
-				`tool[0] id=resp_1_call_0 name=now args=""`,
-				`tool[0] id= name= args="{}"`,
-				"close[0]",
-				"ok turn",
+				"err network",
 			},
 		},
 		{
@@ -1524,5 +1519,70 @@ func TestStringAboveMaxLengthIsInvalid(t *testing.T) {
 	}
 	if got := errorVocabulary("context_length_exceeded"); got != api.CodeContextLength {
 		t.Fatalf("errorVocabulary(context_length_exceeded) = %q, want %q", got, api.CodeContextLength)
+	}
+}
+
+func convertAll(frames ...string) []api.Event {
+	c := newConverter(testModel, 0, 0)
+	var all []api.Event
+	for _, data := range frames {
+		events, more := c.Convert(lib.Frame{Data: []byte(data)})
+		all = append(all, events...)
+		if !more {
+			return all
+		}
+	}
+	return all
+}
+
+// TestBrokenKnownFramesFail pins the strict half of decoding: a handled frame
+// that breaks the flow ends the turn with CodeNetwork instead of being salvaged.
+func TestBrokenKnownFramesFail(t *testing.T) {
+	msg := `{"type":"response.output_item.added","output_index":0,"item":{"type":"message","content":[]}}`
+	call := `{"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","call_id":"call_1","name":"f"}}`
+	reasoning := `{"type":"response.output_item.added","output_index":0,"item":{"type":"reasoning"}}`
+	for name, frames := range map[string][]string{
+		"opens without a response":      {`{"type":"response.output_item.added","output_index":0,"item":{"type":"message"}}`},
+		"created without a response":    {`{"type":"response.created"}`},
+		"item does not parse":           {createdFrame, `{"type":"response.output_item.added","output_index":0,"item":5}`},
+		"item without a type":           {createdFrame, `{"type":"response.output_item.added","output_index":0,"item":{"id":"x"}}`},
+		"absent item":                   {createdFrame, `{"type":"response.output_item.added","output_index":0}`},
+		"done item without a type":      {createdFrame, `{"type":"response.output_item.done","output_index":0,"item":null}`},
+		"call without a call_id":        {createdFrame, `{"type":"response.output_item.added","output_index":0,"item":{"id":"fc_1","type":"function_call","name":"f"}}`},
+		"item without output_index":     {createdFrame, `{"type":"response.output_item.added","item":{"type":"message"}}`},
+		"text without content_index":    {createdFrame, msg, `{"type":"response.output_text.delta","output_index":0,"delta":"x"}`},
+		"summary without summary_index": {createdFrame, reasoning, `{"type":"response.reasoning_summary_text.delta","output_index":0,"delta":"x"}`},
+		"text for no message":           {createdFrame, `{"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"x"}`},
+		"text on a function call":       {createdFrame, call, `{"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"x"}`},
+		"refusal for no message":        {createdFrame, `{"type":"response.refusal.delta","output_index":1,"content_index":0,"delta":"x"}`},
+		"summary for no reasoning":      {createdFrame, msg, `{"type":"response.reasoning_summary_text.delta","output_index":0,"summary_index":0,"delta":"x"}`},
+		"thinking for no item":          {createdFrame, `{"type":"response.reasoning_text.delta","output_index":2,"content_index":0,"delta":"x"}`},
+		"hosted delta on another kind":  {createdFrame, `{"type":"response.output_item.added","output_index":0,"item":{"type":"mcp_call"}}`, `{"type":"response.code_interpreter_call_code.delta","output_index":0,"delta":"x"}`},
+		"arguments differ from deltas":  {createdFrame, call, `{"type":"response.function_call_arguments.delta","output_index":0,"delta":"{\"a\":"}`, `{"type":"response.function_call_arguments.done","output_index":0,"arguments":"{\"a\":2}"}`},
+		"completed without a response":  {createdFrame, `{"type":"response.completed"}`},
+	} {
+		got := convertAll(frames...)
+		last, ok := got[len(got)-1].(api.EventErr)
+		if !ok || last.Code != api.CodeNetwork {
+			t.Errorf("%s: ended with %#v, want err network", name, got[len(got)-1])
+		}
+	}
+}
+
+// TestUnknownAndToleratedFrames is the other half: a type this adapter does not
+// handle is not decoded past its type, arguments that match their deltas pass,
+// and arguments that arrive before their call is announced are still taken.
+func TestUnknownAndToleratedFrames(t *testing.T) {
+	got := convertAll(
+		createdFrame,
+		`{"type":"response.future_thing","output_index":"x","delta":{"a":1},"item":7}`,
+		`{"type":"response.function_call_arguments.delta","output_index":0,"delta":"{\"a\":"}`,
+		`{"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","call_id":"call_1","name":"f"}}`,
+		`{"type":"response.function_call_arguments.delta","output_index":0,"delta":"1}"}`,
+		`{"type":"response.function_call_arguments.done","output_index":0,"arguments":"{\"a\":1}"}`,
+		usageFrame,
+	)
+	if _, ok := got[len(got)-1].(api.EventOk); !ok {
+		t.Fatalf("ended with %#v, want ok", got[len(got)-1])
 	}
 }

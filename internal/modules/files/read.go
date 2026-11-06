@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"strings"
 	"unicode/utf8"
 
@@ -159,7 +161,8 @@ func readBytesTool(ctx context.Context, arg readBytesArg) ([]byte, error) {
 
 func writeBytesTool(ctx context.Context, arg writeBytesArg) (Entry, error) {
 	fs := common.GetController(ctx).FS()
-	w, err := fs.Create(arg.Path)
+	tmp := fmt.Sprintf("%s.tmp-%016x~", arg.Path, rand.Uint64())
+	w, err := fs.Create(tmp)
 	if err != nil {
 		return Entry{}, err
 	}
@@ -167,8 +170,11 @@ func writeBytesTool(ctx context.Context, arg writeBytesArg) (Entry, error) {
 	if cerr := w.Close(); err == nil {
 		err = cerr
 	}
+	if err == nil {
+		err = fs.Rename(tmp, arg.Path)
+	}
 	if err != nil {
-		return Entry{}, err
+		return Entry{}, errors.Join(err, fs.Remove(context.WithoutCancel(ctx), tmp))
 	}
 	e, err := fs.Stat(ctx, arg.Path)
 	if err != nil {

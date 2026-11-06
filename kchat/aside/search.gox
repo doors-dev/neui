@@ -47,9 +47,6 @@ elem (p *Aside) overviewBody(body *doors.Door, input string, open func(ctx conte
 		doors.Logger(ctx).Error("aside: search others", "err", err)
 		failed = err
 	}
-	if failed != nil {
-		notify.Error(ctx, failed)
-	}
 	~~
 	~(if len(threads) != 0 {
 		<div class="kchat-side-label">Chats</div>
@@ -272,5 +269,5 @@ type names struct {
 }
 
 elem (n *names) Main() {
-	~(&days{aside: n.aside, window: n.window, save: n.save, name: n.query})
+	~(&days{aside: n.aside, window: n.window, save: n.save, name: n.query, empty: n.aside.noResults(controller.SearchNames)})
 }

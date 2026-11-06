@@ -43,6 +43,7 @@ func zipTool(ctx context.Context, arg zipArg) (Entry, error) {
 		return Entry{}, err
 	}
 	zw := zip.NewWriter(out)
+	added := map[string]bool{}
 	err = func() error {
 		for _, p := range arg.Paths {
 			e, err := fs.Stat(ctx, p)
@@ -50,18 +51,20 @@ func zipTool(ctx context.Context, arg zipArg) (Entry, error) {
 				return err
 			}
 			if !e.Dir {
-				if e.Name == dst {
+				if e.Name == dst || added[e.Name] {
 					continue
 				}
+				added[e.Name] = true
 				if err := zipAdd(ctx, fs, zw, e.Name); err != nil {
 					return err
 				}
 				continue
 			}
-			err = walkFiles(ctx, fs, e.Name, false, func(f api.FSEntry) (bool, error) {
-				if f.Name == dst {
+			_, err = walkFiles(ctx, fs, e.Name, false, func(f api.FSEntry) (bool, error) {
+				if f.Name == dst || added[f.Name] {
 					return true, nil
 				}
+				added[f.Name] = true
 				return true, zipAdd(ctx, fs, zw, f.Name)
 			})
 			if err != nil {
@@ -77,8 +80,7 @@ func zipTool(ctx context.Context, arg zipArg) (Entry, error) {
 		err = cerr
 	}
 	if err != nil {
-		fs.Remove(ctx, dst)
-		return Entry{}, err
+		return Entry{}, errors.Join(err, fs.Remove(context.WithoutCancel(ctx), dst))
 	}
 	e, err := fs.Stat(ctx, dst)
 	if err != nil {

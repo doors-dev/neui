@@ -106,7 +106,8 @@ type namedToolFunction struct {
 
 // chunk is one streamed frame. Every field DeepSeek sends that this protocol
 // has no home for is left out of the struct rather than decoded and dropped:
-// object, created, system_fingerprint, logprobs and choices[].index.
+// object, created, system_fingerprint and logprobs. choices[].index is read
+// because only the choice at index 0 is this turn's.
 //
 // Error, ErrorType and ErrorMsg are defensive. DeepSeek documents no in band
 // error frame on this endpoint at all, but the two shapes that circulate for
@@ -123,6 +124,7 @@ type chunk struct {
 }
 
 type chunkChoice struct {
+	Index        int     `json:"index"`
 	Delta        delta   `json:"delta"`
 	FinishReason *string `json:"finish_reason"`
 }
@@ -138,11 +140,12 @@ type delta struct {
 }
 
 // toolDelta is one fragment of one tool call. Index is the position among the
-// calls of this turn and is what fragments are correlated by. Function is a
+// calls of this turn and is what fragments are correlated by; it is a pointer
+// because every fragment carries it and absent must not read as call 0. Function is a
 // pointer because a fragment that carries only an id has no function object at
 // all, which is how a call's name can start arriving after its id.
 type toolDelta struct {
-	Index    int                `json:"index"`
+	Index    *int               `json:"index"`
 	ID       string             `json:"id"`
 	Function *toolDeltaFunction `json:"function"`
 }

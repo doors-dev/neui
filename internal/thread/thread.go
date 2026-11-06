@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/doors-dev/doors"
-	"log/slog"
 	"maps"
 	"sync"
 
@@ -141,6 +140,7 @@ func (t *thread) getState() api.ChatState {
 	s.Usage = t.replay.Usage()
 	s.Name = t.replay.Name()
 	s.Compaction = t.compaction.isActive()
+	s.CanCompact = t.canCompact()
 	t.state.dump(&s)
 	return s
 }
@@ -374,22 +374,12 @@ func (t *thread) on(cmd any) {
 			cmd.Err(api.ErrUnlinked)
 			return
 		}
-		if !t.replay.IsLoaded() {
+		if !t.canCompact() {
 			cmd.Err(api.ErrWrongState)
 			return
 		}
-		model := t.link.backend.Provider().Model()
-		if model.Context != 0 && float32(t.replay.Usage().Total()) < t.link.backend.Config().CompactionAllowed*float32(model.Context) {
-			cmd.Err(api.ErrWrongState)
-			return
-		}
-		started, err := t.compact()
-		if err != nil {
+		if _, err := t.compact(); err != nil {
 			cmd.Err(err)
-			return
-		}
-		if !started {
-			cmd.Err(api.ErrWrongState)
 			return
 		}
 		cmd.NoMessage()
@@ -516,23 +506,19 @@ func (t *thread) applyCompaction(cmd commandApplyCompaction) bool {
 	if !ok {
 		return false
 	}
-	if code, isErr := cmd.resp.Err(); isErr {
-		t.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}}))
+	if code, isErr := cmd.resp.Err(); isErr && code != api.CodeCapped {
+		t.replay.CompactionFailed()
+		t.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}, CanCompact: t.canCompact()}))
 		switch code {
 		case api.CodeAccess, api.CodeBusy, api.CodeNetwork, api.CodeUnknown, api.CodeInvalid:
 			doors.Logger(t.link.backend.Context()).Error("thread: compaction failed", "thread", t.id, "code", code, "err", cmd.resp.Cause)
 		}
 		return false
 	}
-	if code, _ := cmd.resp.Ok(); code != api.CodeTurn {
-		t.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}}))
-		slog.Error("thread: compaction skipped", "thread", t.id, "code", code)
-		return false
-	}
 	err := t.replay.ApplyCompaction(compaction, cmd.resp.Content, cmd.resp.Usage)
 	if errors.Is(err, replay.ErrEmptySummary) {
-		t.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}}))
-		slog.Error("thread: compaction skipped", "thread", t.id, "err", err)
+		t.replay.CompactionFailed()
+		t.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}, CanCompact: t.canCompact()}))
 		return false
 	}
 	if err != nil {
@@ -540,7 +526,7 @@ func (t *thread) applyCompaction(cmd commandApplyCompaction) bool {
 		return false
 	}
 	usage := t.replay.Usage()
-	t.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: usage}))
+	t.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: usage, CanCompact: t.canCompact()}))
 	return true
 }
 
@@ -551,6 +537,10 @@ func (t *thread) applyHeldCompaction() {
 	}
 	t.compaction.held = nil
 	t.applyCompaction(*held)
+}
+
+func (t *thread) canCompact() bool {
+	return !t.compaction.isActive() && t.replay.CanCompact()
 }
 
 func (t *thread) compact() (bool, error) {
@@ -565,7 +555,7 @@ func (t *thread) compact() (bool, error) {
 		return false, nil
 	}
 	ctx, seq := t.compaction.start(t.link.backend.Context(), c)
-	t.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: true, Usage: api.EventUsage{}}))
+	t.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: true, Usage: api.EventUsage{}, CanCompact: t.canCompact()}))
 	events := t.link.backend.Provider().Stream(ctx, api.Request{
 		System:   t.link.system(),
 		Messages: m,

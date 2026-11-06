@@ -94,7 +94,7 @@ func grepTool(ctx context.Context, arg grepArg) (grepResult, error) {
 	if root := path.Clean(arg.Path); root != "." {
 		skip = len(root) + 1
 	}
-	if err := walkFiles(ctx, fs, arg.Path, false, func(e api.FSEntry) (bool, error) {
+	if _, err := walkFiles(ctx, fs, arg.Path, false, func(e api.FSEntry) (bool, error) {
 		return scan(e.Name, e.Name[skip:])
 	}); err != nil {
 		return grepResult{}, err
@@ -156,7 +156,7 @@ func globTool(ctx context.Context, arg globArg) (globResult, error) {
 		skip = len(root) + 1
 	}
 	res := globResult{Paths: []string{}}
-	err = walkFiles(ctx, fs, arg.Path, true, func(e api.FSEntry) (bool, error) {
+	_, err = walkFiles(ctx, fs, arg.Path, true, func(e api.FSEntry) (bool, error) {
 		if !re.MatchString(e.Name[skip:]) {
 			return true, nil
 		}
@@ -173,30 +173,31 @@ func globTool(ctx context.Context, arg globArg) (globResult, error) {
 	return res, nil
 }
 
-func walkFiles(ctx context.Context, fs api.FS, root string, virtual bool, fn func(e api.FSEntry) (bool, error)) error {
+func walkFiles(ctx context.Context, fs api.FS, root string, virtual bool, fn func(e api.FSEntry) (bool, error)) (bool, error) {
 	entries, err := fs.ReadDir(ctx, root)
 	if err != nil {
-		return err
+		return false, err
 	}
 	for _, e := range entries {
 		if err := context.Cause(ctx); err != nil {
-			return err
+			return false, err
 		}
 		if e.Dir {
 			if !virtual && e.Virtual {
 				continue
 			}
-			if err := walkFiles(ctx, fs, e.Name, virtual, fn); err != nil {
-				return err
+			cont, err := walkFiles(ctx, fs, e.Name, virtual, fn)
+			if err != nil || !cont {
+				return false, err
 			}
 			continue
 		}
 		cont, err := fn(e)
 		if err != nil || !cont {
-			return err
+			return false, err
 		}
 	}
-	return nil
+	return true, nil
 }
 
 func globRegexp(pattern string) (*regexp.Regexp, error) {

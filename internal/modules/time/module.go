@@ -23,7 +23,7 @@ var errCancelled = errors.New("cancelled by time__cancel")
 const moduleDesc = `The clock. time__now is the server's clock, time__client the clock of the browser the user has open — they differ in offset and may differ in wall time; quote the client's when talking to the user. time__timer waits until a moment: short waits complete inside the call, longer ones return deferred and arrive later as a <task_result> element in the conversation, so use it to continue work at a chosen moment, not to pause a conversation. One deferred timer at a time: another deferred call errors while one is pending; short waits always work. time__cancel drops a deferred one.`
 const nowDesc = `Current time of the machine this runs on, in its own zone. Use it for anything timestamped by the server; for what the user's clock says, call time__client.`
 const clientDesc = `Current time of the browser the user has the page open in, with the user's UTC offset. Errors when the browser does not answer. The reading carries no zone name, only the offset.`
-const timerDesc = `Wait until a moment. Pass afterMs, or at as an RFC 3339 instant — exactly one; at is resolved against the server clock. A wait of up to 10 s blocks the call and returns when the moment arrives. A longer one returns at once with deferred: true; when the moment arrives a <task_result> element (module time, name timer, comment as given) carrying the firing details appears and starts a round. One deferred timer at a time: another deferred call errors while one is pending; short waits always work. time__cancel drops a deferred one. Called from a script, it always blocks until the moment arrives and never defers.`
+const timerDesc = `Wait until a moment. Pass afterMs, or at as an RFC 3339 instant — exactly one; at is resolved against the server clock. A wait of up to 10 s blocks the call and returns when the moment arrives. A longer one returns at once with deferred: true; when the moment arrives a <task_result> element (module time, name timer, comment as given) carrying the firing details appears and starts a round. One deferred timer at a time: another deferred call errors while one is pending; short waits always work. time__cancel drops a deferred one. Called from a script, it blocks within the script's time limit and never defers; a moment past that limit errors at once, so wait that long with time__timer outside the script.`
 const cancelDesc = `Drop the pending deferred timer; its task_result element reports the cancellation. Errors when none is pending.`
 
 func Module(context.Context) common.Module {
@@ -151,6 +151,9 @@ func (m *module) timer(ctx context.Context, arg TimerArg) (TimerResult, error) {
 		return TimerResult{}, fmt.Errorf("at most %s from now", maxDelay)
 	}
 	if delay <= syncAfter || tools.FromJS(ctx) {
+		if deadline, ok := ctx.Deadline(); ok && tools.FromJS(ctx) && fires.After(deadline) {
+			return TimerResult{}, fmt.Errorf("%s is past the script's time limit, which ends at %s: call time__timer outside the script to wait that long", fires.Format(layout), deadline.Format(layout))
+		}
 		timer := time.NewTimer(delay)
 		defer timer.Stop()
 		select {
@@ -163,13 +166,11 @@ func (m *module) timer(ctx context.Context, arg TimerArg) (TimerResult, error) {
 	thread := common.GetController(ctx)
 	waitCtx, cancel := context.WithCancelCause(thread.Context())
 	p := &pending{comment: arg.Comment, cancel: cancel, done: make(chan struct{})}
-	if !m.pending.CompareAndSwap(nil, p) {
-		cancel(nil)
-		comment := ""
+	for !m.pending.CompareAndSwap(nil, p) {
 		if q := m.pending.Load(); q != nil {
-			comment = q.comment
+			cancel(nil)
+			return TimerResult{}, fmt.Errorf("a timer is already pending (%s): time__cancel it or wait for it to fire", q.comment)
 		}
-		return TimerResult{}, fmt.Errorf("a timer is already pending (%s): time__cancel it or wait for it to fire", comment)
 	}
 	task, err := thread.Task(arg.Comment, map[string]any{
 		"requested": requested,
@@ -216,7 +217,7 @@ func (m *module) cancel(ctx context.Context, _ struct{}) (struct{}, error) {
 		return struct{}{}, errors.New("no timer is pending")
 	}
 	if !p.claimed.CompareAndSwap(false, true) {
-		return struct{}{}, errors.New("the timer already fired: its task_result reports the firing")
+		return struct{}{}, errors.New("the timer is already ending: its task_result reports the outcome")
 	}
 	m.pending.CompareAndSwap(p, nil)
 	p.cancel(errCancelled)

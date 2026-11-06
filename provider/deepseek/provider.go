@@ -8,9 +8,10 @@
 //		deepseek.WithEffort(deepseek.EffortMax))
 //
 // The key comes from DEEPSEEK_API_KEY unless WithAPIKey sets it. A provider
-// serves one model with one set of options; build two for two settings. New
-// refuses a setting DeepSeek would reject or ignore, so a Provider that was
-// built sends what it was given. Thinking is on by default and streams back as
+// serves one model with one set of options; build two for two settings. For a
+// model declared here New refuses a setting DeepSeek would reject or ignore,
+// so a Provider that was built sends what it was given; for any other model it
+// checks no combination and every option is sent as configured. Thinking is on by default and streams back as
 // readable reasoning. Images go to deepseek-flash in user messages and tool
 // results; every other model gets a short note in place of each image, and
 // every model gets one in place of a document. Caching is automatic and needs no options:
@@ -42,8 +43,8 @@ const (
 	defaultBaseURL = "https://api.deepseek.com"
 	completionPath = "/chat/completions"
 	// maxOutputTokens is the documented ceiling for both v4 models, against a
-	// 1M context. A request above it is rejected, so WithMaxTokens refuses the
-	// value rather than letting the turn fail at the server.
+	// 1M context. A request above it is rejected, so New refuses the value on
+	// those models rather than letting the turn fail at the server.
 	maxOutputTokens = 393_216
 	// maxToolNameLen is a documented request limit. Checking it here turns an
 	// opaque 400 into a sentence naming the tool.
@@ -67,7 +68,8 @@ const (
 type family int
 
 const (
-	familyPro family = iota
+	familyUnknown family = iota
+	familyPro
 	familyFlash
 )
 
@@ -101,15 +103,17 @@ type Conf struct {
 }
 
 // New builds a Provider for conf.Model. The key defaults to DEEPSEEK_API_KEY.
-// New returns the first option error, and an error for an empty Model.Name, a
-// missing key, an Effort outside the declared levels, WithTemperature without
-// WithEffort(EffortNone), and WithTopP where the model ignores it. The model
-// rules follow the exact id: deepseek-flash and its legacy ids
-// deepseek-v4-flash and deepseek-v4-flash-vision-exp take images and honor
-// top_p with thinking on; deepseek-v4-pro and any id not listed here take no
-// images and honor top_p with thinking off. The default HTTP client has no
-// timeout, because DeepSeek may queue a request for minutes before answering;
-// WithTransport bounds a dead connection instead.
+// New returns the first option error, and an error for an empty Model.Name or
+// a missing key. The model rules follow the exact id: deepseek-flash and its
+// legacy ids deepseek-v4-flash and deepseek-v4-flash-vision-exp take images
+// and honor top_p with thinking on; deepseek-v4-pro takes no images and honors
+// top_p with thinking off. On those models New also returns an error for an
+// Effort outside the declared levels, WithTemperature without
+// WithEffort(EffortNone), WithTopP where the model ignores it, and
+// WithMaxTokens over the documented ceiling. Any other id takes no images, and
+// New checks nothing more for it: every option is sent as configured. The
+// default HTTP client has no timeout, because DeepSeek may queue a request for
+// minutes before answering; WithTransport bounds a dead connection instead.
 func New(conf Conf, opts ...Option) (*Provider, error) {
 	p := &Provider{
 		key:    os.Getenv("DEEPSEEK_API_KEY"),
@@ -131,14 +135,22 @@ func New(conf Conf, opts ...Option) (*Provider, error) {
 	if p.key == "" {
 		return nil, errNoKey
 	}
+	switch p.model.Name {
+	case Flash.Name, "deepseek-v4-flash", "deepseek-v4-flash-vision-exp":
+		p.family = familyFlash
+	case V4Pro.Name:
+		p.family = familyPro
+	}
+	if p.family == familyUnknown {
+		return p, nil
+	}
 	switch p.effort {
 	case "", EffortNone, EffortLow, EffortHigh, EffortMax:
 	default:
 		return nil, fmt.Errorf("deepseek: effort %q is not one of none, low, high or max", p.effort)
 	}
-	switch p.model.Name {
-	case "deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp":
-		p.family = familyFlash
+	if p.maxTokens > maxOutputTokens {
+		return nil, fmt.Errorf("deepseek: max tokens %d is over the documented ceiling of %d", p.maxTokens, maxOutputTokens)
 	}
 	if p.temperature != nil && p.effort != EffortNone {
 		return nil, errors.New("deepseek: temperature has no effect in thinking mode, pass WithEffort(EffortNone) with it")
@@ -199,9 +211,10 @@ func WithHTTPClient(client *http.Client) Option {
 // WithEffort sets the reasoning level. EffortNone sends thinking disabled and
 // no reasoning_effort; the other levels send thinking enabled and that
 // reasoning_effort; unset sends thinking enabled and leaves the level to the
-// server. With thinking on, DeepSeek refuses a forced tool choice, so a
-// request whose ToolChoice is api.ToolChoiceAny or names a tool fails with a
-// *RequestError unless the effort is EffortNone.
+// server. With thinking on, DeepSeek refuses a forced tool choice, so on a
+// declared model a request whose ToolChoice is api.ToolChoiceAny or names a
+// tool fails with a *RequestError unless the effort is EffortNone; any other
+// model is sent the choice as it is.
 func WithEffort(e Effort) Option {
 	return func(p *Provider) error {
 		p.effort = e
@@ -210,7 +223,8 @@ func WithEffort(e Effort) Option {
 }
 
 // WithTemperature sets temperature, from 0 to 2. DeepSeek ignores it in
-// thinking mode, so New refuses it without WithEffort(EffortNone).
+// thinking mode, so on a declared model New refuses it without
+// WithEffort(EffortNone).
 func WithTemperature(t float64) Option {
 	return func(p *Provider) error {
 		if !(t >= 0 && t <= 2) {
@@ -225,7 +239,8 @@ func WithTemperature(t float64) Option {
 // deepseek-v4-pro with WithEffort(EffortNone), and deepseek-flash (or
 // deepseek-v4-flash or deepseek-v4-flash-vision-exp) with thinking on, where
 // the server raises values below 0.95 to 0.95. DeepSeek fixes top_p
-// everywhere else, so New refuses it there.
+// everywhere else, so New refuses it there; on a model not declared here it is
+// sent as configured.
 func WithTopP(t float64) Option {
 	return func(p *Provider) error {
 		if !(t > 0 && t <= 1) {
@@ -247,15 +262,12 @@ func WithStop(stop ...string) Option {
 
 // WithMaxTokens caps the response; a turn that hits it ends with
 // api.CodeCapped. At 0, the default, no cap is sent and the server's default
-// applies. A negative value or one over the documented 393,216 ceiling makes
-// New fail.
+// applies. A negative value makes New fail, and so does one over the
+// documented 393,216 ceiling on a model declared here.
 func WithMaxTokens(n int) Option {
 	return func(p *Provider) error {
 		if n < 0 {
 			return fmt.Errorf("deepseek: max tokens %d is negative", n)
-		}
-		if n > maxOutputTokens {
-			return fmt.Errorf("deepseek: max tokens %d is over the documented ceiling of %d", n, maxOutputTokens)
 		}
 		p.maxTokens = n
 		return nil

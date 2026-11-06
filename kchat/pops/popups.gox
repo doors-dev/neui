@@ -60,14 +60,14 @@ elem (p Popups) script(seq int) {
 			$hook("hide", seq).catch(fail)
 		}
 		const escape = (e) => {
-			if (e.key !== "Escape") return
+			e.preventDefault()
 			$hook("hide", seq).catch(fail)
 		}
 		document.addEventListener("pointerdown", hide)
-		document.addEventListener("keydown", escape)
+		root.addEventListener("kchat_escape", escape)
 		$sys.clean(() => {
 			document.removeEventListener("pointerdown", hide)
-			document.removeEventListener("keydown", escape)
+			root.removeEventListener("kchat_escape", escape)
 		})
 	</script>
 }

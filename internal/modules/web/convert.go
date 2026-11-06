@@ -36,7 +36,7 @@ var blockTag = map[string]bool{
 }
 
 func docTitle(n *html.Node) string {
-	if n.Type == html.ElementNode && n.Data == "title" {
+	if n.Type == html.ElementNode && n.Data == "title" && n.Namespace == "" {
 		var b strings.Builder
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
 			if c.Type == html.TextNode {

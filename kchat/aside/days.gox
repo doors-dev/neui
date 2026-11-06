@@ -27,6 +27,7 @@ type days struct {
 	window controller.Window
 	save func(ctx context.Context, w controller.Window)
 	name string
+	empty gox.Comp
 	pinned api.ThreadID
 	active api.ThreadID
 }
@@ -37,6 +38,7 @@ elem (d *days) Main() {
 		Driver: d,
 		InitialWindow: d.window,
 		SaveWindow: d.save,
+		Empty: d.empty,
 	})
 }
 
@@ -183,7 +185,6 @@ elem (d *day) content() {
 		threads, err = d.days.aside.Instance.ThreadList(ctx, d.start, d.end, false, 0, d.days.name)
 		if err != nil {
 			doors.Logger(ctx).Error("aside: day", "day", label, "err", err)
-			notify.Error(ctx, err)
 			failed = true
 		}
 	}

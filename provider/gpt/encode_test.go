@@ -460,14 +460,14 @@ func TestEncodeInput(t *testing.T) {
 			want: `[{"role":"assistant","content":[{"type":"output_text","text":"the answer"}]}]`,
 		},
 		{
-			name:  "a gateway spelling of the same model still labels the message",
+			name:  "a gateway spelling is another model and does not label the message",
 			model: "openai/GPT-5.6-sol",
 			req: api.Request{Messages: []api.Message{
 				assistant(
 					api.ContentText{Text: "the answer", Meta: phaseMeta("gpt-5.6-sol", "commentary")},
 				),
 			}},
-			want: `[{"role":"assistant","content":[{"type":"output_text","text":"the answer"}],"phase":"commentary"}]`,
+			want: `[{"role":"assistant","content":[{"type":"output_text","text":"the answer"}]}]`,
 		},
 		{
 			// The label is on the block, so it travels with it wherever the block
@@ -886,13 +886,18 @@ func TestEncodeTopLevel(t *testing.T) {
 		sameJSON(t, body["reasoning"], `{"effort":"none"}`)
 	})
 
-	t.Run("forced sampling overrides the model gate", func(t *testing.T) {
+	t.Run("an unknown model gets every option and no include", func(t *testing.T) {
 		set := defaultSettings()
 		temp := 0.2
 		set.temperature = &temp
-		set.forceSampling = true
-		if got := encodeBody(t, testModel, set, base)["temperature"]; got != 0.2 {
-			t.Fatalf("temperature %v, want 0.2", got)
+		set.effort = string(EffortHigh)
+		body := encodeBody(t, "my-model", set, base)
+		if body["temperature"] != 0.2 {
+			t.Fatalf("temperature %v, want 0.2", body["temperature"])
+		}
+		sameJSON(t, body["reasoning"], `{"effort":"high"}`)
+		if _, ok := body["include"]; ok {
+			t.Fatal("encrypted reasoning was requested from a model not known to reason")
 		}
 	})
 }
@@ -942,21 +947,26 @@ func TestModelClassification(t *testing.T) {
 	reasoning := []string{
 		"gpt-5.6-sol", "gpt-5.6", "gpt-5", "gpt-5-mini", "gpt-5.1-codex-max",
 		"gpt-5.4-2026-01-01", "o1", "o1-pro", "o3-mini", "o4-mini",
-		"codex-mini-latest", "openai/gpt-5.6-terra", "GPT-5.6-LUNA",
-		"gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "openai/gpt-6-sol",
+		"codex-mini-latest",
+		"gpt-6-astra", "gpt-6-sol", "gpt-6-luna",
 	}
 	for _, m := range reasoning {
-		if !isReasoningModel(m) {
-			t.Errorf("%q classified as non reasoning", m)
+		if got := classify(m); got != reasoningModel {
+			t.Errorf("%q classified as %d, want reasoning", m, got)
 		}
 	}
 	plain := []string{
 		"gpt-4o", "gpt-4o-mini", "gpt-4.1", "gpt-4-turbo", "gpt-3.5-turbo",
-		"chatgpt-4o-latest", "gpt-5-chat-latest", "gpt-5.3-chat-latest", "gpt-60", "",
+		"chatgpt-4o-latest", "gpt-5-chat-latest", "gpt-5.3-chat-latest",
 	}
 	for _, m := range plain {
-		if isReasoningModel(m) {
-			t.Errorf("%q classified as reasoning", m)
+		if got := classify(m); got != plainModel {
+			t.Errorf("%q classified as %d, want non reasoning", m, got)
+		}
+	}
+	for _, m := range []string{"gpt-60", "gpt-40", "o10", "my-model", "llama-3", "", "openai/gpt-5.6-terra", "GPT-5.6-LUNA", "openai/gpt-6-sol", "openai/gpt-4.1"} {
+		if got := classify(m); got != unknownModel {
+			t.Errorf("%q classified as %d, want unknown", m, got)
 		}
 	}
 }
@@ -1031,8 +1041,16 @@ func TestProviderOptions(t *testing.T) {
 			}
 		}
 		build(t, api.Model{Name: testModel}, WithAPIKey("k"), WithTemperature(0.2), WithReasoningEffort(EffortNone))
-		build(t, api.Model{Name: testModel}, WithAPIKey("k"), WithTopP(0.9), WithForcedSampling())
 		build(t, api.Model{Name: "gpt-4o"}, WithAPIKey("k"), WithTemperature(0.2), WithTopP(0.9))
+	})
+
+	t.Run("New checks no combination on an unknown model", func(t *testing.T) {
+		p := build(t, api.Model{Name: "my-model"}, WithAPIKey("k"), WithTemperature(0.2), WithTopP(0.9),
+			WithReasoningEffort(EffortHigh), WithReasoningSummary(SummaryAuto), WithReasoningMode(ReasoningPro), WithReasoningContext(ContextAllTurns))
+		if p.set.temperature == nil || p.set.topP == nil || p.set.effort != string(EffortHigh) || p.set.summary != string(SummaryAuto) ||
+			p.set.reasoningMode != string(ReasoningPro) || p.set.reasoningContext != string(ContextAllTurns) {
+			t.Fatalf("settings %+v, want every option kept", p.set)
+		}
 	})
 
 	t.Run("an empty model name fails New", func(t *testing.T) {
@@ -1060,8 +1078,10 @@ func TestProviderOptions(t *testing.T) {
 			}
 			build(t, m, WithAPIKey("k"), WithMaxTokens(128_000))
 		}
-		if p := build(t, api.Model{Name: "gpt-7"}, WithAPIKey("k"), WithMaxTokens(256_000)); p.set.maxTokens != 256_000 {
-			t.Fatalf("maxTokens %d, want an undeclared model left unchecked", p.set.maxTokens)
+		for _, name := range []string{"gpt-7", "openai/gpt-6.1-sol", "GPT-6.1-SOL"} {
+			if p := build(t, api.Model{Name: name}, WithAPIKey("k"), WithMaxTokens(256_000)); p.set.maxTokens != 256_000 {
+				t.Fatalf("%s: maxTokens %d, want an undeclared model left unchecked", name, p.set.maxTokens)
+			}
 		}
 	})
 
@@ -1091,6 +1111,7 @@ func TestProviderOptions(t *testing.T) {
 			build(t, m, WithAPIKey("k"), WithReasoningEffort(EffortNone))
 		}
 		build(t, api.Model{Name: "gpt-5"}, WithAPIKey("k"), WithReasoningEffort(EffortMinimal))
+		build(t, api.Model{Name: "openai/gpt-6.1-sol"}, WithAPIKey("k"), WithReasoningEffort(EffortNone))
 	})
 
 	t.Run("the model reads back as configured, window included", func(t *testing.T) {

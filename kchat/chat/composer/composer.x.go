@@ -638,7 +638,7 @@ func (c *Composer) context(has bool) gox.Elem {
 								}
 								__e = __c.Close(); if __e != nil { return }
 //line composer.gox:242
-							} else if window == 0 || float32(settled) >= config.CompactionAllowed * float32(window) {
+							} else if s.CanCompact {
 								__e = __c.Init("span"); if __e != nil { return }
 								{
 //line composer.gox:243

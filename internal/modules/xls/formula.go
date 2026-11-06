@@ -3,21 +3,13 @@ package xls
 import (
 	"context"
 	"fmt"
-	"maps"
-	"regexp"
-	"slices"
 	"strings"
 
 	"github.com/xuri/excelize/v2"
 	"neui.dev/internal/common"
 )
 
-const maxCheckCells = 10000
-
 const totalDesc = `Add a summary row in the empty row right under a range: a SUBTOTAL per chosen column, bold with a top border, each cell keeping its column's number format (counts excepted). Plain ranges only: a range that is or overlaps a table is refused, since total rows inside tables are not supported — total a table with write instead, e.g. =SUBTOTAL(109,Sales[Amount]) in a cell clear of it. The summary row must also be clear of tables, the autofilter and merged cells.`
-const checkDesc = `Spot-check a workbook's formulas with excelize's evaluator, which is not Excel: errors it reports are real, but a clean pass is encouraging rather than proof. Functions and references it cannot compute come back in uncalculated and their cells are skipped, never counted as passing — check those in Excel. SUBTOTAL 101-111 evaluate like 1-11, ignoring hidden rows.`
-
-var unsupportedFn = regexp.MustCompile(`not support (\S+) function`)
 
 type aggSpec struct {
 	Column string `json:"column" required:"true" description:"header of a column in the range, like Amount; a column letter inside the range, like B, also works"`
@@ -34,23 +26,6 @@ type totalArg struct {
 type totalResult struct {
 	Row   int    `json:"row" description:"row number of the summary row"`
 	Range string `json:"range" description:"the summary row, like A21:C21"`
-}
-
-type checkArg struct {
-	Path string `json:"path" required:"true"`
-}
-
-type cellError struct {
-	Cell  string `json:"cell" description:"like 'Sheet1'!D4"`
-	Error string `json:"error"`
-}
-
-type checkResult struct {
-	Formulas     int         `json:"formulas" description:"formula cells evaluated"`
-	Errors       []cellError `json:"errors" description:"cells that evaluated to an error, like #DIV/0!"`
-	Uncalculated []string    `json:"uncalculated" description:"functions and references the evaluator cannot compute"`
-	Skipped      int         `json:"skipped" description:"formula cells not evaluated because they use, or depend on a cell that uses, something in uncalculated"`
-	Truncated    bool        `json:"truncated,omitempty" description:"stopped early, at the formula cell cap or with the error list full; the rest of the workbook was not checked"`
 }
 
 var aggFns = map[string]int{
@@ -190,81 +165,4 @@ func totalTool(ctx context.Context, arg totalArg) (totalResult, error) {
 		return totalResult{}, err
 	}
 	return totalResult{Row: row, Range: target.ref()}, nil
-}
-
-func checkTool(ctx context.Context, arg checkArg) (checkResult, error) {
-	c := cfg(ctx)
-	fs := common.GetController(ctx).FS()
-	f, err := openRead(ctx, fs, arg.Path)
-	if err != nil {
-		return checkResult{}, err
-	}
-	defer f.Close()
-	res := checkResult{Errors: []cellError{}}
-	uncalculated := map[string]bool{}
-	for _, sheet := range f.GetSheetList() {
-		rows, err := f.Rows(sheet)
-		if err != nil {
-			return checkResult{}, err
-		}
-		num := 0
-		for rows.Next() && !res.Truncated {
-			num++
-			if err := ctx.Err(); err != nil {
-				rows.Close()
-				return checkResult{}, err
-			}
-			v, err := rows.Columns()
-			if err != nil {
-				rows.Close()
-				return checkResult{}, err
-			}
-			for i := range v {
-				cell, err := excelize.CoordinatesToCellName(i+1, num)
-				if err != nil {
-					rows.Close()
-					return checkResult{}, err
-				}
-				fl, _ := f.GetCellFormula(sheet, cell)
-				if fl == "" {
-					continue
-				}
-				if res.Formulas+res.Skipped == maxCheckCells || uint(len(res.Errors)) == c.MaxReadRows {
-					res.Truncated = true
-					break
-				}
-				val, err := f.CalcCellValue(sheet, cell)
-				if err != nil {
-					if m := unsupportedFn.FindStringSubmatch(err.Error()); m != nil {
-						uncalculated[m[1]] = true
-						res.Skipped++
-						continue
-					}
-					if strings.Contains(err.Error(), "invalid reference") {
-						uncalculated["references it cannot resolve, such as Table[Column]"] = true
-						res.Skipped++
-						continue
-					}
-				}
-				res.Formulas++
-				ref := sheetRef(sheet) + "!" + cell
-				if err != nil {
-					res.Errors = append(res.Errors, cellError{Cell: ref, Error: err.Error()})
-				} else if strings.HasPrefix(val, "#") {
-					res.Errors = append(res.Errors, cellError{Cell: ref, Error: val})
-				}
-			}
-		}
-		if err := rows.Close(); err != nil {
-			return checkResult{}, err
-		}
-		if res.Truncated {
-			break
-		}
-	}
-	res.Uncalculated = slices.Sorted(maps.Keys(uncalculated))
-	if res.Uncalculated == nil {
-		res.Uncalculated = []string{}
-	}
-	return res, nil
 }

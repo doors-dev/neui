@@ -67,6 +67,7 @@ type WindowList struct {
 	SaveWindow func(context.Context, controller.Window)
 	Driver Driver
 	Margin int
+	Empty gox.Comp
 	mu *sync.Mutex
 	ctx context.Context
 	history deque.Deque[*slot]
@@ -98,7 +99,9 @@ elem (w WindowList) body(door *doors.Door) {
 	w.mu = new(sync.Mutex)
 	s, err := w.seed(ctx)
 	~~
-	~(if err == nil {
+	~(if err == nil && w.Empty != nil && w.history.Len() == 0 {
+		~(w.Empty)
+	} else if err == nil {
 		~(s)
 		~(w.script())
 	} else {

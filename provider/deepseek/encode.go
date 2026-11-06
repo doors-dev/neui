@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"strings"
+	"unsafe"
 
 	"neui.dev/api"
 	"neui.dev/provider/lib"
@@ -29,8 +30,8 @@ import (
 //
 // thinking always goes out, since it is the field that decides when
 // reasoning_effort is present too, and a disabled thinking never carries an
-// effort. Temperature and top_p go out as set: New refused them where the
-// model ignores them.
+// effort. Temperature and top_p go out as set: New refused them where a
+// declared model ignores them.
 func (p *Provider) encode(req api.Request) (*chatRequest, error) {
 	out := &chatRequest{
 		Model:         p.model.Name,
@@ -63,8 +64,9 @@ func (p *Provider) encode(req api.Request) (*chatRequest, error) {
 
 // encodeTools declares the tools and the choice. An unset choice means let the
 // server decide, which is not the same as "auto" on every host, so the field
-// stays off the wire. A forced choice is refused while thinking is on, which is
-// what the server answers it with a 400 for.
+// stays off the wire. On a declared model a forced choice is refused while
+// thinking is on, which is what the server answers it with a 400 for; any other
+// model is sent the choice as it is.
 func (p *Provider) encodeTools(out *chatRequest, req api.Request) error {
 	seen := make(map[string]bool, len(req.Tools))
 	for _, t := range req.Tools {
@@ -85,7 +87,7 @@ func (p *Provider) encodeTools(out *chatRequest, req api.Request) error {
 		})
 	}
 	name, named := req.ToolChoice.Tool()
-	if p.effort != EffortNone && (named || req.ToolChoice == api.ToolChoiceAny) {
+	if p.family != familyUnknown && p.effort != EffortNone && (named || req.ToolChoice == api.ToolChoiceAny) {
 		return reqErrf("tool choice %q forces a tool call, which DeepSeek refuses in thinking mode; pass WithEffort(EffortNone) to force one", req.ToolChoice)
 	}
 	if named {
@@ -363,7 +365,7 @@ func (p *Provider) image(c api.ContentImage) any {
 	n += copy(url[n:], mime)
 	n += copy(url[n:], ";base64,")
 	base64.StdEncoding.Encode(url[n:], c.Data)
-	return imagePart{Type: "image_url", ImageURL: imageURL{URL: string(url)}}
+	return imagePart{Type: "image_url", ImageURL: imageURL{URL: unsafe.String(&url[0], len(url))}}
 }
 
 func note(c api.Content, why string) textPart {

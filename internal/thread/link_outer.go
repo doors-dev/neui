@@ -38,7 +38,6 @@ func (l Link) Close() {
 	case <-l.inner.thread.close:
 	case l.inner.thread.ch <- commandUnlink{l.inner}:
 	}
-	l.inner = nil
 }
 
 func (l Link) Input(op Operation, input api.Input) Command {

@@ -46,6 +46,8 @@ const (
 	Sidebar = Feature(params.Sidebar)
 	// ThreadEdit hides rename, clone and delete in the chat list.
 	ThreadEdit = Feature(params.ThreadEdit)
+	// MessageSearch limits search to chat names; message contents are not searched.
+	MessageSearch = Feature(params.MessageSearch)
 )
 
 // Simple is the preset for non-technical users. It grows as technical features are added.
@@ -110,18 +112,18 @@ type kchat struct {
 	pops pops.Popups
 }
 
-//line kchat.gox:110
+//line kchat.gox:112
 func (k *kchat) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line kchat.gox:111
+//line kchat.gox:113
 		__e = __c.Any(css.Style(k.params.ThemeDark, k.params.ThemeLight)); if __e != nil { return }
-//line kchat.gox:112
+//line kchat.gox:114
 		__e = (doors.Ctx(notify.Root(ctx))).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line kchat.gox:113
+//line kchat.gox:115
 				__e = __c.Set("class", func() any {
 			class := "kchat-widget kchat-widget_split"
 			if k.params.Off(params.Sidebar) {
@@ -134,7 +136,7 @@ func (k *kchat) Main() gox.Elem {
 			}
 			return class
 		}()); if __e != nil { return }
-//line kchat.gox:125
+//line kchat.gox:127
 				__e = __c.Set("data-kchat-theme", func() any {
 			key := css.FaceKey(k.params.ThemeDark, k.params.ThemeLight)
 			if key == "" {
@@ -143,15 +145,15 @@ func (k *kchat) Main() gox.Elem {
 			return key
 		}()); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line kchat.gox:132
+//line kchat.gox:134
 				if !k.params.Off(params.Sidebar) {
-//line kchat.gox:133
+//line kchat.gox:135
 					__e = __c.Any(k.synced.Bind(func(synced bool) gox.Elem {
 				return gox.Elem(func(__c gox.Cursor) (__e error) {
 					ctx := __c.Context(); _ = ctx
-//line kchat.gox:134
+//line kchat.gox:136
 					if synced {
-//line kchat.gox:135
+//line kchat.gox:137
 						__e = __c.Any(aside.Aside{
 						Params: k.params,
 						Instance: k.inst,
@@ -159,22 +161,22 @@ func (k *kchat) Main() gox.Elem {
 					}); if __e != nil { return }
 					}
 				return })
-//line kchat.gox:141
+//line kchat.gox:143
 			})); if __e != nil { return }
 				}
-//line kchat.gox:143
+//line kchat.gox:145
 				__e = __c.Any(chat.Chat{
 			Params: k.params,
 			Inst: k.inst,
 			Pops: k.pops.Popup[string](),
 		}); if __e != nil { return }
-//line kchat.gox:148
+//line kchat.gox:150
 				__e = __c.Any(k.pops.Script()); if __e != nil { return }
-//line kchat.gox:149
+//line kchat.gox:151
 				__e = __c.Any(notify.Script()); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
-//line kchat.gox:151
+//line kchat.gox:153
 }

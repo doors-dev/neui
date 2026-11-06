@@ -251,8 +251,10 @@ func (f *fileProgress) download(ctx context.Context, part *multipart.Part) (adde
 		var maxBytes *http.MaxBytesError
 		if errors.Is(err, api.ErrTooLarge) || errors.As(err, &maxBytes) {
 			status = http.StatusRequestEntityTooLarge
-		} else if errors.Is(err, api.ErrQuota) || errors.Is(err, api.ErrExists) || errors.Is(err, api.ErrInvalidName) {
+		} else if errors.Is(err, api.ErrQuota) || errors.Is(err, api.ErrExists) || errors.Is(err, api.ErrInvalidName) || errors.Is(err, api.ErrNotFound) {
 			status = http.StatusUnprocessableEntity
+		} else if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, io.ErrUnexpectedEOF) {
+			status = http.StatusRequestTimeout
 		}
 		f.w.WriteHeader(status)
 		f.intoError(ctx, describe(ctx, err, f.params))
@@ -271,80 +273,80 @@ func (f *fileProgress) download(ctx context.Context, part *multipart.Part) (adde
 	return true, nil
 }
 
-//line file.gox:217
+//line file.gox:219
 func (f *fileProgress) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line file.gox:218
+//line file.gox:220
 		__e = __c.Any(f.door); if __e != nil { return }
 	return })
-//line file.gox:219
+//line file.gox:221
 }
-//line file.gox:220
+//line file.gox:222
 func (f *fileProgress) main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("span"); if __e != nil { return }
 		{
-//line file.gox:221
+//line file.gox:223
 			__e = __c.Set("class", "kchat-file"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line file.gox:222
+//line file.gox:224
 			__e = __c.Any(f.percent.Bind(func(i int) gox.Elem {
 			return gox.Elem(func(__c gox.Cursor) (__e error) {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.Init("i"); if __e != nil { return }
 				{
-//line file.gox:223
+//line file.gox:225
 					__e = __c.Set("class", "kchat-file-fill"); if __e != nil { return }
-//line file.gox:223
+//line file.gox:225
 					__e = __c.Set("style", "width:" + strconv.Itoa(i) + "%"); if __e != nil { return }
-//line file.gox:223
+//line file.gox:225
 					__e = __c.Set("aria-hidden", "true"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
 			return })
-//line file.gox:224
+//line file.gox:226
 		})); if __e != nil { return }
-//line file.gox:225
+//line file.gox:227
 			__e = (doors.Class("kchat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 				ctx := __c.Context(); _ = ctx
-//line file.gox:225
+//line file.gox:227
 				__e = __c.Any(icons.File()); if __e != nil { return }
 			return })); if __e != nil { return }
 			__e = __c.Init("span"); if __e != nil { return }
 			{
-//line file.gox:226
+//line file.gox:228
 				__e = __c.Set("class", "kchat-file-name"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line file.gox:226
+//line file.gox:228
 				__e = __c.Any(path.Base(f.name)); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line file.gox:227
+//line file.gox:229
 			__e = __c.Any(f.percent.Bind(func(i int) gox.Elem {
 			return gox.Elem(func(__c gox.Cursor) (__e error) {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.Init("span"); if __e != nil { return }
 				{
-//line file.gox:228
+//line file.gox:230
 					__e = __c.Set("class", "kchat-file-meta"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line file.gox:228
+//line file.gox:230
 					__e = __c.Any(i); if __e != nil { return }
 					__e = __c.Text("%"); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
 			return })
-//line file.gox:229
+//line file.gox:231
 		})); if __e != nil { return }
 			__e = __c.Init("span"); if __e != nil { return }
 			{
-//line file.gox:230
+//line file.gox:232
 				__e = __c.Set("class", "kchat-file-trail"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line file.gox:231
+//line file.gox:233
 				__e = (doors.AClick{
 				Scope: new(doors.ScopeBlocking),
 				On: func(ctx context.Context, rp doors.RequestPointer) bool {
@@ -366,15 +368,15 @@ func (f *fileProgress) main() gox.Elem {
 					ctx := __c.Context(); _ = ctx
 					__e = __c.Init("button"); if __e != nil { return }
 					{
-//line file.gox:248
+//line file.gox:250
 						__e = __c.Set("class", "kchat-ctl"); if __e != nil { return }
-//line file.gox:248
+//line file.gox:250
 						__e = __c.Set("aria-label", "Cancel upload"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line file.gox:249
+//line file.gox:251
 						__e = (doors.Class("kchat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 							ctx := __c.Context(); _ = ctx
-//line file.gox:249
+//line file.gox:251
 							__e = __c.Any(icons.Close()); if __e != nil { return }
 						return })); if __e != nil { return }
 					}
@@ -385,7 +387,7 @@ func (f *fileProgress) main() gox.Elem {
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line file.gox:253
+//line file.gox:255
 }
 
 func (f *fileProgress) intoDone(ctx context.Context) {
@@ -424,57 +426,57 @@ func newFileErr(ctx context.Context, name string, err error, p params.Params) fi
 	return f
 }
 
-//line file.gox:291
+//line file.gox:293
 func (f fileErr) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line file.gox:292
+//line file.gox:294
 		__e = __c.Any(f.door); if __e != nil { return }
 	return })
-//line file.gox:293
+//line file.gox:295
 }
 
-//line file.gox:295
+//line file.gox:297
 func (f fileErr) main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("span"); if __e != nil { return }
 		{
-//line file.gox:296
+//line file.gox:298
 			__e = __c.Set("class", "kchat-file kchat-file_err"); if __e != nil { return }
-//line file.gox:296
+//line file.gox:298
 			__e = __c.Set("title", f.text); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line file.gox:297
+//line file.gox:299
 			__e = (doors.Class("kchat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 				ctx := __c.Context(); _ = ctx
-//line file.gox:297
+//line file.gox:299
 				__e = __c.Any(icons.WarningFill()); if __e != nil { return }
 			return })); if __e != nil { return }
 			__e = __c.Init("span"); if __e != nil { return }
 			{
-//line file.gox:298
+//line file.gox:300
 				__e = __c.Set("class", "kchat-file-name"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line file.gox:298
+//line file.gox:300
 				__e = __c.Any(path.Base(f.name)); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 			__e = __c.Init("span"); if __e != nil { return }
 			{
-//line file.gox:299
+//line file.gox:301
 				__e = __c.Set("class", "kchat-file-meta"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line file.gox:299
+//line file.gox:301
 				__e = __c.Any(f.text); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 			__e = __c.Init("span"); if __e != nil { return }
 			{
-//line file.gox:300
+//line file.gox:302
 				__e = __c.Set("class", "kchat-file-trail"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line file.gox:301
+//line file.gox:303
 				__e = (doors.AClick{
 				Scope: new(doors.ScopeBlocking),
 				On: func(ctx context.Context, rp doors.RequestPointer) bool {
@@ -486,15 +488,15 @@ func (f fileErr) main() gox.Elem {
 					ctx := __c.Context(); _ = ctx
 					__e = __c.Init("button"); if __e != nil { return }
 					{
-//line file.gox:308
+//line file.gox:310
 						__e = __c.Set("class", "kchat-ctl"); if __e != nil { return }
-//line file.gox:308
+//line file.gox:310
 						__e = __c.Set("aria-label", "Dismiss"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line file.gox:309
+//line file.gox:311
 						__e = (doors.Class("kchat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 							ctx := __c.Context(); _ = ctx
-//line file.gox:309
+//line file.gox:311
 							__e = __c.Any(icons.Close()); if __e != nil { return }
 						return })); if __e != nil { return }
 					}
@@ -505,5 +507,5 @@ func (f fileErr) main() gox.Elem {
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line file.gox:313
+//line file.gox:315
 }

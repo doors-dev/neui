@@ -28,16 +28,17 @@ var (
 )
 
 type rules struct {
-	maxTokens        int
-	refusedThinking  []ThinkingType
-	effort           bool
-	disabledUpToHigh bool
+	maxTokens         int
+	refusedThinking   []ThinkingType
+	effort            bool
+	disabledUpToHigh  bool
+	refusesForcedTool bool
 }
 
 var declared = map[string]rules{
-	Fable51.Name:  {maxTokens: 128_000, refusedThinking: []ThinkingType{ThinkingEnabled, ThinkingDisabled}, effort: true},
-	Opus55.Name:   {maxTokens: 128_000, refusedThinking: []ThinkingType{ThinkingEnabled, ThinkingDisabled}, effort: true},
-	Sonnet55.Name: {maxTokens: 128_000, refusedThinking: []ThinkingType{ThinkingEnabled, ThinkingDisabled}, effort: true},
+	Fable51.Name:  {maxTokens: 128_000, refusedThinking: []ThinkingType{ThinkingEnabled, ThinkingDisabled}, effort: true, refusesForcedTool: true},
+	Opus55.Name:   {maxTokens: 128_000, refusedThinking: []ThinkingType{ThinkingEnabled, ThinkingDisabled}, effort: true, refusesForcedTool: true},
+	Sonnet55.Name: {maxTokens: 128_000, refusedThinking: []ThinkingType{ThinkingEnabled, ThinkingDisabled}, effort: true, refusesForcedTool: true},
 	Haiku55.Name:  {maxTokens: 128_000, refusedThinking: []ThinkingType{ThinkingEnabled}, effort: true, disabledUpToHigh: true},
 	Sonnet5.Name:  {maxTokens: 128_000, refusedThinking: []ThinkingType{ThinkingEnabled}, effort: true},
 	Haiku45.Name:  {maxTokens: 64_000, refusedThinking: []ThinkingType{ThinkingAdaptive}},

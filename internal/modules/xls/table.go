@@ -249,6 +249,14 @@ func tableTool(ctx context.Context, arg tableArg) (tableResult, error) {
 	if err := f.SetSheetRow(arg.Sheet, anchor, &headers); err != nil {
 		return tableResult{}, err
 	}
+	wb, err := f.GetWorkbookProps()
+	if err != nil {
+		return tableResult{}, err
+	}
+	epoch := time.Date(1900, 1, 1, 0, 0, 0, 0, time.UTC)
+	if wb.Date1904 != nil && *wb.Date1904 {
+		epoch = time.Date(1904, 1, 1, 0, 0, 0, 0, time.UTC)
+	}
 	timed := make([]bool, len(arg.Columns))
 	formulas := false
 	for i, row := range arg.Rows {
@@ -281,6 +289,9 @@ func tableTool(ctx context.Context, arg tableArg) (tableResult, error) {
 					if err != nil {
 						return tableResult{}, fmt.Errorf("row %d column %q: %q is not an ISO 8601 date, use YYYY-MM-DD or YYYY-MM-DDThh:mm:ss", i, col.Header, v)
 					}
+					if t.Before(epoch) {
+						return tableResult{}, fmt.Errorf("row %d column %q: %q is before %s, the first date this workbook can store — pass it as text in a text column", i, col.Header, v, epoch.Format("2006-01-02"))
+					}
 					h, m, sec := t.Clock()
 					timed[j] = timed[j] || h != 0 || m != 0 || sec != 0 || t.Nanosecond() != 0
 					vals[j] = t
@@ -297,7 +308,9 @@ func tableTool(ctx context.Context, arg tableArg) (tableResult, error) {
 					continue
 				}
 				pct := col.Format == "percent" && strings.HasSuffix(t, "%")
-				t = strings.TrimSuffix(t, "%")
+				if pct {
+					t = strings.TrimSuffix(t, "%")
+				}
 				if col.Format == "currency" {
 					t = strings.Replace(t, "$", "", 1)
 				}

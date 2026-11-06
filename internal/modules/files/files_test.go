@@ -76,7 +76,7 @@ func newFSStore(t *testing.T) (filesystem.FS, *local.FileStorage) {
 	}
 	t.Cleanup(func() { store.Remove() })
 	fs := filesystem.Open("thread", store, store, api.FilesConfig{})
-	t.Cleanup(fs.Dispose)
+	t.Cleanup(func() { fs.Dispose() })
 	return fs, store
 }
 
@@ -803,5 +803,54 @@ func TestUnzipRemovesTheEntryCutByCancel(t *testing.T) {
 	}
 	if _, err := fs.Stat(context.Background(), "out/big.txt"); !errors.Is(err, api.ErrNotFound) {
 		t.Fatalf("the cut entry: %v", err)
+	}
+}
+
+func TestZipSkipsOverlappingArgs(t *testing.T) {
+	fs := newFS(t)
+	write(t, fs, "src/main.go", "package main")
+	write(t, fs, "src/b.go", "package main")
+	if _, err := zipTool(threadCtx(fs), zipArg{Paths: []string{"src", "src/main.go", "src/b.go", "src"}, Dst: "out.zip"}); err != nil {
+		t.Fatal(err)
+	}
+	if names := zipNames(t, fs, "out.zip"); len(names) != 2 {
+		t.Fatalf("got %v", names)
+	}
+}
+
+func TestWalkStopsAtTheFirstStop(t *testing.T) {
+	fs := newFS(t)
+	write(t, fs, "a/x.txt", "x")
+	write(t, fs, "a/y.txt", "y")
+	write(t, fs, "b/z.txt", "z")
+	calls := 0
+	cont, err := walkFiles(context.Background(), fs, ".", false, func(api.FSEntry) (bool, error) {
+		calls++
+		return false, nil
+	})
+	if err != nil || cont || calls != 1 {
+		t.Fatalf("cont %v, err %v, calls %d", cont, err, calls)
+	}
+}
+
+func TestFailedWriteBytesKeepsTheOriginal(t *testing.T) {
+	store, err := local.NewFileStorage("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Remove() })
+	fs := filesystem.Open("thread", store, store, api.FilesConfig{MaxBytes: 20})
+	t.Cleanup(func() { fs.Dispose() })
+	write(t, fs, "a.bin", "0123456789")
+	if _, err := writeBytesTool(threadCtx(fs), writeBytesArg{Path: "a.bin", Data: make([]byte, 15)}); !errors.Is(err, api.ErrQuota) {
+		t.Fatalf("got %v", err)
+	}
+	rc, err := fs.ReadAll(context.Background(), "a.bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rc.Close()
+	if b, _ := io.ReadAll(rc); string(b) != "0123456789" {
+		t.Fatalf("got %q", b)
 	}
 }

@@ -125,7 +125,7 @@ func TestFrameNamesAcrossChangingEvents(t *testing.T) {
 	want := []string{"delta|1", "delta|2", "del|3", "|4", "|5", "delta|6", "done|7", "done|8"}
 	var got []string
 	var frames []Frame
-	for fr := range read(context.Background(), strings.NewReader(body), 0) {
+	for fr := range read(context.Background(), strings.NewReader(body), 0, nil) {
 		if fr.err != nil {
 			if !errors.Is(fr.err, io.EOF) {
 				t.Fatalf("read: %v", fr.err)
@@ -150,7 +150,7 @@ func BenchmarkFrameNames(b *testing.B) {
 	body := strings.Repeat("event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"hi\"}}\n\n", 1000)
 	b.ReportAllocs()
 	for b.Loop() {
-		for fr := range read(context.Background(), strings.NewReader(body), 0) {
+		for fr := range read(context.Background(), strings.NewReader(body), 0, nil) {
 			if fr.err != nil {
 				break
 			}

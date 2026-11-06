@@ -97,6 +97,7 @@ type WindowList struct {
 	SaveWindow func(context.Context, controller.Window)
 	Driver Driver
 	Margin int
+	Empty gox.Comp
 	mu *sync.Mutex
 	ctx context.Context
 	history deque.Deque[*slot]
@@ -115,43 +116,47 @@ type WindowList struct {
 	}
 }
 
-//line window.gox:88
+//line window.gox:89
 func (w WindowList) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line window.gox:90
+//line window.gox:91
 		body := new(doors.Door)
 	body.Inner(ctx, w.body(body))
 
-//line window.gox:93
+//line window.gox:94
 		__e = __c.Any(body); if __e != nil { return }
 	return })
-//line window.gox:94
+//line window.gox:95
 }
 
-//line window.gox:96
+//line window.gox:97
 func (w WindowList) body(door *doors.Door) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line window.gox:98
+//line window.gox:99
 		w.mu = new(sync.Mutex)
 	s, err := w.seed(ctx)
 
-//line window.gox:101
-		if err == nil {
 //line window.gox:102
-			__e = __c.Any(s); if __e != nil { return }
+		if err == nil && w.Empty != nil && w.history.Len() == 0 {
 //line window.gox:103
+			__e = __c.Any(w.Empty); if __e != nil { return }
+//line window.gox:104
+		} else if err == nil {
+//line window.gox:105
+			__e = __c.Any(s); if __e != nil { return }
+//line window.gox:106
 			__e = __c.Any(w.script()); if __e != nil { return }
 		} else  {
-//line window.gox:106
+//line window.gox:109
 			doors.Logger(ctx).Error("window: seed", "err", err)
 
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line window.gox:108
+//line window.gox:111
 				__e = __c.Set("class", "kchat-side-retry"); if __e != nil { return }
-//line window.gox:108
+//line window.gox:111
 				__e = __c.Set("role", "alert"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Init("span"); if __e != nil { return }
@@ -160,7 +165,7 @@ func (w WindowList) body(door *doors.Door) gox.Elem {
 					__e = __c.Text("Couldn't load."); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
-//line window.gox:110
+//line window.gox:113
 				__e = (doors.AClick{
 				Scope: new(doors.ScopeBlocking),
 				On: func(ctx context.Context, rp doors.RequestPointer) bool {
@@ -172,9 +177,9 @@ func (w WindowList) body(door *doors.Door) gox.Elem {
 					ctx := __c.Context(); _ = ctx
 					__e = __c.Init("button"); if __e != nil { return }
 					{
-//line window.gox:117
+//line window.gox:120
 						__e = __c.Set("type", "button"); if __e != nil { return }
-//line window.gox:117
+//line window.gox:120
 						__e = __c.Set("class", "kchat-btn kchat-btn_2nd"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 						__e = __c.Text("Retry"); if __e != nil { return }
@@ -185,7 +190,7 @@ func (w WindowList) body(door *doors.Door) gox.Elem {
 			__e = __c.Close(); if __e != nil { return }
 		}
 	return })
-//line window.gox:120
+//line window.gox:123
 }
 
 func (w *WindowList) seed(ctx context.Context) (gox.Comp, error) {
@@ -421,11 +426,11 @@ func (w *WindowList) sync(ctx context.Context) (more bool) {
 	return
 }
 
-//line window.gox:355
+//line window.gox:358
 func (w *WindowList) script() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line window.gox:356
+//line window.gox:359
 		__e = (doors.AHook[syncMsg]{
 		Name: "sync",
 		Scope: &doors.ScopeRate{Tick: 100 * time.Millisecond},
@@ -439,9 +444,9 @@ func (w *WindowList) script() gox.Elem {
 			ctx := __c.Context(); _ = ctx
 			__e = __c.Init("script"); if __e != nil { return }
 			{
-//line window.gox:365
+//line window.gox:368
 				__e = __c.Set("data:first", w.first); if __e != nil { return }
-//line window.gox:365
+//line window.gox:368
 				__e = __c.Set("data:last", w.last); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Raw("const script = document.currentScript\n\t\tconst body = script.closest(\".kchat-side-body\")\n\t\tconst seedFirst = $data(\"first\")\n\t\tconst seedLast = $data(\"last\")\n\t\tlet sent = seedLast ? `${seedFirst}:${seedLast}` : \"\"\n\t\tconst widget = body.closest(\".kchat-widget\")\n\t\tlet reported = false\n\t\tconst report = () => {\n\t\t\tconst b = body.getBoundingClientRect()\n\t\t\tlet first = \"\"\n\t\t\tlet last = \"\"\n\t\t\tfor (const s of body.querySelectorAll(\".kchat-day[data-id]\")) {\n\t\t\t\tif (s.hasAttribute(\"data-pending\")) continue\n\t\t\t\tconst r = s.getBoundingClientRect()\n\t\t\t\tif (r.height === 0 || r.bottom <= b.top || r.top >= b.bottom) continue\n\t\t\t\tif (last === \"\") last = s.dataset.id\n\t\t\t\tfirst = s.dataset.id\n\t\t\t}\n\t\t\tif (first === \"\") return\n\t\t\tconst key = `${first}:${last}`\n\t\t\tif (key === sent) return\n\t\t\tsent = key\n\t\t\t$hook(\"sync\", { first, last }).then(\n\t\t\t\t() => {\n\t\t\t\t\treported = false\n\t\t\t\t},\n\t\t\t\t(err) => {\n\t\t\t\t\tsent = \"\"\n\t\t\t\t\tif (reported || !(err instanceof HookErr) || !err.network()) return\n\t\t\t\t\treported = true\n\t\t\t\t\twidget.dispatchEvent(new CustomEvent(\"kchat_error\", { detail: err.kind }))\n\t\t\t\t},\n\t\t\t)\n\t\t}\n\t\tconst edge = (e) => {\n\t\t\tconst top = e.deltaY < 0 && body.scrollTop <= 0\n\t\t\tconst bottom =\n\t\t\t\te.deltaY > 0 && body.scrollTop + body.clientHeight >= body.scrollHeight - 1\n\t\t\tif (!top && !bottom) return\n\t\t\tsent = \"\"\n\t\t\treport()\n\t\t}\n\t\t$sys.clean(() => {\n\t\t\tbody.removeEventListener(\"scroll\", report)\n\t\t\tbody.removeEventListener(\"wheel\", edge)\n\t\t})\n\t\tawait $sys.ready()\n\t\trequestAnimationFrame(() => {\n\t\t\tconst top = body.querySelector(`.kchat-day[data-id=\"${seedLast}\"]`)\n\t\t\tif (seedLast && top) {\n\t\t\t\tconst base = body.scrollTop - body.getBoundingClientRect().top\n\t\t\t\tconst t = top.getBoundingClientRect()\n\t\t\t\tlet lo = t.top + base\n\t\t\t\tlet hi = t.bottom + base\n\t\t\t\tconst bottom = body.querySelector(`.kchat-day[data-id=\"${seedFirst}\"]`)\n\t\t\t\tif (bottom) {\n\t\t\t\t\tconst f = bottom.getBoundingClientRect()\n\t\t\t\t\tlo = Math.max(lo, f.top + base - body.clientHeight)\n\t\t\t\t\thi = Math.min(hi, f.bottom + base - body.clientHeight)\n\t\t\t\t}\n\t\t\t\tbody.scrollTop = lo <= hi ? (lo + hi) / 2 : t.top + base\n\t\t\t}\n\t\t\tbody.addEventListener(\"scroll\", report, { passive: true })\n\t\t\tbody.addEventListener(\"wheel\", edge, { passive: true })\n\t\t\treport()\n\t\t})"); if __e != nil { return }
@@ -449,7 +454,7 @@ func (w *WindowList) script() gox.Elem {
 			__e = __c.Close(); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
-//line window.gox:433
+//line window.gox:436
 }
 
 type syncMsg struct {
@@ -457,20 +462,20 @@ type syncMsg struct {
 	Last string `json:"last"`
 }
 
-//line window.gox:440
+//line window.gox:443
 func restoreScroll(batch int, edge string) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("script"); if __e != nil { return }
 		{
-//line window.gox:441
+//line window.gox:444
 			__e = __c.Set("data:batch", batch); if __e != nil { return }
-//line window.gox:441
+//line window.gox:444
 			__e = __c.Set("data:edge", edge); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Raw("const script = document.currentScript\n\t\tconst body = script.closest(\".kchat-side-body\")\n\t\tconst top = body.scrollTop\n\t\tconst h0 = body.scrollHeight\n\t\tfor (const s of body.querySelectorAll(\n\t\t\t`.kchat-day[data-batch=\"${$data(\"batch\")}\"]`,\n\t\t)) {\n\t\t\ts.removeAttribute(\"data-pending\")\n\t\t}\n\t\tconst grew = body.scrollHeight - h0\n\t\tif ($data(\"edge\") === \"top\") {\n\t\t\tbody.scrollTo({ top: top + grew, behavior: \"instant\" })\n\t\t} else {\n\t\t\tbody.scrollTo({ top, behavior: \"instant\" })\n\t\t}\n\t\tbody.dispatchEvent(new Event(\"scroll\"))"); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line window.gox:459
+//line window.gox:462
 }

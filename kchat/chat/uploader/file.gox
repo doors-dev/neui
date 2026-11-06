@@ -194,8 +194,10 @@ func (f *fileProgress) download(ctx context.Context, part *multipart.Part) (adde
 		var maxBytes *http.MaxBytesError
 		if errors.Is(err, api.ErrTooLarge) || errors.As(err, &maxBytes) {
 			status = http.StatusRequestEntityTooLarge
-		} else if errors.Is(err, api.ErrQuota) || errors.Is(err, api.ErrExists) || errors.Is(err, api.ErrInvalidName) {
+		} else if errors.Is(err, api.ErrQuota) || errors.Is(err, api.ErrExists) || errors.Is(err, api.ErrInvalidName) || errors.Is(err, api.ErrNotFound) {
 			status = http.StatusUnprocessableEntity
+		} else if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, io.ErrUnexpectedEOF) {
+			status = http.StatusRequestTimeout
 		}
 		f.w.WriteHeader(status)
 		f.intoError(ctx, describe(ctx, err, f.params))

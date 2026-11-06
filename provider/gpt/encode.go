@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unsafe"
 
 	"neui.dev/api"
 	"neui.dev/provider/lib"
@@ -48,12 +49,11 @@ type inputItem struct {
 
 // encodeRequest builds the body of one turn.
 //
-// A reasoning model is asked for reasoning.encrypted_content unless the caller
+// A known reasoning model is asked for reasoning.encrypted_content unless the caller
 // replaced the include list. Stateless mode populates it on its own now, and the
 // include value is still accepted, still documented and still what older models
 // need. Sending it costs a string.
 func encodeRequest(model string, set settings, req api.Request) (*requestBody, error) {
-	reasoner := isReasoningModel(model)
 	b := &requestBody{
 		Model:         model,
 		Stream:        true,
@@ -65,7 +65,7 @@ func encodeRequest(model string, set settings, req api.Request) (*requestBody, e
 	switch {
 	case set.include != nil:
 		b.Include = set.include
-	case reasoner:
+	case classify(model) == reasoningModel:
 		b.Include = []string{"reasoning.encrypted_content"}
 	}
 	b.MaxOutputTokens = set.maxTokens
@@ -372,8 +372,7 @@ func (b *inputBuilder) assistant(m api.Message, at int) error {
 // phaseOf reads the phase a stored text block was labelled with, and nothing
 // when the label was written for another model: phase labels an assistant
 // message one particular model produced, and an empty claim is no claim rather
-// than a wildcard. The comparison is on the normalized name, so a gateway prefix
-// or a case difference does not silently drop one.
+// than a wildcard. The comparison is on the name exactly as configured.
 //
 // A block carrying meta this adapter did not write leaves both fields empty and
 // so claims nothing, which is what a block with no meta at all claims.
@@ -383,7 +382,7 @@ func (b *inputBuilder) assistant(m api.Message, at int) error {
 func (b *inputBuilder) phaseOf(meta json.RawMessage) string {
 	var m messageMeta
 	_ = json.Unmarshal(meta, &m)
-	if m.Model == "" || baseModel(m.Model) != baseModel(b.model) {
+	if m.Model == "" || m.Model != b.model {
 		return ""
 	}
 	return m.Phase
@@ -668,5 +667,5 @@ func dataURL(mime string, data []byte) string {
 	n += copy(buf[n:], mime)
 	n += copy(buf[n:], ";base64,")
 	base64.StdEncoding.Encode(buf[n:], data)
-	return string(buf)
+	return unsafe.String(&buf[0], len(buf))
 }

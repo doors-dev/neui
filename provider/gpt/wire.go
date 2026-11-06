@@ -128,16 +128,20 @@ type functionCallOutput struct {
 // be fifty declarations to read one string out of each.
 //
 // The event: line duplicates type, so type is what this dispatches on: it is
-// authoritative and always present.
+// authoritative and always present. It is read on its own first, into
+// frameHead, and the rest only for a type the converter handles.
+//
+// The indexes are pointers because the events that use them require them, and
+// absent must not read as item or part zero.
 //
 // An in band error arrives in two shapes. The documented one is flat, with code
 // and message at the top level; the one seen on the wire nests them under error.
 // Both official SDKs only detect the nested form. Both are read here.
 type streamEvent struct {
 	Type         string          `json:"type"`
-	OutputIndex  int             `json:"output_index"`
-	ContentIndex int             `json:"content_index"`
-	SummaryIndex int             `json:"summary_index"`
+	OutputIndex  *int            `json:"output_index"`
+	ContentIndex *int            `json:"content_index"`
+	SummaryIndex *int            `json:"summary_index"`
 	Delta        string          `json:"delta"`
 	Arguments    string          `json:"arguments"`
 	Item         json.RawMessage `json:"item"`
@@ -146,6 +150,10 @@ type streamEvent struct {
 	Message      string          `json:"message"`
 	Param        string          `json:"param"`
 	Error        *wireError      `json:"error"`
+}
+
+type frameHead struct {
+	Type string `json:"type"`
 }
 
 type responseObject struct {
