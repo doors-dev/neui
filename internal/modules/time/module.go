@@ -18,10 +18,10 @@ const syncAfter = 10 * time.Second
 const clientTimeout = 10 * time.Second
 const maxDelay = 24 * time.Hour
 
-const moduleDesc = `The clock. time__now is the server's clock, time__client the clock of the browser the user has open — they differ in offset and may differ in wall time; quote the client's when talking to the user. time__timer waits until a moment: short waits complete inside the call, longer ones return deferred and arrive later as a <task_result> element in the conversation, so use it to continue work at a chosen moment, not to pause a conversation. One timer at a time; time__cancel drops a deferred one.`
+const moduleDesc = `The clock. time__now is the server's clock, time__client the clock of the browser the user has open — they differ in offset and may differ in wall time; quote the client's when talking to the user. time__timer waits until a moment: short waits complete inside the call, longer ones return deferred and arrive later as a <task_result> element in the conversation, so use it to continue work at a chosen moment, not to pause a conversation. One deferred timer at a time: another deferred call errors while one is pending; short waits always work. time__cancel drops a deferred one.`
 const nowDesc = `Current time of the machine this runs on, in its own zone. Use it for anything timestamped by the server; for what the user's clock says, call time__client.`
 const clientDesc = `Current time of the browser the user has the page open in, with the user's UTC offset. Errors when the browser does not answer. The reading carries no zone name, only the offset.`
-const timerDesc = `Wait until a moment. Pass afterMs, or at as an RFC 3339 instant — exactly one; at is resolved against the server clock. A wait of up to 10 s blocks the call and returns when the moment arrives. A longer one returns at once with deferred: true; when the moment arrives a <task_result> element (module time, name timer, comment as given) carrying the firing details appears and starts a round. One timer per conversation: a second call errors while one is pending. time__cancel drops a deferred one. Called from a script, it always blocks until the moment arrives and never defers.`
+const timerDesc = `Wait until a moment. Pass afterMs, or at as an RFC 3339 instant — exactly one; at is resolved against the server clock. A wait of up to 10 s blocks the call and returns when the moment arrives. A longer one returns at once with deferred: true; when the moment arrives a <task_result> element (module time, name timer, comment as given) carrying the firing details appears and starts a round. One deferred timer at a time: another deferred call errors while one is pending; short waits always work. time__cancel drops a deferred one. Called from a script, it always blocks until the moment arrives and never defers.`
 const cancelDesc = `Drop the pending deferred timer; its task_result element reports the cancellation. Errors when none is pending.`
 
 func Module(context.Context) common.Module {
@@ -56,7 +56,7 @@ type pending struct {
 type NowResult struct {
 	Time   string `json:"time" description:"RFC 3339 local date-time with numeric UTC offset, milliseconds, e.g. 2026-09-28T14:03:05.123+02:00"`
 	UTC    string `json:"utc" description:"the same instant in UTC"`
-	Zone   string `json:"zone" description:"IANA zone name of the host process when known, else the abbreviation or the offset"`
+	Zone   string `json:"zone" description:"the server's zone abbreviation (e.g. CET), else its offset"`
 	Offset int    `json:"offsetMinutes" description:"minutes the local time is ahead of UTC; negative west of Greenwich"`
 }
 
@@ -206,6 +206,7 @@ func (m *module) wait(ctx context.Context, p *pending, task common.Task, fires t
 			"firedAt": fired.Format(layout),
 			"lateMs":  fired.Sub(fires).Milliseconds(),
 		})
+		m.pending.CompareAndSwap(p, nil)
 		task.Ok(out)
 	}
 }

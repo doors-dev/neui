@@ -63,23 +63,21 @@ func (l *FileStorage) FilePut(ctx context.Context, threadID api.ThreadID, origin
 	if err := checkFile(threadID, origin, name); err != nil {
 		return api.File{}, err
 	}
-	threadDir := filepath.Join(l.base, filesDirName, string(threadID))
-	originDir := filepath.Join(threadDir, string(origin))
+	originDir := filepath.Join(l.base, filesDirName, string(threadID), string(origin))
 	dst := filepath.Join(originDir, name)
 	l.mu.Lock()
-	_, statErr := os.Stat(filepath.Join(dst, metaName))
+	err := os.MkdirAll(originDir, 0o755)
+	if err == nil {
+		err = os.Mkdir(dst, 0o755)
+	}
 	l.mu.Unlock()
-	if statErr == nil {
+	if errors.Is(err, fs.ErrExist) {
 		return api.File{}, api.ErrExists
 	}
-	if err := os.MkdirAll(originDir, 0o755); err != nil {
-		return api.File{}, err
-	}
-	stage, err := os.MkdirTemp(threadDir, ".tmp-")
 	if err != nil {
 		return api.File{}, err
 	}
-	f, err := stageFile(ctx, stage, api.File{
+	f, err := writeFile(ctx, dst, api.File{
 		ThreadID: threadID,
 		Name:     name,
 		MIME:     mime,
@@ -87,27 +85,16 @@ func (l *FileStorage) FilePut(ctx context.Context, threadID api.ThreadID, origin
 		Draft:    draft,
 	}, r)
 	if err != nil {
-		os.RemoveAll(stage)
-		return api.File{}, err
-	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if _, err := os.Stat(filepath.Join(dst, metaName)); err == nil {
-		os.RemoveAll(stage)
-		return api.File{}, api.ErrExists
-	}
-	if err := os.Rename(stage, dst); err != nil {
-		os.RemoveAll(stage)
-		if _, statErr := os.Stat(filepath.Join(dst, metaName)); statErr == nil {
-			return api.File{}, api.ErrExists
-		}
+		l.mu.Lock()
+		os.RemoveAll(dst)
+		l.mu.Unlock()
 		return api.File{}, err
 	}
 	return f, nil
 }
 
-func stageFile(ctx context.Context, stage string, f api.File, r io.Reader) (api.File, error) {
-	w, err := os.Create(filepath.Join(stage, dataName))
+func writeFile(ctx context.Context, dir string, f api.File, r io.Reader) (api.File, error) {
+	w, err := os.Create(filepath.Join(dir, dataName))
 	if err != nil {
 		return api.File{}, err
 	}
@@ -124,7 +111,11 @@ func stageFile(ctx context.Context, stage string, f api.File, r io.Reader) (api.
 	if err != nil {
 		return api.File{}, err
 	}
-	if err := os.WriteFile(filepath.Join(stage, metaName), b, 0o644); err != nil {
+	tmp := filepath.Join(dir, metaName+".tmp")
+	if err := os.WriteFile(tmp, b, 0o644); err != nil {
+		return api.File{}, err
+	}
+	if err := os.Rename(tmp, filepath.Join(dir, metaName)); err != nil {
 		return api.File{}, err
 	}
 	return f, nil

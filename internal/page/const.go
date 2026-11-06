@@ -31,7 +31,12 @@ const islandNotFoundMessage = "this space is not an island: sync its path to see
 const islandStartName = "island_start"
 const islandStartDesc = `Start an app in an island with its first script, replacing any app already running there: its task ends, its queued scripts and the values queued since its last ui.draw() are dropped, and its frame stays on screen until the new app's first ui.draw(). Read the island's spec first; later starts need only the island space's current seq, from sync or island_spec. A script with a syntax error is refused and nothing is replaced. Returns as soon as the script is queued, with the app's task id and the script id. Not accessible from scripts.`
 const islandContinueName = "island_continue"
-const islandContinueDesc = `Send the next script to an island's running app; it runs with the same UI, elements and globals. By default it is queued and runs once the running script and those queued before it have ended, so behind a script that never ends, such as a loop on ui.draw(), it waits for good. With interrupt, queued scripts are dropped, and the running script stops for good in ui.draw(), at once if it is waiting there, otherwise at its next one; if a user action reaches the waiting script first, the script gets it and the stop happens at its following draw. If the running script ends before drawing again, or no script is running, the new script simply runs next. A script with a syntax error is refused and nothing is queued or dropped. Returns once the script is queued, with the task id and the new script id. Not accessible from scripts.`
+const islandContinueDesc = `Append the next script to an island's running app. The app is one script: everything you send runs in order as if appended to it, sharing its UI, elements and globals, and when a part ends normally the app waits for the next one.
+- Default: the part runs once the running part and those queued before it have ended. Behind a part that never ends, such as a loop on ui.draw(), it waits for good.
+- Interrupt: queued parts are dropped, and the running part stops for good in ui.draw(): at once if it is waiting there, otherwise at its next one.
+- Syntax error: the part is refused, and nothing is queued or dropped.
+- Returns once the part is queued, with the task id and the new script id.
+Not accessible from scripts.`
 const islandStopName = "island_stop"
 const islandStopDesc = `End an island's app now, whether a script is running or not; values a running script queued since its last ui.draw() are dropped. Not accessible from scripts.`
 const fileOrCodeMessage = "set exactly one of file and code"
@@ -59,7 +64,7 @@ The lifecycle:
 5. Decide and continue. Read the values, do what they need (answer the user, call tools), then, if the app should change, send the next script with island_continue.
 6. Repeat steps 3 to 5 until the work is done, then call island_stop.
 
-island_start always starts a fresh app, dropping the old one's elements and globals. island_continue works any time the app runs, also when the user asks for a change in chat, and the new script runs with the same UI, elements and globals. By default it is queued: it runs once the running script and those queued before it have ended. With interrupt, the queued ones are dropped, and the running script stops for good in ui.draw(), at once if it is waiting there, otherwise at its next one. Either way the new script takes over, so if the app should keep looping, it must contain the whole loop again. Once the app has ended, start a new one.
+island_start always starts a fresh app, dropping the old one's elements and globals. The app is one script: island_continue appends the next part to it while the app runs, and island_continue's description covers queueing and interrupt. The appended part takes over from the one before it, so an app that should keep looping must contain the whole loop again. Once the app has ended, start a new one.
 
 What an app is made of
 

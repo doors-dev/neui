@@ -1,7 +1,10 @@
 // Package gpt is the OpenAI provider for neui. Build one with New and hand it
 // to neui.WithProvider or neui.OptionProvider:
 //
-//	p := gpt.New(gpt.Conf{Model: gpt.GPT56Luna}, gpt.WithReasoningEffort(gpt.EffortHigh))
+//	p, err := gpt.New(gpt.Conf{Model: gpt.GPT56Luna}, gpt.WithReasoningEffort(gpt.EffortHigh))
+//	if err != nil {
+//		return err
+//	}
 //	neui.Enable(ctx, neui.OptionProvider(p))
 //
 // The key is read from OPENAI_API_KEY unless WithAPIKey sets one. Model and

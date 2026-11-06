@@ -40,15 +40,31 @@ type thinking struct {
 // endpoint takes a union and the fields that do not apply to a role are simply
 // absent from it.
 //
-// Content is a pointer with no omitempty: the assistant form is documented as
-// string or null and a turn that only called tools has to send an explicit
-// null, while system, user and tool all require the key present.
+// Content has no omitempty: it is a string, nil, or a []any of textPart and
+// imagePart. The assistant form is documented as string or null and a turn
+// that only called tools has to send an explicit null, while system, user and
+// tool all require the key present. User and tool content is a part list only
+// when it carries an image.
 type message struct {
 	Role             string     `json:"role"`
-	Content          *string    `json:"content"`
+	Content          any        `json:"content"`
 	ReasoningContent string     `json:"reasoning_content,omitempty"`
 	ToolCalls        []toolCall `json:"tool_calls,omitempty"`
 	ToolCallID       string     `json:"tool_call_id,omitempty"`
+}
+
+type textPart struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
+type imagePart struct {
+	Type     string   `json:"type"`
+	ImageURL imageURL `json:"image_url"`
+}
+
+type imageURL struct {
+	URL string `json:"url"`
 }
 
 type toolCall struct {

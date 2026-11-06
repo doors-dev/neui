@@ -15,10 +15,10 @@ import (
 )
 
 const (
-	maxImageDim     = 2000
-	fallbackByteCap = 4 << 20
-	retryArea       = 0.75
-	MaxDecodePixels = 50_000_000
+	fallbackImageSide = 2000
+	fallbackByteCap   = 4 << 20
+	retryArea         = 0.75
+	MaxDecodePixels   = 50_000_000
 )
 
 func Shape(data []byte, mimeType api.ImageMime, model api.Model) (api.Image, error) {
@@ -30,11 +30,15 @@ func Shape(data []byte, mimeType api.ImageMime, model api.Model) (api.Image, err
 	if byteCap <= 0 {
 		byteCap = fallbackByteCap
 	}
+	side := model.ImageSide
+	if side <= 0 {
+		side = fallbackImageSide
+	}
 	w, h := cfg.Width, cfg.Height
 	if w <= 0 || h <= 0 || int64(w)*int64(h) > MaxDecodePixels {
 		return api.Image{}, fmt.Errorf("image is %dx%d, over the %d pixels that can be decoded", w, h, MaxDecodePixels)
 	}
-	fits := w <= maxImageDim && h <= maxImageDim
+	fits := w <= side && h <= side
 	if model.ImagePixels > 0 {
 		fits = fits && w*h <= model.ImagePixels
 	}
@@ -46,7 +50,7 @@ func Shape(data []byte, mimeType api.ImageMime, model api.Model) (api.Image, err
 		return api.Image{}, err
 	}
 	w, h = fitSidesToArea(w, h, model.ImagePixels)
-	w, h = fitSidesToLongest(w, h, maxImageDim)
+	w, h = fitSidesToLongest(w, h, side)
 	w, h = max(w, 1), max(h, 1)
 	w, h = clampSidesToArea(w, h, model.ImagePixels)
 	dst := image.NewRGBA(image.Rect(0, 0, w, h))

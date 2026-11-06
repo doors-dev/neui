@@ -255,14 +255,14 @@ func (u *uploader) Form(pending doors.Beam[bool]) gox.Elem {
 //line uploader.gox:184
 						__e = __c.Set("data:id", u.params.ID); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-						__e = __c.Raw("const input =\n\t\t\t\t\tdocument.currentScript.previousElementSibling.querySelector(\"input\")\n\t\t\t\tconst text = document.getElementById(\"text\" + $data(\"id\"))\n\t\t\t\tinput.addEventListener(\"change\", async () => {\n\t\t\t\t\tconst files = [...input.files]\n\t\t\t\t\tinput.value = \"\"\n\t\t\t\t\ttext?.focus()\n\t\t\t\t\tawait Promise.all(\n\t\t\t\t\t\tfiles.map(async (file) => {\n\t\t\t\t\t\t\tconst form = new FormData()\n\t\t\t\t\t\t\tform.append(\"file\", file)\n\t\t\t\t\t\t\ttry {\n\t\t\t\t\t\t\t\tawait $fetch(\"upload\", form)\n\t\t\t\t\t\t\t} catch (err) {\n\t\t\t\t\t\t\t\tif (err?.status !== 408) console.error(\"upload failed\", file.name, err)\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}),\n\t\t\t\t\t)\n\t\t\t\t})"); if __e != nil { return }
+						__e = __c.Raw("const input =\n\t\t\t\t\tdocument.currentScript.previousElementSibling.querySelector(\"input\")\n\t\t\t\tconst text = document.getElementById(\"text\" + $data(\"id\"))\n\t\t\t\tconst widget = input.closest(\".kchat-widget\")\n\t\t\t\tinput.addEventListener(\"change\", async () => {\n\t\t\t\t\tconst files = [...input.files]\n\t\t\t\t\tinput.value = \"\"\n\t\t\t\t\ttext?.focus()\n\t\t\t\t\tawait Promise.all(\n\t\t\t\t\t\tfiles.map(async (file) => {\n\t\t\t\t\t\t\tconst form = new FormData()\n\t\t\t\t\t\t\tform.append(\"file\", file)\n\t\t\t\t\t\t\ttry {\n\t\t\t\t\t\t\t\tawait $fetch(\"upload\", form)\n\t\t\t\t\t\t\t} catch (err) {\n\t\t\t\t\t\t\t\tif (err?.status === 408) return\n\t\t\t\t\t\t\t\tconsole.error(\"upload failed\", file.name, err)\n\t\t\t\t\t\t\t\tif (err instanceof HookErr && (err.network() || err.server())) {\n\t\t\t\t\t\t\t\t\twidget.dispatchEvent(\n\t\t\t\t\t\t\t\t\t\tnew CustomEvent(\"kchat_error\", { detail: err.kind }),\n\t\t\t\t\t\t\t\t\t)\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t}),\n\t\t\t\t\t)\n\t\t\t\t})"); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
 				return })); if __e != nil { return }
 			}
 		return })
-//line uploader.gox:206
+//line uploader.gox:213
 	})); if __e != nil { return }
 	return })
-//line uploader.gox:207
+//line uploader.gox:214
 }

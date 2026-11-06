@@ -83,6 +83,85 @@ func TestFilePutDuplicate(t *testing.T) {
 	}
 }
 
+type gateReader struct {
+	started chan struct{}
+	release chan struct{}
+	body    io.Reader
+}
+
+func (g *gateReader) Read(p []byte) (int, error) {
+	if g.started != nil {
+		close(g.started)
+		g.started = nil
+		<-g.release
+	}
+	return g.body.Read(p)
+}
+
+type failReader struct{}
+
+func (failReader) Read(p []byte) (int, error) {
+	return 0, errors.New("broken body")
+}
+
+type touchReader struct {
+	read bool
+}
+
+func (r *touchReader) Read(p []byte) (int, error) {
+	r.read = true
+	return 0, io.EOF
+}
+
+func TestFilePutReservesName(t *testing.T) {
+	s := newFileStore(t)
+	ctx := context.Background()
+	started, release := make(chan struct{}), make(chan struct{})
+	gate := &gateReader{started: started, release: release, body: strings.NewReader("first")}
+	done := make(chan error, 1)
+	go func() {
+		_, err := s.FilePut(ctx, "t1", api.OriginUser, "f.txt", "text/plain", gate, false)
+		done <- err
+	}()
+	<-started
+	second := &touchReader{}
+	if _, err := s.FilePut(ctx, "t1", api.OriginUser, "f.txt", "text/plain", second, false); !errors.Is(err, api.ErrExists) {
+		t.Fatalf("concurrent put = %v, want ErrExists", err)
+	}
+	if second.read {
+		t.Fatal("concurrent put read its body before refusing")
+	}
+	if _, err := s.FileStat(ctx, "t1", api.OriginUser, "f.txt"); !errors.Is(err, api.ErrNotFound) {
+		t.Fatalf("FileStat mid-put = %v, want ErrNotFound", err)
+	}
+	if files, errs := collect(t, s, "t1", api.OriginUser); len(files) != 0 || len(errs) != 0 {
+		t.Fatalf("mid-put list = %+v, %v", files, errs)
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	rc, err := s.FileRead(ctx, "t1", api.OriginUser, "f.txt", 0, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if body := readAll(t, rc); body != "first" {
+		t.Fatalf("body = %q", body)
+	}
+}
+
+func TestFilePutFailureFreesName(t *testing.T) {
+	s := newFileStore(t)
+	ctx := context.Background()
+	if _, err := s.FilePut(ctx, "t1", api.OriginUser, "f.txt", "", failReader{}, false); err == nil {
+		t.Fatal("put with broken body succeeded")
+	}
+	if _, err := os.Stat(filepath.Join(s.base, "files", "t1", "user", "f.txt")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("reserved dir survived: %v", err)
+	}
+	putText(t, s, "t1", "f.txt", "retry")
+}
+
 func TestFileOriginsSeparate(t *testing.T) {
 	s := newFileStore(t)
 	putText(t, s, "t1", "f1.txt", "user side")

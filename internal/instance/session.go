@@ -72,6 +72,7 @@ func (s Session) newInstance(id string, ctx context.Context) Instance {
 		dead:    make(map[*link]struct{}),
 		page:    page.NewPage(ctx),
 		current: doors.TabState[api.ThreadID](ctx, "neui_thread"),
+		synced:  doors.NewSource(false),
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -112,6 +113,11 @@ func (s Session) Enable(opts []common.Option) error {
 			return fmt.Errorf("instance: local file storage: %w", err)
 		}
 		s.localFileStorage = fs
+		context.AfterFunc(s.ctx, func() {
+			if err := fs.Remove(); err != nil {
+				doors.Logger(s.ctx).Error("instance: local file storage removal failed", "err", err)
+			}
+		})
 	}
 	options := make([]common.Option, 0, len(opts)+5)
 	options = append(options, common.OptionModule(chatmod.Module))

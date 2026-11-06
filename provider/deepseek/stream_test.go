@@ -296,7 +296,7 @@ func TestReplayReproducesTheTurnByteForByte(t *testing.T) {
 	events := collect(t, p, turn("9.11 or 9.8?"))
 	checkGrammar(t, events)
 
-	body := encodeBody(t, New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), api.Request{
+	body := encodeBody(t, mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), api.Request{
 		Tools: []api.Tool{{Name: "note"}},
 		Messages: []api.Message{
 			{Role: api.RoleUser, Content: text("9.11 or 9.8?")},
@@ -304,8 +304,8 @@ func TestReplayReproducesTheTurnByteForByte(t *testing.T) {
 		},
 	})
 	m := body.Messages[1]
-	if *m.Content != "9.11 wins" {
-		t.Fatalf("the model said %q and is replayed %q", "9.11 wins", *m.Content)
+	if m.Content.(string) != "9.11 wins" {
+		t.Fatalf("the model said %q and is replayed %q", "9.11 wins", m.Content.(string))
 	}
 	if want := "Let me compare the decimals actually, hold on"; m.ReasoningContent != want {
 		t.Fatalf("reasoning_content %q, want %q", m.ReasoningContent, want)
@@ -359,7 +359,7 @@ func TestStreamToolArgumentsThatNeverParse(t *testing.T) {
 	// The discarded call goes back to the model on the next turn: the arguments
 	// field is not optional, so it becomes the empty object, and the paired
 	// tool message carries the error, since there is no error flag on the wire.
-	body, err := New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")).encode(api.Request{
+	body, err := mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")).encode(api.Request{
 		Messages: []api.Message{
 			{Role: api.RoleUser, Content: api.Contents{api.ContentText{Text: "search"}}},
 			{Role: api.RoleAssistant, Content: api.Contents{call}},
@@ -379,11 +379,11 @@ func TestStreamToolArgumentsThatNeverParse(t *testing.T) {
 	if result.Role != "tool" {
 		t.Fatalf("result replayed with role %q", result.Role)
 	}
-	if !strings.HasPrefix(*result.Content, "Error: tool call arguments were not valid JSON") {
-		t.Fatalf("result content %q does not report the discard", *result.Content)
+	if !strings.HasPrefix(result.Content.(string), "Error: tool call arguments were not valid JSON") {
+		t.Fatalf("result content %q does not report the discard", result.Content.(string))
 	}
-	if !strings.Contains(*result.Content, `{"query": "San Franc`) {
-		t.Fatalf("result content %q does not show the model what it botched", *result.Content)
+	if !strings.Contains(result.Content.(string), `{"query": "San Franc`) {
+		t.Fatalf("result content %q does not show the model what it botched", result.Content.(string))
 	}
 }
 
@@ -719,16 +719,6 @@ func TestRetryAfter(t *testing.T) {
 		if got := retryAfter(h) > 0; got != tc.want {
 			t.Fatalf("Retry-After %q: got %v, want %v", tc.header, got, tc.want)
 		}
-	}
-}
-
-func TestMissingKey(t *testing.T) {
-	p := serve(t, stringHandler(doneFrame), WithAPIKey(""))
-	events := collect(t, p, turn("hi"))
-	checkGrammar(t, events)
-	wantTrace(t, events, "err access")
-	if !errors.Is(events[0].(api.EventErr).Err, errNoKey) {
-		t.Fatalf("err %v", events[0].(api.EventErr).Err)
 	}
 }
 

@@ -20,12 +20,11 @@ func newQuotaFS(t *testing.T, config api.FilesConfig) (*workFS, *local.FileStora
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { store.Remove() })
-	ws, err := store.WorkspaceOpen(testThread)
-	if err != nil {
+	w := Open(testThread, store, store, config)
+	t.Cleanup(w.Dispose)
+	if _, err := w.root(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { ws.Close() })
-	w := New(testThread, ws, store, config)
 	return w, store
 }
 

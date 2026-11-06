@@ -16,6 +16,7 @@ import (
 	"neui.dev/kchat/chat/list"
 	"neui.dev/kchat/pops"
 	"neui.dev/kchat/params"
+	"neui.dev/kchat/notify"
 )
 
 type Chat struct {
@@ -33,15 +34,18 @@ func (c Chat) Main() gox.Elem {
 func (c Chat) Chat(thread api.ChatThread, s api.ChatState) api.Chat {
 	controller := controller.NewComposerController(thread, s.Input, s.Round != nil, s.Usage, s.Tasks, s.Compaction, s.Ask)
 	at := anchor.Read(s.Meta)
+	dead := doors.NewSource(alive)
 	return &chat{
 		params: c.Params,
 		thread: thread,
 		inst: c.Inst,
 		composer: controller,
 		pops: c.Pops,
-		list: list.NewList(c.Params, c.Inst, thread, controller, s.ID, s.Round, at),
+		list: list.NewList(c.Params, c.Inst, thread, controller, s.ID, s.Round, at, func(ctx context.Context, err error) {
+			dead.Update(ctx, closedKindOf(err))
+		}),
 		name: doors.NewSource(s.Name),
-		dead: doors.NewSource(alive),
+		dead: dead,
 	}
 }
 
@@ -155,6 +159,7 @@ elem (c *chat) Main() {
 			c.composer.Escape(ctx)
 			return false
 		},
+		OnError: notify.OnError,
 	} <div
 		class="kchat-pane"
 		data-attach=({
@@ -169,6 +174,7 @@ elem (c *chat) Main() {
 				~(c.files())
 			})
 		</div>
+		~(notify.Toasts())
 		~(c.dead.Bind(c.body))
 		<script data:id=(c.params.ID) data:paste=(pasteAsFile)>
 			const main = document.currentScript.parentElement
@@ -271,6 +277,7 @@ elem (c *chat) closed(kind closedKind) {
 					confirm(ctx)
 					return true
 				},
+				OnError: notify.OnError,
 			} <button type="button" class="kchat-btn kchat-btn_auto">OK<i class="kchat-file-fill" aria-hidden="true"></i></button>
 		</div>
 		~(doors.Go(func(ctx context.Context) {

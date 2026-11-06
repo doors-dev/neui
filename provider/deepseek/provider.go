@@ -4,14 +4,16 @@
 // provider, or to neui.OptionProvider to set one session's provider, which
 // takes precedence over WithProvider if any:
 //
-//	p := deepseek.New(deepseek.Conf{Model: deepseek.Flash},
-//		deepseek.WithReasoningEffort(deepseek.EffortMax))
+//	p, err := deepseek.New(deepseek.Conf{Model: deepseek.Flash},
+//		deepseek.WithEffort(deepseek.EffortMax))
 //
 // The key comes from DEEPSEEK_API_KEY unless WithAPIKey sets it. A provider
-// serves one model with one set of options; build two for two settings.
-// Thinking is on by default and streams back as readable reasoning. The wire
-// carries text only, so images and documents in a request reach the model as
-// a short note in their place. Caching is automatic and needs no options:
+// serves one model with one set of options; build two for two settings. New
+// refuses a setting DeepSeek would reject or ignore, so a Provider that was
+// built sends what it was given. Thinking is on by default and streams back as
+// readable reasoning. Images go to deepseek-flash in user messages and tool
+// results; every other model gets a short note in place of each image, and
+// every model gets one in place of a document. Caching is automatic and needs no options:
 // keep the tools, system prompt and history stable between turns to hit it.
 // Failures reach the thread as api.EventErr with an api.ErrCode. Its Err is an
 // *APIError for a non 200 response, a *RequestError for a request this adapter
@@ -25,7 +27,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -51,29 +52,35 @@ const (
 	maxUserIDBytes = 512
 )
 
-// Effort is DeepSeek's reasoning_effort, the depth of thinking. The server
-// defaults to high, takes minimal as low, medium and xhigh as high, and ultra
-// as max. It does nothing with thinking off, and it does not turn thinking
-// off: the server's none level is overridden by the thinking field this
-// adapter always sends, so use WithThinking(false) for that.
+// Effort is DeepSeek's reasoning_effort: EffortNone turns thinking off, and
+// the other levels turn it on at that depth. The zero value leaves the choice
+// to the server, which thinks at high.
 type Effort string
 
-// The reasoning_effort levels DeepSeek documents, other than none.
+// The reasoning_effort levels DeepSeek documents.
 const (
+	EffortNone Effort = "none"
 	EffortLow  Effort = "low"
 	EffortHigh Effort = "high"
 	EffortMax  Effort = "max"
 )
 
+type family int
+
+const (
+	familyPro family = iota
+	familyFlash
+)
+
 // Provider is one DeepSeek configuration: a model plus the settings
-// api.Request leaves out (thinking, effort, sampling, stop sequences, response
-// cap). It is safe for concurrent use and holds no per turn state.
+// api.Request leaves out (effort, sampling, stop sequences, response cap). It
+// is safe for concurrent use and holds no per turn state.
 type Provider struct {
 	key         string
 	base        string
 	model       api.Model
+	family      family
 	client      *http.Client
-	thinking    bool
 	effort      Effort
 	temperature *float64
 	topP        *float64
@@ -83,49 +90,68 @@ type Provider struct {
 	transport   lib.Options
 }
 
-// Option configures a Provider at New. An option that returns an error is
-// logged and skipped.
+// Option configures a Provider at New. An option that returns an error makes
+// New return it.
 type Option func(*Provider) error
 
 // Conf holds the provider's model.
 type Conf struct {
 	// Model is the model every turn is sent to, such as Flash or V4Pro. There
-	// is no default: an empty Model.Name fails every turn with a *RequestError
-	// under api.CodeInvalid.
+	// is no default: New refuses an empty Model.Name.
 	Model api.Model `json:"model"`
 }
 
-// New builds a Provider for conf.Model. The key defaults to DEEPSEEK_API_KEY;
-// without one New logs a warning and every turn fails with api.CodeAccess. A
-// nil option is skipped, and an option that fails is logged and leaves its
-// setting as it was. The default HTTP client has no timeout, because DeepSeek
-// may queue a request for minutes before answering; WithTransport bounds a
-// dead connection instead.
-func New(conf Conf, opts ...Option) *Provider {
+// New builds a Provider for conf.Model. The key defaults to DEEPSEEK_API_KEY.
+// New returns the first option error, and an error for an empty Model.Name, a
+// missing key, an Effort outside the declared levels, WithTemperature without
+// WithEffort(EffortNone), and WithTopP where the model ignores it. The model
+// rules follow the exact id: deepseek-flash and its legacy ids
+// deepseek-v4-flash and deepseek-v4-flash-vision-exp take images and honor
+// top_p with thinking on; deepseek-v4-pro and any id not listed here take no
+// images and honor top_p with thinking off. The default HTTP client has no
+// timeout, because DeepSeek may queue a request for minutes before answering;
+// WithTransport bounds a dead connection instead.
+func New(conf Conf, opts ...Option) (*Provider, error) {
 	p := &Provider{
-		key:      os.Getenv("DEEPSEEK_API_KEY"),
-		base:     defaultBaseURL,
-		model:    conf.Model,
-		client:   &http.Client{},
-		thinking: true,
+		key:    os.Getenv("DEEPSEEK_API_KEY"),
+		base:   defaultBaseURL,
+		model:  conf.Model,
+		client: &http.Client{},
 	}
 	for _, opt := range opts {
-		if opt == nil {
-			continue
-		}
 		if err := opt(p); err != nil {
-			slog.Error("deepseek: option rejected", "err", err)
+			return nil, err
 		}
+	}
+	if p.model.Name == "" {
+		return nil, errors.New("deepseek: no model, set Conf.Model")
 	}
 	if p.key == "" {
-		slog.Warn("deepseek: no API key: set DEEPSEEK_API_KEY or pass WithAPIKey")
+		return nil, errNoKey
 	}
-	return p
+	switch p.effort {
+	case "", EffortNone, EffortLow, EffortHigh, EffortMax:
+	default:
+		return nil, fmt.Errorf("deepseek: effort %q is not one of none, low, high or max", p.effort)
+	}
+	switch p.model.Name {
+	case "deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp":
+		p.family = familyFlash
+	}
+	if p.temperature != nil && p.effort != EffortNone {
+		return nil, errors.New("deepseek: temperature has no effect in thinking mode, pass WithEffort(EffortNone) with it")
+	}
+	if p.topP != nil && (p.family == familyFlash) == (p.effort == EffortNone) {
+		if p.family == familyFlash {
+			return nil, fmt.Errorf("deepseek: %s fixes top_p at 1.0 with thinking off, so WithTopP needs thinking on", p.model.Name)
+		}
+		return nil, fmt.Errorf("deepseek: %s ignores top_p in thinking mode, pass WithEffort(EffortNone) with it", p.model.Name)
+	}
+	return p, nil
 }
 
-// WithAPIKey sets the key, overriding DEEPSEEK_API_KEY. An empty key fails
-// every turn with api.CodeAccess; a wrong one is rejected by the server with
-// the same code.
+// WithAPIKey sets the key, overriding DEEPSEEK_API_KEY. New refuses an empty
+// key; the server rejects a wrong one with api.CodeAccess.
 func WithAPIKey(key string) Option {
 	return func(p *Provider) error {
 		p.key = key
@@ -135,9 +161,9 @@ func WithAPIKey(key string) Option {
 
 // WithBaseURL points the provider at another host, such as a proxy or a test
 // server, without the /chat/completions path; a trailing slash is trimmed. An
-// empty value or one without a scheme and host is rejected at New and the
-// default stays. https://api.deepseek.com/anthropic speaks a different wire
-// format and does not work here.
+// empty value or one without a scheme and host makes New fail.
+// https://api.deepseek.com/anthropic speaks a different wire format and does
+// not work here.
 func WithBaseURL(base string) Option {
 	return func(p *Provider) error {
 		if base == "" {
@@ -168,44 +194,41 @@ func WithHTTPClient(client *http.Client) Option {
 	}
 }
 
-// WithThinking turns reasoning on or off; it is on by default and always sent
-// explicitly. WithTemperature takes effect only with it off, and WithTopP as
-// WithTopP says. With it on, DeepSeek refuses a forced tool choice, so a
+// WithEffort sets the reasoning level. EffortNone sends thinking disabled and
+// no reasoning_effort; the other levels send thinking enabled and that
+// reasoning_effort; unset sends thinking enabled and leaves the level to the
+// server. With thinking on, DeepSeek refuses a forced tool choice, so a
 // request whose ToolChoice is api.ToolChoiceAny or names a tool fails with a
-// *RequestError until it is turned off.
-func WithThinking(on bool) Option {
-	return func(p *Provider) error {
-		p.thinking = on
-		return nil
-	}
-}
-
-// WithReasoningEffort sets reasoning_effort. It is sent only while thinking is
-// on; unset, the server's default of high applies.
-func WithReasoningEffort(e Effort) Option {
+// *RequestError unless the effort is EffortNone.
+func WithEffort(e Effort) Option {
 	return func(p *Provider) error {
 		p.effort = e
 		return nil
 	}
 }
 
-// WithTemperature sets temperature. It is sent only while thinking is off
-// (WithThinking(false)); with thinking on DeepSeek ignores it, so it is left
-// out.
+// WithTemperature sets temperature, from 0 to 2. DeepSeek ignores it in
+// thinking mode, so New refuses it without WithEffort(EffortNone).
 func WithTemperature(t float64) Option {
 	return func(p *Provider) error {
+		if !(t >= 0 && t <= 2) {
+			return fmt.Errorf("deepseek: temperature %v is outside the documented range of 0 to 2", t)
+		}
 		p.temperature = &t
 		return nil
 	}
 }
 
-// WithTopP sets top_p. It is sent only where the model honors it: on
-// deepseek-v4-pro with thinking off, and on deepseek-flash (any id containing
-// "flash") with thinking on, where the server raises values below 0.95 to
-// 0.95. Elsewhere DeepSeek fixes top_p and ignores the value, so it is left
-// out.
+// WithTopP sets top_p, above 0 and at most 1. Only two settings honor it:
+// deepseek-v4-pro with WithEffort(EffortNone), and deepseek-flash (or
+// deepseek-v4-flash or deepseek-v4-flash-vision-exp) with thinking on, where
+// the server raises values below 0.95 to 0.95. DeepSeek fixes top_p
+// everywhere else, so New refuses it there.
 func WithTopP(t float64) Option {
 	return func(p *Provider) error {
+		if !(t > 0 && t <= 1) {
+			return fmt.Errorf("deepseek: top_p %v is outside the documented range of above 0 to 1", t)
+		}
 		p.topP = &t
 		return nil
 	}
@@ -221,11 +244,14 @@ func WithStop(stop ...string) Option {
 }
 
 // WithMaxTokens caps the response; a turn that hits it ends with
-// api.CodeCapped. By default, and for a value of 0 or below, no cap is sent.
-// A value over the documented 393,216 ceiling is logged at New and the
-// previous setting stays.
+// api.CodeCapped. At 0, the default, no cap is sent and the server's default
+// applies. A negative value or one over the documented 393,216 ceiling makes
+// New fail.
 func WithMaxTokens(n int) Option {
 	return func(p *Provider) error {
+		if n < 0 {
+			return fmt.Errorf("deepseek: max tokens %d is negative", n)
+		}
 		if n > maxOutputTokens {
 			return fmt.Errorf("deepseek: max tokens %d is over the documented ceiling of %d", n, maxOutputTokens)
 		}
@@ -237,8 +263,7 @@ func WithMaxTokens(n int) Option {
 // WithUserID sets user_id, which partitions DeepSeek's cache and concurrency
 // allowance by user. Requests with different ids share no cache, so leave it
 // unset unless that isolation is wanted, and keep it fixed per provider. An id
-// over 512 bytes, the documented limit, is logged at New and the previous
-// setting stays.
+// over 512 bytes, the documented limit, makes New fail.
 func WithUserID(id string) Option {
 	return func(p *Provider) error {
 		if len(id) > maxUserIDBytes {
@@ -279,9 +304,9 @@ func (p *Provider) Model() api.Model {
 // finishes ends in exactly one EventOk or EventErr, then the channel closes. A
 // cancelled ctx closes it with neither, and so does a connection that stops
 // before any finish_reason arrived; one that stops after it ends as that
-// finish_reason does. A missing key, a request this wire cannot carry, or one over
-// Model.RequestBytes ends at once in EventErr with api.CodeAccess,
-// api.CodeInvalid or api.CodeTooLarge. The thread calls it; hosts normally do
+// finish_reason does. A request this wire cannot carry, or one over
+// Model.RequestBytes, ends at once in EventErr with api.CodeInvalid or
+// api.CodeTooLarge. The thread calls it; hosts normally do
 // not.
 func (p *Provider) Stream(ctx context.Context, req api.Request) <-chan api.Event {
 	httpReq, sent, err := p.request(ctx, req)
@@ -296,9 +321,6 @@ func (p *Provider) Stream(ctx context.Context, req api.Request) <-chan api.Event
 // base with a fixed path, and WithBaseURL refuses a base that does not parse —
 // so the panic below guards a case construction already made unreachable.
 func (p *Provider) request(ctx context.Context, req api.Request) (*http.Request, int, error) {
-	if p.key == "" {
-		return nil, 0, errNoKey
-	}
 	body, err := p.encode(req)
 	if err != nil {
 		return nil, 0, err
@@ -320,12 +342,8 @@ func (p *Provider) request(ctx context.Context, req api.Request) (*http.Request,
 	return httpReq, len(raw), nil
 }
 
-// errorCodeFor classifies a turn that never left this process. A missing key is
-// the one failure here that is not about the request's contents.
+// errorCodeFor classifies a turn that never left this process.
 func errorCodeFor(err error) api.ErrCode {
-	if errors.Is(err, errNoKey) {
-		return api.CodeAccess
-	}
 	if errors.Is(err, errTooLarge) {
 		return api.CodeTooLarge
 	}

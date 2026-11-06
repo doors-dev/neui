@@ -14,6 +14,7 @@ import (
 	"neui.dev/kchat/aside/controller"
 	"neui.dev/kchat/aside/window"
 	"neui.dev/kchat/icons"
+	"neui.dev/kchat/notify"
 )
 
 const margin = 12
@@ -176,16 +177,18 @@ elem (d *day) content() {
 	threads, seeded := d.rows, d.seeded
 	d.rows, d.seeded = nil, false
 	d.days.mu.Unlock()
+	failed := false
 	if !seeded {
 		var err error
 		threads, err = d.days.aside.Instance.ThreadList(ctx, d.start, d.end, false, 0, d.days.name)
 		if err != nil {
 			doors.Logger(ctx).Error("aside: day", "day", label, "err", err)
+			failed = true
 		}
 	}
 	var all map[api.ThreadID]api.InstanceChat
 	all, _ = d.days.aside.Instance.Chats().ReadAndSub(ctx, func(ctx context.Context, m map[api.ThreadID]api.InstanceChat) bool {
-		if !today {
+		if !today && !failed {
 			same := true
 			for _, t := range threads {
 				if m[t.ID] != all[t.ID] {
@@ -257,6 +260,7 @@ elem (d *day) content() {
 						rp.After(doors.ActionEmit[any]{Name: "opened"})
 						return false
 					},
+					OnError: notify.OnError,
 				} <button class="kchat-thread kchat-thread_new">
 					~>(doors.Class("kchat-ic")) ~(icons.Plus())
 					<span class="kchat-thread-name">New chat</span>

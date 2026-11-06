@@ -208,7 +208,11 @@ func testProvider(t *testing.T, url string, opts ...Option) *Provider {
 func modelProvider(t *testing.T, model, url string, opts ...Option) *Provider {
 	t.Helper()
 	all := append([]Option{WithAPIKey("test-key"), WithBaseURL(url)}, opts...)
-	return New(Conf{Model: api.Model{Name: model}}, all...)
+	p, err := New(Conf{Model: api.Model{Name: model}}, all...)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	return p
 }
 
 func textRequest() api.Request {
@@ -404,6 +408,21 @@ func TestStreamSequences(t *testing.T) {
 				`tool[0] id=call_cut name=search args=""`,
 				`tool[0] id= name= args="{\"query\": \"the hist"`,
 				"err capped",
+			},
+		},
+		{
+			name: "a reasoning item whose summary streamed keeps its meta without encrypted content",
+			sse: frame("response.created", createdFrame) +
+				frame("response.output_item.added", `{"type":"response.output_item.added","output_index":0,"item":{"id":"rs_1","type":"reasoning","summary":[]}}`) +
+				frame("response.reasoning_summary_text.delta", `{"type":"response.reasoning_summary_text.delta","item_id":"rs_1","output_index":0,"summary_index":0,"delta":"Checking."}`) +
+				frame("response.output_item.done", `{"type":"response.output_item.done","output_index":0,"item":{"id":"rs_1","type":"reasoning","summary":[{"type":"summary_text","text":"Checking."}]}}`) +
+				frame("response.completed", `{"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.6-sol","status":"completed","usage":null}}`),
+			want: []string{
+				"start id=resp_1 model=gpt-5.6-sol",
+				`summary[0] part=0 "Checking."`,
+				`meta[0] {"id":"rs_1","type":"reasoning","summary":[{"type":"summary_text","text":"Checking."}]}`,
+				"close[0]",
+				"ok turn",
 			},
 		},
 		{
@@ -1314,8 +1333,8 @@ func TestStreamRejectsUnsendableContent(t *testing.T) {
 	srv := sseServer(t, "")
 	p := testProvider(t, srv.URL)
 	req := api.Request{
-		Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{
-			api.ContentImage{Data: []byte("x"), Mime: "image/tiff"},
+		Messages: []api.Message{{Role: api.RoleAssistant, Content: api.Contents{
+			api.ContentToolUse{ID: "call_a", Name: "search", Input: api.DiscardedArguments},
 		}}},
 	}
 	var events []api.Event
@@ -1329,8 +1348,8 @@ func TestStreamRejectsUnsendableContent(t *testing.T) {
 	if !ok || ee.Code != api.CodeInvalid {
 		t.Fatalf("got %#v, want EventErr{invalid}", events[0])
 	}
-	if !strings.Contains(ee.Err.Error(), "image/tiff") {
-		t.Fatalf("error %v does not name the media type it refused", ee.Err)
+	if !strings.Contains(ee.Err.Error(), "err_json") {
+		t.Fatalf("error %v does not say why it refused", ee.Err)
 	}
 }
 
@@ -1359,7 +1378,10 @@ func TestProviderRefusesBytesMeasuredAsFitting(t *testing.T) {
 		io.WriteString(w, `{"error":{"message":"payload too large","type":"invalid_request_error"}}`)
 	}))
 	t.Cleanup(srv.Close)
-	p := New(Conf{Model: api.Model{Name: testModel, RequestBytes: declared}}, WithAPIKey("k"), WithBaseURL(srv.URL))
+	p, err := New(Conf{Model: api.Model{Name: testModel, RequestBytes: declared}}, WithAPIKey("k"), WithBaseURL(srv.URL))
+	if err != nil {
+		t.Fatal(err)
+	}
 	events := collect(p.Stream(context.Background(), textRequest()))
 	if len(events) != 1 {
 		t.Fatalf("got %d events, want one terminal error: %v", len(events), events)
@@ -1442,6 +1464,11 @@ func TestContextOverflowOnTheHTTPPath(t *testing.T) {
 			body: `{"error":{"message":"Invalid request","type":"invalid_request_error","param":null,"code":null}}`,
 			want: api.CodeInvalid,
 		},
+		{
+			name: "one string above its max length",
+			body: `{"error":{"message":"Invalid 'input[0].content[0].text': string too long.","type":"invalid_request_error","param":"input[0].content[0].text","code":"string_above_max_length"}}`,
+			want: api.CodeInvalid,
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1463,5 +1490,17 @@ func TestContextOverflowOnTheHTTPPath(t *testing.T) {
 				t.Fatalf("code = %q, want %q (err %v)", e.Code, tc.want, e.Err)
 			}
 		})
+	}
+}
+
+func TestStringAboveMaxLengthIsInvalid(t *testing.T) {
+	if got := errorVocabulary("string_above_max_length"); got != api.CodeInvalid {
+		t.Fatalf("errorVocabulary(string_above_max_length) = %q, want %q", got, api.CodeInvalid)
+	}
+	if got := inBandCode("string_above_max_length", "invalid_request_error"); got != api.CodeInvalid {
+		t.Fatalf("inBandCode(string_above_max_length) = %q, want %q", got, api.CodeInvalid)
+	}
+	if got := errorVocabulary("context_length_exceeded"); got != api.CodeContextLength {
+		t.Fatalf("errorVocabulary(context_length_exceeded) = %q, want %q", got, api.CodeContextLength)
 	}
 }

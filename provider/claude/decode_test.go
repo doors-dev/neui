@@ -20,7 +20,7 @@ func testProvider(t *testing.T, h http.HandlerFunc, opts ...Option) *Provider {
 	t.Helper()
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
-	return New(Conf{Model: api.Model{Name: testModel}}, append([]Option{WithAPIKey("test-key"), WithBaseURL(srv.URL)}, opts...)...)
+	return mustNew(t, Conf{Model: api.Model{Name: testModel}}, append([]Option{WithAPIKey("test-key"), WithBaseURL(srv.URL)}, opts...)...)
 }
 
 func sseServer(body string) http.HandlerFunc {
@@ -1121,7 +1121,7 @@ func TestMalformedFrame(t *testing.T) {
 }
 
 func TestUnreachableHost(t *testing.T) {
-	p := New(Conf{Model: api.Model{Name: testModel}}, WithAPIKey("k"), WithBaseURL("http://127.0.0.1:1"))
+	p := mustNew(t, Conf{Model: api.Model{Name: testModel}}, WithAPIKey("k"), WithBaseURL("http://127.0.0.1:1"))
 	got := collect(t, p, hello())
 	checkGrammar(t, got)
 	if len(got) != 1 {
@@ -1133,8 +1133,8 @@ func TestUnreachableHost(t *testing.T) {
 }
 
 func TestEncodeFailureIsATerminalEvent(t *testing.T) {
-	p := New(Conf{}, WithAPIKey("k"))
-	got := collect(t, p, hello())
+	p := mustNew(t, Conf{Model: api.Model{Name: testModel}}, WithAPIKey("k"))
+	got := collect(t, p, api.Request{})
 	checkGrammar(t, got)
 	if ev := got[0].(api.EventErr); ev.Code != api.CodeInvalid {
 		t.Fatalf("code %s, want invalid", ev.Code)
@@ -1187,7 +1187,7 @@ func TestUnknownStopCarriesTheRawValue(t *testing.T) {
 // every block of the turn comes from this event and is compared against the
 // model the next turn is built with.
 func TestStartCarriesTheConfiguredModel(t *testing.T) {
-	p := New(Conf{Model: api.Model{Name: "claude-opus-4-5"}}, WithAPIKey("k"), WithBaseURL(httptest.NewServer(sseServer(sse(
+	p := mustNew(t, Conf{Model: api.Model{Name: "claude-opus-4-5"}}, WithAPIKey("k"), WithBaseURL(httptest.NewServer(sseServer(sse(
 		"message_start", `{"type":"message_start","message":{"id":"msg_01","type":"message","role":"assistant","content":[],"model":"claude-opus-4-5-20250929","usage":{"input_tokens":1,"output_tokens":1}}}`,
 		"message_stop", fixStopFrame,
 	))).URL))

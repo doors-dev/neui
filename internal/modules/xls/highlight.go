@@ -19,7 +19,7 @@ type highlightRule struct {
 type highlightArg struct {
 	Path  string        `json:"path" required:"true"`
 	Sheet string        `json:"sheet" required:"true"`
-	Range string        `json:"range" required:"true" description:"like B2:B20"`
+	Range string        `json:"range" required:"true" description:"cells to format, like B2:B20 — usually a column's data cells, header left out"`
 	Rule  highlightRule `json:"rule" required:"true"`
 }
 
@@ -76,11 +76,11 @@ func highlightOpt(f *excelize.File, rule highlightRule) (excelize.ConditionalFor
 
 func highlightTool(ctx context.Context, arg highlightArg) (struct{}, error) {
 	fs := common.GetController(ctx).FS()
-	f, err := openRead(ctx, fs, arg.Path)
+	f, _, release, err := openWrite(ctx, fs, arg.Path, false)
 	if err != nil {
 		return struct{}{}, err
 	}
-	defer f.Close()
+	defer release()
 	opt, err := highlightOpt(f, arg.Rule)
 	if err != nil {
 		return struct{}{}, err

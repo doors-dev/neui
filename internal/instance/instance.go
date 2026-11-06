@@ -44,7 +44,7 @@ type instance struct {
 	dead    map[*link]struct{}
 	page    page.Page
 	current doors.Source[*api.ThreadID]
-	synced  bool
+	synced  doors.Source[bool]
 }
 
 func (inst *instance) enable(b *common.Backend) {
@@ -57,6 +57,10 @@ func (inst *instance) disable() {
 
 func (inst *instance) getSpace() page.Space {
 	return inst.page.Space()
+}
+
+func (inst *instance) Synced() doors.Beam[bool] {
+	return inst.synced
 }
 
 func (inst Instance) link() (Link, bool) {
@@ -121,7 +125,7 @@ func (inst *instance) run() {
 			inst.queue.PopFront()
 		case <-synced:
 			synced = nil
-			inst.synced = true
+			inst.synced.Update(context.Background(), true)
 			if inst.backend.Load() != nil {
 				inst.getUplink()
 			}
@@ -132,7 +136,7 @@ func (inst *instance) run() {
 func (inst *instance) onCommand(cmd command) {
 	switch cmd := cmd.(type) {
 	case commandSetUplink:
-		if inst.backend.Load() != cmd.backend {
+		if !inst.synced.Get() || inst.backend.Load() != cmd.backend {
 			cmd.uplink.Close()
 			cmd.Err(api.ErrUnlinked)
 			return
@@ -141,6 +145,10 @@ func (inst *instance) onCommand(cmd command) {
 		inst.setUplink(cmd.ctx, cmd.uplink)
 		inst.reloadLinks(thread.NewMessageReload(cmd.Operation))
 	case commandDrop:
+		if !inst.synced.Get() {
+			cmd.Err(api.ErrUnlinked)
+			return
+		}
 		if !inst.uplink.Valid() || inst.uplink.ID() != cmd.id {
 			cmd.NoMessage()
 			return
@@ -150,7 +158,7 @@ func (inst *instance) onCommand(cmd command) {
 		inst.reloadLinks(thread.NewMessageReload(cmd.Operation))
 	case commandLink:
 		inst.links[cmd.link] = struct{}{}
-		if inst.synced && inst.backend.Load() != nil {
+		if inst.synced.Get() && inst.backend.Load() != nil {
 			cmd.link.backend = inst.backend.Load()
 			if inst.uplink.Valid() {
 				cmd.link.thread = inst.uplink.ID()
@@ -173,12 +181,12 @@ func (inst *instance) onCommand(cmd command) {
 		}
 		if cmd.backend == nil {
 			inst.state.Disable(context.Background())
-			if inst.synced {
+			if inst.synced.Get() {
 				inst.reloadLinks(thread.NewMessageReload(nil))
 			}
 			return
 		}
-		if inst.synced {
+		if inst.synced.Get() {
 			inst.getUplink()
 			return
 		}
@@ -194,7 +202,7 @@ func (inst *instance) onCommand(cmd command) {
 		}
 		inst.sendUplink(cmd.makeCommand(inst.uplink))
 	case commandRecord:
-		if !inst.uplink.Valid() {
+		if !inst.synced.Get() || !inst.uplink.Valid() {
 			cmd.Err(api.ErrUnlinked)
 			return
 		}
@@ -218,7 +226,7 @@ func (inst *instance) getUplink() {
 		inst.renewUplink()
 		return
 	}
-	uplink, err := thread.OpenLink(id, inst.backend.Load(), inst.page, nil)
+	uplink, err := thread.OpenLink(id, inst.backend.Load(), inst.page, nil, nil)
 	if err != nil {
 		inst.renewUplink()
 		return
@@ -265,6 +273,10 @@ func (inst *instance) clearQueue() {
 }
 
 func (inst *instance) onMessage(m thread.Message) {
+	if r, ok := m.(thread.MessageReload); ok {
+		inst.reloadLinks(r)
+		return
+	}
 	defer m.Ack()
 	if m, ok := m.(thread.MessageEvent); ok {
 		switch e := m.Event.(type) {
@@ -285,11 +297,16 @@ func (inst *instance) onMessage(m thread.Message) {
 
 func (inst *instance) onCriticalErr() {
 	for link := range inst.links {
-		inst.dead[link] = struct{}{}
+		if link.initialized {
+			inst.dead[link] = struct{}{}
+			continue
+		}
+		link.send(thread.NewMessageReload(nil))
+		link.disconnect()
 	}
 	clear(inst.links)
 	inst.clearQueue()
-	uplink, err := thread.OpenLink(inst.uplink.ID(), inst.backend.Load(), inst.page, nil)
+	uplink, err := thread.OpenLink(inst.uplink.ID(), inst.backend.Load(), inst.page, nil, nil)
 	if err != nil {
 		inst.uplink.Close()
 		inst.setUplink(context.Background(), thread.NewLink(inst.backend.Load(), inst.page))

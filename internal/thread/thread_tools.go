@@ -72,6 +72,12 @@ func (s *threadTools) on(cmd any) {
 			cmd.Ok(link)
 			return
 		}
+		if s.thread.link.page == cmd.page && s.thread.link.linkCtx.Err() == nil {
+			s.thread.link.meta = cmd.meta
+			s.thread.link.send(NewMessageReload(cmd.op))
+			cmd.Err(ErrLinked)
+			return
+		}
 		s.thread.pending = false
 		s.thread.link = s.thread.link.inherit(cmd.page, cmd.meta)
 		cmd.Ok(s.thread.link.link())
@@ -124,6 +130,9 @@ func (s *threadTools) on(cmd any) {
 		if err != nil {
 			s.thread.criticalErr(cmd.intoMessage(), err)
 			return
+		}
+		if s.thread.link.taskCut(cmd.round) {
+			s.thread.link.send(newMessageEvent(nil, api.ChatEventTasks{Tasks: s.thread.link.taskList()}))
 		}
 		s.thread.rewindAttachments(removed, cmd.input)
 		if err := s.thread.sweepDrafts(); err != nil {

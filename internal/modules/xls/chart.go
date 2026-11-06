@@ -9,14 +9,14 @@ import (
 	"neui.dev/internal/common"
 )
 
-const chartDesc = `Add a chart over a data range, one series per data column. Anchor is the top-left cell the chart is placed at — pick one clear of the data.`
+const chartDesc = `Add a chart over a data range, header row included: one series per column, named by its header. Anchor is the top-left cell the chart is placed at — pick one clear of the data.`
 
 type chartArg struct {
 	Path       string `json:"path" required:"true"`
 	Sheet      string `json:"sheet" required:"true"`
 	Type       string `json:"type" required:"true" description:"column, bar, line, pie or scatter"`
-	DataRange  string `json:"dataRange" required:"true" description:"values to plot, like B2:C13, one series per column — exclude the header row; series names are taken automatically from the cells just above the range"`
-	Categories string `json:"categoriesRange" description:"labels along the axis, like A2:A13"`
+	DataRange  string `json:"dataRange" required:"true" description:"columns to plot, header row included, like B1:C13; each header names its series"`
+	Categories string `json:"categoriesRange" description:"axis labels, header row included like dataRange, like A1:A13"`
 	Anchor     string `json:"anchor" required:"true" description:"top-left cell of the chart"`
 	Title      string `json:"title"`
 }
@@ -54,38 +54,40 @@ func chartTool(ctx context.Context, arg chartArg) (struct{}, error) {
 	if err != nil {
 		return struct{}{}, err
 	}
+	if b.y2 == b.y1 {
+		return struct{}{}, fmt.Errorf("dataRange %s has no data rows below its header", arg.DataRange)
+	}
 	categories := ""
 	if arg.Categories != "" {
 		cb, err := rangeBounds(arg.Categories)
 		if err != nil {
 			return struct{}{}, err
 		}
-		if categories, err = absRange(arg.Sheet, cb.x1, cb.y1, cb.x2, cb.y2); err != nil {
+		if cb.y2 == cb.y1 {
+			return struct{}{}, fmt.Errorf("categoriesRange %s has no data rows below its header", arg.Categories)
+		}
+		if categories, err = absRange(arg.Sheet, cb.x1, cb.y1+1, cb.x2, cb.y2); err != nil {
 			return struct{}{}, err
 		}
 	}
 	series := []excelize.ChartSeries{}
 	for x := b.x1; x <= b.x2; x++ {
-		values, err := absRange(arg.Sheet, x, b.y1, x, b.y2)
+		values, err := absRange(arg.Sheet, x, b.y1+1, x, b.y2)
 		if err != nil {
 			return struct{}{}, err
 		}
-		s := excelize.ChartSeries{Values: values, Categories: categories}
-		if b.y1 > 1 {
-			name, err := excelize.CoordinatesToCellName(x, b.y1-1, true)
-			if err != nil {
-				return struct{}{}, err
-			}
-			s.Name = sheetRef(arg.Sheet) + "!" + name
+		name, err := excelize.CoordinatesToCellName(x, b.y1, true)
+		if err != nil {
+			return struct{}{}, err
 		}
-		series = append(series, s)
+		series = append(series, excelize.ChartSeries{Name: sheetRef(arg.Sheet) + "!" + name, Values: values, Categories: categories})
 	}
 	fs := common.GetController(ctx).FS()
-	f, err := openRead(ctx, fs, arg.Path)
+	f, _, release, err := openWrite(ctx, fs, arg.Path, false)
 	if err != nil {
 		return struct{}{}, err
 	}
-	defer f.Close()
+	defer release()
 	chart := &excelize.Chart{Type: t, Series: series}
 	if arg.Title != "" {
 		chart.Title = excelize.ChartTitle{Paragraph: []excelize.RichTextRun{{Text: arg.Title}}}

@@ -14,7 +14,9 @@ import (
 	"neui.dev/api"
 	"neui.dev/internal/common"
 	"neui.dev/internal/filesystem"
+	"neui.dev/internal/modules/js/task"
 	"neui.dev/internal/storage/local"
+	"neui.dev/internal/tools"
 )
 
 type testThread struct {
@@ -56,12 +58,8 @@ func newCtx(t *testing.T) (context.Context, api.FS) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { store.Remove() })
-	ws, err := store.WorkspaceOpen("thread")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { ws.Close() })
-	fs := filesystem.New("thread", ws, store, api.FilesConfig{})
+	fs := filesystem.Open("thread", store, store, api.FilesConfig{})
+	t.Cleanup(fs.Dispose)
 	return context.WithValue(context.Background(), common.KeyController, testThread{fs: fs}), fs
 }
 
@@ -139,8 +137,43 @@ func TestRunTimeout(t *testing.T) {
 	ctx, fs := newCtx(t)
 	write(t, fs, "spin.js", "while (true) {}")
 	m := &module{runtime: getRuntime(context.Background())}
-	if _, err := m.run(ctx, RunArg{File: "spin.js", Timeout: 200}); !errors.Is(err, errScript) {
+	if _, err := m.run(ctx, RunArg{File: "spin.js", Timeout: 200}); !errors.Is(err, task.ErrTimeout) {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+type toolThread struct {
+	testThread
+	module common.Module
+}
+
+func (t toolThread) Modules() iter.Seq[common.Module] {
+	return func(yield func(common.Module) bool) { yield(t.module) }
+}
+
+func TestRunTimeoutCancelsTool(t *testing.T) {
+	base, fs := newCtx(t)
+	seen := make(chan error, 1)
+	wait := tools.NewModule("wait", "")
+	if _, err := wait.Add("block", "", func(ctx context.Context, _ struct{}) (struct{}, error) {
+		<-ctx.Done()
+		seen <- context.Cause(ctx)
+		return struct{}{}, context.Cause(ctx)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.WithValue(base, common.KeyController, toolThread{testThread: testThread{fs: fs}, module: wait})
+	m := &module{runtime: getRuntime(context.Background())}
+	start := time.Now()
+	_, err := m.run(ctx, RunArg{Code: "try { wait__block({}); } catch (e) {}\nwhile (true) {}", Timeout: 200})
+	if !errors.Is(err, task.ErrTimeout) {
+		t.Fatalf("err = %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("timed out run took %v", elapsed)
+	}
+	if cause := <-seen; !errors.Is(cause, task.ErrTimeout) {
+		t.Fatalf("tool ctx cause = %v", cause)
 	}
 }
 

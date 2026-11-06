@@ -2,8 +2,10 @@ package instance
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestEnableRetriesLocalFileStorage(t *testing.T) {
@@ -19,5 +21,31 @@ func TestEnableRetriesLocalFileStorage(t *testing.T) {
 	s.Enable(nil)
 	if s.localFileStorage == nil {
 		t.Fatal("a later Enable did not create the file storage")
+	}
+}
+
+func TestSessionEndRemovesTheLocalFileStorage(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("TMPDIR", dir)
+	ctx, cancel := context.WithCancel(context.Background())
+	s := &session{ctx: ctx, instances: make(map[*instance]struct{})}
+	s.Enable(nil)
+	if entries, _ := os.ReadDir(dir); s.localFileStorage == nil || len(entries) == 0 {
+		t.Fatal("Enable did not create the file storage")
+	}
+	cancel()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			t.Fatalf("ReadDir: %v", err)
+		}
+		if len(entries) == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the session ended but its file storage is still there: %v", entries)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }

@@ -2,6 +2,7 @@ package instance
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/doors-dev/doors"
@@ -37,14 +38,20 @@ func (inst *instance) ThreadOpen(ctx context.Context, id api.ThreadID, meta any)
 	if ctx.Err() != nil {
 		return context.Canceled
 	}
+	if !inst.synced.Get() {
+		return api.ErrUnlinked
+	}
 	if _, err := backend.Storage().ThreadGet(ctx, id); err != nil {
 		return err
 	}
-	uplink, err := thread.OpenLink(id, backend, inst.page, meta)
+	op := thread.NewOperation(ctx)
+	uplink, err := thread.OpenLink(id, backend, inst.page, meta, op)
+	if errors.Is(err, thread.ErrLinked) {
+		return op.Receive()
+	}
 	if err != nil {
 		return err
 	}
-	op := thread.NewOperation(ctx)
 	setCmd := commandSetUplink{
 		ctx:       ctx,
 		backend:   backend,
@@ -65,6 +72,9 @@ func (inst *instance) ThreadNew(ctx context.Context) error {
 	}
 	if ctx.Err() != nil {
 		return context.Canceled
+	}
+	if !inst.synced.Get() {
+		return api.ErrUnlinked
 	}
 	op := thread.NewOperation(ctx)
 	uplink := thread.NewLink(backend, inst.page)
@@ -88,6 +98,9 @@ func (inst *instance) ThreadRename(ctx context.Context, id api.ThreadID, name st
 	}
 	if ctx.Err() != nil {
 		return context.Canceled
+	}
+	if _, err := backend.Storage().ThreadGet(ctx, id); err != nil {
+		return err
 	}
 	return thread.Rename(context.WithoutCancel(ctx), backend.Storage(), id, name)
 }
@@ -122,7 +135,10 @@ func (inst *instance) ThreadDelete(ctx context.Context, id api.ThreadID) error {
 	if err := op.Receive(); err != nil {
 		return err
 	}
-	return thread.Delete(context.WithoutCancel(ctx), backend.Storage(), id)
+	if err := thread.Delete(context.WithoutCancel(ctx), backend.Storage(), id); err != nil {
+		return err
+	}
+	return backend.FileStorage().FileDeleteAll(context.WithoutCancel(ctx), id)
 }
 
 func (inst *instance) ThreadGet(ctx context.Context, id api.ThreadID) (api.Thread, error) {

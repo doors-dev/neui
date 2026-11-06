@@ -219,12 +219,8 @@ func TestToolRoundEndWipesScratch(t *testing.T) {
 	messages := local.NewMessageStorage()
 	backend := common.NewBackend(ctx, messages, store, store, nil)
 	const id api.ThreadID = "scratch-round"
-	ws, err := store.WorkspaceOpen(id)
-	if err != nil {
-		t.Fatalf("WorkspaceOpen: %v", err)
-	}
-	t.Cleanup(func() { ws.Close() })
-	fs := filesystem.New(id, ws, store, api.FilesConfig{})
+	fs := filesystem.Open(id, store, store, api.FilesConfig{})
+	t.Cleanup(fs.Dispose)
 	scratch, err := fs.TempDir()
 	if err != nil {
 		t.Fatalf("TempDir: %v", err)
@@ -248,7 +244,6 @@ func TestToolRoundEndWipesScratch(t *testing.T) {
 	th.link = &link{
 		thread:     th,
 		backend:    backend,
-		ws:         ws,
 		fs:         fs,
 		ctx:        ctx,
 		cancel:     func() {},
@@ -273,7 +268,7 @@ func TestToolRoundEndWipesScratch(t *testing.T) {
 	if _, err := os.Stat(scratch); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("scratch survived the round: %v", err)
 	}
-	if b, err := os.ReadFile(filepath.Join(ws.Dir, "keep.txt")); err != nil || string(b) != "keep" {
+	if b, err := os.ReadFile(filepath.Join(filepath.Dir(scratch), "keep.txt")); err != nil || string(b) != "keep" {
 		t.Fatalf("workspace file after the round: %q, %v", b, err)
 	}
 }
@@ -316,19 +311,15 @@ func stubThread(t *testing.T, id api.ThreadID, p api.Provider, config api.Thread
 	t.Cleanup(func() { store.Remove() })
 	messages := local.NewMessageStorage()
 	backend := common.NewBackend(ctx, messages, store, store, []common.Option{common.OptionProvider(p)})
-	ws, err := store.WorkspaceOpen(id)
-	if err != nil {
-		t.Fatalf("WorkspaceOpen: %v", err)
-	}
-	t.Cleanup(func() { ws.Close() })
+	fs := filesystem.Open(id, store, store, api.FilesConfig{})
+	t.Cleanup(fs.Dispose)
 	linkCtx, linkCancel := context.WithCancel(ctx)
 	linkCancel()
 	th := &thread{id: id, ch: make(chan Command)}
 	th.link = &link{
 		thread:     th,
 		backend:    backend,
-		ws:         ws,
-		fs:         filesystem.New(id, ws, store, api.FilesConfig{}),
+		fs:         fs,
 		ctx:        ctx,
 		cancel:     func() {},
 		linkCtx:    linkCtx,
@@ -1085,7 +1076,6 @@ func TestAskFromBeforeReloadReachesTheNewPage(t *testing.T) {
 	th.link = &link{
 		thread:     th,
 		backend:    old.backend,
-		ws:         old.ws,
 		fs:         old.fs,
 		ctx:        old.ctx,
 		cancel:     old.cancel,
@@ -1147,7 +1137,13 @@ func TestTaskKeepsTheRoundOfItsTool(t *testing.T) {
 
 type countingWorkspaces struct {
 	api.WorkspaceStorage
+	opened  *atomic.Int64
 	deleted *atomic.Int64
+}
+
+func (c countingWorkspaces) WorkspaceOpen(id api.ThreadID) (api.Workspace, error) {
+	c.opened.Add(1)
+	return c.WorkspaceStorage.WorkspaceOpen(id)
 }
 
 func (c countingWorkspaces) WorkspaceDelete(id api.ThreadID) error {
@@ -1162,16 +1158,183 @@ func TestFailedOpenDisposesItsLink(t *testing.T) {
 		t.Fatalf("NewFileStorage: %v", err)
 	}
 	t.Cleanup(func() { store.Remove() })
-	var deleted atomic.Int64
-	backend := common.NewBackend(ctx, local.NewMessageStorage(), countingWorkspaces{store, &deleted}, store, []common.Option{common.OptionProvider(stubProvider{model: api.Model{Name: "stub"}})})
+	var opened, deleted atomic.Int64
+	backend := common.NewBackend(ctx, local.NewMessageStorage(), countingWorkspaces{store, &opened, &deleted}, store, []common.Option{common.OptionProvider(stubProvider{model: api.Model{Name: "stub"}})})
 	th := &thread{id: "open-missing", ch: make(chan Command)}
 	if _, err := th.connect(backend, page.NewPage(ctx), true, nil); err == nil {
 		t.Fatalf("opening a thread that is not in storage succeeded")
 	}
-	if deleted.Load() != 1 {
-		t.Fatalf("the failed open left its workspace open (%d deletes)", deleted.Load())
+	if opened.Load() != 0 || deleted.Load() != 0 {
+		t.Fatalf("the failed open touched the workspace (%d opens, %d deletes)", opened.Load(), deleted.Load())
 	}
 	if th.link != nil {
 		t.Fatalf("the failed open kept a link")
+	}
+}
+
+func openLink(st interface{ on(any) }, cmd commandLink) (Link, error) {
+	go st.on(cmd)
+	return cmd.Receive()
+}
+
+func livePage(th *thread) {
+	th.link.linkCtx, th.link.linkCancel = context.WithCancel(context.Background())
+	th.link.page = page.NewPage(context.Background())
+	th.link.toolkit = toolkit.NewToolkit(context.Background())
+}
+
+func TestOpenFromTheSamePageKeepsTheLink(t *testing.T) {
+	th, r, _, _ := taskThread(t, "open-same-page")
+	state := startRound(t, th, r, api.Input{Text: "call"})
+	state.ok(api.CodeTurn, api.Indexed[api.Content]{0: api.ContentToolUse{ID: "c", Name: "probe__run", Input: json.RawMessage(`{}`)}}, api.EventUsage{})
+	tools, ok := th.state.(*threadTools)
+	if !ok {
+		t.Fatalf("a round that asked for a tool left the thread in %T, want the tool calls", th.state)
+	}
+	livePage(th)
+	old := th.link
+	cmd := commandLink{old.backend, old.page, true, "anchor", NewOperation(context.Background()), NewResultResponse[Link]()}
+	go tools.on(cmd)
+	reload, ok := (<-old.ch).(MessageReload)
+	if !ok {
+		t.Fatalf("a reopen from the same page sent no reload to the instance")
+	}
+	reload.Ack()
+	_, err := cmd.Receive()
+	if !errors.Is(err, ErrLinked) {
+		t.Fatalf("a reopen from the same page returned %v, want ErrLinked", err)
+	}
+	if th.link != old || old.linkCtx.Err() != nil {
+		t.Fatalf("a reopen from the same page replaced or cancelled the link")
+	}
+	if old.meta != "anchor" {
+		t.Fatalf("the reopen meta is %v, want it on the link for the next init", old.meta)
+	}
+}
+
+func TestOpenFromAnotherPageInheritsTheLink(t *testing.T) {
+	th, _, _, _ := taskThread(t, "open-other-page")
+	livePage(th)
+	old := th.link
+	link, err := openLink(threadWait{thread: th}, commandLink{old.backend, page.NewPage(context.Background()), true, nil, nil, NewResultResponse[Link]()})
+	if err != nil {
+		t.Fatalf("an open from another page: %v", err)
+	}
+	if link.inner == old || old.linkCtx.Err() == nil {
+		t.Fatalf("an open from another page kept the old link")
+	}
+}
+
+func TestRewindCancelsTheTasksOfTheCutRounds(t *testing.T) {
+	th, r, _, first := taskThread(t, "rewind-tasks")
+	second, _, err := r.RoundInit(api.Input{Text: "start another"})
+	if err != nil {
+		t.Fatalf("replay RoundInit: %v", err)
+	}
+	if _, err := r.RoundOk(api.EventUsage{}, api.Indexed[api.Content]{0: api.ContentText{Text: "started"}}); err != nil {
+		t.Fatalf("replay RoundOk: %v", err)
+	}
+	var keptCause, cutCause error
+	kept := th.link.taskAdd(first, "js", "run", "kept", nil, func(err error) { keptCause = err })
+	cut := th.link.taskAdd(second.ID, "js", "run", "cut", nil, func(err error) { cutCause = err })
+	events := captureEvents(th)
+	wait := threadWait{thread: th}
+	th.state = wait
+	op := NewOperation(context.Background())
+	wait.on(commandRewind{th.link, second.ID, api.Input{Text: "again"}, op})
+	if err := op.Receive(); err != nil {
+		t.Fatalf("rewind: %v", err)
+	}
+	if !errors.Is(cutCause, api.ErrCanceledByUser) || keptCause != nil {
+		t.Fatalf("the rewind cancelled the cut round's task with %v and the earlier one with %v", cutCause, keptCause)
+	}
+	tasks := th.link.taskList()
+	if len(tasks) != 1 || tasks[0].ID != kept.ID() {
+		t.Fatalf("the task list after the rewind is %v, want only the earlier round's task", tasks)
+	}
+	var listed bool
+	for _, e := range events() {
+		if e, ok := e.(api.ChatEventTasks); ok && len(e.Tasks) == 1 {
+			listed = true
+		}
+	}
+	if !listed {
+		t.Fatalf("the rewind did not send the shortened task list")
+	}
+	round, ok := th.state.(*threadRound)
+	if !ok {
+		t.Fatalf("the rewind left the thread in %T, want a round", th.state)
+	}
+	round.on(deliver(th, func() { cut.Ok(json.RawMessage(`"late"`)) }))
+	if len(events()) != 0 || len(th.link.taskList()) != 1 {
+		t.Fatalf("a result from the cancelled task was not dropped")
+	}
+}
+
+func TestOnlyUserInputRoundsSweepDrafts(t *testing.T) {
+	th, _, _, origin := taskThread(t, "sweep-drafts")
+	files := th.link.backend.FileStorage()
+	ctx := context.Background()
+	if _, err := files.FilePut(ctx, th.id, api.OriginUser, "edit.png", "image/png", strings.NewReader("png"), true); err != nil {
+		t.Fatalf("FilePut: %v", err)
+	}
+	task := th.link.taskAdd(origin, "js", "run", "", map[string]any{}, func(error) {})
+	wait := threadWait{thread: th}
+	th.state = wait
+	wait.on(deliver(th, func() { task.Ok(json.RawMessage(`"done"`)) }))
+	if _, ok := th.state.(*threadRound); !ok {
+		t.Fatalf("a task result while idle left the thread in %T, want a round", th.state)
+	}
+	if f, err := files.FileStat(ctx, th.id, api.OriginUser, "edit.png"); err != nil || !f.Draft {
+		t.Fatalf("the open edit's draft after a task-result round: %+v, %v, want it kept", f, err)
+	}
+	wait = threadWait{thread: th}
+	th.state = wait
+	op := NewOperation(ctx)
+	wait.on(commandSend{link: th.link, Operation: op, input: api.Input{Text: "next"}})
+	if _, ok := th.state.(*threadRound); !ok {
+		t.Fatalf("a send left the thread in %T, want a round", th.state)
+	}
+	if _, err := files.FileStat(ctx, th.id, api.OriginUser, "edit.png"); !errors.Is(err, api.ErrNotFound) {
+		t.Fatalf("the leftover draft after a send: %v, want it swept", err)
+	}
+}
+
+func TestToolWriteOpensTheWorkspaceAndDisposeRemovesIt(t *testing.T) {
+	ctx := context.WithValue(context.Background(), common.ConfigKey{}, api.ThreadConfig{})
+	store, err := local.NewFileStorage("")
+	if err != nil {
+		t.Fatalf("NewFileStorage: %v", err)
+	}
+	t.Cleanup(func() { store.Remove() })
+	var opened, deleted atomic.Int64
+	backend := common.NewBackend(ctx, local.NewMessageStorage(), countingWorkspaces{store, &opened, &deleted}, store, []common.Option{common.OptionProvider(stubProvider{model: api.Model{Name: "stub"}})})
+	th := &thread{id: "lazy-workspace", ch: make(chan Command)}
+	l := newLink(th, backend, page.NewPage(ctx), nil)
+	if opened.Load() != 0 {
+		t.Fatalf("a new link opened its workspace")
+	}
+	fs := controller{link: l}.FS()
+	f, err := fs.Create("a.txt")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	file, err := fs.LocalPath(ctx, "a.txt")
+	if err != nil {
+		t.Fatalf("LocalPath: %v", err)
+	}
+	dir := filepath.Dir(file)
+	if _, err := os.Stat(dir); err != nil {
+		t.Fatalf("the write left no workspace: %v", err)
+	}
+	l.dispose()
+	if _, err := os.Stat(dir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("dispose left the workspace: %v", err)
+	}
+	if opened.Load() != 1 || deleted.Load() != 1 {
+		t.Fatalf("workspace opened %d and deleted %d times, want 1 and 1", opened.Load(), deleted.Load())
 	}
 }

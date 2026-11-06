@@ -3,7 +3,9 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -173,6 +175,24 @@ func TestFetchRefusals(t *testing.T) {
 		{`{"url":"http://198.18.0.1/x"}`, "an address web__fetch does not connect to"},
 		{`{"url":"http://240.1.2.3/x"}`, "an address web__fetch does not connect to"},
 		{`{"url":"http://[fec0::1]/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://[::ffff:127.0.0.1]/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://[::127.0.0.1]/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://[64:ff9b::7f00:1]/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://[64:ff9b::a00:1]/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://[64:ff9b:1::1]/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://[2002:7f00:1::1]/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://[2001::1]/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://[2001:db8::1]/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://[3fff::1]/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://[100::1]/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://[5f00::1]/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://[fd00:ec2::254]/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://169.254.169.254/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://192.0.2.1/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://203.0.113.1/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://100.64.0.1/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://[fe80::1%25lo0]/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://8.8.8.8:25/x"}`, "an address web__fetch does not connect to"},
 	} {
 		if _, err := guarded(c.arg); err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: got %v, want %q", c.arg, err, c.want)
@@ -427,5 +447,174 @@ func TestFetchForeignCancelIsAnError(t *testing.T) {
 	fetch := fetchTool(t, Config{HTTPClient: &http.Client{Transport: canceledTransport{}}})
 	if _, err := fetch(`{"url":"https://example.com/"}`); err == nil {
 		t.Error("a Canceled not caused by the call's context was reported as success")
+	}
+}
+
+func TestFetchRefusesHexLoopback(t *testing.T) {
+	_, err := fetchTool(t, Config{})(`{"url":"http://0x7f.1/x"}`)
+	if err == nil {
+		t.Fatal("0x7f.1 was fetched")
+	}
+	var dns *net.DNSError
+	if !strings.Contains(err.Error(), "an address web__fetch does not connect to") && !errors.As(err, &dns) {
+		t.Errorf("0x7f.1 must be refused or fail to resolve: %v", err)
+	}
+}
+
+func TestGuardPolicy(t *testing.T) {
+	for _, address := range []string{"[64:ff9b::808:808]:443", "8.8.8.8:443", "[2606:4700::1111]:80", "8.8.8.8:8080"} {
+		if err := guard("tcp", address, nil); err != nil {
+			t.Errorf("%s refused: %v", address, err)
+		}
+	}
+	for _, address := range []string{"127.0.0.1:80", "[64:ff9b::7f00:1]:80", "[::ffff:10.0.0.1]:443", "8.8.8.8:25", "8.8.8.8:6667", "8.8.8.8:0", "bogus"} {
+		var refused blocked
+		if err := guard("tcp", address, nil); !errors.As(err, &refused) {
+			t.Errorf("%s allowed: %v", address, err)
+		}
+	}
+}
+
+func TestFetchIgnoresProxyEnvironment(t *testing.T) {
+	proxied := 0
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		proxied++
+		fmt.Fprint(w, "proxied")
+	}))
+	defer proxy.Close()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "direct")
+	}))
+	defer srv.Close()
+	t.Setenv("HTTP_PROXY", proxy.URL)
+	t.Setenv("HTTPS_PROXY", proxy.URL)
+	t.Setenv("NO_PROXY", "")
+	if _, err := fetchTool(t, Config{})(fmt.Sprintf(`{"url":%q}`, srv.URL)); err == nil || !strings.Contains(err.Error(), "an address web__fetch does not connect to") {
+		t.Errorf("a loopback target behind a proxy setting: %v", err)
+	}
+	if proxied != 0 {
+		t.Errorf("the proxy got %d requests", proxied)
+	}
+	if guardedClient().Transport.(*http.Transport).Proxy != nil {
+		t.Error("the default client consults a proxy")
+	}
+}
+
+func TestFetchRefusesRedirectToLoopback(t *testing.T) {
+	reached := false
+	inner := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reached = true
+		fmt.Fprint(w, "secret")
+	}))
+	defer inner.Close()
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, inner.URL+"/secret", http.StatusFound)
+	}))
+	defer origin.Close()
+	client := guardedClient()
+	transport := client.Transport.(*http.Transport)
+	guarded := transport.DialContext
+	transport.DialContext = func(ctx context.Context, network string, address string) (net.Conn, error) {
+		if address == "origin.example:80" {
+			return (&net.Dialer{}).DialContext(ctx, network, origin.Listener.Addr().String())
+		}
+		return guarded(ctx, network, address)
+	}
+	_, err := fetchTool(t, Config{HTTPClient: client})(`{"url":"http://origin.example/start"}`)
+	if err == nil || !strings.Contains(err.Error(), "127.0.0.1, an address web__fetch does not connect to") {
+		t.Errorf("a redirect to loopback: %v", err)
+	}
+	if reached {
+		t.Error("the redirect target was reached")
+	}
+}
+
+const webFormsPage = `<!doctype html>
+<html><head><title>Orders</title></head><body>
+<form method="post" action="./orders.aspx" id="form1">
+<input type="hidden" name="__VIEWSTATE" id="__VIEWSTATE" value="dDwtMTA4NzE3MjA4Njs7Pj5aVIEWSTATEBLOB">
+<div id="content">
+<article>
+<h1>Order processing guide</h1>
+<p>Orders placed before noon ship the same day, and every order is checked by a person before it leaves the warehouse.</p>
+<p>Returns are accepted for thirty days after delivery, provided the item is unused and still in its original packaging.</p>
+<p>Refunds reach the original payment method within five working days of the warehouse receiving the returned item.</p>
+</article>
+</div>
+</form>
+</body></html>`
+
+const searchHeaderPage = `<!doctype html>
+<html><head><title>Guide</title></head><body>
+<header><form role="search"><label for="q">Search</label><input id="q" name="q"><button>Go</button></form></header>
+<article>
+<header><h1>Pruning the right things</h1></header>
+<p>A page converter has to keep the content a reader came for, and drop the controls and chrome around it.</p>
+<p>Titles often live inside the article's own header element, so removing every header loses them.</p>
+<p>Forms are not boilerplate by themselves, since whole pages are sometimes wrapped in a single form.</p>
+<p>Select options must never be glued together:</p>
+<select><option>Alpha</option><option>Beta</option></select>
+<pre>line one
+    indented two</pre>
+</article>
+</body></html>`
+
+func TestFetchKeepsFormContent(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/forms", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, webFormsPage)
+	})
+	mux.HandleFunc("/header", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, searchHeaderPage)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	fetch := fetchTool(t, Config{HTTPClient: srv.Client()})
+	for _, format := range []string{"markdown", "text", "html"} {
+		for _, full := range []bool{false, true} {
+			out, err := fetch(fmt.Sprintf(`{"url":%q,"format":%q,"full":%t}`, srv.URL+"/forms", format, full))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(out, "Orders placed before noon ship the same day") || !strings.Contains(out, "Order processing guide") {
+				t.Errorf("%s full=%t: a page wrapped in a form lost its article: %s", format, full, out)
+			}
+			if strings.Contains(out, "__VIEWSTATE") || strings.Contains(out, "VIEWSTATEBLOB") {
+				t.Errorf("%s full=%t: hidden form state leaked: %s", format, full, out)
+			}
+			page, err := fetch(fmt.Sprintf(`{"url":%q,"format":%q,"full":%t}`, srv.URL+"/header", format, full))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(page, "Pruning the right things") {
+				t.Errorf("%s full=%t: the article's own header title was dropped: %s", format, full, page)
+			}
+			if strings.Contains(page, "Go") {
+				t.Errorf("%s full=%t: button text survived: %s", format, full, page)
+			}
+			if strings.Contains(page, "AlphaBeta") {
+				t.Errorf("%s full=%t: select options were glued: %s", format, full, page)
+			}
+			if full && !strings.Contains(page, "Search") {
+				t.Errorf("%s full: the search label was dropped: %s", format, page)
+			}
+			if !full && strings.Contains(page, "Search") {
+				t.Errorf("%s: the site header's search form survived main-content extraction: %s", format, page)
+			}
+		}
+	}
+	text, err := fetch(fmt.Sprintf(`{"url":%q,"format":"text","full":true}`, srv.URL+"/header"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(text, "line one\n    indented two") {
+		t.Errorf("text mode collapsed a pre block: %s", text)
+	}
+	for _, line := range strings.Split(text, "\n") {
+		if strings.TrimSpace(line) == "Go" {
+			t.Errorf("button text survived in text mode: %s", text)
+		}
 	}
 }

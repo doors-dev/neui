@@ -1,9 +1,12 @@
 package xls
 
 import (
+	"archive/zip"
 	"context"
 	"errors"
 	"iter"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -55,12 +58,9 @@ func newFSStore(t *testing.T) (filesystem.FS, *local.FileStorage) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { store.Remove() })
-	ws, err := store.WorkspaceOpen("thread")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { ws.Close() })
-	return filesystem.New("thread", ws, store, api.FilesConfig{}), store
+	fs := filesystem.Open("thread", store, store, api.FilesConfig{})
+	t.Cleanup(fs.Dispose)
+	return fs, store
 }
 
 func buildBook(t *testing.T, fs api.FS, name string) {
@@ -294,5 +294,148 @@ func TestProfileBlankHeaderRow(t *testing.T) {
 	}
 	if res.Headers == nil {
 		t.Fatal("headers = nil")
+	}
+}
+
+func TestOpenRepetitiveWorkbook(t *testing.T) {
+	fs, _ := newFSStore(t)
+	f := excelize.NewFile()
+	sw, err := f.NewStreamWriter("Sheet1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := []any{"same text", 12345.678, 42}
+	for r := 1; r <= 20000; r++ {
+		cell, _ := excelize.CoordinatesToCellName(1, r)
+		if err := sw.SetRow(cell, row); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := sw.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	writeBook(t, fs, "big.xlsx", f)
+	path, err := fs.LocalPath(context.Background(), "big.xlsx")
+	if err != nil {
+		t.Fatal(err)
+	}
+	z, err := zip.OpenReader(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw uint64
+	for _, zf := range z.File {
+		raw += zf.UncompressedSize64
+	}
+	z.Close()
+	e, err := fs.Stat(context.Background(), "big.xlsx")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if raw <= 4*uint64(e.Size) {
+		t.Fatalf("fixture inflates only %d -> %d", e.Size, raw)
+	}
+	tight := context.WithValue(threadCtx(fs), configKey{}, Config{MaxFileSize: e.Size})
+	if _, err := sheetsTool(tight, sheetsArg{Path: "big.xlsx"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestOpenZipBomb(t *testing.T) {
+	fs, _ := newFSStore(t)
+	w, err := fs.Create("bomb.xlsx")
+	if err != nil {
+		t.Fatal(err)
+	}
+	zw := zip.NewWriter(w)
+	ct, err := zw.Create("[Content_Types].xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ct.Write([]byte(`<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>`))
+	sheet, err := zw.Create("xl/worksheets/sheet1.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sheet.Write(make([]byte, 16<<20)); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	_, err = sheetsTool(threadCtx(fs), sheetsArg{Path: "bomb.xlsx"})
+	if err == nil || !strings.Contains(err.Error(), "100x") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestOpenMaxUnzipSize(t *testing.T) {
+	fs, _ := newFSStore(t)
+	buildBook(t, fs, "book.xlsx")
+	low := context.WithValue(threadCtx(fs), configKey{}, Config{MaxUnzipSize: 1000})
+	_, err := sheetsTool(low, sheetsArg{Path: "book.xlsx"})
+	if err == nil || !strings.Contains(err.Error(), "uncompressed") {
+		t.Fatalf("err = %v", err)
+	}
+	small := context.WithValue(threadCtx(fs), configKey{}, Config{MaxUnzipSize: 10 << 20})
+	if _, err := sheetsTool(small, sheetsArg{Path: "book.xlsx"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestProfileTypesPastSample(t *testing.T) {
+	fs, _ := newFSStore(t)
+	f := excelize.NewFile()
+	for cell, v := range map[string]any{"A1": "Late", "B1": "Mixed", "C1": "Num"} {
+		if err := f.SetCellValue("Sheet1", cell, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for r := 2; r <= 12; r++ {
+		if err := f.SetCellValue("Sheet1", "C"+strconv.Itoa(r), r); err != nil {
+			t.Fatal(err)
+		}
+		if err := f.SetCellValue("Sheet1", "B"+strconv.Itoa(r), r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := f.SetCellValue("Sheet1", "A10", 3.5); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.SetCellValue("Sheet1", "B11", "n/a"); err != nil {
+		t.Fatal(err)
+	}
+	writeBook(t, fs, "book.xlsx", f)
+	res, err := profileTool(threadCtx(fs), profileArg{Path: "book.xlsx", Sheet: "Sheet1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"number", "mixed", "number"}; !slices.Equal(res.Types, want) {
+		t.Fatalf("types = %v, want %v", res.Types, want)
+	}
+	if len(res.Sample) != profileSampleRows || res.RowCount != 11 {
+		t.Fatalf("sample = %d rows, rowCount = %d", len(res.Sample), res.RowCount)
+	}
+}
+
+func TestSheetsAutoFilter(t *testing.T) {
+	fs, _ := newFSStore(t)
+	f := excelize.NewFile()
+	if err := f.SetCellValue("Sheet1", "A1", "N"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.AutoFilter("Sheet1", "A1:C9", nil); err != nil {
+		t.Fatal(err)
+	}
+	writeBook(t, fs, "book.xlsx", f)
+	infos, err := sheetsTool(threadCtx(fs), sheetsArg{Path: "book.xlsx"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(infos) != 1 || infos[0].Filter != "A1:C9" {
+		t.Fatalf("infos = %+v", infos)
 	}
 }

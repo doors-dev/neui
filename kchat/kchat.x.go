@@ -6,12 +6,14 @@ package kchat
 import (
 	"time"
 	
+	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
 	"neui.dev/api"
 	"neui.dev/internal/instance"
 	"neui.dev/kchat/aside"
 	"neui.dev/kchat/chat"
 	"neui.dev/kchat/css"
+	"neui.dev/kchat/notify"
 	"neui.dev/kchat/params"
 	"neui.dev/kchat/pops"
 )
@@ -91,9 +93,11 @@ func (k Kchat) Main() gox.Elem {
 	params.InitDefault()
 	params.Disable(k.Disable)
 	return gox.Elem(func(cur gox.Cursor) error {
+		inst := instance.GetInstance(cur.Context())
 		return cur.Comp(&kchat{
 			params: params,
-			inst: instance.GetInstance(cur.Context()),
+			inst: inst,
+			synced: inst.Synced(),
 			pops: pops.NewPopups(),
 		})
 	})
@@ -102,19 +106,23 @@ func (k Kchat) Main() gox.Elem {
 type kchat struct {
 	params params.Params
 	inst api.Instance
+	synced doors.Beam[bool]
 	pops pops.Popups
 }
 
-//line kchat.gox:105
+//line kchat.gox:110
 func (k *kchat) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line kchat.gox:106
+//line kchat.gox:111
 		__e = __c.Any(css.Style(k.params.ThemeDark, k.params.ThemeLight)); if __e != nil { return }
-		__e = __c.Init("div"); if __e != nil { return }
-		{
-//line kchat.gox:108
-			__e = __c.Set("class", func() any {
+//line kchat.gox:112
+		__e = (doors.Ctx(notify.Root(ctx))).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+			ctx := __c.Context(); _ = ctx
+			__e = __c.Init("div"); if __e != nil { return }
+			{
+//line kchat.gox:113
+				__e = __c.Set("class", func() any {
 			class := "kchat-widget kchat-widget_split"
 			if k.params.Off(params.Sidebar) {
 				class += " kchat-widget_noside"
@@ -126,34 +134,47 @@ func (k *kchat) Main() gox.Elem {
 			}
 			return class
 		}()); if __e != nil { return }
-//line kchat.gox:120
-			__e = __c.Set("data-kchat-theme", func() any {
+//line kchat.gox:125
+				__e = __c.Set("data-kchat-theme", func() any {
 			key := css.FaceKey(k.params.ThemeDark, k.params.ThemeLight)
 			if key == "" {
 				return nil
 			}
 			return key
 		}()); if __e != nil { return }
-			__e = __c.Submit(); if __e != nil { return }
-//line kchat.gox:127
-			if !k.params.Off(params.Sidebar) {
-//line kchat.gox:128
-				__e = __c.Any(aside.Aside{
-				Params: k.params,
-				Instance: k.inst,
-				Pops: k.pops,
-			}); if __e != nil { return }
-			}
+				__e = __c.Submit(); if __e != nil { return }
+//line kchat.gox:132
+				if !k.params.Off(params.Sidebar) {
+//line kchat.gox:133
+					__e = __c.Any(k.synced.Bind(func(synced bool) gox.Elem {
+				return gox.Elem(func(__c gox.Cursor) (__e error) {
+					ctx := __c.Context(); _ = ctx
 //line kchat.gox:134
-			__e = __c.Any(chat.Chat{
+					if synced {
+//line kchat.gox:135
+						__e = __c.Any(aside.Aside{
+						Params: k.params,
+						Instance: k.inst,
+						Pops: k.pops,
+					}); if __e != nil { return }
+					}
+				return })
+//line kchat.gox:141
+			})); if __e != nil { return }
+				}
+//line kchat.gox:143
+				__e = __c.Any(chat.Chat{
 			Params: k.params,
 			Inst: k.inst,
 			Pops: k.pops.Popup[string](),
 		}); if __e != nil { return }
-//line kchat.gox:139
-			__e = __c.Any(k.pops.Script()); if __e != nil { return }
-		}
-		__e = __c.Close(); if __e != nil { return }
+//line kchat.gox:148
+				__e = __c.Any(k.pops.Script()); if __e != nil { return }
+//line kchat.gox:149
+				__e = __c.Any(notify.Script()); if __e != nil { return }
+			}
+			__e = __c.Close(); if __e != nil { return }
+		return })); if __e != nil { return }
 	return })
-//line kchat.gox:141
+//line kchat.gox:151
 }

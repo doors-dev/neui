@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"image"
+	"image/color"
+	"image/gif"
 	"image/png"
 	"io"
 	"iter"
@@ -72,12 +74,9 @@ func newFSStore(t *testing.T) (filesystem.FS, *local.FileStorage) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { store.Remove() })
-	ws, err := store.WorkspaceOpen("thread")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { ws.Close() })
-	return filesystem.New("thread", ws, store, api.FilesConfig{}), store
+	fs := filesystem.Open("thread", store, store, api.FilesConfig{})
+	t.Cleanup(fs.Dispose)
+	return fs, store
 }
 
 func putFile(t *testing.T, store *local.FileStorage, origin api.Origin, name, content string) {
@@ -556,5 +555,131 @@ func TestReadImageRejectsOversizedGIF(t *testing.T) {
 	_, err := readImageTool(threadCtx(fs), PathArg{Path: "huge.gif"})
 	if err == nil || !strings.Contains(err.Error(), "65535x65535") {
 		t.Fatalf("err %v", err)
+	}
+}
+
+func TestGlobRelativeToPath(t *testing.T) {
+	fs := newFS(t)
+	write(t, fs, "src/a.go", "package a\n")
+	write(t, fs, "src/sub/b.go", "package b\n")
+	write(t, fs, "c.go", "package c\n")
+	res, err := globTool(threadCtx(fs), globArg{Pattern: "*.go", Path: "src"})
+	if err != nil || len(res.Paths) != 1 || res.Paths[0] != "src/a.go" {
+		t.Fatalf("%+v, %v", res, err)
+	}
+	res, err = globTool(threadCtx(fs), globArg{Pattern: "sub/*.go", Path: "src/"})
+	if err != nil || len(res.Paths) != 1 || res.Paths[0] != "src/sub/b.go" {
+		t.Fatalf("%+v, %v", res, err)
+	}
+	res, err = globTool(threadCtx(fs), globArg{Pattern: "*.go"})
+	if err != nil || len(res.Paths) != 1 || res.Paths[0] != "c.go" {
+		t.Fatalf("%+v, %v", res, err)
+	}
+	gres, err := grepTool(threadCtx(fs), grepArg{Pattern: "package", Path: "src", Glob: "*.go"})
+	if err != nil || len(gres.Matches) != 1 || gres.Matches[0].Path != "src/a.go" {
+		t.Fatalf("%+v, %v", gres, err)
+	}
+	gres, err = grepTool(threadCtx(fs), grepArg{Pattern: "package", Path: "src/sub/b.go", Glob: "*.go"})
+	if err != nil || len(gres.Matches) != 1 || gres.Matches[0].Path != "src/sub/b.go" {
+		t.Fatalf("%+v, %v", gres, err)
+	}
+}
+
+func TestReadDocumentExtensionsAndMagic(t *testing.T) {
+	fs := newFS(t)
+	cases := []struct {
+		name, content string
+		mime          api.DocumentMime
+	}{
+		{"notes.md", "# hi", api.DocumentMarkdown},
+		{"notes.MARKDOWN", "# hi", api.DocumentMarkdown},
+		{"conf.yml", "a: 1", api.DocumentYAML},
+		{"page.htm", "<p>x</p>", api.DocumentHTML},
+		{"data.csv", "a,b", api.DocumentCSV},
+		{"old.xls", "\xd0\xcf\x11\xe0", api.DocumentXLS},
+		{"sheet.xlsx", "PK\x03\x04", api.DocumentXLSX},
+		{"noext", "plain words", api.DocumentText},
+	}
+	for _, c := range cases {
+		write(t, fs, c.name, c.content)
+		doc, err := readDocumentTool(threadCtx(fs), PathArg{Path: c.name})
+		if err != nil || doc.Mime != c.mime {
+			t.Fatalf("%s: mime %s, %v", c.name, doc.Mime, err)
+		}
+	}
+	for _, name := range []string{"fake.pdf", "fake.docx", "fake.pptx"} {
+		write(t, fs, name, "not the real thing")
+		if _, err := readDocumentTool(threadCtx(fs), PathArg{Path: name}); err == nil {
+			t.Fatalf("%s accepted", name)
+		}
+	}
+}
+
+func gifBytes(t *testing.T, frames int) []byte {
+	t.Helper()
+	g := &gif.GIF{}
+	for range frames {
+		g.Image = append(g.Image, image.NewPaletted(image.Rect(0, 0, 4, 4), color.Palette{color.Black, color.White}))
+		g.Delay = append(g.Delay, 10)
+	}
+	var buf bytes.Buffer
+	if err := gif.EncodeAll(&buf, g); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+func TestReadImageGIFFrames(t *testing.T) {
+	fs := newFS(t)
+	single := gifBytes(t, 1)
+	many := []byte("GIF89a\x04\x00\x04\x00\x00\x00\x00")
+	for range 100000 {
+		many = append(many, 0x21, 0xF9, 4, 0, 10, 0, 0, 0)
+		many = append(many, 0x2C, 0, 0, 0, 0, 0xff, 0xff, 0xff, 0xff, 0, 2, 2, 0x4C, 0x01, 0)
+	}
+	many = append(many, 0x3B)
+	cases := []struct {
+		name string
+		data []byte
+		want string
+	}{
+		{"single.gif", single, ""},
+		{"anim.gif", gifBytes(t, 3), "animated"},
+		{"many.gif", many, "animated"},
+		{"cut.gif", single[:len(single)-3], "truncated"},
+	}
+	for _, c := range cases {
+		if _, err := writeBytesTool(threadCtx(fs), writeBytesArg{Path: c.name, Data: c.data}); err != nil {
+			t.Fatal(err)
+		}
+		img, err := readImageTool(threadCtx(fs), PathArg{Path: c.name})
+		if c.want == "" {
+			if err != nil || img.Mime != api.ImageGIF {
+				t.Fatalf("%s: mime %s, %v", c.name, img.Mime, err)
+			}
+			continue
+		}
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Fatalf("%s: err %v", c.name, err)
+		}
+	}
+}
+
+func TestReadHidesTheBOMAndAgreesWithGrepOnLoneCR(t *testing.T) {
+	fs := newFS(t)
+	write(t, fs, "b.txt", "\ufeffa\rb\r\nneedle\n")
+	out, err := readTool(threadCtx(fs), readArg{Path: "b.txt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "1: a\rb\n2: needle\n(end of file, 2 lines)"; out != want {
+		t.Fatalf("got %q", out)
+	}
+	res, err := grepTool(threadCtx(fs), grepArg{Pattern: "needle", Path: "b.txt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Matches) != 1 || res.Matches[0].Line != 2 {
+		t.Fatalf("got %+v", res.Matches)
 	}
 }

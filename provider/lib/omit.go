@@ -3,23 +3,22 @@ package lib
 import (
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"neui.dev/api"
 )
 
-// Omitted logs a warning that an adapter dropped content c, which this wire
-// cannot carry, and returns the placeholder text to send in its place, such as
-// "[image omitted]". Use it for content the thread holds but this provider
-// cannot take (another model's reasoning, a foreign opaque payload, an unknown
-// type), so the turn keeps its shape instead of failing. message is the index
-// of the api.Message holding c, and why goes to the log only, never to the
-// model.
-func Omitted(provider string, message int, c api.Content, why string) string {
-	slog.Default().Warn("content omitted",
-		"provider", provider,
-		"message", message,
-		"content", fmt.Sprintf("%T", c),
-		"reason", why)
+// EmptyResult is the text an adapter sends for a tool result that carries no
+// blocks, so the model reads that the call succeeded and returned nothing
+// rather than an empty output or a note about content that never existed.
+const EmptyResult = "(the tool returned no output)"
+
+// Omitted returns the placeholder text an adapter sends in place of content c
+// that this wire cannot carry, such as "[image omitted]", so the turn keeps its
+// shape instead of failing. It logs nothing: an omission is a fixed consequence
+// of the stored thread and recurs on every turn. why says at the call site why
+// the content cannot go and never reaches the model.
+func Omitted(c api.Content, why string) string {
 	switch c.(type) {
 	case api.ContentImage:
 		return "[image omitted]"
@@ -27,6 +26,24 @@ func Omitted(provider string, message int, c api.Content, why string) string {
 		return "[document omitted]"
 	case api.ContentReasoning:
 		return "[reasoning omitted]"
+	}
+	return "[content omitted]"
+}
+
+var unknownSeen sync.Map
+
+// Unknown returns the placeholder an adapter sends in place of content c whose
+// type it has no case for, and logs that at Error once per provider and type
+// per process: a missing type is a bug in the adapter, and the stored thread
+// would otherwise repeat the record on every turn. message is the index of the
+// api.Message holding c.
+func Unknown(provider string, message int, c api.Content) string {
+	typ := fmt.Sprintf("%T", c)
+	if _, seen := unknownSeen.LoadOrStore(provider+"\x00"+typ, struct{}{}); !seen {
+		slog.Default().Error("unknown content type",
+			"provider", provider,
+			"message", message,
+			"content", typ)
 	}
 	return "[content omitted]"
 }

@@ -15,9 +15,6 @@ type request struct {
 	ToolChoice    *toolChoice       `json:"tool_choice,omitempty"`
 	System        []json.RawMessage `json:"system,omitempty"`
 	Messages      []message         `json:"messages"`
-	Temperature   *float64          `json:"temperature,omitempty"`
-	TopP          *float64          `json:"top_p,omitempty"`
-	TopK          *int              `json:"top_k,omitempty"`
 	StopSequences []string          `json:"stop_sequences,omitempty"`
 	Thinking      *thinkingWire     `json:"thinking,omitempty"`
 	OutputConfig  *outputConfig     `json:"output_config,omitempty"`

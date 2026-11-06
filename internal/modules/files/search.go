@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"path"
 	"regexp"
 	"strings"
 
@@ -27,7 +28,7 @@ const globDesc = `Find files by path pattern.`
 type grepArg struct {
 	Pattern string `json:"pattern" required:"true" description:"RE2 regular expression matched against single lines"`
 	Path    string `json:"path" description:"file or directory to search, empty string is everything"`
-	Glob    string `json:"glob" description:"only search files with matching paths, e.g. **/*.go"`
+	Glob    string `json:"glob" description:"only search files whose path relative to path matches, e.g. **/*.go"`
 	Limit   uint   `json:"limit" description:"max matches, default 100"`
 }
 
@@ -43,7 +44,7 @@ type grepResult struct {
 }
 
 type globArg struct {
-	Pattern string `json:"pattern" required:"true" description:"path pattern, * stays within a path segment, ** crosses directories, e.g. **/*.csv"`
+	Pattern string `json:"pattern" required:"true" description:"path pattern matched against paths relative to path, * stays within a path segment, ** crosses directories, e.g. **/*.csv"`
 	Path    string `json:"path" description:"directory to search under, empty string is everything"`
 }
 
@@ -69,8 +70,8 @@ func grepTool(ctx context.Context, arg grepArg) (grepResult, error) {
 		limit = grepDefaultLimit
 	}
 	res := grepResult{Matches: []grepMatch{}}
-	scan := func(name string) (bool, error) {
-		if globRe != nil && !globRe.MatchString(name) {
+	scan := func(name, rel string) (bool, error) {
+		if globRe != nil && !globRe.MatchString(rel) {
 			return true, nil
 		}
 		if err := grepFile(ctx, fs, name, re, limit, &res); err != nil {
@@ -84,12 +85,16 @@ func grepTool(ctx context.Context, arg grepArg) (grepResult, error) {
 			return grepResult{}, err
 		}
 		if !e.Dir {
-			_, err := scan(e.Name)
+			_, err := scan(e.Name, path.Base(e.Name))
 			return res, err
 		}
 	}
+	skip := 0
+	if root := path.Clean(arg.Path); root != "." {
+		skip = len(root) + 1
+	}
 	if err := walkFiles(ctx, fs, arg.Path, false, func(e api.FSEntry) (bool, error) {
-		return scan(e.Name)
+		return scan(e.Name, e.Name[skip:])
 	}); err != nil {
 		return grepResult{}, err
 	}
@@ -138,9 +143,13 @@ func globTool(ctx context.Context, arg globArg) (globResult, error) {
 	if err != nil {
 		return globResult{}, err
 	}
+	skip := 0
+	if root := path.Clean(arg.Path); root != "." {
+		skip = len(root) + 1
+	}
 	res := globResult{Paths: []string{}}
 	err = walkFiles(ctx, fs, arg.Path, true, func(e api.FSEntry) (bool, error) {
-		if !re.MatchString(e.Name) {
+		if !re.MatchString(e.Name[skip:]) {
 			return true, nil
 		}
 		if len(res.Paths) == globCap {

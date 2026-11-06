@@ -38,7 +38,7 @@ const fetchDesc = `Fetch one http or https URL with a GET and return its content
 
 type FetchArg struct {
 	URL     string `json:"url" required:"true" description:"absolute http or https URL, credentials not allowed in it"`
-	Format  string `json:"format" enum:"markdown,text,html" description:"markdown (default) converts the document, text strips it to prose, html returns the parsed page re-serialised, with scripts, styles, embeds, forms, meta, links and comments removed, and navigation, headers, footers and sidebars too unless full is set"`
+	Format  string `json:"format" enum:"markdown,text,html" description:"markdown (default) converts the document, text strips it to prose, html returns the markup re-serialised, with scripts, styles, embeds, form controls, meta, links and comments removed; unless full is set it is the same main content the other formats pick, without navigation, headers, footers and sidebars"`
 	Full    bool   `json:"full" description:"the page as a whole, including navigation, sidebars and comments; use it when the default came back missing something you saw referenced"`
 	Offset  uint   `json:"offset" description:"1-based line of the converted content to start from, for continuing a long page"`
 	Limit   uint   `json:"limit" description:"max lines to return, default 2000"`
@@ -249,27 +249,23 @@ func (m *module) fetch(ctx context.Context, arg FetchArg) (string, error) {
 		if runes := []rune(e.title); len(runes) > fetchAttrMax {
 			e.title = string(runes[:fetchAttrMax])
 		}
-		prune(doc, arg.Full)
+		prune(doc, false)
+		node := doc
+		if !arg.Full {
+			node = readable(doc, resp.Request.URL)
+		}
 		switch format {
 		case "html":
 			b := strings.Builder{}
-			if err := html.Render(&b, doc); err != nil {
+			if err := html.Render(&b, node); err != nil {
 				return "", err
 			}
 			e.text = b.String()
 		case "text":
-			node := doc
-			if !arg.Full {
-				node = readable(doc, resp.Request.URL)
-			}
 			b := bytes.Buffer{}
-			plain(node, &b, arg.Full)
+			plain(node, &b, false)
 			e.text = strings.TrimSpace(b.String())
 		default:
-			node := doc
-			if !arg.Full {
-				node = readable(doc, resp.Request.URL)
-			}
 			out, cerr := m.conv.ConvertNode(node, converter.WithDomain(final), converter.WithContext(ctx))
 			if cerr != nil {
 				return "", cerr

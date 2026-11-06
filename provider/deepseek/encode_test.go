@@ -1,8 +1,10 @@
 package deepseek
 
 import (
+	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -50,7 +52,7 @@ func text(s string) api.Contents {
 // blocks in one message become one string, and streaming with usage is not
 // optional because it is the only way the turn is priced.
 func TestEncodeShape(t *testing.T) {
-	p := New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k"))
+	p := mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k"))
 	body := encodeBody(t, p, api.Request{
 		System: "be terse\nanswer in English",
 		Messages: []api.Message{{
@@ -64,10 +66,10 @@ func TestEncodeShape(t *testing.T) {
 	if len(body.Messages) != 2 {
 		t.Fatalf("messages %+v", body.Messages)
 	}
-	if body.Messages[0].Role != "system" || *body.Messages[0].Content != "be terse\nanswer in English" {
+	if body.Messages[0].Role != "system" || body.Messages[0].Content.(string) != "be terse\nanswer in English" {
 		t.Fatalf("system message %+v", body.Messages[0])
 	}
-	if body.Messages[1].Role != "user" || *body.Messages[1].Content != "one\n\ntwo" {
+	if body.Messages[1].Role != "user" || body.Messages[1].Content.(string) != "one\n\ntwo" {
 		t.Fatalf("user message %+v", body.Messages[1])
 	}
 	if body.MaxTokens != 0 {
@@ -89,11 +91,10 @@ func TestEncodeMaxTokens(t *testing.T) {
 		{"unset", 0, 0},
 		{"configured", 4096, 4096},
 		{"at the documented ceiling", maxOutputTokens, maxOutputTokens},
-		{"over the documented ceiling", 1_000_000, 0},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			p := New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k"), WithMaxTokens(tc.opt))
+			p := mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k"), WithMaxTokens(tc.opt))
 			body := encodeBody(t, p, api.Request{
 				Messages: []api.Message{{Role: api.RoleUser, Content: text("hi")}},
 			})
@@ -102,14 +103,11 @@ func TestEncodeMaxTokens(t *testing.T) {
 			}
 		})
 	}
-	if err := WithMaxTokens(maxOutputTokens + 1)(&Provider{}); err == nil {
-		t.Fatal("a cap over the documented ceiling has to be reported, not adjusted")
-	}
 }
 
-// This wire carries text and nothing else, and a turn carrying anything else is
-// a thread that touched another provider or an adapter that never grew a path
-// for it. The note goes out in the block's place: refusing would end
+// deepseek-v4-pro reads text and nothing else, and a turn carrying anything else
+// is a thread that touched another provider or an adapter that never grew a
+// path for it. The note goes out in the block's place: refusing would end
 // the conversation over stored history the caller cannot rewrite, and dropping
 // the block silently would tell the model a turn it cannot see never happened.
 func TestEncodeNotesWhatItCannotSend(t *testing.T) {
@@ -164,20 +162,20 @@ func TestEncodeNotesWhatItCannotSend(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			body := encodeBody(t, New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), api.Request{
+			body := encodeBody(t, mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), api.Request{
 				Messages: []api.Message{tc.msg},
 			})
 			if len(body.Messages) != 1 {
 				t.Fatalf("messages %d, want 1", len(body.Messages))
 			}
-			if got := *body.Messages[0].Content; got != tc.want {
+			if got := body.Messages[0].Content.(string); got != tc.want {
 				t.Fatalf("content %q, want %q", got, tc.want)
 			}
 		})
 	}
 }
 
-// This wire takes a result as a bare string, so an attachment inside one goes
+// deepseek-v4-pro takes a result as text only, so an attachment inside one goes
 // the way an attachment in a message goes: the note in its place. Refusing
 // delivers the image no more than the note does, and the result is the answer a
 // call is waiting on, so failing it fails the conversation as well.
@@ -196,7 +194,7 @@ func TestEncodeNotesAttachmentsInAToolResult(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			body := encodeBody(t, New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), api.Request{
+			body := encodeBody(t, mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), api.Request{
 				Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{
 					api.ContentToolResult{ID: "t1", Content: api.UserContents{
 						api.ContentText{Text: "the chart:"},
@@ -212,7 +210,7 @@ func TestEncodeNotesAttachmentsInAToolResult(t *testing.T) {
 			if m.Role != "tool" || m.ToolCallID != "t1" {
 				t.Fatalf("result message %+v", m)
 			}
-			if got := *m.Content; got != tc.want {
+			if got := m.Content.(string); got != tc.want {
 				t.Fatalf("content %q, want %q", got, tc.want)
 			}
 		})
@@ -223,7 +221,7 @@ func TestEncodeNotesAttachmentsInAToolResult(t *testing.T) {
 // any user text in the same message: a result has to follow the assistant turn
 // that asked for it with nothing in between.
 func TestEncodeToolResults(t *testing.T) {
-	p := New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k"))
+	p := mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k"))
 	body := encodeBody(t, p, api.Request{
 		Messages: []api.Message{{
 			Role: api.RoleUser,
@@ -237,15 +235,15 @@ func TestEncodeToolResults(t *testing.T) {
 	if len(body.Messages) != 3 {
 		t.Fatalf("messages %+v", body.Messages)
 	}
-	if body.Messages[0].Role != "tool" || body.Messages[0].ToolCallID != "call_a" || *body.Messages[0].Content != "24C" {
+	if body.Messages[0].Role != "tool" || body.Messages[0].ToolCallID != "call_a" || body.Messages[0].Content.(string) != "24C" {
 		t.Fatalf("first result %+v", body.Messages[0])
 	}
 	// There is no error flag on a tool message, so a failed result says so in
 	// the text or the model never learns it failed.
-	if *body.Messages[1].Content != "Error: boom" {
-		t.Fatalf("failed result %q", *body.Messages[1].Content)
+	if body.Messages[1].Content.(string) != "Error: boom" {
+		t.Fatalf("failed result %q", body.Messages[1].Content.(string))
 	}
-	if body.Messages[2].Role != "user" || *body.Messages[2].Content != "and now?" {
+	if body.Messages[2].Role != "user" || body.Messages[2].Content.(string) != "and now?" {
 		t.Fatalf("trailing user message %+v", body.Messages[2])
 	}
 }
@@ -258,7 +256,7 @@ func TestEncodeToolResults(t *testing.T) {
 // into the one reasoning_content the wire has per message, since putting the
 // fragments of one block back together is a different operation.
 func TestEncodeAssistantCollapsesToOneMessage(t *testing.T) {
-	p := New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k"))
+	p := mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k"))
 	body := encodeBody(t, p, api.Request{
 		Tools: []api.Tool{{Name: "get_weather"}, {Name: "get_time"}},
 		Messages: []api.Message{{
@@ -277,7 +275,7 @@ func TestEncodeAssistantCollapsesToOneMessage(t *testing.T) {
 		t.Fatalf("messages %+v", body.Messages)
 	}
 	m := body.Messages[0]
-	if m.Role != "assistant" || *m.Content != "let me look\n\nat this" {
+	if m.Role != "assistant" || m.Content.(string) != "let me look\n\nat this" {
 		t.Fatalf("message %+v", m)
 	}
 	if m.ReasoningContent != "first I think, then some more" {
@@ -319,7 +317,7 @@ func TestEncodeDiscardedArgumentsSurviveStorage(t *testing.T) {
 	if input := loaded.Content[0].(api.ContentToolUse).Input; input != nil {
 		t.Fatalf("a discarded accumulation reloaded as %s, want nothing", input)
 	}
-	body := encodeBody(t, New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), api.Request{
+	body := encodeBody(t, mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), api.Request{
 		Messages: []api.Message{loaded, {Role: api.RoleUser, Content: api.Contents{
 			api.ContentToolResult{ID: "call_trunc", Content: api.UserContents{api.ContentText{Text: "no"}}, Error: api.ToolErrJSON},
 		}}},
@@ -335,7 +333,7 @@ func TestEncodeDiscardedArgumentsSurviveStorage(t *testing.T) {
 // call that takes no arguments, and the model would read a tool it never named
 // arguments for as one it did.
 func TestEncodeRejectsDiscardedArgumentsWithNoFailedResult(t *testing.T) {
-	p := New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k"))
+	p := mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k"))
 	call := api.Message{
 		Role:    api.RoleAssistant,
 		Content: api.Contents{api.ContentToolUse{ID: "call_trunc", Name: "search", Input: api.DiscardedArguments}},
@@ -352,7 +350,7 @@ func TestEncodeRejectsDiscardedArgumentsWithNoFailedResult(t *testing.T) {
 	if got := body.Messages[0].ToolCalls[0].Function.Arguments; got != "{}" {
 		t.Fatalf("a discarded call replays as %q, want %q", got, "{}")
 	}
-	if got := *body.Messages[1].Content; got != "Error: not valid JSON" {
+	if got := body.Messages[1].Content.(string); got != "Error: not valid JSON" {
 		t.Fatalf("result content %q does not report the discard", got)
 	}
 }
@@ -361,7 +359,7 @@ func TestEncodeRejectsDiscardedArgumentsWithNoFailedResult(t *testing.T) {
 // sense of and nothing for the caller to dispatch. Sending "name":"" would ask
 // DeepSeek to decide what that meant.
 func TestEncodeRejectsNamelessToolCall(t *testing.T) {
-	err := encodeError(t, New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), api.Request{
+	err := encodeError(t, mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), api.Request{
 		Messages: []api.Message{{
 			Role:    api.RoleAssistant,
 			Content: api.Contents{api.ContentToolUse{ID: "call_a", Input: json.RawMessage(`{}`)}},
@@ -375,7 +373,7 @@ func TestEncodeRejectsNamelessToolCall(t *testing.T) {
 // A turn that only called tools sends an explicit null, which the assistant
 // message schema documents and which omitting would not reproduce.
 func TestEncodeAssistantContentNull(t *testing.T) {
-	p := New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k"))
+	p := mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k"))
 	raw := encodeJSON(t, p, api.Request{
 		Messages: []api.Message{{
 			Role:    api.RoleAssistant,
@@ -456,6 +454,23 @@ func TestEncodeReasoningReplay(t *testing.T) {
 			want: "",
 		},
 		{
+			name: "thinking another provider signed is not replayed as this model's",
+			content: api.Contents{
+				api.ContentReasoning{Model: "claude-opus-5", Thoughts: map[int]string{0: "theirs"}, Meta: json.RawMessage(`"sig"`)},
+				api.ContentReasoning{Model: "deepseek-v4-pro", Thoughts: map[int]string{0: "mine"}},
+				api.ContentToolUse{ID: "call_a", Name: "t", Input: json.RawMessage(`{}`)},
+			},
+			want: "mine",
+		},
+		{
+			name: "reasoning another provider summarized is not replayed either",
+			content: api.Contents{
+				api.ContentReasoning{Model: "gpt-5.6-sol", Summary: map[int]string{0: "in short"}, Thoughts: map[int]string{0: "theirs"}},
+				api.ContentToolUse{ID: "call_a", Name: "t", Input: json.RawMessage(`{}`)},
+			},
+			want: "",
+		},
+		{
 			name: "several blocks join into one field",
 			content: api.Contents{
 				api.ContentReasoning{Model: "deepseek-v4-pro", Thoughts: map[int]string{0: "first"}},
@@ -478,7 +493,7 @@ func TestEncodeReasoningReplay(t *testing.T) {
 			if tc.noTools {
 				req.Tools = nil
 			}
-			body := encodeBody(t, New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), req)
+			body := encodeBody(t, mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), req)
 			if got := body.Messages[0].ReasoningContent; got != tc.want {
 				t.Fatalf("reasoning_content %q, want %q", got, tc.want)
 			}
@@ -492,7 +507,7 @@ func TestEncodeReasoningReplay(t *testing.T) {
 // assistant turn's text joins with the blank line every other role's joins
 // with.
 func TestEncodeNotesOpaque(t *testing.T) {
-	p := New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k"))
+	p := mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k"))
 	body := encodeBody(t, p, api.Request{
 		Messages: []api.Message{{
 			Role: api.RoleAssistant,
@@ -509,13 +524,13 @@ func TestEncodeNotesOpaque(t *testing.T) {
 	if len(body.Messages) != 1 {
 		t.Fatalf("messages %d, want 1", len(body.Messages))
 	}
-	if got := *body.Messages[0].Content; got != "[content omitted]\n\nhi" {
+	if got := body.Messages[0].Content.(string); got != "[content omitted]\n\nhi" {
 		t.Fatalf("content %q", got)
 	}
 }
 
 func TestEncodeTools(t *testing.T) {
-	p := New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k"))
+	p := mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k"))
 	schema := map[string]any{"type": "object", "properties": map[string]any{"city": map[string]any{"type": "string"}}}
 	body := encodeBody(t, p, api.Request{
 		Tools:    []api.Tool{{Name: "get_weather", Desc: "look it up", Schema: schema}},
@@ -546,7 +561,7 @@ func TestEncodeToolChoice(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(string(tc.choice), func(t *testing.T) {
-			raw := encodeJSON(t, New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k"), WithThinking(false)), api.Request{
+			raw := encodeJSON(t, mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k"), WithEffort(EffortNone)), api.Request{
 				ToolChoice: tc.choice,
 				Messages:   []api.Message{{Role: api.RoleUser, Content: text("hi")}},
 			})
@@ -567,17 +582,23 @@ func TestEncodeToolChoice(t *testing.T) {
 // refused here with a sentence saying how to get one. Choices that force
 // nothing still go out.
 func TestEncodeForcedToolChoiceInThinkingMode(t *testing.T) {
-	p := New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k"))
+	p := mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k"))
 	for _, choice := range []api.ToolChoice{api.ToolChoiceAny, "get_weather"} {
 		t.Run(string(choice), func(t *testing.T) {
 			err := encodeError(t, p, api.Request{
 				ToolChoice: choice,
 				Messages:   []api.Message{{Role: api.RoleUser, Content: text("hi")}},
 			})
-			if !strings.Contains(err.Error(), "WithThinking(false)") {
+			if !strings.Contains(err.Error(), "WithEffort(EffortNone)") {
 				t.Fatalf("error %q", err)
 			}
 		})
+	}
+	if err := encodeError(t, mustNew(t, Conf{Model: Flash}, WithAPIKey("k"), WithEffort(EffortHigh)), api.Request{
+		ToolChoice: api.ToolChoiceAny,
+		Messages:   []api.Message{{Role: api.RoleUser, Content: text("hi")}},
+	}); !strings.Contains(err.Error(), "WithEffort(EffortNone)") {
+		t.Fatalf("error %q", err)
 	}
 	for _, choice := range []api.ToolChoice{"", api.ToolChoiceAuto, api.ToolChoiceNone} {
 		t.Run(string(choice), func(t *testing.T) {
@@ -598,26 +619,26 @@ func TestEncodeToolValidation(t *testing.T) {
 	t.Run("name characters", func(t *testing.T) {
 		req := base
 		req.Tools = []api.Tool{{Name: "get weather"}}
-		if err := encodeError(t, New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), req); !strings.Contains(err.Error(), "get weather") {
+		if err := encodeError(t, mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), req); !strings.Contains(err.Error(), "get weather") {
 			t.Fatalf("error %q", err)
 		}
 	})
 	t.Run("name length", func(t *testing.T) {
 		req := base
 		req.Tools = []api.Tool{{Name: strings.Repeat("a", maxToolNameLen+1)}}
-		if err := encodeError(t, New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), req); !strings.Contains(err.Error(), "128") {
+		if err := encodeError(t, mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), req); !strings.Contains(err.Error(), "128") {
 			t.Fatalf("error %q", err)
 		}
 	})
 	t.Run("name at the limit", func(t *testing.T) {
 		req := base
 		req.Tools = []api.Tool{{Name: strings.Repeat("a", maxToolNameLen)}}
-		encodeBody(t, New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), req)
+		encodeBody(t, mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), req)
 	})
 	t.Run("duplicate name", func(t *testing.T) {
 		req := base
 		req.Tools = []api.Tool{{Name: "get_weather"}, {Name: "get_weather"}}
-		if err := encodeError(t, New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), req); !strings.Contains(err.Error(), "twice") {
+		if err := encodeError(t, mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), req); !strings.Contains(err.Error(), "twice") {
 			t.Fatalf("error %q", err)
 		}
 	})
@@ -626,22 +647,11 @@ func TestEncodeToolValidation(t *testing.T) {
 		for i := range 200 {
 			req.Tools = append(req.Tools, api.Tool{Name: "t" + string(rune('a'+i%26)) + string(rune('a'+i/26))})
 		}
-		encodeBody(t, New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), req)
-	})
-	t.Run("no model", func(t *testing.T) {
-		if err := encodeError(t, New(Conf{}, WithAPIKey("k")), api.Request{}); !strings.Contains(err.Error(), "no model") {
-			t.Fatalf("error %q", err)
-		}
+		encodeBody(t, mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), req)
 	})
 }
 
-// Thinking is on by default and the field goes out explicitly, so a change to
-// the server default cannot quietly change what a turn does. Effort and
-// temperature reach the model with thinking on and off respectively, and top_p
-// with thinking on for flash and off for v4-pro, so each is omitted elsewhere
-// rather than sent to be ignored. Effort is a top level field; the thinking
-// object has only a type.
-func TestEncodeThinkingAndSampling(t *testing.T) {
+func TestEncodeEffortAndSampling(t *testing.T) {
 	tests := []struct {
 		name    string
 		model   string
@@ -649,72 +659,36 @@ func TestEncodeThinkingAndSampling(t *testing.T) {
 		want    []string
 		notWant []string
 	}{
+		{"pro unset", "deepseek-v4-pro", nil, []string{`"thinking":{"type":"enabled"}`}, []string{"reasoning_effort", "temperature", "top_p"}},
+		{"flash unset", "deepseek-flash", nil, []string{`"thinking":{"type":"enabled"}`}, []string{"reasoning_effort", "temperature", "top_p"}},
+		{"pro none", "deepseek-v4-pro", []Option{WithEffort(EffortNone)}, []string{`"thinking":{"type":"disabled"}`}, []string{"reasoning_effort", "temperature", "top_p"}},
+		{"flash none", "deepseek-flash", []Option{WithEffort(EffortNone)}, []string{`"thinking":{"type":"disabled"}`}, []string{"reasoning_effort", "temperature", "top_p"}},
+		{"pro low", "deepseek-v4-pro", []Option{WithEffort(EffortLow)}, []string{`"thinking":{"type":"enabled"},"reasoning_effort":"low"`}, nil},
+		{"flash low", "deepseek-flash", []Option{WithEffort(EffortLow)}, []string{`"thinking":{"type":"enabled"},"reasoning_effort":"low"`}, nil},
+		{"pro high", "deepseek-v4-pro", []Option{WithEffort(EffortHigh)}, []string{`"thinking":{"type":"enabled"},"reasoning_effort":"high"`}, nil},
+		{"flash high", "deepseek-flash", []Option{WithEffort(EffortHigh)}, []string{`"thinking":{"type":"enabled"},"reasoning_effort":"high"`}, nil},
+		{"pro max", "deepseek-v4-pro", []Option{WithEffort(EffortMax)}, []string{`"thinking":{"type":"enabled"},"reasoning_effort":"max"`}, nil},
+		{"flash max", "deepseek-flash", []Option{WithEffort(EffortMax)}, []string{`"thinking":{"type":"enabled"},"reasoning_effort":"max"`}, nil},
 		{
-			name:    "default",
-			opts:    nil,
-			want:    []string{`"thinking":{"type":"enabled"}`},
-			notWant: []string{"reasoning_effort", "temperature", "top_p"},
+			"pro none with temperature and top_p", "deepseek-v4-pro",
+			[]Option{WithEffort(EffortNone), WithTemperature(0.2), WithTopP(0.9)},
+			[]string{`"thinking":{"type":"disabled"}`, `"temperature":0.2`, `"top_p":0.9`},
+			[]string{"reasoning_effort"},
 		},
 		{
-			name:    "temperature with thinking on",
-			opts:    []Option{WithTemperature(0.2), WithTopP(0.9)},
-			want:    []string{`"thinking":{"type":"enabled"}`},
-			notWant: []string{"temperature", "top_p"},
+			"flash none with temperature", "deepseek-flash",
+			[]Option{WithEffort(EffortNone), WithTemperature(0.2)},
+			[]string{`"thinking":{"type":"disabled"}`, `"temperature":0.2`},
+			[]string{"reasoning_effort", "top_p"},
 		},
-		{
-			name: "temperature with thinking off",
-			opts: []Option{WithThinking(false), WithTemperature(0.2), WithTopP(0.9)},
-			want: []string{`"thinking":{"type":"disabled"}`, `"temperature":0.2`, `"top_p":0.9`},
-		},
-		{
-			name:    "flash honors top_p with thinking on",
-			model:   "deepseek-flash",
-			opts:    []Option{WithTemperature(0.2), WithTopP(0.97)},
-			want:    []string{`"thinking":{"type":"enabled"}`, `"top_p":0.97`},
-			notWant: []string{"temperature"},
-		},
-		{
-			name:  "a legacy flash id too",
-			model: "deepseek-v4-flash",
-			opts:  []Option{WithTopP(0.97)},
-			want:  []string{`"top_p":0.97`},
-		},
-		{
-			name:    "flash fixes top_p with thinking off",
-			model:   "deepseek-flash",
-			opts:    []Option{WithThinking(false), WithTemperature(0.2), WithTopP(0.9)},
-			want:    []string{`"thinking":{"type":"disabled"}`, `"temperature":0.2`},
-			notWant: []string{"top_p"},
-		},
-		{
-			name: "reasoning effort is top level",
-			opts: []Option{WithReasoningEffort(EffortMax)},
-			want: []string{`"thinking":{"type":"enabled"},"reasoning_effort":"max"`},
-		},
-		{
-			name: "low effort",
-			opts: []Option{WithReasoningEffort(EffortLow)},
-			want: []string{`"reasoning_effort":"low"`},
-		},
-		{
-			name:    "no effort with thinking off",
-			opts:    []Option{WithThinking(false), WithReasoningEffort(EffortMax)},
-			want:    []string{`"thinking":{"type":"disabled"}`},
-			notWant: []string{"reasoning_effort"},
-		},
-		{
-			name: "stop and user id",
-			opts: []Option{WithStop("STOP"), WithUserID("tenant-7")},
-			want: []string{`"stop":["STOP"]`, `"user_id":"tenant-7"`},
-		},
+		{"flash unset with top_p", "deepseek-flash", []Option{WithTopP(0.97)}, []string{`"thinking":{"type":"enabled"}`, `"top_p":0.97`}, []string{"temperature", "reasoning_effort"}},
+		{"flash max with top_p", "deepseek-flash", []Option{WithEffort(EffortMax), WithTopP(0.97)}, []string{`"reasoning_effort":"max"`, `"top_p":0.97`}, []string{"temperature"}},
+		{"a legacy flash id with top_p", "deepseek-v4-flash", []Option{WithTopP(0.97)}, []string{`"top_p":0.97`}, nil},
+		{"stop and user id", "deepseek-v4-pro", []Option{WithStop("STOP"), WithUserID("tenant-7")}, []string{`"stop":["STOP"]`, `"user_id":"tenant-7"`}, nil},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			model := tc.model
-			if model == "" {
-				model = "deepseek-v4-pro"
-			}
-			raw := encodeJSON(t, New(Conf{Model: api.Model{Name: model}}, append([]Option{WithAPIKey("k")}, tc.opts...)...), api.Request{
+			raw := encodeJSON(t, mustNew(t, Conf{Model: api.Model{Name: tc.model}}, append([]Option{WithAPIKey("k")}, tc.opts...)...), api.Request{
 				Messages: []api.Message{{Role: api.RoleUser, Content: text("hi")}},
 			})
 			for _, want := range tc.want {
@@ -731,22 +705,73 @@ func TestEncodeThinkingAndSampling(t *testing.T) {
 	}
 }
 
-// A user_id over the documented 512 bytes is the option's error, and the id it
-// had stays.
-func TestWithUserIDLimit(t *testing.T) {
-	p := New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k"), WithUserID("tenant-7"), WithUserID(strings.Repeat("a", maxUserIDBytes+1)))
-	if p.userID != "tenant-7" {
-		t.Fatalf("user id %q", p.userID)
+func TestEncodeFlashImages(t *testing.T) {
+	flash := mustNew(t, Conf{Model: Flash}, WithAPIKey("k"))
+	for _, mime := range []string{"image/jpeg", "image/png", "image/gif", "image/webp", " IMAGE/PNG "} {
+		t.Run(mime, func(t *testing.T) {
+			raw := encodeJSON(t, flash, api.Request{Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{
+				api.ContentText{Text: "what is it"},
+				api.ContentImage{Data: []byte("img"), Mime: mime},
+			}}}})
+			want := `"content":[{"type":"text","text":"what is it"},{"type":"image_url","image_url":{"url":"data:` +
+				strings.ToLower(strings.TrimSpace(mime)) + `;base64,aW1n"}}]`
+			if !strings.Contains(raw, want) {
+				t.Fatalf("body %s does not contain %s", raw, want)
+			}
+		})
 	}
-	if err := WithUserID(strings.Repeat("a", maxUserIDBytes))(&Provider{}); err != nil {
-		t.Fatalf("an id at the limit was refused: %v", err)
+	notes := []struct {
+		name string
+		p    *Provider
+		img  api.ContentImage
+	}{
+		{"pro reads no images", mustNew(t, Conf{Model: V4Pro}, WithAPIKey("k")), api.ContentImage{Data: []byte("img"), Mime: "image/png"}},
+		{"an unknown id reads no images", mustNew(t, Conf{Model: api.Model{Name: "my-flash-proxy"}}, WithAPIKey("k")), api.ContentImage{Data: []byte("img"), Mime: "image/png"}},
+		{"an unsupported type", flash, api.ContentImage{Data: []byte("img"), Mime: "image/bmp"}},
+		{"no bytes", flash, api.ContentImage{Mime: "image/png"}},
 	}
+	for _, tc := range notes {
+		t.Run(tc.name, func(t *testing.T) {
+			body := encodeBody(t, tc.p, api.Request{Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{tc.img, api.ContentText{Text: "what is it"}}}}})
+			if got, ok := body.Messages[0].Content.(string); !ok || got != "[image omitted]\n\nwhat is it" {
+				t.Fatalf("content %#v", body.Messages[0].Content)
+			}
+		})
+	}
+	t.Run("an image in an assistant turn", func(t *testing.T) {
+		body := encodeBody(t, flash, api.Request{Messages: []api.Message{{Role: api.RoleAssistant, Content: api.Contents{api.ContentImage{Data: []byte("img"), Mime: "image/png"}}}}})
+		if got, ok := body.Messages[0].Content.(string); !ok || got != "[image omitted]" {
+			t.Fatalf("content %#v", body.Messages[0].Content)
+		}
+	})
+	t.Run("a document stays a note", func(t *testing.T) {
+		raw := encodeJSON(t, flash, api.Request{Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{
+			api.ContentDocument{Data: []byte("%PDF-"), Mime: "application/pdf"},
+			api.ContentImage{Data: []byte("img"), Mime: "image/png"},
+		}}}})
+		if !strings.Contains(raw, `"content":[{"type":"text","text":"[document omitted]"},{"type":"image_url"`) {
+			t.Fatalf("body %s", raw)
+		}
+	})
+	t.Run("a tool result", func(t *testing.T) {
+		raw := encodeJSON(t, flash, api.Request{Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{
+			api.ContentToolResult{ID: "t1", Error: api.ToolErrRuntime, Content: api.UserContents{
+				api.ContentText{Text: "the chart:"},
+				api.ContentImage{Data: []byte("img"), Mime: "image/png"},
+			}},
+		}}}})
+		want := `{"role":"tool","content":[{"type":"text","text":"Error:"},{"type":"text","text":"the chart:"},` +
+			`{"type":"image_url","image_url":{"url":"data:image/png;base64,aW1n"}}],"tool_call_id":"t1"}`
+		if !strings.Contains(raw, want) {
+			t.Fatalf("body %s does not contain %s", raw, want)
+		}
+	})
 }
 
 // Both deprecated penalties are documented as no longer supported, so a field
 // for either would encode a knob the server ignores.
 func TestEncodeNeverSendsDeprecatedPenalties(t *testing.T) {
-	raw := encodeJSON(t, New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), api.Request{
+	raw := encodeJSON(t, mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), api.Request{
 		Messages: []api.Message{{Role: api.RoleUser, Content: text("hi")}},
 	})
 	for _, field := range []string{"frequency_penalty", "presence_penalty", "response_format", "strict"} {
@@ -808,5 +833,56 @@ func TestRequestWireDetails(t *testing.T) {
 	}
 	if i := strings.Index(string(body), `"be terse"`); i < 0 || i > strings.Index(string(body), `"hi"`) {
 		t.Fatalf("the system prompt must lead the messages: %s", body)
+	}
+}
+
+type levelCounter map[slog.Level]int
+
+func (c levelCounter) Enabled(context.Context, slog.Level) bool { return true }
+
+func (c levelCounter) Handle(_ context.Context, r slog.Record) error {
+	c[r.Level]++
+	return nil
+}
+
+func (c levelCounter) WithAttrs([]slog.Attr) slog.Handler { return c }
+
+func (c levelCounter) WithGroup(string) slog.Handler { return c }
+
+func TestEncodeLogsNothingForAnOmission(t *testing.T) {
+	p := mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k"))
+	counts := levelCounter{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(counts))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	req := api.Request{Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{
+		api.ContentImage{Data: []byte{1}, Mime: "image/png"},
+		api.ContentDocument{Data: []byte("PK"), Mime: string(api.DocumentDOCX)},
+		api.ContentText{Text: "look"},
+	}}}}
+	for range 2 {
+		if got := encodeJSON(t, p, req); !strings.Contains(got, `[image omitted]\n\n[document omitted]\n\nlook`) {
+			t.Fatalf("body %s does not carry the notes", got)
+		}
+	}
+	if len(counts) != 0 {
+		t.Fatalf("two encodes logged %v, want nothing", map[slog.Level]int(counts))
+	}
+}
+
+func TestEncodeLogsAnUnknownTypeOnce(t *testing.T) {
+	p := mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k"))
+	counts := levelCounter{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(counts))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	req := api.Request{Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{nil, api.ContentText{Text: "look"}}}}}
+	for range 2 {
+		if got := encodeJSON(t, p, req); !strings.Contains(got, `[content omitted]\n\nlook`) {
+			t.Fatalf("body %s does not carry the note", got)
+		}
+	}
+	if counts[slog.LevelWarn] != 0 || counts[slog.LevelError] > 1 {
+		t.Fatalf("two encodes logged %v, want no warnings and at most one error", map[slog.Level]int(counts))
 	}
 }

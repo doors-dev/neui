@@ -11,6 +11,9 @@ import (
 )
 
 func (w *workFS) readUpload(ctx context.Context, dir *uploadsDir, fileName string, off int64, n int64) (io.ReadCloser, error) {
+	if _, err := w.findUpload(ctx, dir, fileName); err != nil {
+		return nil, err
+	}
 	rc, err := w.files.FileRead(ctx, w.threadID, dir.origin, fileName, off, n)
 	if err != nil {
 		return nil, fmt.Errorf("%q: %w", path.Join(dir.name, fileName), err)

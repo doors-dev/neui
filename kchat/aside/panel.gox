@@ -11,6 +11,7 @@ import (
 	"neui.dev/kchat/pops"
 	"neui.dev/kchat/icons"
 	"neui.dev/kchat/params"
+	"neui.dev/kchat/notify"
 )
 
 type chatMenuMode int
@@ -49,6 +50,7 @@ elem (p Aside) Main() {
 			p.controller.Toggle(ctx)
 			return false
 		},
+		OnError: notify.OnError,
 	} <button class="kchat-iconbtn kchat-burger" title="Menu">
 		~(p.controller.RouteToggle(
 			<>~>(doors.Class("kchat-ic")) ~(icons.List())</>,
@@ -74,6 +76,7 @@ elem (p *Aside) aside() {
 							p.controller.SearchInput(ctx, ri.Event().Value)
 							return false
 						},
+						OnError: notify.OnError,
 					} <input
 						value=(v)
 						class="kchat-text"
@@ -123,9 +126,13 @@ elem (p *Aside) aside() {
 			},
 		} <script>
 			const side = document.currentScript.closest(".kchat-aside")
+			const widget = side.closest(".kchat-widget")
 			$on("opened", () => {
 				if (getComputedStyle(side).position !== "absolute") return
-				return $hook("collapse", true)
+				return $hook("collapse", true).catch((err) => {
+					if (err instanceof HookErr)
+						widget.dispatchEvent(new CustomEvent("kchat_error", { detail: err.kind }))
+				})
 			})
 		</script>
 		~(if !p.Params.Off(params.ThreadEdit) {
@@ -183,6 +190,7 @@ elem (p *Aside) match(t api.Thread) {
 				rp.After(doors.ActionEmit[any]{Name: "opened"})
 				return false
 			},
+			OnError: notify.OnError,
 		} <button class="kchat-thread">
 			<span class="kchat-dot kchat-dot_off" aria-hidden="true"></span>
 			~(name(t.Name))

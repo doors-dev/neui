@@ -56,14 +56,6 @@ type MessageEvent struct {
 	message *message
 }
 
-func (m MessageEvent) IntoInit(state api.ChatState, fs api.FS) MessageInit {
-	return MessageInit{
-		State:   state,
-		FS:      fs,
-		message: m.message,
-	}
-}
-
 func (m MessageEvent) Ack() {
 	m.message.ack()
 }

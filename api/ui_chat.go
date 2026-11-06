@@ -92,6 +92,8 @@ type ChatFactory interface {
 // element that renders the chat. Get it with neui.Instance(ctx) from any ctx of
 // that page. Every method that returns an error returns ErrDisabled while neui
 // is not enabled for the session and context.Canceled once ctx is done.
+// ThreadOpen, ThreadNew, ThreadDelete and Emit return ErrUnlinked until the
+// instance has synced with its tab, shortly after the page loads.
 type Instance interface {
 	// ID is the instance's immutable id, the one its own entry in Chats
 	// carries.

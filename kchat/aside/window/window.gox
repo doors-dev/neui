@@ -10,6 +10,7 @@ import (
 	"github.com/doors-dev/gox"
 	"github.com/gammazero/deque"
 	"neui.dev/kchat/aside/controller"
+	"neui.dev/kchat/notify"
 )
 
 type Section struct {
@@ -93,6 +94,14 @@ type WindowList struct {
 
 elem (w WindowList) Main() {
 	~~
+	body := new(doors.Door)
+	body.Inner(ctx, w.body(body))
+	~~
+	~(body)
+}
+
+elem (w WindowList) body(door *doors.Door) {
+	~~
 	w.mu = new(sync.Mutex)
 	s, err := w.seed(ctx)
 	~~
@@ -103,6 +112,17 @@ elem (w WindowList) Main() {
 		~~
 		doors.Logger(ctx).Error("window: seed", "err", err)
 		~~
+		<div class="kchat-side-retry" role="alert">
+			<span>Couldn't load.</span>
+			~>doors.AClick{
+				Scope: new(doors.ScopeBlocking),
+				On: func(ctx context.Context, rp doors.RequestPointer) bool {
+					door.Reload(ctx)
+					return false
+				},
+				OnError: notify.OnError,
+			} <button type="button" class="kchat-btn kchat-btn_2nd">Retry</button>
+		</div>
 	})
 }
 
@@ -264,6 +284,8 @@ func (w *WindowList) sync(ctx context.Context) (more bool) {
 		sections, ended, err := w.Driver.Sections(ctx, anchor, false, false, wantOlder - older)
 		w.mu.Lock()
 		if err != nil {
+			w.scrollState.first = ""
+			w.scrollState.last = ""
 			w.scrollState.synced = true
 			return
 		}
@@ -296,6 +318,8 @@ func (w *WindowList) sync(ctx context.Context) (more bool) {
 		sections, ended, err := w.Driver.Sections(ctx, anchor, false, true, wantNewer - newer)
 		w.mu.Lock()
 		if err != nil {
+			w.scrollState.first = ""
+			w.scrollState.last = ""
 			w.scrollState.synced = true
 			return
 		}
@@ -354,6 +378,8 @@ elem (w *WindowList) script() {
 		// the seeded window already matches this range, so an identical first
 		// report needs no round trip
 		let sent = seedLast ? `${seedFirst}:${seedLast}` : ""
+		const widget = body.closest(".kchat-widget")
+		let reported = false
 		const report = () => {
 			const b = body.getBoundingClientRect()
 			let first = ""
@@ -370,10 +396,30 @@ elem (w *WindowList) script() {
 			const key = `${first}:${last}`
 			if (key === sent) return
 			sent = key
-			$hook("sync", { first, last }).catch(() => {
-				sent = ""
-			})
+			$hook("sync", { first, last }).then(
+				() => {
+					reported = false
+				},
+				(err) => {
+					sent = ""
+					if (reported || !(err instanceof HookErr) || !err.network()) return
+					reported = true
+					widget.dispatchEvent(new CustomEvent("kchat_error", { detail: err.kind }))
+				},
+			)
 		}
+		const edge = (e) => {
+			const top = e.deltaY < 0 && body.scrollTop <= 0
+			const bottom =
+				e.deltaY > 0 && body.scrollTop + body.clientHeight >= body.scrollHeight - 1
+			if (!top && !bottom) return
+			sent = ""
+			report()
+		}
+		$sys.clean(() => {
+			body.removeEventListener("scroll", report)
+			body.removeEventListener("wheel", edge)
+		})
 		await $sys.ready()
 		requestAnimationFrame(() => {
 			const top = body.querySelector(`.kchat-day[data-id="${seedLast}"]`)
@@ -396,6 +442,7 @@ elem (w *WindowList) script() {
 				body.scrollTop = lo <= hi ? (lo + hi) / 2 : t.top + base
 			}
 			body.addEventListener("scroll", report, { passive: true })
+			body.addEventListener("wheel", edge, { passive: true })
 			report()
 		})
 	</script>

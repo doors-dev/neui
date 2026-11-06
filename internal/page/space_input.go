@@ -20,16 +20,16 @@ const (
 )
 
 type input struct {
-	ctx       context.Context `json:"-"`
-	ID        uint            `json:"id" description:"pass to read, write, click and focus"`
-	Kind      kind            `json:"kind" description:"button, link, input or radio; button and link take click, input and radio take write; a radio entry stands for its whole same-name group"`
-	elementID string          `json:"-"`
-	members   int             `json:"-"`
-	Desc      string          `json:"desc"`
-	Type      string          `json:"type" description:"html flavor of the element"`
-	Name      string          `json:"name,omitempty" description:"html name attribute"`
-	Rights    Rights          `json:"rights" description:"RW allows every call, R only read and focus, W only click, write and focus"`
-	Disabled  bool            `json:"disabled,omitempty" description:"present and true when the element is disabled"`
+	ctx       context.Context          `json:"-"`
+	ID        uint                     `json:"id" description:"pass to read, write, click and focus"`
+	Kind      kind                     `json:"kind" description:"button, link, input or radio; button and link take click, input and radio take write; a radio entry stands for its whole same-name group"`
+	elementID string                   `json:"-"`
+	members   map[uint]context.Context `json:"-"`
+	Desc      string                   `json:"desc"`
+	Type      string                   `json:"type" description:"html flavor of the element"`
+	Name      string                   `json:"name,omitempty" description:"html name attribute"`
+	Rights    Rights                   `json:"rights" description:"RW allows every call, R only read and focus, W only click, write and focus"`
+	Disabled  bool                     `json:"disabled,omitempty" description:"present and true when the element is disabled"`
 }
 
 type kind string
@@ -43,6 +43,7 @@ const (
 
 type inputs struct {
 	counter uint
+	member  uint
 	list    []input
 }
 
@@ -95,18 +96,20 @@ func (s Space) Radio(ctx context.Context, permissios Rights, desc string, attrs 
 			break
 		}
 	}
+	s.member += 1
+	member := s.member
+	memberCtx := doors.DetachedContext(ctx)
 	var id uint
 	var elementID string
-	first := group < 0
-	if first {
+	if group < 0 {
 		id, elementID = s.elementID()
 		s.bump()
 		s.list = append(s.list, input{
-			ctx:       doors.DetachedContext(ctx),
+			ctx:       memberCtx,
 			ID:        id,
 			Kind:      kindRadio,
 			elementID: elementID,
-			members:   1,
+			members:   map[uint]context.Context{member: memberCtx},
 			Desc:      desc,
 			Type:      "radio",
 			Name:      name,
@@ -115,7 +118,7 @@ func (s Space) Radio(ctx context.Context, permissios Rights, desc string, attrs 
 	} else {
 		id = s.list[group].ID
 		elementID = s.list[group].elementID
-		s.list[group].members += 1
+		s.list[group].members[member] = memberCtx
 	}
 	idAttr.Set(elementID)
 	s.root.mu.Unlock()
@@ -125,18 +128,22 @@ func (s Space) Radio(ctx context.Context, permissios Rights, desc string, attrs 
 		if s.ctx.Err() != nil {
 			return
 		}
-		if i, ok := searchInput(s.list, id); ok {
-			s.list[i].members -= 1
-			if s.list[i].members == 0 {
-				s.list = slices.Delete(s.list, i, i+1)
-				s.bump()
-			}
+		i, ok := searchInput(s.list, id)
+		if !ok {
+			return
+		}
+		delete(s.list[i].members, member)
+		if len(s.list[i].members) == 0 {
+			s.list = slices.Delete(s.list, i, i+1)
+			s.bump()
+			return
+		}
+		for _, memberCtx := range s.list[i].members {
+			s.list[i].ctx = memberCtx
+			break
 		}
 	})
-	if first {
-		return radioGroup(elementID), nil
-	}
-	return gox.Elem(func(gox.Cursor) error { return nil }), nil
+	return radioGroup(elementID), nil
 }
 
 func (s Space) element(ctx context.Context, permissios Rights, desc string, attrs gox.Attrs, typ string, kind kind, script func(string) gox.Elem) (gox.Elem, error) {

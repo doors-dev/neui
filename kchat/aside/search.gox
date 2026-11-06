@@ -14,6 +14,7 @@ import (
 	"neui.dev/kchat/aside/controller"
 	"neui.dev/kchat/aside/window"
 	"neui.dev/kchat/icons"
+	"neui.dev/kchat/notify"
 )
 
 const overview = 5
@@ -99,6 +100,7 @@ elem (p *Aside) more(open func(ctx context.Context, kind controller.SearchKind),
 				open(ctx, kind)
 				return false
 			},
+			OnError: notify.OnError,
 		} <button class="kchat-thread kchat-thread_new">
 			~>(doors.Class("kchat-ic")) ~(icons.ArrowRight())
 			<span class="kchat-thread-name">Show more</span>
@@ -114,6 +116,7 @@ elem (p *Aside) hit(h api.Hit, loc *time.Location, named bool) {
 			rp.After(doors.ActionEmit[any]{Name: "opened"})
 			return false
 		},
+		OnError: notify.OnError,
 	} <button class="kchat-hit">
 		~(if named {
 			<span class="kchat-hit-head">

@@ -2,6 +2,7 @@ package deepseek
 
 import (
 	"bytes"
+	"encoding/base64"
 	"strings"
 
 	"neui.dev/api"
@@ -11,9 +12,9 @@ import (
 // encode turns an api.Request into the request body.
 //
 // The shape it targets is the plain OpenAI one: content is a bare string on
-// every role, not a typed block array, so a message holding several blocks
-// collapses into one string and the blocks that are not text become separate
-// fields or separate messages. A block this wire has no field for leaves a note
+// every role unless a user or tool message carries an image to deepseek-flash,
+// so a message holding several blocks collapses into one string and the blocks
+// that are not text become separate fields or separate messages. A block this wire has no field for leaves a note
 // in its place and the turn goes out, stated at the arm it happens in; what is
 // refused instead is a block this wire does carry, filled with something it does
 // not take.
@@ -26,20 +27,17 @@ import (
 // the block is still there carrying everything this wire takes of it. Both are
 // stated at encodeAssistant.
 //
-// Effort, temperature and top_p are each sent only where the model honors
-// them. Sending them anyway is documented as harmless, but an inert field in
-// the body is a field a reader has to work out, and it perturbs the cached
-// prefix for nothing. Temperature and effort depend on thinking alone; top_p
-// depends on the model too, because deepseek-flash honors it only with thinking
-// on and deepseek-v4-pro only with it off.
+// thinking always goes out, since it is the field that decides when
+// reasoning_effort is present too, and a disabled thinking never carries an
+// effort. Temperature and top_p go out as set: New refused them where the
+// model ignores them.
 func (p *Provider) encode(req api.Request) (*chatRequest, error) {
-	if p.model.Name == "" {
-		return nil, &RequestError{Reason: "provider has no model, set Conf.Model"}
-	}
 	out := &chatRequest{
 		Model:         p.model.Name,
 		Stream:        true,
 		StreamOptions: &streamOptions{IncludeUsage: true},
+		Temperature:   p.temperature,
+		TopP:          p.topP,
 		Stop:          p.stop,
 		UserID:        p.userID,
 	}
@@ -54,19 +52,11 @@ func (p *Provider) encode(req api.Request) (*chatRequest, error) {
 	if p.maxTokens > 0 {
 		out.MaxTokens = p.maxTokens
 	}
-	flash := strings.Contains(p.model.Name, "flash")
-	if p.thinking {
+	if p.effort == EffortNone {
+		out.Thinking = &thinking{Type: "disabled"}
+	} else {
 		out.Thinking = &thinking{Type: "enabled"}
 		out.ReasoningEffort = string(p.effort)
-		if flash {
-			out.TopP = p.topP
-		}
-	} else {
-		out.Thinking = &thinking{Type: "disabled"}
-		out.Temperature = p.temperature
-		if !flash {
-			out.TopP = p.topP
-		}
 	}
 	return out, nil
 }
@@ -95,8 +85,8 @@ func (p *Provider) encodeTools(out *chatRequest, req api.Request) error {
 		})
 	}
 	name, named := req.ToolChoice.Tool()
-	if p.thinking && (named || req.ToolChoice == api.ToolChoiceAny) {
-		return reqErrf("tool choice %q forces a tool call, which DeepSeek refuses in thinking mode; pass WithThinking(false) to force one", req.ToolChoice)
+	if p.effort != EffortNone && (named || req.ToolChoice == api.ToolChoiceAny) {
+		return reqErrf("tool choice %q forces a tool call, which DeepSeek refuses in thinking mode; pass WithEffort(EffortNone) to force one", req.ToolChoice)
 	}
 	if named {
 		out.ToolChoice = namedToolChoice{
@@ -158,7 +148,7 @@ func (p *Provider) encodeMessages(req api.Request) ([]message, error) {
 	}
 	msgs := make([]message, 0, len(req.Messages)+1)
 	if req.System != "" {
-		msgs = append(msgs, message{Role: "system", Content: str(req.System)})
+		msgs = append(msgs, message{Role: "system", Content: req.System})
 	}
 	for i, m := range req.Messages {
 		var err error
@@ -184,32 +174,33 @@ func (p *Provider) encodeMessages(req api.Request) ([]message, error) {
 // nothing in between, and a user message in the gap is rejected.
 //
 // A block this wire has no field for becomes a note among the text, which is
-// where the note belongs: it is the only thing a user message on this wire
-// carries.
+// where the note belongs.
 func (p *Provider) encodeUser(msgs []message, m api.Message, at int) ([]message, error) {
-	var text []string
+	var parts []any
 	var results []message
 	for _, c := range m.Content {
 		switch c := c.(type) {
 		case api.ContentText:
-			text = append(text, c.Text)
+			parts = append(parts, textPart{Type: "text", Text: c.Text})
 		case api.ContentToolResult:
-			results = append(results, toolResult(c, at))
-		case api.ContentImage, api.ContentDocument:
-			text = append(text, lib.Omitted(Name, at, c, "content is a bare string on this wire and this adapter has no encoding for an attachment"))
+			results = append(results, p.toolResult(c))
+		case api.ContentImage:
+			parts = append(parts, p.image(c))
+		case api.ContentDocument:
+			parts = append(parts, note(c, "this adapter has no encoding for a document"))
 		case api.ContentToolUse:
-			text = append(text, lib.Omitted(Name, at, c, "a tool call is a field of the assistant message that made it"))
+			parts = append(parts, note(c, "a tool call is a field of the assistant message that made it"))
 		case api.ContentReasoning:
-			text = append(text, lib.Omitted(Name, at, c, "reasoning_content is a field of an assistant message"))
+			parts = append(parts, note(c, "reasoning_content is a field of an assistant message"))
 		case api.ContentOpaque:
-			text = append(text, lib.Omitted(Name, at, c, "DeepSeek runs no tools of its own, so this wire has no field that could carry a payload back"))
+			parts = append(parts, note(c, "DeepSeek runs no tools of its own, so this wire has no field that could carry a payload back"))
 		default:
-			text = append(text, lib.Omitted(Name, at, c, "this version of the adapter has no field for it"))
+			parts = append(parts, textPart{Type: "text", Text: lib.Unknown(Name, at, c)})
 		}
 	}
 	msgs = append(msgs, results...)
-	if len(text) > 0 || len(results) == 0 {
-		msgs = append(msgs, message{Role: "user", Content: str(strings.Join(text, "\n\n"))})
+	if len(parts) > 0 || len(results) == 0 {
+		msgs = append(msgs, message{Role: "user", Content: content(parts)})
 	}
 	return msgs, nil
 }
@@ -219,11 +210,13 @@ func (p *Provider) encodeUser(msgs []message, m api.Message, at int) ([]message,
 // object rather than blocks, so a turn that thought, spoke and called two tools
 // is one message with three fields set.
 //
-// Meta is not read, and this adapter writes none, because DeepSeek's reasoning
-// is plain readable text in a field of its own, sealed behind nothing, so there
-// is no encoding of it to replay verbatim and Thoughts is the whole of it. A stored summary is dropped:
-// reasoning_content is the thinking, this adapter never produces a summary to
-// put in it, and there is no second field on this wire a paraphrase could go in.
+// This adapter writes no Meta, because DeepSeek's reasoning is plain readable
+// text in a field of its own, sealed behind nothing, so there is no encoding of
+// it to replay verbatim and Thoughts is the whole of it. A block carrying Meta
+// or a Summary is therefore one another provider issued, and its Thoughts are
+// dropped with it rather than replayed as this model's own: reasoning_content
+// is the thinking, this adapter never produces a summary to put in it, and
+// there is no second field on this wire a paraphrase could go in.
 //
 // A block this wire has no field for leaves a note among the text, an opaque
 // payload for the reason encodeUser gives.
@@ -266,7 +259,9 @@ func (p *Provider) encodeAssistant(msgs []message, m api.Message, at int, discar
 		case api.ContentText:
 			text = append(text, c.Text)
 		case api.ContentReasoning:
-			reasoning = append(reasoning, c.Thoughts.Ordered()...)
+			if len(c.Meta) == 0 && len(c.Summary) == 0 {
+				reasoning = append(reasoning, c.Thoughts.Ordered()...)
+			}
 		case api.ContentToolUse:
 			if c.Name == "" {
 				return nil, reqErrf("message %d replays tool call %q with no name, which names no tool", at, c.ID)
@@ -287,14 +282,16 @@ func (p *Provider) encodeAssistant(msgs []message, m api.Message, at int, discar
 					Arguments: args,
 				},
 			})
-		case api.ContentImage, api.ContentDocument:
-			text = append(text, lib.Omitted(Name, at, c, "content is a bare string on this wire and this adapter has no encoding for an attachment"))
+		case api.ContentImage:
+			text = append(text, lib.Omitted(c, "DeepSeek refuses an image in an assistant message"))
+		case api.ContentDocument:
+			text = append(text, lib.Omitted(c, "this adapter has no encoding for a document"))
 		case api.ContentToolResult:
-			text = append(text, lib.Omitted(Name, at, c, "a tool result is a message of the tool role and belongs to the user turn that answers the call"))
+			text = append(text, lib.Omitted(c, "a tool result is a message of the tool role and belongs to the user turn that answers the call"))
 		case api.ContentOpaque:
-			text = append(text, lib.Omitted(Name, at, c, "DeepSeek runs no tools of its own, so this wire has no field that could carry a payload back"))
+			text = append(text, lib.Omitted(c, "DeepSeek runs no tools of its own, so this wire has no field that could carry a payload back"))
 		default:
-			text = append(text, lib.Omitted(Name, at, c, "this version of the adapter has no field for it"))
+			text = append(text, lib.Unknown(Name, at, c))
 		}
 	}
 	msg := message{Role: "assistant", ToolCalls: calls}
@@ -303,44 +300,76 @@ func (p *Provider) encodeAssistant(msgs []message, m api.Message, at int, discar
 	}
 	switch {
 	case len(text) > 0:
-		msg.Content = str(strings.Join(text, "\n\n"))
+		msg.Content = strings.Join(text, "\n\n")
 	case len(calls) > 0:
 	default:
-		msg.Content = str("")
+		msg.Content = ""
 	}
 	return append(msgs, msg), nil
 }
 
 // toolResult lowers one result into a tool role message.
 //
-// There is no error flag anywhere in that message: role, tool_call_id and a
-// string is the whole of it. So api.ToolError reaches the model as a prefix on
+// There is no error flag anywhere in that message: role, tool_call_id and the
+// content are the whole of it. So api.ToolError reaches the model as a prefix on
 // the text or not at all, and the three values collapse to two here, since what
 // the model does about a failure is in the text either way. api.ToolErrJSON is
 // how api.DiscardedArgumentsError gets the model to reissue a call whose
 // arguments were thrown away.
 //
-// What that string has no room for leaves the note among the text, the way a
+// What the content has no room for leaves the note among the text, the way a
 // block of a message does: refusing here costs the whole request and delivers
 // the image no more than the note does, and the result is the answer a call is
 // waiting on, so failing it fails the conversation too.
-func toolResult(c api.ContentToolResult, at int) message {
-	parts := make([]string, 0, len(c.Content))
+func (p *Provider) toolResult(c api.ContentToolResult) message {
+	parts := make([]any, 0, len(c.Content))
 	for _, rc := range c.Content {
 		switch rc := rc.(type) {
 		case api.ContentText:
-			parts = append(parts, rc.Text)
+			parts = append(parts, textPart{Type: "text", Text: rc.Text})
+		case api.ContentImage:
+			parts = append(parts, p.image(rc))
 		default:
-			parts = append(parts, lib.Omitted(Name, at, rc, "a DeepSeek tool result is a bare string and carries nothing but text"))
+			parts = append(parts, note(rc, "a DeepSeek tool result carries text and images only"))
 		}
 	}
-	body := strings.Join(parts, "\n\n")
+	body := content(parts)
 	if c.Error != api.ToolOk {
-		body = "Error: " + body
+		if s, ok := body.(string); ok {
+			body = "Error: " + s
+		} else {
+			body = append([]any{textPart{Type: "text", Text: "Error:"}}, parts...)
+		}
 	}
-	return message{Role: "tool", ToolCallID: c.ID, Content: str(body)}
+	return message{Role: "tool", ToolCallID: c.ID, Content: body}
 }
 
-func str(s string) *string {
-	return &s
+func (p *Provider) image(c api.ContentImage) any {
+	if p.family != familyFlash {
+		return note(c, "only deepseek-flash reads images")
+	}
+	if len(c.Data) == 0 {
+		return note(c, "an image with no bytes in it is refused by the server")
+	}
+	mime := strings.ToLower(strings.TrimSpace(c.Mime))
+	if !api.ImageMime(mime).IsValid() {
+		return note(c, "the server takes JPEG, PNG, GIF and WebP only")
+	}
+	return imagePart{Type: "image_url", ImageURL: imageURL{URL: "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(c.Data)}}
+}
+
+func note(c api.Content, why string) textPart {
+	return textPart{Type: "text", Text: lib.Omitted(c, why)}
+}
+
+func content(parts []any) any {
+	text := make([]string, 0, len(parts))
+	for _, part := range parts {
+		t, ok := part.(textPart)
+		if !ok {
+			return parts
+		}
+		text = append(text, t.Text)
+	}
+	return strings.Join(text, "\n\n")
 }

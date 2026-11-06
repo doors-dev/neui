@@ -25,8 +25,11 @@ import (
 // as long as its render: when that part of the page re-renders or unmounts,
 // the space and everything in it go away.
 type Space struct {
-	// Name is the space's segment of the path, sanitized as NewModule does.
-	// A sibling rendered later with the same name replaces the earlier one.
+	// Name is the space's segment of the path. Names are reduced to ASCII
+	// letters, digits and _ (runs of other characters become one _); names
+	// that reduce to the same value replace each other, and a name with no
+	// letter or digit becomes empty. A sibling rendered later with the same
+	// name replaces the earlier one.
 	Name string
 	// Desc tells the agent what the region is and what it is for.
 	Desc string
@@ -46,7 +49,10 @@ func (s Space) Proxy(cur gox.Cursor, el gox.Elem) error {
 // Tool defines a tool. Add it to a Module or a Library, or render it to add it
 // to the page space it is rendered in.
 type Tool[I any, O any] struct {
-	// Name is the tool's name, sanitized as NewModule does.
+	// Name is the tool's name. Names are reduced to ASCII letters, digits
+	// and _ (runs of other characters become one _); names that reduce to
+	// the same value replace each other, and a name must keep at least one
+	// letter or digit.
 	Name string
 	// Desc tells the agent what the tool does and when to call it; the
 	// output schema is appended to it.
@@ -82,7 +88,10 @@ var _ gox.Comp = Tool[any, any]{}
 // Ask defines a tool that shows the user a question in the chat and returns
 // their answer. Add it to a Module; a Library refuses it with ErrAskInIsland.
 type Ask[I any, O any] struct {
-	// Name is the tool's name, sanitized as NewModule does.
+	// Name is the tool's name. Names are reduced to ASCII letters, digits
+	// and _ (runs of other characters become one _); names that reduce to
+	// the same value replace each other, and a name must keep at least one
+	// letter or digit.
 	Name string
 	// Desc tells the agent what the question is for; a note that the call
 	// waits for the user and fails when they dismiss it is appended.
@@ -273,8 +282,10 @@ var _ gox.Proxy = Input{}
 // reacts to what the user does there. It appears to the agent as a space
 // marked as an island. Template and Library are required.
 type Island struct {
-	// Name is the island space's segment of the path, sanitized as
-	// NewModule does.
+	// Name is the island space's segment of the path. Names are reduced to
+	// ASCII letters, digits and _ (runs of other characters become one _);
+	// names that reduce to the same value replace each other, and a name
+	// with no letter or digit becomes empty.
 	Name string
 	// Desc tells the agent what the island is for.
 	Desc string

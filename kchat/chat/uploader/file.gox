@@ -17,6 +17,7 @@ import (
 	"neui.dev/api"
 	"neui.dev/kchat/icons"
 	"neui.dev/kchat/params"
+	"neui.dev/kchat/notify"
 )
 
 func fileIcon(mime string) gox.Elem {
@@ -86,6 +87,7 @@ elem (f fileDone) main() {
 						f.door.Static(ctx, nil)
 						return true
 					},
+					OnError: notify.OnError,
 				} <button class="kchat-ctl" aria-label=("Remove " + path.Base(f.name))>
 					~>(doors.Class("kchat-ic")) ~(icons.Close())
 				</button>
@@ -234,6 +236,7 @@ elem (f *fileProgress) main() {
 					f.door.Static(ctx, nil)
 					return true
 				},
+				OnError: notify.OnError,
 			} <button class="kchat-ctl" aria-label="Cancel upload">
 				~>(doors.Class("kchat-ic")) ~(icons.Close())
 			</button>
@@ -293,6 +296,7 @@ elem (f fileErr) main() {
 					f.door.Static(ctx, nil)
 					return true
 				},
+				OnError: notify.OnError,
 			} <button class="kchat-ctl" aria-label="Dismiss">
 				~>(doors.Class("kchat-ic")) ~(icons.Close())
 			</button>

@@ -14,6 +14,7 @@ import (
 	"neui.dev/kchat/icons"
 	"neui.dev/kchat/params"
 	"neui.dev/kchat/chat/uploader"
+	"neui.dev/kchat/notify"
 )
 
 type Composer struct {
@@ -147,6 +148,7 @@ elem (c *Composer) rewind() {
 					c.Controller.CancelRewind(ctx)
 					return false
 				},
+				OnError: notify.OnError,
 			} <button type="button" class="kchat-ctl" title="Cancel edit">
 				~>(doors.Class("kchat-ic")) ~(icons.Close())
 			</button>
@@ -165,6 +167,7 @@ elem (c *Composer) asking(ask *api.ChatAsk) {
 					ask.Cancel(ctx)
 					return false
 				},
+				OnError: notify.OnError,
 			} <button type="button" class="kchat-ctl" title="Dismiss question">
 				~>(doors.Class("kchat-ic")) ~(icons.Close())
 			</button>
@@ -245,6 +248,7 @@ elem (c *Composer) context(has bool) {
 										hide(ctx)
 										return false
 									},
+									OnError: notify.OnError,
 								} <button type="button" class="kchat-btn">Compact now</button>
 							</span>
 						})
@@ -270,6 +274,7 @@ elem (c *Composer) contextChip(toggle func(ctx context.Context), open bool) {
 			toggle(ctx)
 			return false
 		},
+		OnError: notify.OnError,
 	} <button type="button" class=(class) title="Context size">
 		~(if window != 0 {
 			<span class="kchat-gauge-lead">
@@ -321,6 +326,7 @@ elem (c *Composer) queued(pending bool) {
 						c.Controller.Unsend(ctx)
 						return false
 					},
+					OnError: notify.OnError,
 				} <button type="button" class="kchat-ctl" title="Cancel queued message">
 					~>(doors.Class("kchat-ic")) ~(icons.Close())
 				</button>
@@ -353,6 +359,7 @@ elem (c *Composer) tasks(has bool) {
 								hide(ctx)
 								return false
 							},
+							OnError: notify.OnError,
 						} <button type="button" class="kchat-btn">Cancel all</button>
 					</span>
 				</span>
@@ -374,6 +381,7 @@ elem (c *Composer) tasksChip(toggle func(ctx context.Context), open bool) {
 			toggle(ctx)
 			return false
 		},
+		OnError: notify.OnError,
 	} <button type="button" class=(class)>
 		<span class="kchat-gauge-lead">~>(doors.Class("kchat-ic kchat-ic_line kchat-ic_beams")) ~(icons.Beams())</span>
 		<span class="kchat-gauge-body">
@@ -405,6 +413,7 @@ elem (c *Composer) taskRows(tasks []api.Task) {
 					c.Controller.CancelTask(t.ID)
 					return false
 				},
+				OnError: notify.OnError,
 			} <button type="button" class="kchat-ctl" title="Cancel task" aria-label=("Cancel " + t.Module + " task")>
 				~>(doors.Class("kchat-ic")) ~(icons.Close())
 			</button>
@@ -424,6 +433,7 @@ elem (c *Composer) running() {
 					c.Controller.Stop(ctx)
 					return false
 				},
+				OnError: notify.OnError,
 			} <button type="button" class="kchat-ctl" title="Stop">
 				~>(doors.Class("kchat-ic kchat-icon_breathe")) ~(icons.Stop())
 			</button>
@@ -492,6 +502,7 @@ elem (c *Composer) send(enabled bool) {
 				c.Controller.Send(ctx)
 				return false
 			},
+			OnError: notify.OnError,
 		} <button type="button" id=("send" + c.id()) class="kchat-iconbtn" aria-label="Send">
 			~>(doors.Class("kchat-ic kchat-icon_idle")) ~(icons.Submit())
 			~>(doors.Class("kchat-ic kchat-icon_busy")) ~(icons.Spinner())
@@ -528,6 +539,7 @@ elem (c *Composer) textarea(input api.Input) {
 			c.Controller.Send(ctx)
 			return false
 		},
+		OnError: notify.OnError,
 	} ~>doors.AInput{
 		Scope: c.scope.Scope(false).And(&doors.ScopeRate{
 			Tick: 100 * time.Millisecond,
@@ -537,6 +549,7 @@ elem (c *Composer) textarea(input api.Input) {
 			c.Controller.UpdateInputText(ctx, value)
 			return false
 		},
+		OnError: notify.OnError,
 	} <textarea
 		id=("text" + c.id())
 		class="kchat-draft"

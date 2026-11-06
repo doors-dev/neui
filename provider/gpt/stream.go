@@ -329,7 +329,9 @@ func (c *converter) itemAdded(ev streamEvent) {
 //
 // A reasoning item's encrypted_content exists on the item alone and never
 // streams, and the whole item is the provider's own encoding of the thinking,
-// which is what goes back on a later turn. Nothing readable and nothing sealed
+// which is what goes back on a later turn. A block whose summary streamed keeps
+// the item even without encrypted_content, and encode replays it only with
+// encrypted_content, or by id when store is on. Nothing readable and nothing sealed
 // is an item carrying only its own id, and with no stored response to reference
 // it by there is nothing to put in a block.
 //

@@ -84,6 +84,8 @@ func (l *list) sync(ctx context.Context) (more bool) {
 			return true
 		}
 		if err != nil {
+			l.scrollState.first = api.NoRoundID
+			l.scrollState.last = api.NoRoundID
 			l.scrollState.synced = true
 			return
 		}
@@ -126,6 +128,8 @@ func (l *list) sync(ctx context.Context) (more bool) {
 			return true
 		}
 		if err != nil {
+			l.scrollState.first = api.NoRoundID
+			l.scrollState.last = api.NoRoundID
 			l.scrollState.synced = true
 			return
 		}
@@ -259,7 +263,9 @@ elem (l List) Script() {
 	} <script>
 		const script = document.currentScript
 		const log = script.closest(".kchat-log")
+		const widget = log.closest(".kchat-widget")
 		let sent = ""
+		let reported = false
 		const report = () => {
 			const b = log.getBoundingClientRect()
 			let first = Infinity
@@ -275,13 +281,30 @@ elem (l List) Script() {
 			const key = `${first}:${last}`
 			if (key === sent) return
 			sent = key
-			$hook("sync", { first, last }).catch(() => {
-				sent = ""
-			})
+			$hook("sync", { first, last }).then(
+				() => {
+					reported = false
+				},
+				(err) => {
+					sent = ""
+					if (reported || !(err instanceof HookErr) || !err.network()) return
+					reported = true
+					widget.dispatchEvent(new CustomEvent("kchat_error", { detail: err.kind }))
+				},
+			)
+		}
+		const edge = (e) => {
+			const top = e.deltaY < 0 && log.scrollTop <= 0
+			const bottom =
+				e.deltaY > 0 && log.scrollTop + log.clientHeight >= log.scrollHeight - 1
+			if (!top && !bottom) return
+			sent = ""
+			report()
 		}
 		await $sys.ready()
 		requestAnimationFrame(() => {
 			log.addEventListener("scroll", report, { passive: true })
+			log.addEventListener("wheel", edge, { passive: true })
 			report()
 		})
 	</script>

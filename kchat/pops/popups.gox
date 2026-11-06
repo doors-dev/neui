@@ -50,14 +50,18 @@ elem (p Popups) script(seq int) {
 	} <script data:seq=(seq)>
 		const root = document.currentScript.closest(".kchat-widget")
 		const seq = $data("seq")
+		const fail = (err) => {
+			if (err instanceof HookErr)
+				root.dispatchEvent(new CustomEvent("kchat_error", { detail: err.kind }))
+		}
 		const hide = (e) => {
 			const pop = e.target.closest?.("[data-kchat-pop]")
 			if (pop && root.contains(pop)) return
-			$hook("hide", seq)
+			$hook("hide", seq).catch(fail)
 		}
 		const escape = (e) => {
 			if (e.key !== "Escape") return
-			$hook("hide", seq)
+			$hook("hide", seq).catch(fail)
 		}
 		document.addEventListener("pointerdown", hide)
 		document.addEventListener("keydown", escape)

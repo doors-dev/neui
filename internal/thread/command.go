@@ -40,6 +40,7 @@ type commandLink struct {
 	page    page.Page
 	load    bool
 	meta    any
+	op      Operation
 	ResultResponse[Link]
 }
 

@@ -29,7 +29,8 @@ type FSEntry struct {
 // agent_uploads/ dirs and are streamed straight from file storage on read;
 // nothing materializes locally. user_uploads/ is read-only; agent_uploads/
 // takes new files only through Copy and loses them only through Remove or
-// DeleteUpload. Stat and ReadDir leave out drafts; UploadStat reports them.
+// DeleteUpload. Stat, ReadDir and every read leave out drafts; UploadStat
+// reports them.
 type FS interface {
 	// ReadRange streams [off, off+n) of the named file; n < 0 means to EOF.
 	// Reading past EOF truncates silently; a negative off is refused and
@@ -86,7 +87,7 @@ type FS interface {
 	// the base name of the client-provided name ("unnamed" when that is empty,
 	// "/", "." or ".."), with a "(N)" suffix before the extension when the name
 	// is taken, and its MIME sniffed from the first 512 bytes. It returns the
-	// draft's entry; the draft stays hidden from Stat and ReadDir until it is
+	// draft's entry; the draft stays hidden from Stat, ReadDir and reads until it is
 	// committed with FileStorage.FileCommit.
 	UserUpload(ctx context.Context, name string, r io.Reader) (FSEntry, error)
 	// UploadStat returns an upload's entry whether or not it is still a

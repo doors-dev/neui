@@ -37,7 +37,7 @@ func arm(m *module) (*pending, context.Context) {
 	return p, ctx
 }
 
-func TestCancelAfterFiringReportsFired(t *testing.T) {
+func TestCancelDuringFiringFindsNoTimer(t *testing.T) {
 	m := &module{}
 	p, ctx := arm(m)
 	task := newFakeTask()
@@ -47,15 +47,15 @@ func TestCancelAfterFiringReportsFired(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timer did not fire")
 	}
+	if m.pending.Load() != nil {
+		t.Fatal("pending not cleared before task.Ok")
+	}
 	_, err := m.cancel(context.Background(), struct{}{})
-	if err == nil || !strings.Contains(err.Error(), "already fired") {
+	if err == nil || !strings.Contains(err.Error(), "no timer is pending") {
 		t.Fatalf("cancel during firing: %v", err)
 	}
 	close(task.release)
 	<-p.done
-	if m.pending.Load() != nil {
-		t.Fatal("pending not cleared after firing")
-	}
 }
 
 func TestCancelClaimedBeforeFiringReportsCancellation(t *testing.T) {

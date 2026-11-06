@@ -11,6 +11,7 @@ import (
 	"neui.dev/kchat/chat/rower"
 	"neui.dev/kchat/chat/uploader"
 	"neui.dev/kchat/params"
+	"neui.dev/kchat/notify"
 )
 
 type Rewinder interface {
@@ -278,6 +279,7 @@ elem rewindButton(composer Rewinder, rewind doors.Beam[rewindState], id api.Roun
 					composer.InitRewind(ctx, id, input)
 					return false
 				},
+				OnError: notify.OnError,
 			} <button class="kchat-iconbtn" type="button" title="Edit and resend this message" aria-label="Edit and resend this message">
 				~>(doors.Class("kchat-ic")) ~(icons.Pencil())
 			</button>
@@ -293,6 +295,7 @@ elem retryButton(thread api.ChatThread) {
 			thread.Retry(ctx)
 			return false
 		},
+		OnError: notify.OnError,
 	} <button class="kchat-iconbtn" type="button" aria-label="Run this round again">
 		~>(doors.Class("kchat-ic")) ~(icons.Retry())
 	</button>

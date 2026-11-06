@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"slices"
+	"unicode/utf8"
 	
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
@@ -44,7 +45,7 @@ func NewComposerController(thread api.ChatThread, input api.ChatInput, active bo
 		if old.uploading != new.uploading {
 			return false
 		}
-		if old.inputBytes != new.inputBytes {
+		if old.textBytes != new.textBytes || old.attachBytes != new.attachBytes {
 			return false
 		}
 		if old.settled != new.settled || old.unsettled != new.unsettled {
@@ -80,7 +81,7 @@ func NewComposerController(thread api.ChatThread, input api.ChatInput, active bo
 		return d.pending
 	})
 	enabled := doors.DeriveBeam(origin, func(d state) bool {
-		if d.inputBytes > limit {
+		if d.textBytes + d.attachBytes > limit {
 			return false
 		}
 		if d.rewind.isValid() {
@@ -131,7 +132,7 @@ func NewComposerController(thread api.ChatThread, input api.ChatInput, active bo
 		return old.Seq == new.Seq
 	})
 	excessBytes := doors.DeriveBeam(origin, func(d state) int {
-		return max(d.inputBytes - limit, 0)
+		return max(d.textBytes + d.attachBytes - limit, 0)
 	})
 	return ComposerController{
 		thread: thread,
@@ -178,7 +179,8 @@ type state struct {
 	pending bool
 	active bool
 	inputSeq int
-	inputBytes int
+	textBytes int
+	attachBytes int
 	uploading int
 	settled api.EventUsage
 	unsettled int
@@ -383,13 +385,13 @@ func (s ComposerController) Send(ctx context.Context) {
 		if state.rewind.input.Len() == 0 {
 			return
 		}
-		if state.inputBytes > s.inputLimit {
+		if state.textBytes + state.attachBytes > s.inputLimit {
 			return
 		}
 		s.thread.Rewind(ctx, state.rewind.round, state.rewind.input)
 		return
 	}
-	if state.input.Len() == 0 || state.pending || state.inputBytes > s.inputLimit {
+	if state.input.Len() == 0 || state.pending || state.textBytes + state.attachBytes > s.inputLimit {
 		return
 	}
 	s.thread.Send(ctx, state.input)
@@ -433,17 +435,13 @@ func (s ComposerController) UpdateAttachments(ctx context.Context, seq int, file
 		} else {
 			d.input.Attachments = files
 		}
-		text := d.input.Text
-		if d.rewind.isValid() {
-			text = d.rewind.input.Text
-		}
-		d.inputBytes = 0
-		for _, c := range (api.Input{Text: text, Attachments: files}).Content() {
+		d.attachBytes = 0
+		for _, c := range (api.Input{Attachments: files}).Content() {
 			if t, ok := c.(api.ContentText); ok {
-				d.inputBytes += len(t.Text)
+				d.attachBytes += len(t.Text)
 			}
 		}
-		if d.rewind.isValid() || d.inputBytes > s.inputLimit {
+		if d.rewind.isValid() || d.textBytes + d.attachBytes > s.inputLimit {
 			return d
 		}
 		input = d.input
@@ -460,24 +458,23 @@ func (s ComposerController) UpdateInputText(ctx context.Context, text string) {
 	send := false
 	var input api.Input
 	s.origin.Mutate(ctx, func(d state) state {
-		attachments := d.input.Attachments
-		if d.rewind.isValid() {
-			attachments = d.rewind.input.Attachments
-		}
-		d.inputBytes = 0
-		for _, c := range (api.Input{Text: text, Attachments: attachments}).Content() {
-			if t, ok := c.(api.ContentText); ok {
-				d.inputBytes += len(t.Text)
+		d.textBytes = len(text)
+		cut := text
+		if len(cut) > s.inputLimit {
+			n := s.inputLimit
+			for n > 0 && !utf8.RuneStart(cut[n]) {
+				n--
 			}
-		}
-		if d.inputBytes > s.inputLimit {
-			return d
+			cut = cut[:n]
 		}
 		if d.rewind.isValid() {
-			d.rewind.input.Text = text
+			d.rewind.input.Text = cut
 			return d
 		}
-		d.input.Text = text
+		d.input.Text = cut
+		if d.textBytes + d.attachBytes > s.inputLimit {
+			return d
+		}
 		input = d.input
 		send = true
 		return d

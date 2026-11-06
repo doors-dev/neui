@@ -185,6 +185,7 @@ elem (u *uploader) Form(pending doors.Beam[bool]) {
 				const input =
 					document.currentScript.previousElementSibling.querySelector("input")
 				const text = document.getElementById("text" + $data("id"))
+				const widget = input.closest(".kchat-widget")
 				input.addEventListener("change", async () => {
 					const files = [...input.files]
 					input.value = ""
@@ -196,7 +197,13 @@ elem (u *uploader) Form(pending doors.Beam[bool]) {
 							try {
 								await $fetch("upload", form)
 							} catch (err) {
-								if (err?.status !== 408) console.error("upload failed", file.name, err)
+								if (err?.status === 408) return
+								console.error("upload failed", file.name, err)
+								if (err instanceof HookErr && (err.network() || err.server())) {
+									widget.dispatchEvent(
+										new CustomEvent("kchat_error", { detail: err.kind }),
+									)
+								}
 							}
 						}),
 					)

@@ -2,6 +2,7 @@ package js
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -64,8 +65,9 @@ type Config struct {
 	// MaxWorkers is how many scripts may execute at once across the app.
 	// Default 16.
 	MaxWorkers int
-	// JobTimeout caps how long one script may execute; a script may ask for
-	// less. Default 30s.
+	// JobTimeout caps how long one script may execute, its tool calls
+	// included: tool calls in flight are cancelled at the limit. A script may
+	// ask for less. Default 30s.
 	JobTimeout time.Duration
 	// AsyncAfter is how long a run keeps the tool call waiting before it
 	// detaches and delivers its result later as a background task. Default
@@ -121,6 +123,9 @@ type runtime struct {
 func (r *runtime) submit(params task.Params, done func()) (<-chan task.Result, context.CancelCauseFunc) {
 	r.init()
 	params.Memory = min(max(params.Memory, r.config.DefaultMemory), r.config.WorkerMemory)
+	if params.Timeout <= 0 || params.Timeout > r.config.JobTimeout {
+		params.Timeout = r.config.JobTimeout
+	}
 	task, res, cancel := task.NewTask(params, done, r.config.AsyncAfter)
 	r.tasks <- task
 	return res, cancel
@@ -200,11 +205,6 @@ func (r *runtime) execute(vm *quickjs.VM, input task.Input) (out string, err err
 			err = fmt.Errorf("%q: %v: %w", input.Name, rec, errRuntime)
 		}
 	}()
-	timeout := r.config.JobTimeout
-	if input.Timeout > 0 && input.Timeout < r.config.JobTimeout {
-		timeout = input.Timeout
-	}
-	vm.SetEvalTimeout(timeout)
 	vm.SetMemoryLimit(uintptr(input.Memory))
 	vm.SetMaxStackSize(uintptr(r.config.MaxCallDepth))
 	if !input.AppendLogs {
@@ -223,6 +223,9 @@ func (r *runtime) execute(vm *quickjs.VM, input task.Input) (out string, err err
 	}
 	res, err := vm.Eval(input.Script, quickjs.EvalGlobal)
 	if err != nil {
+		if errors.Is(context.Cause(input.Context), task.ErrTimeout) {
+			return "", fmt.Errorf("%q: limit %v: %w", input.Name, input.Timeout, task.ErrTimeout)
+		}
 		return "", fmt.Errorf("%q: %v: %w", input.Name, err, errScript)
 	}
 	s, ok := res.(string)

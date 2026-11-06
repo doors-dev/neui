@@ -6,15 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"neui.dev/api"
 	"neui.dev/provider/lib"
 )
 
 func (p *Provider) encode(req api.Request) ([]byte, error) {
-	if p.model.Name == "" {
-		return nil, fmt.Errorf("claude: provider has no model, set Conf.Model")
-	}
 	if len(req.Messages) == 0 {
 		return nil, fmt.Errorf("claude: request has no messages")
 	}
@@ -34,9 +32,6 @@ func (p *Provider) encode(req api.Request) ([]byte, error) {
 	if p.effort != "" {
 		w.OutputConfig = &outputConfig{Effort: p.effort}
 	}
-	if err := p.encodeSampling(&w); err != nil {
-		return nil, err
-	}
 	var err error
 	if w.Tools, err = p.encodeTools(req.Tools); err != nil {
 		return nil, err
@@ -51,45 +46,6 @@ func (p *Provider) encode(req api.Request) ([]byte, error) {
 		return nil, err
 	}
 	return lib.MarshalRaw(w)
-}
-
-// samplingRefused models are the ones that answer any non default temperature,
-// top_p or top_k with a 400 on every request, whether or not thinking is on.
-// Matched by substring because the same model is addressed as claude-opus-5 on
-// the first party API, anthropic.claude-opus-5 on Bedrock and with an @ version
-// suffix on Vertex. Every one of them also thinks by default, which is why the
-// older per model rule below only has to look at explicit configuration: there
-// temperature and top_k are refused while thinking is on and top_p is taken from
-// 0.95 to 1. From API version 2026-10-21 all three are refused on every model.
-var samplingRefused = []string{
-	"fable-5", "mythos-5", "mythos-preview",
-	"opus-5", "opus-4-8", "opus-4-7", "sonnet-5", "haiku-5-5",
-}
-
-const samplingRemovedVersion = "2026-10-21"
-
-func (p *Provider) encodeSampling(w *request) error {
-	if p.temperature == nil && p.topP == nil && p.topK == nil {
-		return nil
-	}
-	if p.version >= samplingRemovedVersion {
-		return fmt.Errorf("claude: API version %s refuses temperature, top_p and top_k on every model; steer the model by prompt or configure a provider without them", p.version)
-	}
-	for _, m := range samplingRefused {
-		if strings.Contains(p.model.Name, m) {
-			return fmt.Errorf("claude: model %q refuses temperature, top_p and top_k; steer it by prompt or configure a provider without them", p.model.Name)
-		}
-	}
-	if p.thinking.active() {
-		if p.temperature != nil || p.topK != nil {
-			return fmt.Errorf("claude: temperature and top_k are not accepted while thinking is on; disable thinking or configure a provider without them")
-		}
-		if *p.topP < 0.95 || *p.topP > 1 {
-			return fmt.Errorf("claude: top_p %v is not accepted while thinking is on; this API takes 0.95 to 1 then", *p.topP)
-		}
-	}
-	w.Temperature, w.TopP, w.TopK = p.temperature, p.topP, p.topK
-	return nil
 }
 
 var forcedToolRefused = []string{"opus-5-5", "sonnet-5-5", "fable-5-1", "mythos-5-1"}
@@ -220,7 +176,7 @@ func (p *Provider) encodeMessages(msgs []api.Message) ([]message, error) {
 		}
 		blocks := make([]json.RawMessage, 0, len(m.Content))
 		markable := -1
-		replay := replayThinking(m, p.model.Name)
+		replay := replayThinking(m)
 		for j, c := range m.Content {
 			raw, ok, err := p.encodeContent(c, role, replay, discarded, i)
 			if err != nil {
@@ -250,31 +206,38 @@ func (p *Provider) encodeMessages(msgs []api.Message) ([]message, error) {
 // back with it. Every thinking and redacted_thinking block of the message
 // replays or none does, and that is the whole rule.
 //
-// Nothing is refused for being another model's. This API ignores thinking it did
-// not write instead of rejecting the request, so the gate saves the tokens an
-// ignored block is still billed for and keeps a thread from carrying one model's
-// reasoning into another's answer. Partial dropping is the part that is refused:
+// Models are not compared. This API ignores or drops thinking the target model
+// cannot read instead of rejecting the request, so a block another Claude model
+// wrote goes back like this model's own. Partial dropping is the part that is
+// refused:
 // within the latest assistant message the sequence of consecutive thinking
 // blocks has to match what the model generated, and anything else comes back as
 // "`thinking` or `redacted_thinking` blocks in the latest assistant message
 // cannot be modified". So one block that cannot go settles the message.
 //
-// A block that cannot go is one another model produced, or one carrying no meta:
-// this API signs thinking and rejects an unsigned block, so a block that arrived
-// without the signature has nothing to be replayed by. Both are counted here
-// rather than at the block, because a message that drops either one has to drop
-// the rest with it.
-//
-// The comparison is ==. From 4.6 onward there are no aliases and the dateless id
-// is the snapshot itself, so there is nothing to normalize, and a prefix rule
-// would let one model's thinking pass for a sibling's.
-func replayThinking(m api.Message, model string) bool {
+// A block that cannot go is one Anthropic did not issue: its meta is neither a
+// signature, a JSON string, nor a redacted_thinking block. That covers another
+// provider's sealed payload and a block that arrived unsigned, which this API
+// rejects and which has nothing to be replayed by. Both are counted here rather
+// than at the block, because a message that drops either one has to drop the
+// rest with it.
+func replayThinking(m api.Message) bool {
 	for _, c := range m.Content {
 		r, is := c.(api.ContentReasoning)
 		if !is {
 			continue
 		}
-		if r.Model != model || len(r.Meta) == 0 {
+		var signature string
+		if json.Unmarshal(r.Meta, &signature) == nil {
+			if signature == "" {
+				return false
+			}
+			continue
+		}
+		var block struct {
+			Type string `json:"type"`
+		}
+		if json.Unmarshal(r.Meta, &block) != nil || block.Type != "redacted_thinking" {
 			return false
 		}
 	}
@@ -283,16 +246,17 @@ func replayThinking(m api.Message, model string) bool {
 
 // encodeContent returns the wire block and whether a cache marker may be
 // attached to it. Content this API cannot send becomes the note omitted returns,
-// in the place the block held, and there are seven: a text block with no non
-// whitespace content in it, an image or a document that arrived with no bytes in
-// it, thinking the message does not replay, a payload another model produced or
-// that arrived with nothing in it to replay, a payload whose streamed fragments
-// never parsed back into it, a tool result in an assistant message, and a type
-// this version of the adapter has no case for. An error is a block this API does
-// carry, filled with something it does not take.
+// in the place the block held: a text block with no non whitespace content in
+// it, an image or a document that arrived with no bytes in it, an image of a
+// type this API does not take, a document in an assistant message or one
+// encodeDocument cannot send, thinking the message does not replay, a payload
+// another model produced or that arrived with nothing in it to replay, a
+// payload whose streamed fragments never parsed back into it, and a tool result
+// in an assistant message. A type this version
+// of the adapter has no case for becomes the note lib.Unknown returns.
 //
-// An empty text block and an empty attachment are the two that are notes for the
-// thread's sake rather than the API's. This API refuses either outright, and a
+// An empty text block and an attachment this API refuses are notes for the
+// thread's sake rather than the API's. This API refuses each outright, and a
 // user message and a tool result are both stored and replayed, so one sent as a
 // block would be refused again on every later turn of the thread rather than on
 // this one alone — a 400 no caller can act on, since shedding media does not
@@ -318,16 +282,16 @@ func (p *Provider) encodeContent(c api.Content, role string, replay bool, discar
 	switch c := c.(type) {
 	case api.ContentText:
 		if strings.TrimSpace(c.Text) == "" {
-			return omitted(c, at, "a text block with no non-whitespace content in it is refused by this API, and the block is stored, so it would be refused again on every later turn of the thread")
+			return omitted(c, "a text block with no non-whitespace content in it is refused by this API, and the block is stored, so it would be refused again on every later turn of the thread")
 		}
 		raw, err := json.Marshal(textBlock{Type: "text", Text: c.Text})
 		return raw, true, err
 	case api.ContentImage:
 		if len(c.Data) == 0 {
-			return omitted(c, at, "an image source with no bytes in it is refused by this API, and the block is stored, so it would be refused again on every later turn of the thread")
+			return omitted(c, "an image source with no bytes in it is refused by this API, and the block is stored, so it would be refused again on every later turn of the thread")
 		}
 		if !api.ImageMime(c.Mime).IsValid() {
-			return nil, false, fmt.Errorf("image type %q is not accepted; this API takes image/jpeg, image/png, image/gif and image/webp", c.Mime)
+			return omitted(c, fmt.Sprintf("an image of type %q is refused by this API, which takes image/jpeg, image/png, image/gif and image/webp, and the block is stored, so it would be refused again on every later turn of the thread", c.Mime))
 		}
 		raw, err := json.Marshal(imageBlock{
 			Type: "image",
@@ -339,11 +303,13 @@ func (p *Provider) encodeContent(c api.Content, role string, replay bool, discar
 		})
 		return raw, true, err
 	case api.ContentDocument:
-		if len(c.Data) == 0 {
-			return omitted(c, at, "a document source with no bytes in it is refused by this API, and the block is stored, so it would be refused again on every later turn of the thread")
+		if role == string(api.RoleAssistant) {
+			return omitted(c, "a document is a block of the user turn on this API, which refuses one placed directly in an assistant message")
 		}
-		raw, err := encodeDocument(c)
-		return raw, true, err
+		if len(c.Data) == 0 {
+			return omitted(c, "a document source with no bytes in it is refused by this API, and the block is stored, so it would be refused again on every later turn of the thread")
+		}
+		return encodeDocument(c)
 	case api.ContentToolUse:
 		input := c.Input
 		switch {
@@ -358,16 +324,17 @@ func (p *Provider) encodeContent(c api.Content, role string, replay bool, discar
 		return raw, true, err
 	case api.ContentToolResult:
 		if role == string(api.RoleAssistant) {
-			return omitted(c, at, "a tool result is a block of the user turn that answers the call, and an assistant message on this API takes none")
+			return omitted(c, "a tool result is a block of the user turn that answers the call, and an assistant message on this API takes none")
 		}
-		raw, err := encodeToolResult(c, at)
+		raw, err := encodeToolResult(c)
 		return raw, true, err
 	case api.ContentReasoning:
-		return encodeReasoning(c, replay, at)
+		return encodeReasoning(c, replay)
 	case api.ContentOpaque:
-		return encodeOpaque(c, p.model.Name, at)
+		return encodeOpaque(c, p.model.Name)
 	}
-	return omitted(c, at, "this version of the adapter has no block for it")
+	raw, err := json.Marshal(textBlock{Type: "text", Text: lib.Unknown(providerName, at, c)})
+	return raw, true, err
 }
 
 // omitted is the note that stands in for content this API cannot send. It is a
@@ -375,19 +342,22 @@ func (p *Provider) encodeContent(c api.Content, role string, replay bool, discar
 // lands where the content was whichever message it came from, and it is markable
 // for the same reason it is placeable: nothing about it has to be replayed
 // unchanged.
-func omitted(c api.Content, at int, why string) (json.RawMessage, bool, error) {
-	raw, err := json.Marshal(textBlock{Type: "text", Text: lib.Omitted(providerName, at, c, why)})
+func omitted(c api.Content, why string) (json.RawMessage, bool, error) {
+	raw, err := json.Marshal(textBlock{Type: "text", Text: lib.Omitted(c, why)})
 	return raw, true, err
 }
 
-// encodeDocument sends a PDF as base64 and plain text as text, which are the
-// two sources this API takes. Everything else is refused rather than relabelled.
+// encodeDocument sends a PDF as base64 and the text types as a text source,
+// which are the two sources this API takes. The docs have plain text files such
+// as markdown or csv sent as text/plain, so every text type goes out labelled
+// that way. Anything else, the binary Office types and whatever is unknown,
+// becomes the note omitted returns: the block is stored, so a refusal would be
+// earned again on every later turn of the thread.
 //
 // A text source is a JSON string, and a JSON string is UTF-8 by definition, so a
-// text/plain document whose bytes are not UTF-8 loses them to U+FFFD wherever it
-// is encoded. There is nowhere on this API for those bytes to go: what is not
-// text cannot be sent as text, and base64 is the pdf source alone.
-func encodeDocument(c api.ContentDocument) (json.RawMessage, error) {
+// text document whose bytes are not UTF-8 would lose them to U+FFFD. There is
+// nowhere on this API for those bytes to go, so it becomes the note as well.
+func encodeDocument(c api.ContentDocument) (json.RawMessage, bool, error) {
 	b := documentBlock{Type: "document", Title: c.Name}
 	switch c.Mime {
 	case "application/pdf":
@@ -396,12 +366,17 @@ func encodeDocument(c api.ContentDocument) (json.RawMessage, error) {
 			MediaType: c.Mime,
 			Data:      base64.StdEncoding.EncodeToString(c.Data),
 		}
-	case "text/plain":
-		b.Source = mediaSource{Type: "text", MediaType: c.Mime, Data: string(c.Data)}
+	case "text/plain", "text/markdown", "text/csv", "text/html", "text/xml",
+		"application/json", "application/yaml", "application/rtf":
+		if !utf8.Valid(c.Data) {
+			return omitted(c, fmt.Sprintf("a document of type %q is sent as text, its bytes are not UTF-8, and the block is stored, so it would be refused again on every later turn of the thread", c.Mime))
+		}
+		b.Source = mediaSource{Type: "text", MediaType: "text/plain", Data: string(c.Data)}
 	default:
-		return nil, fmt.Errorf("document type %q is not accepted; this API takes application/pdf and text/plain", c.Mime)
+		return omitted(c, fmt.Sprintf("document type %q is not taken by this API, which reads PDF and text only, and the block is stored, so it would be refused again on every later turn of the thread", c.Mime))
 	}
-	return json.Marshal(b)
+	raw, err := json.Marshal(b)
+	return raw, true, err
 }
 
 // encodeToolResult carries the text and images this API takes in a result, and
@@ -412,15 +387,15 @@ func encodeDocument(c api.ContentDocument) (json.RawMessage, error) {
 // one every other block gets, for the same reason. Refusing the block costs the whole request and still does not deliver
 // it, where the note leaves the call answered and the drop reported.
 //
-// A result that carried no blocks at all takes the note too, so content is never
-// the empty array: a tool that returned nothing, which
-// api.NewContentToolResult answers with no blocks, is a result this API is not
-// documented to accept, and it is stored like any other.
+// A result that carried no blocks at all takes the text lib.EmptyResult names
+// instead of the note, so content is never the empty array: a tool that
+// returned nothing, which api.NewContentToolResult answers with no blocks, is a
+// result this API is not documented to accept, and it is stored like any other.
 //
 // A result with no tool use id is refused instead, because that is not content
 // this API cannot carry: it is a result matched to no call, and there is nothing
 // for the model to read it against.
-func encodeToolResult(c api.ContentToolResult, at int) (json.RawMessage, error) {
+func encodeToolResult(c api.ContentToolResult) (json.RawMessage, error) {
 	if c.ID == "" {
 		return nil, fmt.Errorf("tool result has no tool use id")
 	}
@@ -431,17 +406,17 @@ func encodeToolResult(c api.ContentToolResult, at int) (json.RawMessage, error) 
 		switch rc := rc.(type) {
 		case api.ContentText:
 			if strings.TrimSpace(rc.Text) == "" {
-				raw, _, err = omitted(rc, at, "a text block with no non-whitespace content in it is refused by this API, and the result is stored, so it would be refused again on every later turn of the thread")
+				raw, _, err = omitted(rc, "a text block with no non-whitespace content in it is refused by this API, and the result is stored, so it would be refused again on every later turn of the thread")
 				break
 			}
 			raw, err = json.Marshal(textBlock{Type: "text", Text: rc.Text})
 		case api.ContentImage:
 			if len(rc.Data) == 0 {
-				raw, _, err = omitted(rc, at, "an image source with no bytes in it is refused by this API, and the result is stored, so it would be refused again on every later turn of the thread")
+				raw, _, err = omitted(rc, "an image source with no bytes in it is refused by this API, and the result is stored, so it would be refused again on every later turn of the thread")
 				break
 			}
 			if !api.ImageMime(rc.Mime).IsValid() {
-				raw, _, err = omitted(rc, at, fmt.Sprintf("an image of type %q is refused by this API, which takes image/jpeg, image/png, image/gif and image/webp, and the result is stored, so it would be refused again on every later turn of the thread", rc.Mime))
+				raw, _, err = omitted(rc, fmt.Sprintf("an image of type %q is refused by this API, which takes image/jpeg, image/png, image/gif and image/webp, and the result is stored, so it would be refused again on every later turn of the thread", rc.Mime))
 				break
 			}
 			raw, err = json.Marshal(imageBlock{
@@ -453,7 +428,7 @@ func encodeToolResult(c api.ContentToolResult, at int) (json.RawMessage, error) 
 				},
 			})
 		default:
-			raw, _, err = omitted(rc, at, "a result on this API takes text and images and carries nothing else")
+			raw, _, err = omitted(rc, "a result on this API takes text and images and carries nothing else")
 		}
 		if err != nil {
 			return nil, err
@@ -461,7 +436,7 @@ func encodeToolResult(c api.ContentToolResult, at int) (json.RawMessage, error) 
 		content = append(content, raw)
 	}
 	if len(content) == 0 {
-		raw, _, err := omitted(c, at, "a result with no blocks in it encodes as an empty content array, which this API does not document accepting, and the result is stored, so a refusal would be earned again on every later turn of the thread")
+		raw, err := json.Marshal(textBlock{Type: "text", Text: lib.EmptyResult})
 		if err != nil {
 			return nil, err
 		}
@@ -497,18 +472,15 @@ func encodeToolResult(c api.ContentToolResult, at int) (json.RawMessage, error) 
 // See replayThinking. A message that does not replay leaves a note in place of
 // each of its thinking blocks, rather than the gap a model reads as a turn that
 // never thought. The readable half is not sent as the assistant's text: it is
-// another model's thinking, or a summary this API wrote, and either one replayed
+// another provider's thinking, or a summary this API wrote, and either one replayed
 // as words this model spoke is a fabrication.
-func encodeReasoning(c api.ContentReasoning, replay bool, at int) (json.RawMessage, bool, error) {
+func encodeReasoning(c api.ContentReasoning, replay bool) (json.RawMessage, bool, error) {
 	if !replay {
-		return omitted(c, at, "the message holds thinking another model produced or thinking that arrived unsigned, and this API refuses a message whose thinking was partly kept")
-	}
-	if c.Meta[0] == '{' {
-		return c.Meta, false, nil
+		return omitted(c, "the message holds thinking another provider issued or thinking that arrived unsigned, and this API refuses a message whose thinking was partly kept")
 	}
 	var signature string
-	if err := json.Unmarshal(c.Meta, &signature); err != nil {
-		return nil, false, fmt.Errorf("claude: reasoning holds neither a signature nor a block of this API's: %w", err)
+	if json.Unmarshal(c.Meta, &signature) != nil {
+		return c.Meta, false, nil
 	}
 	readable := c.Thoughts.Ordered()
 	if len(readable) == 0 {
@@ -541,16 +513,16 @@ func encodeReasoning(c api.ContentReasoning, replay bool, at int) (json.RawMessa
 // opened with would replay as a call made with arguments it never had. Failing
 // the request instead would end the thread on stored history the caller cannot
 // rewrite, over one block that is already lost.
-func encodeOpaque(c api.ContentOpaque, model string, at int) (json.RawMessage, bool, error) {
+func encodeOpaque(c api.ContentOpaque, model string) (json.RawMessage, bool, error) {
 	if c.Model != model || len(c.Data) == 0 {
-		return omitted(c, at, "the payload is signed against the turn that issued it and this one arrived from another model or with nothing in it")
+		return omitted(c, "the payload is signed against the turn that issued it and this one arrived from another model or with nothing in it")
 	}
 	if len(c.Deltas) == 0 {
 		return c.Data, false, nil
 	}
 	raw, err := spliceField(c.Data, "input", json.RawMessage(strings.Join(c.Deltas, "")))
 	if err != nil {
-		return omitted(c, at, "the fragments this block collected never parsed as JSON, or the payload holding the field they belong in is not the object this API sent, and either way there is nothing to splice back into it")
+		return omitted(c, "the fragments this block collected never parsed as JSON, or the payload holding the field they belong in is not the object this API sent, and either way there is nothing to splice back into it")
 	}
 	return raw, false, nil
 }

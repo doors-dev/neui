@@ -2,6 +2,7 @@ package xls
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -21,43 +22,6 @@ func reopen(t *testing.T, fs api.FS, name string) *excelize.File {
 	}
 	t.Cleanup(func() { f.Close() })
 	return f
-}
-
-func TestColumn(t *testing.T) {
-	fs, _ := newFSStore(t)
-	buildBook(t, fs, "book.xlsx")
-	res, err := columnTool(threadCtx(fs), columnArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:D4", Header: "Triple", Formula: "=B{row}*3"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Column != "E" || res.Range != "E1:E4" {
-		t.Fatalf("result = %+v", res)
-	}
-	f := reopen(t, fs, "book.xlsx")
-	if v, _ := f.GetCellValue("Data", "E1"); v != "Triple" {
-		t.Fatalf("header = %q", v)
-	}
-	for _, c := range []struct{ cell, want string }{{"E2", "B2*3"}, {"E3", "B3*3"}, {"E4", "B4*3"}} {
-		fl, err := f.GetCellFormula("Data", c.cell)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if fl != c.want {
-			t.Fatalf("%s formula = %q, want %q", c.cell, fl, c.want)
-		}
-	}
-	if v, _ := f.GetCellValue("Data", "E2", excelize.Options{RawCellValue: true}); v != "" {
-		t.Fatalf("cached value not cleared: %q", v)
-	}
-}
-
-func TestColumnNoPlaceholder(t *testing.T) {
-	fs, _ := newFSStore(t)
-	buildBook(t, fs, "book.xlsx")
-	_, err := columnTool(threadCtx(fs), columnArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:D4", Header: "X", Formula: "=B2*3"})
-	if err == nil || !strings.Contains(err.Error(), "{row}") {
-		t.Fatalf("err = %v", err)
-	}
 }
 
 func TestTotal(t *testing.T) {
@@ -98,7 +62,206 @@ func TestTotalBadFn(t *testing.T) {
 	fs, _ := newFSStore(t)
 	buildBook(t, fs, "book.xlsx")
 	_, err := totalTool(threadCtx(fs), totalArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:B4", Aggs: []aggSpec{{Column: "B", Fn: "median"}}})
-	if err == nil || !strings.Contains(err.Error(), "median") {
+	if err == nil || !strings.Contains(err.Error(), "median") || !strings.Contains(err.Error(), "count_nums") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func writeBook(t *testing.T, fs api.FS, name string, f *excelize.File) {
+	t.Helper()
+	w, err := fs.Create(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Write(w); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+}
+
+func TestTotalFns(t *testing.T) {
+	for _, c := range []struct{ fn, want string }{
+		{"sum", "SUBTOTAL(109,B2:B4)"},
+		{"count", "SUBTOTAL(103,B2:B4)"},
+		{"count_nums", "SUBTOTAL(102,B2:B4)"},
+	} {
+		fs, _ := newFSStore(t)
+		buildBook(t, fs, "book.xlsx")
+		if _, err := totalTool(threadCtx(fs), totalArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:B4", Aggs: []aggSpec{{Column: "B", Fn: c.fn}}}); err != nil {
+			t.Fatal(err)
+		}
+		fl, err := reopen(t, fs, "book.xlsx").GetCellFormula("Data", "B5")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if fl != c.want {
+			t.Fatalf("%s formula = %q, want %q", c.fn, fl, c.want)
+		}
+	}
+}
+
+func TestTotalCountEval(t *testing.T) {
+	fs, _ := newFSStore(t)
+	f := excelize.NewFile()
+	for cell, v := range map[string]any{"A1": "All", "B1": "Nums", "A2": 1, "A3": "x", "A4": 2, "B2": 1, "B3": "x", "B4": 2} {
+		if err := f.SetCellValue("Sheet1", cell, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeBook(t, fs, "book.xlsx", f)
+	if _, err := totalTool(threadCtx(fs), totalArg{Path: "book.xlsx", Sheet: "Sheet1", Range: "A1:B5", Aggs: []aggSpec{{Column: "A", Fn: "count"}, {Column: "B", Fn: "count_nums"}}}); err != nil {
+		t.Fatal(err)
+	}
+	g := reopen(t, fs, "book.xlsx")
+	for _, c := range []struct{ cell, want string }{{"A6", "3"}, {"B6", "2"}} {
+		v, err := g.CalcCellValue("Sheet1", c.cell)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if v != c.want {
+			t.Fatalf("%s = %q, want %q", c.cell, v, c.want)
+		}
+	}
+}
+
+func TestTotalRefusesNonEmpty(t *testing.T) {
+	fs, _ := newFSStore(t)
+	buildBook(t, fs, "book.xlsx")
+	_, err := totalTool(threadCtx(fs), totalArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:B3", Aggs: []aggSpec{{Column: "B", Fn: "sum"}}})
+	if err == nil || !strings.Contains(err.Error(), "not empty") {
+		t.Fatalf("err = %v", err)
+	}
+	if v, _ := reopen(t, fs, "book.xlsx").GetCellValue("Data", "B4"); v != "30" {
+		t.Fatalf("B4 = %q", v)
+	}
+}
+
+func salesTable(t *testing.T, fs api.FS) {
+	t.Helper()
+	_, err := tableTool(threadCtx(fs), tableArg{
+		Path:    "book.xlsx",
+		Sheet:   "Data",
+		Columns: []columnSpec{{Header: "Item"}, {Header: "Price", Format: "number"}, {Header: "Qty", Format: "integer"}},
+		Rows:    [][]any{{"a", 2.0, 3.0}, {"b", 4.0, 5.0}, {"c", 6.0, 7.0}},
+		Preset:  "report",
+		Name:    "T",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestTotalByHeader(t *testing.T) {
+	fs, _ := newFSStore(t)
+	buildBook(t, fs, "book.xlsx")
+	ctx := threadCtx(fs)
+	res, err := totalTool(ctx, totalArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:D4", Aggs: []aggSpec{{Column: "amount", Fn: "max"}, {Column: "A", Fn: "count"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Range != "A5:D5" {
+		t.Fatalf("result = %+v", res)
+	}
+	f := reopen(t, fs, "book.xlsx")
+	for _, c := range []struct{ cell, want string }{{"B5", "SUBTOTAL(104,B2:B4)"}, {"A5", "SUBTOTAL(103,A2:A4)"}} {
+		if fl, _ := f.GetCellFormula("Data", c.cell); fl != c.want {
+			t.Fatalf("%s formula = %q, want %q", c.cell, fl, c.want)
+		}
+	}
+	for _, col := range []string{"Price", "F", "B"} {
+		_, err := totalTool(ctx, totalArg{Path: "book.xlsx", Sheet: "Data", Range: "C1:D4", Aggs: []aggSpec{{Column: col, Fn: "sum"}}})
+		if err == nil || !strings.Contains(err.Error(), "neither a header") {
+			t.Fatalf("column %q: err = %v", col, err)
+		}
+	}
+}
+
+func TestTotalCopiesNumberFormat(t *testing.T) {
+	fs, _ := newFSStore(t)
+	f := excelize.NewFile()
+	for cell, v := range map[string]any{"A1": "Item", "B1": "Price", "A2": "a", "B2": 2.5, "A3": "b", "B3": 4} {
+		if err := f.SetCellValue("Sheet1", cell, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	money := "$#,##0.00"
+	style, err := f.NewStyle(&excelize.Style{CustomNumFmt: &money})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.SetCellStyle("Sheet1", "B2", "B3", style); err != nil {
+		t.Fatal(err)
+	}
+	writeBook(t, fs, "book.xlsx", f)
+	ctx := threadCtx(fs)
+	if _, err := totalTool(ctx, totalArg{Path: "book.xlsx", Sheet: "Sheet1", Range: "A1:B3", Aggs: []aggSpec{{Column: "Price", Fn: "sum"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := totalTool(ctx, totalArg{Path: "book.xlsx", Sheet: "Sheet1", Range: "A1:B4", Aggs: []aggSpec{{Column: "Price", Fn: "count_nums"}}}); err != nil {
+		t.Fatal(err)
+	}
+	g := reopen(t, fs, "book.xlsx")
+	for _, c := range []struct {
+		cell  string
+		money bool
+	}{{"B4", true}, {"B5", false}} {
+		sid, err := g.GetCellStyle("Sheet1", c.cell)
+		if err != nil {
+			t.Fatal(err)
+		}
+		st, err := g.GetStyle(sid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if st.Font == nil || !st.Font.Bold {
+			t.Fatalf("%s not bold: %+v", c.cell, st)
+		}
+		if got := st.CustomNumFmt != nil && *st.CustomNumFmt == money; got != c.money {
+			t.Fatalf("%s currency format = %v, want %v (%+v)", c.cell, got, c.money, st)
+		}
+	}
+}
+
+func TestTotalRefusesTable(t *testing.T) {
+	fs, _ := newFSStore(t)
+	salesTable(t, fs)
+	ctx := threadCtx(fs)
+	for _, c := range []struct{ rng, want string }{{"A1:C4", "is table"}, {"B1:C4", "overlaps table"}, {"A1:C3", "overlaps table"}} {
+		_, err := totalTool(ctx, totalArg{Path: "book.xlsx", Sheet: "Data", Range: c.rng, Aggs: []aggSpec{{Column: "Qty", Fn: "sum"}}})
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Fatalf("%s: err = %v", c.rng, err)
+		}
+	}
+	f := reopen(t, fs, "book.xlsx")
+	tables, err := f.GetTables("Data")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tables) != 1 || tables[0].Range != "A1:C4" {
+		t.Fatalf("tables = %+v", tables)
+	}
+	if v, _ := f.GetCellValue("Data", "C5"); v != "" {
+		t.Fatalf("C5 = %q", v)
+	}
+}
+
+func TestTotalRefusesInsideAutoFilter(t *testing.T) {
+	fs, _ := newFSStore(t)
+	f := excelize.NewFile()
+	for cell, v := range map[string]any{"A1": "N", "B1": "P", "A2": "a", "B2": 1, "A3": "b", "B3": 3} {
+		if err := f.SetCellValue("Sheet1", cell, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := f.AutoFilter("Sheet1", "A1:B6", nil); err != nil {
+		t.Fatal(err)
+	}
+	writeBook(t, fs, "book.xlsx", f)
+	_, err := totalTool(threadCtx(fs), totalArg{Path: "book.xlsx", Sheet: "Sheet1", Range: "A1:B3", Aggs: []aggSpec{{Column: "P", Fn: "sum"}}})
+	if err == nil || !strings.Contains(err.Error(), "autofilter") {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -111,69 +274,64 @@ func TestCheck(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Formulas != 1 || len(res.Errors) != 0 {
+	if res.Formulas != 1 || len(res.Errors) != 0 || len(res.Uncalculated) != 0 || res.Skipped != 0 {
 		t.Fatalf("clean book: %+v", res)
 	}
-	_, err = columnTool(ctx, columnArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:D4", Header: "Bad", Formula: "=NOPEFN(B{row})"})
-	if err != nil {
+	if _, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "E2", Rows: [][]any{{"=B{row}/0", "=NOPEFN(B{row})", "=F{row}*2"}}, Repeat: 3}); err != nil {
 		t.Fatal(err)
 	}
 	res, err = checkTool(ctx, checkArg{Path: "book.xlsx"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Formulas != 4 {
-		t.Fatalf("formulas = %d", res.Formulas)
+	if res.Formulas != 4 || res.Skipped != 6 {
+		t.Fatalf("formulas = %d, skipped = %d", res.Formulas, res.Skipped)
 	}
-	if len(res.Errors) != 3 {
+	if len(res.Uncalculated) != 1 || res.Uncalculated[0] != "NOPEFN" {
+		t.Fatalf("uncalculated = %v", res.Uncalculated)
+	}
+	if len(res.Errors) != 3 || res.Errors[0].Cell != "'Data'!E2" || !strings.Contains(res.Errors[0].Error, "DIV/0") {
 		t.Fatalf("errors = %+v", res.Errors)
 	}
-	if res.Errors[0].Cell != "Data!E2" || res.Errors[0].Error == "" {
-		t.Fatalf("errors[0] = %+v", res.Errors[0])
+	if res.Truncated {
+		t.Fatal("truncated")
 	}
 }
 
-func TestColumnKeepsOtherCachedValues(t *testing.T) {
+func TestCheckStructuredRef(t *testing.T) {
 	fs, _ := newFSStore(t)
-	f := excelize.NewFile()
-	for cell, v := range map[string]any{"A1": "N", "B1": "Twice", "A2": 1, "A3": 2, "B2": 2, "B3": 4, "C2": 99, "C3": 98} {
-		if err := f.SetCellValue("Sheet1", cell, v); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := f.SetCellFormula("Sheet1", "B2", "A2*2"); err != nil {
-		t.Fatal(err)
-	}
-	w, err := fs.Create("book.xlsx")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := f.Write(w); err != nil {
-		t.Fatal(err)
-	}
-	w.Close()
-	f.Close()
+	salesTable(t, fs)
 	ctx := threadCtx(fs)
-	if _, err := columnTool(ctx, columnArg{Path: "book.xlsx", Sheet: "Sheet1", Range: "A1:B3", Header: "Thrice", Formula: "=A{row}*3"}); err != nil {
+	if _, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "E1", Rows: [][]any{{"=SUBTOTAL(109,T[Price])"}}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := totalTool(ctx, totalArg{Path: "book.xlsx", Sheet: "Sheet1", Range: "A1:C3", Aggs: []aggSpec{{Column: "A", Fn: "sum"}}}); err != nil {
-		t.Fatal(err)
-	}
-	g := reopen(t, fs, "book.xlsx")
-	if v, _ := g.GetCellValue("Sheet1", "B2", excelize.Options{RawCellValue: true}); v != "2" {
-		t.Fatalf("unrelated cached value = %q, want 2", v)
-	}
-	for _, cell := range []string{"C2", "C3", "A4"} {
-		if v, _ := g.GetCellValue("Sheet1", cell, excelize.Options{RawCellValue: true}); v != "" {
-			t.Fatalf("%s stale cached value %q", cell, v)
-		}
-	}
-	calc, err := g.GetCalcProps()
+	res, err := checkTool(ctx, checkArg{Path: "book.xlsx"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if calc.FullCalcOnLoad == nil || !*calc.FullCalcOnLoad {
-		t.Fatal("fullCalcOnLoad not set")
+	if res.Formulas != 0 || res.Skipped != 1 || len(res.Uncalculated) != 1 || !strings.Contains(res.Uncalculated[0], "Table[Column]") || len(res.Errors) != 0 {
+		t.Fatalf("res = %+v", res)
+	}
+}
+
+func TestCheckCaps(t *testing.T) {
+	fs, _ := newFSStore(t)
+	buildBook(t, fs, "book.xlsx")
+	ctx := threadCtx(fs)
+	if _, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "E2", Rows: [][]any{{"=1/0"}}, Repeat: 3}); err != nil {
+		t.Fatal(err)
+	}
+	low := context.WithValue(ctx, configKey{}, Config{MaxReadRows: 2})
+	res, err := checkTool(low, checkArg{Path: "book.xlsx"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Truncated || len(res.Errors) != 2 {
+		t.Fatalf("res = %+v", res)
+	}
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	if _, err := checkTool(canceled, checkArg{Path: "book.xlsx"}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled err = %v", err)
 	}
 }

@@ -67,10 +67,10 @@ func (p Popups) script(seq int) gox.Elem {
 //line popups.gox:50
 				__e = __c.Set("data:seq", seq); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-				__e = __c.Raw("const root = document.currentScript.closest(\".kchat-widget\")\n\t\tconst seq = $data(\"seq\")\n\t\tconst hide = (e) => {\n\t\t\tconst pop = e.target.closest?.(\"[data-kchat-pop]\")\n\t\t\tif (pop && root.contains(pop)) return\n\t\t\t$hook(\"hide\", seq)\n\t\t}\n\t\tconst escape = (e) => {\n\t\t\tif (e.key !== \"Escape\") return\n\t\t\t$hook(\"hide\", seq)\n\t\t}\n\t\tdocument.addEventListener(\"pointerdown\", hide)\n\t\tdocument.addEventListener(\"keydown\", escape)\n\t\t$sys.clean(() => {\n\t\t\tdocument.removeEventListener(\"pointerdown\", hide)\n\t\t\tdocument.removeEventListener(\"keydown\", escape)\n\t\t})"); if __e != nil { return }
+				__e = __c.Raw("const root = document.currentScript.closest(\".kchat-widget\")\n\t\tconst seq = $data(\"seq\")\n\t\tconst fail = (err) => {\n\t\t\tif (err instanceof HookErr)\n\t\t\t\troot.dispatchEvent(new CustomEvent(\"kchat_error\", { detail: err.kind }))\n\t\t}\n\t\tconst hide = (e) => {\n\t\t\tconst pop = e.target.closest?.(\"[data-kchat-pop]\")\n\t\t\tif (pop && root.contains(pop)) return\n\t\t\t$hook(\"hide\", seq).catch(fail)\n\t\t}\n\t\tconst escape = (e) => {\n\t\t\tif (e.key !== \"Escape\") return\n\t\t\t$hook(\"hide\", seq).catch(fail)\n\t\t}\n\t\tdocument.addEventListener(\"pointerdown\", hide)\n\t\tdocument.addEventListener(\"keydown\", escape)\n\t\t$sys.clean(() => {\n\t\t\tdocument.removeEventListener(\"pointerdown\", hide)\n\t\t\tdocument.removeEventListener(\"keydown\", escape)\n\t\t})"); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
-//line popups.gox:69
+//line popups.gox:73
 }

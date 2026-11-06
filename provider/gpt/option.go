@@ -24,8 +24,9 @@ const (
 type ReplayMode int
 
 const (
-	// ReplayToolTurns replays a reasoning item only when a tool call followed
-	// it, the case the service requires. Default.
+	// ReplayToolTurns replays a reasoning item when a tool call follows it in
+	// the same message, with any preamble or commentary messages in between;
+	// the case the service requires. Default.
 	ReplayToolTurns ReplayMode = iota
 	// ReplayAlways replays every reasoning item that has an item after it in
 	// the same message, including one before a text answer. If the service
@@ -86,13 +87,13 @@ type Conf struct {
 	Model api.Model // the one model this provider streams with, spelled as it goes on the wire
 }
 
-// New builds a Provider. It never fails: a nil option is skipped, an option
-// with an invalid value is logged and has no effect, and an empty
-// Conf.Model.Name fails each turn with CodeInvalid. Without WithAPIKey, New
-// reads the key from OPENAI_API_KEY once. If that is empty, it logs a warning
-// and requests carry no Authorization header, which api.openai.com refuses
-// with CodeAccess.
-func New(conf Conf, opts ...Option) *Provider {
+// New builds a Provider. A nil option is skipped; an option with an invalid
+// value, or one the declared model does not take, makes New return its error.
+// An empty Conf.Model.Name fails each turn with CodeInvalid. Without
+// WithAPIKey, New reads the key from OPENAI_API_KEY once. If that is empty, it
+// logs a warning and requests carry no Authorization header, which
+// api.openai.com refuses with CodeAccess.
+func New(conf Conf, opts ...Option) (*Provider, error) {
 	p := &Provider{
 		baseURL: defaultBaseURL,
 		client:  &http.Client{},
@@ -104,7 +105,7 @@ func New(conf Conf, opts ...Option) *Provider {
 			continue
 		}
 		if err := o(p); err != nil {
-			slog.Error("gpt: option rejected", "err", err)
+			return nil, err
 		}
 	}
 	if !p.keyExplicit {
@@ -113,7 +114,7 @@ func New(conf Conf, opts ...Option) *Provider {
 			slog.Warn("gpt: no API key: set " + apiKeyEnv + " or pass WithAPIKey")
 		}
 	}
-	return p
+	return p, nil
 }
 
 // WithAPIKey sets the key, and OPENAI_API_KEY is then not read. An empty key
@@ -194,9 +195,9 @@ const maxOutputTokensFloor = 16
 
 // WithMaxTokens caps the response, reasoning included, so on a reasoning model
 // a small cap can leave no room for the answer. Zero, the default, sends no cap.
-// Values from 1 to 15 are below the API minimum and are rejected, and so is a
-// value over 128,000 when Conf.Model is one of the models declared in this
-// package, which take no more.
+// A negative value and values from 1 to 15, below the API minimum, are
+// rejected, and so is a value over 128,000 when Conf.Model is one of the
+// models declared in this package, which take no more.
 func WithMaxTokens(n int) Option {
 	return func(p *Provider) error {
 		if n < 0 {
@@ -206,7 +207,7 @@ func WithMaxTokens(n int) Option {
 			return fmt.Errorf("gpt: WithMaxTokens is %d or more, the schema minimum, or zero for no cap", maxOutputTokensFloor)
 		}
 		switch baseModel(p.model.Name) {
-		case GPT56Sol.Name, GPT56Luna.Name, GPT6Astra.Name, GPT6Sol.Name, GPT6Luna.Name:
+		case GPT56Sol.Name, GPT56Luna.Name, GPT6Astra.Name, GPT6Sol.Name, GPT6Luna.Name, GPT61Sol.Name, GPT61Terra.Name:
 			if n > maxOutputTokensCeiling {
 				return fmt.Errorf("gpt: WithMaxTokens is %d, over the %d output tokens %s takes", n, maxOutputTokensCeiling, p.model.Name)
 			}
@@ -270,14 +271,14 @@ const (
 // WithReasoningEffort sets reasoning.effort. Accepted values differ per model.
 // When Conf.Model is one of the models declared in this package, the values
 // its docs leave out are rejected: EffortMinimal on all of them, and EffortNone
-// on gpt-6-astra. For any other model nothing is checked, and an unsupported
-// value fails the turn with a 400. It is sent only to models this provider
+// on gpt-6-astra and gpt-6.1-sol. For any other model nothing is checked, and
+// an unsupported value fails the turn with a 400. It is sent only to models this provider
 // classifies as reasoning (see WithTemperature).
 func WithReasoningEffort(effort Effort) Option {
 	return func(p *Provider) error {
 		switch m := baseModel(p.model.Name); m {
-		case GPT56Sol.Name, GPT56Luna.Name, GPT6Astra.Name, GPT6Sol.Name, GPT6Luna.Name:
-			if effort == EffortMinimal || effort == EffortNone && m == GPT6Astra.Name {
+		case GPT56Sol.Name, GPT56Luna.Name, GPT6Astra.Name, GPT6Sol.Name, GPT6Luna.Name, GPT61Sol.Name, GPT61Terra.Name:
+			if effort == EffortMinimal || effort == EffortNone && (m == GPT6Astra.Name || m == GPT61Sol.Name) {
 				return fmt.Errorf("gpt: %s does not take reasoning effort %q", p.model.Name, effort)
 			}
 		}
@@ -408,7 +409,8 @@ func WithStrictTools(strict bool) Option {
 
 // WithStore sets whether the service retains responses server-side. Off by
 // default; this provider resends the whole thread each turn and needs nothing
-// stored.
+// stored. With it on, reasoning items without encrypted content replay by id
+// for as long as the service keeps the response.
 func WithStore(store bool) Option {
 	return func(p *Provider) error {
 		p.set.store = store
@@ -419,7 +421,8 @@ func WithStore(store bool) Option {
 // WithInclude replaces the include list. Without it, or with a nil list as
 // WithInclude() gives, models classified as reasoning are sent
 // "reasoning.encrypted_content", which older models need for reasoning
-// replay; keep it in a list of your own.
+// replay; keep it in a list of your own. Leaving it out while store is off
+// drops reasoning from replay.
 func WithInclude(values ...string) Option {
 	return func(p *Provider) error {
 		p.set.include = values
@@ -427,9 +430,10 @@ func WithInclude(values ...string) Option {
 	}
 }
 
-// WithPromptCacheKey steers cache routing for requests sharing a long prefix,
-// and is required on gpt-5.6 and later to get reliable matching at all. Keep
-// traffic under roughly fifteen requests a minute per key.
+// WithPromptCacheKey steers cache routing for requests sharing a long prefix.
+// OpenAI's prompt-caching guide asks for about fifteen requests a minute per
+// key across all prefixes; above that, requests overflow to other machines
+// and miss the cache.
 func WithPromptCacheKey(key string) Option {
 	return func(p *Provider) error {
 		p.set.promptCacheKey = key

@@ -58,12 +58,8 @@ func TestFetchSaveAsStreamsToWorkspace(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { store.Remove() })
-	ws, err := store.WorkspaceOpen("thread")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { ws.Close() })
-	fs := filesystem.New("thread", ws, store, api.FilesConfig{})
+	fs := filesystem.Open("thread", store, store, api.FilesConfig{})
+	t.Cleanup(fs.Dispose)
 	ctx := context.WithValue(context.Background(), common.KeyController, common.Controller(testThread{fs: fs}))
 	body := "%PDF-1.7\x00 binary-ish payload"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -108,12 +104,8 @@ func TestFetchSaveAsOverTheCapKeepsNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { store.Remove() })
-	ws, err := store.WorkspaceOpen("thread")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { ws.Close() })
-	fs := filesystem.New("thread", ws, store, api.FilesConfig{})
+	fs := filesystem.Open("thread", store, store, api.FilesConfig{})
+	t.Cleanup(fs.Dispose)
 	ctx := context.WithValue(context.Background(), common.KeyController, common.Controller(testThread{fs: fs}))
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/pdf")
@@ -148,12 +140,8 @@ func TestFetchSaveAsFailureKeepsExistingFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { store.Remove() })
-	ws, err := store.WorkspaceOpen("thread")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { ws.Close() })
-	fs := filesystem.New("thread", ws, store, api.FilesConfig{})
+	fs := filesystem.Open("thread", store, store, api.FilesConfig{})
+	t.Cleanup(fs.Dispose)
 	ctx := context.WithValue(context.Background(), common.KeyController, common.Controller(testThread{fs: fs}))
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/pdf")

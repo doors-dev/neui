@@ -26,7 +26,7 @@ type Result struct {
 	Title     string `json:"title" description:"the backend's title for the page"`
 	URL       string `json:"url" description:"fetch it with web__fetch to read the page"`
 	Snippet   string `json:"snippet,omitempty" description:"the backend's own one- or two-sentence extract; empty when it returns content instead"`
-	Content   string `json:"content,omitempty" description:"passages from the page when the backend returns them, sharing a 10000-character budget across all results; ends with (content truncated) when it was cut. Passages, not the whole page — web__fetch the url when you need the rest"`
+	Content   string `json:"content,omitempty" description:"passages from the page when the backend returns them, capped per result; ends with (content truncated) when cut. web__fetch the url for the rest."`
 	Published string `json:"published,omitempty" description:"publication date the backend reports; empty when it reports none"`
 }
 
@@ -66,24 +66,13 @@ func (m *module) search(ctx context.Context, arg SearchArg) ([]Result, error) {
 		return nil, fmt.Errorf("the search backend is unavailable: %s. Use web__fetch on a URL you already know instead of retrying.", err)
 	}
 	if len(results) == 0 {
-		return nil, errors.New("No search results found. Please try a different query.")
+		return []Result{}, nil
 	}
-	budget := m.conf.SearchChars
+	results = results[:min(len(results), q.Num)]
 	for i := range results {
-		if results[i].Content == "" {
-			continue
+		if runes := []rune(results[i].Content); len(runes) > m.conf.SearchChars {
+			results[i].Content = string(runes[:m.conf.SearchChars]) + "… (content truncated)"
 		}
-		if budget <= 0 {
-			results[i].Content = ""
-			continue
-		}
-		runes := []rune(results[i].Content)
-		if len(runes) <= budget {
-			budget -= len(runes)
-			continue
-		}
-		results[i].Content = string(runes[:budget]) + "… (content truncated)"
-		budget = 0
 	}
 	return results, nil
 }

@@ -139,7 +139,7 @@ func TestShapeBoundsBothDimensions(t *testing.T) {
 			t.Fatalf("%dx%d: %v", size[0], size[1], err)
 		}
 		w, h := dims(t, img.Data)
-		if w > maxImageDim || h > maxImageDim {
+		if w > fallbackImageSide || h > fallbackImageSide {
 			t.Fatalf("%dx%d came back as %dx%d: neither dimension is bounded", size[0], size[1], w, h)
 		}
 		if w*h > pixels {
@@ -163,14 +163,36 @@ func TestShapeClampStaysUnderThePixelBudget(t *testing.T) {
 	}
 }
 
+func TestShapeCapsTheLongestSide(t *testing.T) {
+	model := api.Model{ImageSide: 1568}
+	for _, size := range [][2]int{{4000, 1000}, {1000, 4000}} {
+		img, err := Shape(flatPNG(t, size[0], size[1]), api.ImagePNG, model)
+		if err != nil {
+			t.Fatal(err)
+		}
+		w, h := dims(t, img.Data)
+		if max(w, h) != 1568 || min(w, h) != 1568*1000/4000 {
+			t.Fatalf("%dx%d came back as %dx%d, want the long side at 1568", size[0], size[1], w, h)
+		}
+	}
+	data := flatPNG(t, 2500, 1000)
+	img, err := Shape(data, api.ImagePNG, api.Model{ImageSide: 2576})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(img.Data, data) {
+		t.Fatal("re-encoded a 2500x1000 image that fits a 2576 side")
+	}
+}
+
 func TestShapeFallsBackWithoutModelLimits(t *testing.T) {
 	img, err := Shape(flatPNG(t, 4000, 100), api.ImagePNG, api.Model{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	w, h := dims(t, img.Data)
-	if want := 100 * maxImageDim / 4000; w != maxImageDim || h != want {
-		t.Fatalf("%dx%d, want %dx%d", w, h, maxImageDim, want)
+	if want := 100 * fallbackImageSide / 4000; w != fallbackImageSide || h != want {
+		t.Fatalf("%dx%d, want %dx%d", w, h, fallbackImageSide, want)
 	}
 	big := noisePNG(t, 1600, 1600)
 	if len(big) <= fallbackByteCap {

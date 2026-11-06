@@ -3,10 +3,13 @@ package mcp
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -195,6 +198,37 @@ func TestNoInputSchemaBecomesObject(t *testing.T) {
 	}
 	if !bytes.Equal(tool.Params(), schema.ObjectRawSchema.Raw()) {
 		t.Fatalf("got %s, want %s", tool.Params(), schema.ObjectRawSchema.Raw())
+	}
+}
+
+func TestCollidingAndEmptyNamesHashed(t *testing.T) {
+	m := &module{ctx: context.Background(), conf: Config{Name: "srv"}}
+	module := m.buildModule([]*mcp.Tool{
+		{Name: "get.item", Description: "dot"},
+		{Name: "get-item", Description: "dash"},
+		{Name: "???", Description: "empty"},
+		{Name: "plain", Description: "plain"},
+	})
+	hash := func(s string) string {
+		sum := sha256.Sum256([]byte(s))
+		return hex.EncodeToString(sum[:4])
+	}
+	for name, desc := range map[string]string{
+		"get_item_" + hash("get.item"): "dot",
+		"get_item_" + hash("get-item"): "dash",
+		"t" + hash("???"):              "empty",
+		"plain":                        "plain",
+	} {
+		tool, ok := module.Get(name)
+		if !ok {
+			t.Fatalf("%s not registered", name)
+		}
+		if !strings.HasPrefix(tool.Desc(), desc) {
+			t.Fatalf("%s: got %q, want prefix %q", name, tool.Desc(), desc)
+		}
+	}
+	if _, ok := module.Get("get_item"); ok {
+		t.Fatal("colliding bare name registered")
 	}
 }
 

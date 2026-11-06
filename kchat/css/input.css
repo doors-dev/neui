@@ -27,6 +27,17 @@
 	100% { width: 100% }
 }
 
+@keyframes kchat-toast {
+	0% { opacity: 0; transform: translateY(-4px) }
+	3%, 94% { opacity: 1; transform: none }
+	100% { opacity: 0; transform: translateY(-4px) }
+}
+
+@keyframes kchat-toast-hold {
+	0% { visibility: visible }
+	100% { visibility: hidden }
+}
+
 @layer kchat {
 	.kchat-widget {
 		--app-bg: var(--kchat-dark-app-bg, --theme(--color-zinc-950 inline));
@@ -154,6 +165,7 @@
 
 	.kchat-pane {
 		@apply
+		relative
 		flex
 		flex-col
 		flex-1
@@ -225,6 +237,87 @@
 		items-center
 		gap-2
 		mt-2
+	}
+
+	.kchat-toasts {
+		@apply
+		absolute
+		top-11
+		inset-x-3
+		z-15
+		flex
+		flex-col
+		items-center
+		gap-1.5
+		pointer-events-none
+	}
+
+	@container (width < 36rem) {
+		.kchat-toasts {
+			@apply
+			items-stretch
+		}
+	}
+
+	.kchat-toast {
+		@apply
+		relative
+		isolate
+		overflow-hidden
+		pointer-events-auto
+		flex
+		items-center
+		gap-2
+		box-border
+		max-w-full
+		min-h-7
+		py-1
+		ps-2.5
+		pe-3
+		border
+		border-(--danger-ink)
+		rounded-(--_kchat-radius-control)
+		bg-(--app-bg)
+		text-(--app-ink)
+		text-sm
+		leading-tight
+		shadow-[0_4px_14px_color-mix(in_srgb,var(--app-ink)_10%,transparent)]
+		animate-[kchat-toast_4.25s_ease-out_forwards]
+	}
+
+	.kchat-toast-lead {
+		@apply
+		flex
+		flex-none
+		text-(--danger-ink)
+	}
+
+	.kchat-toast-text {
+		@apply
+		flex-1
+		min-w-0
+		overflow-hidden
+		text-ellipsis
+		whitespace-nowrap
+		py-0.5
+	}
+
+	.kchat-toast > .kchat-file-fill {
+		@apply
+		w-0
+		animate-[kchat-auto-fill_4s_linear_forwards]
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.kchat-toast {
+			@apply
+			animate-[kchat-toast-hold_4s_steps(1,end)_forwards]
+		}
+
+		.kchat-toast > .kchat-file-fill {
+			@apply
+			hidden
+		}
 	}
 
 	.kchat-widget_off .kchat-composer {
@@ -732,6 +825,19 @@
 	}
 
 	.kchat-side-empty-hint { @apply text-xs text-(--app-ink-quiet) }
+
+	.kchat-side-retry {
+		@apply
+		flex
+		items-center
+		justify-between
+		gap-2
+		flex-none
+		min-h-7
+		mt-3
+		ps-2
+		text-(--app-ink-quiet)
+	}
 
 	.kchat-row {
 		@apply

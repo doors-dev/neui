@@ -38,8 +38,8 @@ type File struct {
 	CreatedAt time.Time `json:"created_at"` // when FilePut committed it
 	// Draft marks a blob stored ahead of the message that will carry it. A
 	// draft is not part of the conversation: FileStorage lists it like any
-	// file, but FS leaves it out of Stat and ReadDir. It stays a draft until
-	// FileCommit clears it or it is deleted.
+	// file, but FS leaves it out of Stat, ReadDir and every read. It stays a
+	// draft until FileCommit clears it or it is deleted.
 	Draft bool `json:"draft"`
 }
 
@@ -87,7 +87,8 @@ type FileStorage interface {
 	// FileDelete removes the blob and its record; a missing key is nil, so
 	// deletes are idempotent.
 	FileDelete(ctx context.Context, threadID ThreadID, origin Origin, name string) error
-	// FileDeleteAll removes every blob in the thread, all origins; a
-	// missing thread is nil, so it too is idempotent.
+	// FileDeleteAll removes every blob in the thread, all origins; it is
+	// called when the thread is deleted. A missing thread is nil, so it too
+	// is idempotent.
 	FileDeleteAll(ctx context.Context, threadID ThreadID) error
 }

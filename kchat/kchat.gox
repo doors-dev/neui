@@ -3,12 +3,14 @@ package kchat
 import (
 	"time"
 	
+	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
 	"neui.dev/api"
 	"neui.dev/internal/instance"
 	"neui.dev/kchat/aside"
 	"neui.dev/kchat/chat"
 	"neui.dev/kchat/css"
+	"neui.dev/kchat/notify"
 	"neui.dev/kchat/params"
 	"neui.dev/kchat/pops"
 )
@@ -88,9 +90,11 @@ func (k Kchat) Main() gox.Elem {
 	params.InitDefault()
 	params.Disable(k.Disable)
 	return gox.Elem(func(cur gox.Cursor) error {
+		inst := instance.GetInstance(cur.Context())
 		return cur.Comp(&kchat{
 			params: params,
-			inst: instance.GetInstance(cur.Context()),
+			inst: inst,
+			synced: inst.Synced(),
 			pops: pops.NewPopups(),
 		})
 	})
@@ -99,12 +103,13 @@ func (k Kchat) Main() gox.Elem {
 type kchat struct {
 	params params.Params
 	inst api.Instance
+	synced doors.Beam[bool]
 	pops pops.Popups
 }
 
 elem (k *kchat) Main() {
 	~(css.Style(k.params.ThemeDark, k.params.ThemeLight))
-	<div
+	~>(doors.Ctx(notify.Root(ctx))) <div
 		class=({
 			class := "kchat-widget kchat-widget_split"
 			if k.params.Off(params.Sidebar) {
@@ -125,11 +130,15 @@ elem (k *kchat) Main() {
 			return key
 		})>
 		~(if !k.params.Off(params.Sidebar) {
-			~aside.Aside{
-				Params: k.params,
-				Instance: k.inst,
-				Pops: k.pops,
-			}
+			~(k.synced.Bind(elem(synced bool) {
+				~(if synced {
+					~aside.Aside{
+						Params: k.params,
+						Instance: k.inst,
+						Pops: k.pops,
+					}
+				})
+			}))
 		})
 		~chat.Chat{
 			Params: k.params,
@@ -137,5 +146,6 @@ elem (k *kchat) Main() {
 			Pops: k.pops.Popup[string](),
 		}
 		~(k.pops.Script())
+		~(notify.Script())
 	</div>
 }

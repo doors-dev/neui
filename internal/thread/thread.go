@@ -19,6 +19,8 @@ import (
 
 var registry sync.Map
 
+var ErrLinked = errors.New("thread: already linked to this page")
+
 func getThread(id api.ThreadID) *thread {
 	if entry, ok := registry.Load(id); ok {
 		return entry.(*thread)
@@ -42,7 +44,7 @@ repeat:
 	select {
 	case <-thread.close:
 		goto repeat
-	case thread.ch <- commandLink{backend, page, false, nil, response}:
+	case thread.ch <- commandLink{backend, page, false, nil, nil, response}:
 	}
 	link, err := response.Receive()
 	if err != nil {
@@ -51,14 +53,14 @@ repeat:
 	return link
 }
 
-func OpenLink(id api.ThreadID, backend *common.Backend, page page.Page, meta any) (Link, error) {
+func OpenLink(id api.ThreadID, backend *common.Backend, page page.Page, meta any, op Operation) (Link, error) {
 	response := NewResultResponse[Link]()
 repeat:
 	thread := getThread(id)
 	select {
 	case <-thread.close:
 		goto repeat
-	case thread.ch <- commandLink{backend, page, true, meta, response}:
+	case thread.ch <- commandLink{backend, page, true, meta, op, response}:
 	}
 	return response.Receive()
 }
@@ -144,9 +146,8 @@ func (t *thread) getState() api.ChatState {
 }
 
 func (t *thread) taskResult(id uint, output any, err error) error {
-	task, removeErr := t.link.taskRemove(id)
-	if removeErr != nil {
-		slog.Error("thread: stray task result", "id", id, "err", removeErr)
+	task, ok := t.link.taskRemove(id)
+	if !ok {
 		return nil
 	}
 	attrs := maps.Clone(task.attrs)
@@ -412,10 +413,7 @@ func (t *thread) connect(backend *common.Backend, page page.Page, load bool, met
 		t.link = nil
 		t.replay = nil
 	}
-	link, err := newLink(t, backend, page, meta)
-	if err != nil {
-		return Link{}, err
-	}
+	link := newLink(t, backend, page, meta)
 	replay := replay.NewReplay(backend.Context(), t.id, backend.Storage(), backend.Config(), backend.Provider().Model())
 	if load {
 		if err := replay.Load(); err != nil {
@@ -453,8 +451,10 @@ func (t *thread) switchStateRound() (api.Round, error) {
 	if err != nil {
 		return api.Round{}, err
 	}
-	if err := t.sweepDrafts(); err != nil {
-		doors.Logger(t.link.backend.Context()).Error("thread: draft sweep failed", "thread", t.id, "err", err)
+	if input.Len() != 0 {
+		if err := t.sweepDrafts(); err != nil {
+			doors.Logger(t.link.backend.Context()).Error("thread: draft sweep failed", "thread", t.id, "err", err)
+		}
 	}
 	t.switchStateRoundReplay(round, replay)
 	return round, nil

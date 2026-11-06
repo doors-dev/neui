@@ -1,7 +1,10 @@
 package text
 
 import (
+	"bufio"
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"regexp"
@@ -12,11 +15,13 @@ import (
 	"neui.dev/internal/tools"
 )
 
-const writeDesc = `Write a whole text file, replacing existing content, creating parent directories. Binary goes through writeBytes.`
-const appendDesc = `Append to the end of a text file, creating it if missing.`
-const editDesc = `Replace text in a file; check content with read first. old must match the current content byte for byte, including whitespace and indentation; the "N: " line prefixes shown by the read tool are not part of the content.`
+const writeDesc = `Write a whole text file, replacing existing content, creating parent directories. An existing file keeps its line endings and BOM; content with \r is written as is. Binary goes through writeBytes.`
+const appendDesc = `Append to the end of a text file, creating it if missing. Line breaks take the file's existing ending.`
+const editDesc = `Replace text in a file; check content with read first. old must match the current content exactly, including whitespace and indentation; write line breaks as \n; the "N: " line prefixes shown by the read tool are not part of the content.`
 const replaceDesc = `Replace text matching an RE2 regular expression. Without all the pattern must match exactly once; capture groups work in the replacement, e.g. $1.`
 const insertDesc = `Insert text at a line position; 0 is the top of the file, N goes after line N from the read tool.`
+
+const bom = "\ufeff"
 
 func Register(m tools.Module) {
 	add(m, "write", writeDesc, writeTool)
@@ -55,7 +60,7 @@ type editResult struct {
 
 type replaceArg struct {
 	Path        string `json:"path" required:"true"`
-	Pattern     string `json:"pattern" required:"true" description:"RE2 regular expression matched against the file content; (?s) lets . cross lines, (?m) makes ^ and $ match line boundaries"`
+	Pattern     string `json:"pattern" required:"true" description:"RE2 regular expression matched against the file content; it sees lines ending in \n, as read shows them; (?s) lets . cross lines, (?m) makes ^ and $ match line boundaries"`
 	Replacement string `json:"replacement" description:"may reference capture groups as $1, $2; $$ is a literal dollar"`
 	All         bool   `json:"all" description:"replace every match; without it the pattern must match exactly once"`
 }
@@ -68,11 +73,28 @@ type insertArg struct {
 
 func writeTool(ctx context.Context, arg writeArg) (writeResult, error) {
 	fs := common.GetController(ctx).FS()
+	s, exists, err := existingStyle(ctx, fs, arg.Path)
+	if err != nil {
+		return writeResult{}, err
+	}
+	if exists && !strings.Contains(arg.Content, "\r") {
+		arg.Content = s.format(arg.Content)
+	}
 	return put(ctx, fs, fs.Create, arg)
 }
 
 func appendTool(ctx context.Context, arg writeArg) (writeResult, error) {
 	fs := common.GetController(ctx).FS()
+	s, exists, err := existingStyle(ctx, fs, arg.Path)
+	if err != nil {
+		return writeResult{}, err
+	}
+	if exists {
+		arg.Content = toLF(arg.Content)
+		if s.crlf {
+			arg.Content = strings.ReplaceAll(arg.Content, "\n", "\r\n")
+		}
+	}
 	return put(ctx, fs, fs.Append, arg)
 }
 
@@ -96,39 +118,22 @@ func put(ctx context.Context, fs api.FS, open func(name string) (io.WriteCloser,
 }
 
 func editTool(ctx context.Context, arg editArg) (editResult, error) {
-	thread := common.GetController(ctx)
-	fs := thread.FS()
-	limit := thread.FilesConfig().EditLimit
+	fs := common.GetController(ctx).FS()
+	arg.Old, arg.New = toLF(arg.Old), toLF(arg.New)
 	if arg.Old == "" {
 		return editResult{}, fmt.Errorf("old is empty: use write to create or replace a whole file")
 	}
 	if arg.Old == arg.New {
 		return editResult{}, fmt.Errorf("old and new are identical")
 	}
-	rc, err := fs.ReadAll(ctx, arg.Path)
+	content, s, err := readCapped(ctx, fs, arg.Path)
 	if err != nil {
 		return editResult{}, err
 	}
-	var data []byte
-	if limit < 0 {
-		data, err = io.ReadAll(rc)
-	} else {
-		data, err = io.ReadAll(io.LimitReader(rc, int64(limit)+1))
-	}
-	if cerr := rc.Close(); err == nil {
-		err = cerr
-	}
-	if err != nil {
-		return editResult{}, err
-	}
-	if limit >= 0 && len(data) > limit {
-		return editResult{}, fmt.Errorf("%q is over the %d-byte edit cap", arg.Path, limit)
-	}
-	content := string(data)
 	count := strings.Count(content, arg.Old)
 	switch {
 	case count == 0:
-		return editResult{}, fmt.Errorf("old not found in %q: it must match the file byte for byte, read the file and copy the exact text", arg.Path)
+		return editResult{}, fmt.Errorf("old not found in %q: read the file and copy the exact text", arg.Path)
 	case count > 1 && !arg.ReplaceAll:
 		return editResult{}, fmt.Errorf("old matches %d places in %q: add surrounding lines to make it unique, or set replaceAll", count, arg.Path)
 	}
@@ -136,15 +141,7 @@ func editTool(ctx context.Context, arg editArg) (editResult, error) {
 		count = 1
 	}
 	content = strings.Replace(content, arg.Old, arg.New, count)
-	w, err := fs.Create(arg.Path)
-	if err != nil {
-		return editResult{}, err
-	}
-	_, err = io.WriteString(w, content)
-	if cerr := w.Close(); err == nil {
-		err = cerr
-	}
-	if err != nil {
+	if _, err := put(ctx, fs, fs.Create, writeArg{Path: arg.Path, Content: s.format(content)}); err != nil {
 		return editResult{}, err
 	}
 	return editResult{Replacements: count}, nil
@@ -152,11 +149,11 @@ func editTool(ctx context.Context, arg editArg) (editResult, error) {
 
 func replaceTool(ctx context.Context, arg replaceArg) (editResult, error) {
 	fs := common.GetController(ctx).FS()
-	re, err := regexp.Compile(arg.Pattern)
+	re, err := regexp.Compile(toLF(arg.Pattern))
 	if err != nil {
 		return editResult{}, fmt.Errorf("bad pattern: %w", err)
 	}
-	content, err := readCapped(ctx, fs, arg.Path)
+	content, s, err := readCapped(ctx, fs, arg.Path)
 	if err != nil {
 		return editResult{}, err
 	}
@@ -167,16 +164,8 @@ func replaceTool(ctx context.Context, arg replaceArg) (editResult, error) {
 	case count > 1 && !arg.All:
 		return editResult{}, fmt.Errorf("pattern matches %d places in %q: tighten it or set all", count, arg.Path)
 	}
-	content = re.ReplaceAllString(content, arg.Replacement)
-	w, err := fs.Create(arg.Path)
-	if err != nil {
-		return editResult{}, err
-	}
-	_, err = io.WriteString(w, content)
-	if cerr := w.Close(); err == nil {
-		err = cerr
-	}
-	if err != nil {
+	content = re.ReplaceAllString(content, toLF(arg.Replacement))
+	if _, err := put(ctx, fs, fs.Create, writeArg{Path: arg.Path, Content: s.format(content)}); err != nil {
 		return editResult{}, err
 	}
 	return editResult{Replacements: count}, nil
@@ -184,10 +173,11 @@ func replaceTool(ctx context.Context, arg replaceArg) (editResult, error) {
 
 func insertTool(ctx context.Context, arg insertArg) (writeResult, error) {
 	fs := common.GetController(ctx).FS()
-	content, err := readCapped(ctx, fs, arg.Path)
+	content, s, err := readCapped(ctx, fs, arg.Path)
 	if err != nil {
 		return writeResult{}, err
 	}
+	arg.Text = toLF(arg.Text)
 	lines := splitLines(content)
 	if arg.Line > uint(len(lines)) {
 		return writeResult{}, fmt.Errorf("line %d is beyond %q, %d lines", arg.Line, arg.Path, len(lines))
@@ -204,14 +194,14 @@ func insertTool(ctx context.Context, arg insertArg) (writeResult, error) {
 	if endsNL {
 		out += "\n"
 	}
-	return put(ctx, fs, fs.Create, writeArg{Path: arg.Path, Content: out})
+	return put(ctx, fs, fs.Create, writeArg{Path: arg.Path, Content: s.format(out)})
 }
 
-func readCapped(ctx context.Context, fs api.FS, path string) (string, error) {
+func readCapped(ctx context.Context, fs api.FS, path string) (string, style, error) {
 	limit := common.GetController(ctx).FilesConfig().EditLimit
 	rc, err := fs.ReadAll(ctx, path)
 	if err != nil {
-		return "", err
+		return "", style{}, err
 	}
 	var data []byte
 	if limit < 0 {
@@ -223,12 +213,73 @@ func readCapped(ctx context.Context, fs api.FS, path string) (string, error) {
 		err = cerr
 	}
 	if err != nil {
-		return "", err
+		return "", style{}, err
 	}
 	if limit >= 0 && len(data) > limit {
-		return "", fmt.Errorf("%q is over the %d-byte edit cap", path, limit)
+		return "", style{}, fmt.Errorf("%q is over the %d-byte edit cap", path, limit)
 	}
-	return string(data), nil
+	raw := string(data)
+	s := style{bom: strings.HasPrefix(raw, bom)}
+	raw = strings.TrimPrefix(raw, bom)
+	crlf := strings.Count(raw, "\r\n")
+	s.crlf = crlf > strings.Count(raw, "\n")-crlf
+	return toLF(raw), s, nil
+}
+
+func existingStyle(ctx context.Context, fs api.FS, path string) (style, bool, error) {
+	rc, err := fs.ReadAll(ctx, path)
+	if errors.Is(err, api.ErrNotFound) {
+		return style{}, false, nil
+	}
+	if err != nil {
+		return style{}, false, err
+	}
+	defer rc.Close()
+	br := bufio.NewReaderSize(rc, 64<<10)
+	head, _ := br.Peek(len(bom))
+	s := style{bom: string(head) == bom}
+	buf := make([]byte, 64<<10)
+	var crlf, lines int
+	cr := false
+	for {
+		n, err := br.Read(buf)
+		if n > 0 {
+			chunk := buf[:n]
+			lines += bytes.Count(chunk, []byte("\n"))
+			crlf += bytes.Count(chunk, []byte("\r\n"))
+			if cr && chunk[0] == '\n' {
+				crlf++
+			}
+			cr = chunk[n-1] == '\r'
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return style{}, false, err
+		}
+	}
+	s.crlf = crlf > lines-crlf
+	return s, true, nil
+}
+
+type style struct {
+	bom  bool
+	crlf bool
+}
+
+func (s style) format(lf string) string {
+	if s.crlf {
+		lf = strings.ReplaceAll(lf, "\n", "\r\n")
+	}
+	if s.bom && !strings.HasPrefix(lf, bom) {
+		lf = bom + lf
+	}
+	return lf
+}
+
+func toLF(s string) string {
+	return strings.ReplaceAll(s, "\r\n", "\n")
 }
 
 func splitLines(s string) []string {

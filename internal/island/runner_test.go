@@ -71,12 +71,8 @@ func newCallTestRun(t *testing.T, config api.IslandConfig, lib Library) (*run, *
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { storage.Remove() })
-	ws, err := storage.WorkspaceOpen("thread")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { ws.Close() })
-	fs := filesystem.New("thread", ws, storage, api.FilesConfig{})
+	fs := filesystem.Open("thread", storage, storage, api.FilesConfig{})
+	t.Cleanup(fs.Dispose)
 	ctx, cancel := context.WithCancelCause(context.Background())
 	task := &callTestTask{}
 	r := &run{

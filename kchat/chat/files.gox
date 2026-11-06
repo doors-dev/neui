@@ -15,6 +15,7 @@ import (
 	"github.com/doors-dev/gox"
 	"neui.dev/api"
 	"neui.dev/kchat/icons"
+	"neui.dev/kchat/notify"
 )
 
 elem (c *chat) files() {
@@ -54,6 +55,7 @@ elem filesButton(toggle func(ctx context.Context), open bool) {
 			toggle(ctx)
 			return false
 		},
+		OnError: notify.OnError,
 	} <button class=(class) title="Files" aria-label="Files">
 		~>(doors.Class("kchat-ic")) ~(icons.Files())
 	</button>
@@ -122,16 +124,19 @@ elem (l *fileList) row(e api.FSEntry) {
 							del.Update(ctx, false)
 							return false
 						},
+						OnError: notify.OnError,
 					} <button type="button" class="kchat-btn kchat-btn_2nd">Cancel</button>
 					~>doors.AClick{
 						Scope: new(doors.ScopeBlocking),
 						On: func(ctx context.Context, rp doors.RequestPointer) bool {
 							if err := l.fs.DeleteUpload(ctx, e.Name); err != nil {
 								doors.Logger(ctx).Error("kchat: file delete", "name", e.Name, "err", err)
+								notify.Error(ctx, err)
 							}
 							l.body.Reload(ctx)
 							return false
 						},
+						OnError: notify.OnError,
 					} <button type="button" class="kchat-btn kchat-btn_del">Delete</button>
 				</div>
 			</div>
@@ -152,6 +157,7 @@ elem (l *fileList) row(e api.FSEntry) {
 						del.Update(ctx, true)
 						return false
 					},
+					OnError: notify.OnError,
 				} <button class="kchat-ctl" aria-label=("Delete " + name)>
 					~>(doors.Class("kchat-ic")) ~(icons.Trash())
 				</button>

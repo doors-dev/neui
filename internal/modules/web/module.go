@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"code.dny.dev/ssrf"
 	"github.com/JohannesKaufmann/html-to-markdown/v2/converter"
 	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/base"
 	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/commonmark"
@@ -25,17 +26,28 @@ const acceptHeader = "text/markdown, text/html;q=0.9, text/plain;q=0.8, */*;q=0.
 const acceptLanguage = "en-US,en;q=0.9"
 const maxRedirects = 10
 
-const fetchModuleDesc = `The web, read-only. web__fetch gets one http or https URL and returns it as markdown (default), plain text or html stripped of scripts, styles, embeds, forms, meta and comments. Nothing runs JavaScript, so a page that renders client-side comes back as an empty shell — fetch its API or a server-rendered URL instead. A long page arrives in line ranges: the content ends with a note naming the lines shown and the offset to continue with, and continuing costs no second request for about 15 minutes. Only text is returned; a PDF, an image or any other binary has to be fetched with saveAs into the workspace and read from there with the files tools.`
+const fetchModuleDesc = `The web, read-only. web__fetch gets one http or https URL and returns it as markdown (default), plain text or html stripped of scripts, styles, embeds, form controls, meta and comments. Nothing runs JavaScript, so a page that renders client-side comes back as an empty shell — fetch its API or a server-rendered URL instead. A long page arrives in line ranges: the content ends with a note naming the lines shown and the offset to continue with, and continuing costs no second request for about 15 minutes. Only text is returned; a PDF, an image or any other binary has to be fetched with saveAs into the workspace and read from there with the files tools.`
 
 const searchModuleDesc = ` web__search asks a search backend for pages worth fetching, and returns links with extracts, not whole pages.`
 
-var reserved = []netip.Prefix{
-	netip.MustParsePrefix("0.0.0.0/8"),
-	netip.MustParsePrefix("100.64.0.0/10"),
-	netip.MustParsePrefix("192.0.0.0/24"),
-	netip.MustParsePrefix("198.18.0.0/15"),
-	netip.MustParsePrefix("240.0.0.0/4"),
-	netip.MustParsePrefix("fec0::/10"),
+var guardian = ssrf.New(ssrf.WithAnyPort())
+
+var nat64 = netip.MustParsePrefix("64:ff9b::/96")
+
+var badPort = map[uint16]bool{
+	0: true, 1: true, 7: true, 9: true, 11: true, 13: true, 15: true, 17: true,
+	19: true, 20: true, 21: true, 22: true, 23: true, 25: true, 37: true,
+	42: true, 43: true, 53: true, 69: true, 77: true, 79: true, 87: true,
+	95: true, 101: true, 102: true, 103: true, 104: true, 109: true, 110: true,
+	111: true, 113: true, 115: true, 117: true, 119: true, 123: true, 135: true,
+	137: true, 139: true, 143: true, 161: true, 179: true, 389: true, 427: true,
+	465: true, 512: true, 513: true, 514: true, 515: true, 526: true, 530: true,
+	531: true, 532: true, 540: true, 548: true, 554: true, 556: true, 563: true,
+	587: true, 601: true, 636: true, 989: true, 990: true, 993: true, 995: true,
+	1719: true, 1720: true, 1723: true, 2049: true, 3659: true, 4045: true,
+	4190: true, 5060: true, 5061: true, 6000: true, 6566: true, 6665: true,
+	6666: true, 6667: true, 6668: true, 6669: true, 6679: true, 6697: true,
+	10080: true,
 }
 
 type Config struct {
@@ -70,7 +82,7 @@ func (c *Config) initDefaults() {
 		c.CacheBytes = 8 << 20
 	}
 	if c.SearchChars <= 0 {
-		c.SearchChars = 10000
+		c.SearchChars = 2000
 	}
 }
 
@@ -78,38 +90,7 @@ func Module(c Config) common.ModuleFactory {
 	c.initDefaults()
 	client := c.HTTPClient
 	if client == nil {
-		dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
-		dialer.Control = func(_ string, address string, _ syscall.RawConn) error {
-			ap, err := netip.ParseAddrPort(address)
-			if err != nil {
-				return blocked{addr: address}
-			}
-			a := ap.Addr().Unmap()
-			if a.IsLoopback() || a.IsPrivate() || a.IsLinkLocalUnicast() || a.IsLinkLocalMulticast() || a.IsInterfaceLocalMulticast() || a.IsMulticast() || a.IsUnspecified() {
-				return blocked{addr: a.String()}
-			}
-			for _, prefix := range reserved {
-				if prefix.Contains(a) {
-					return blocked{addr: a.String()}
-				}
-			}
-			return nil
-		}
-		transport := http.DefaultTransport.(*http.Transport).Clone()
-		transport.DialContext = dialer.DialContext
-		client = &http.Client{
-			Transport: transport,
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				if len(via) >= maxRedirects {
-					return redirected{text: via[0].URL.String() + " redirected more than 10 times"}
-				}
-				if req.URL.Scheme != "http" && req.URL.Scheme != "https" {
-					return redirected{text: via[len(via)-1].URL.String() + " redirected to " + req.URL.String() + ", which web__fetch cannot follow"}
-				}
-				req.URL.User = nil
-				return nil
-			},
-		}
+		client = guardedClient()
 	}
 	backend := c.Search
 	desc := fetchModuleDesc
@@ -138,6 +119,45 @@ func Module(c Config) common.ModuleFactory {
 			}
 		}
 		return m
+	}
+}
+
+func guard(_ string, address string, _ syscall.RawConn) error {
+	ap, err := netip.ParseAddrPort(address)
+	if err != nil {
+		return blocked{addr: address}
+	}
+	a := ap.Addr().Unmap()
+	if nat64.Contains(a) {
+		b := a.As16()
+		a = netip.AddrFrom4([4]byte(b[12:]))
+	}
+	if badPort[ap.Port()] {
+		return blocked{addr: netip.AddrPortFrom(a, ap.Port()).String()}
+	}
+	if guardian.SafeAddrPort(netip.AddrPortFrom(a, ap.Port())) != nil {
+		return blocked{addr: a.String()}
+	}
+	return nil
+}
+
+func guardedClient() *http.Client {
+	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second, Control: guard}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = nil
+	transport.DialContext = dialer.DialContext
+	return &http.Client{
+		Transport: transport,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= maxRedirects {
+				return redirected{text: via[0].URL.String() + " redirected more than 10 times"}
+			}
+			if req.URL.Scheme != "http" && req.URL.Scheme != "https" {
+				return redirected{text: via[len(via)-1].URL.String() + " redirected to " + req.URL.String() + ", which web__fetch cannot follow"}
+			}
+			req.URL.User = nil
+			return nil
+		},
 	}
 }
 

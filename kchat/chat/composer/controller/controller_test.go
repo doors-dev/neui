@@ -3,7 +3,9 @@ package controller
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"neui.dev/api"
 )
@@ -102,5 +104,82 @@ func TestStaleUploaderAttachmentsIgnored(t *testing.T) {
 	c.UpdateAttachments(ctx, c.origin.Get().inputSeq, []string{"a.txt", "b.txt"})
 	if got := c.origin.Get().rewind.input.Attachments; !slices.Equal(got, []string{"a.txt", "b.txt"}) {
 		t.Fatalf("rewind attachments after a current update: want [a.txt b.txt], got %v", got)
+	}
+}
+
+func TestOverLimitTextSurvivesAttachmentRemoval(t *testing.T) {
+	ctx := context.Background()
+	thread := &fakeThread{}
+	c := newTestController(thread)
+	seq := c.origin.Get().inputSeq
+	c.UpdateInputText(ctx, "short")
+	c.UpdateAttachments(ctx, seq, []string{"user_uploads/a.txt"})
+	over := strings.Repeat("x", inputLimit+1)
+	c.UpdateInputText(ctx, over)
+	c.UpdateAttachments(ctx, seq, nil)
+	if c.enabled.Get() {
+		t.Fatalf("Send enabled with %d bytes of text over a %d limit after removing the attachment", len(over), inputLimit)
+	}
+	c.Send(ctx)
+	if len(thread.sent) != 0 {
+		t.Fatalf("Send with over-limit text: want nothing sent, got %v", thread.sent)
+	}
+	for _, in := range thread.inputs {
+		if len(in.Text) > inputLimit-len("short") {
+			t.Fatalf("over-limit text reached thread.Input: %d bytes", len(in.Text))
+		}
+	}
+}
+
+func TestFittingTextSentAfterAttachmentRemoval(t *testing.T) {
+	ctx := context.Background()
+	thread := &fakeThread{}
+	c := newTestController(thread)
+	seq := c.origin.Get().inputSeq
+	c.UpdateAttachments(ctx, seq, []string{"user_uploads/a.txt"})
+	text := strings.Repeat("y", inputLimit-5)
+	c.UpdateInputText(ctx, text)
+	if c.enabled.Get() {
+		t.Fatalf("Send enabled with text and attachment over the limit")
+	}
+	c.UpdateAttachments(ctx, seq, nil)
+	if !c.enabled.Get() {
+		t.Fatalf("Send disabled after removing the attachment")
+	}
+	c.Send(ctx)
+	if len(thread.sent) != 1 || thread.sent[0].Text != text || len(thread.sent[0].Attachments) != 0 {
+		t.Fatalf("Send after removing the attachment: want the latest text, got %d sends", len(thread.sent))
+	}
+	if n := len(thread.inputs); n == 0 || thread.inputs[n-1].Text != text {
+		t.Fatalf("thread.Input after removing the attachment: want the latest text")
+	}
+}
+
+func TestTrimmedTextSentExactly(t *testing.T) {
+	ctx := context.Background()
+	thread := &fakeThread{}
+	c := newTestController(thread)
+	c.UpdateInputText(ctx, strings.Repeat("x", inputLimit+10))
+	c.UpdateInputText(ctx, "trimmed")
+	if !c.enabled.Get() {
+		t.Fatalf("Send disabled after trimming the text below the limit")
+	}
+	c.Send(ctx)
+	if len(thread.sent) != 1 || thread.sent[0].Text != "trimmed" {
+		t.Fatalf("Send after trimming: want the visible text, got %v", thread.sent)
+	}
+}
+
+func TestCutKeepsRunes(t *testing.T) {
+	ctx := context.Background()
+	c := newTestController(&fakeThread{})
+	text := strings.Repeat("x", inputLimit-1) + "\u00e9"
+	c.UpdateInputText(ctx, text)
+	got := c.origin.Get().input.Text
+	if !utf8.ValidString(got) || got != text[:inputLimit-1] {
+		t.Fatalf("cut text: want %d valid bytes, got %d (valid %v)", inputLimit-1, len(got), utf8.ValidString(got))
+	}
+	if c.origin.Get().textBytes != len(text) {
+		t.Fatalf("textBytes: want %d, got %d", len(text), c.origin.Get().textBytes)
 	}
 }

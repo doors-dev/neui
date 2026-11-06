@@ -13,6 +13,7 @@ import (
 	"github.com/doors-dev/gox"
 	"github.com/gammazero/deque"
 	"neui.dev/kchat/aside/controller"
+	"neui.dev/kchat/notify"
 )
 
 type Section struct {
@@ -44,11 +45,11 @@ func (s *slot) remove(ctx context.Context) {
 	s.door.Static(ctx, nil)
 }
 
-//line window.gox:44
+//line window.gox:45
 func (s *slot) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line window.gox:46
+//line window.gox:47
 		var batch any
 	if s.batch != 0 {
 		batch = s.batch
@@ -56,23 +57,23 @@ func (s *slot) Main() gox.Elem {
 
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line window.gox:51
+//line window.gox:52
 			__e = __c.Set("class", "kchat-day"); if __e != nil { return }
-//line window.gox:51
+//line window.gox:52
 			__e = __c.Set("data-id", s.key); if __e != nil { return }
-//line window.gox:51
+//line window.gox:52
 			__e = __c.Set("data-batch", batch); if __e != nil { return }
-//line window.gox:51
+//line window.gox:52
 			__e = __c.Set("data-pending", s.batch != 0); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line window.gox:52
-			__e = __c.Any(s.content); if __e != nil { return }
 //line window.gox:53
+			__e = __c.Any(s.content); if __e != nil { return }
+//line window.gox:54
 			__e = __c.Any(s.after); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line window.gox:55
+//line window.gox:56
 }
 
 type layout struct {
@@ -81,21 +82,21 @@ type layout struct {
 	appender gox.Comp
 }
 
-//line window.gox:63
+//line window.gox:64
 func (l *layout) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line window.gox:64
-		__e = __c.Any(l.prepender); if __e != nil { return }
 //line window.gox:65
-		for _, s := range l.history {
+		__e = __c.Any(l.prepender); if __e != nil { return }
 //line window.gox:66
+		for _, s := range l.history {
+//line window.gox:67
 			__e = __c.Any(s.door); if __e != nil { return }
 		}
-//line window.gox:68
+//line window.gox:69
 		__e = __c.Any(l.appender); if __e != nil { return }
 	return })
-//line window.gox:69
+//line window.gox:70
 }
 
 type WindowList struct {
@@ -121,27 +122,77 @@ type WindowList struct {
 	}
 }
 
-//line window.gox:94
+//line window.gox:95
 func (w WindowList) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line window.gox:96
+//line window.gox:97
+		body := new(doors.Door)
+	body.Inner(ctx, w.body(body))
+
+//line window.gox:100
+		__e = __c.Any(body); if __e != nil { return }
+	return })
+//line window.gox:101
+}
+
+//line window.gox:103
+func (w WindowList) body(door *doors.Door) gox.Elem {
+	return gox.Elem(func(__c gox.Cursor) (__e error) {
+		ctx := __c.Context(); _ = ctx
+//line window.gox:105
 		w.mu = new(sync.Mutex)
 	s, err := w.seed(ctx)
 
-//line window.gox:99
+//line window.gox:108
 		if err == nil {
-//line window.gox:100
+//line window.gox:109
 			__e = __c.Any(s); if __e != nil { return }
-//line window.gox:101
+//line window.gox:110
 			__e = __c.Any(w.script()); if __e != nil { return }
 		} else  {
-//line window.gox:104
+//line window.gox:113
 			doors.Logger(ctx).Error("window: seed", "err", err)
 
+			__e = __c.Init("div"); if __e != nil { return }
+			{
+//line window.gox:115
+				__e = __c.Set("class", "kchat-side-retry"); if __e != nil { return }
+//line window.gox:115
+				__e = __c.Set("role", "alert"); if __e != nil { return }
+				__e = __c.Submit(); if __e != nil { return }
+				__e = __c.Init("span"); if __e != nil { return }
+				{
+					__e = __c.Submit(); if __e != nil { return }
+					__e = __c.Text("Couldn't load."); if __e != nil { return }
+				}
+				__e = __c.Close(); if __e != nil { return }
+//line window.gox:117
+				__e = (doors.AClick{
+				Scope: new(doors.ScopeBlocking),
+				On: func(ctx context.Context, rp doors.RequestPointer) bool {
+					door.Reload(ctx)
+					return false
+				},
+				OnError: notify.OnError,
+			}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+					ctx := __c.Context(); _ = ctx
+					__e = __c.Init("button"); if __e != nil { return }
+					{
+//line window.gox:124
+						__e = __c.Set("type", "button"); if __e != nil { return }
+//line window.gox:124
+						__e = __c.Set("class", "kchat-btn kchat-btn_2nd"); if __e != nil { return }
+						__e = __c.Submit(); if __e != nil { return }
+						__e = __c.Text("Retry"); if __e != nil { return }
+					}
+					__e = __c.Close(); if __e != nil { return }
+				return })); if __e != nil { return }
+			}
+			__e = __c.Close(); if __e != nil { return }
 		}
 	return })
-//line window.gox:107
+//line window.gox:127
 }
 
 func (w *WindowList) seed(ctx context.Context) (gox.Comp, error) {
@@ -302,6 +353,8 @@ func (w *WindowList) sync(ctx context.Context) (more bool) {
 		sections, ended, err := w.Driver.Sections(ctx, anchor, false, false, wantOlder - older)
 		w.mu.Lock()
 		if err != nil {
+			w.scrollState.first = ""
+			w.scrollState.last = ""
 			w.scrollState.synced = true
 			return
 		}
@@ -334,6 +387,8 @@ func (w *WindowList) sync(ctx context.Context) (more bool) {
 		sections, ended, err := w.Driver.Sections(ctx, anchor, false, true, wantNewer - newer)
 		w.mu.Lock()
 		if err != nil {
+			w.scrollState.first = ""
+			w.scrollState.last = ""
 			w.scrollState.synced = true
 			return
 		}
@@ -374,11 +429,11 @@ func (w *WindowList) sync(ctx context.Context) (more bool) {
 	return
 }
 
-//line window.gox:339
+//line window.gox:363
 func (w *WindowList) script() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line window.gox:340
+//line window.gox:364
 		__e = (doors.AHook[syncMsg]{
 		Name: "sync",
 		Scope: &doors.ScopeRate{Tick: 100 * time.Millisecond},
@@ -392,17 +447,17 @@ func (w *WindowList) script() gox.Elem {
 			ctx := __c.Context(); _ = ctx
 			__e = __c.Init("script"); if __e != nil { return }
 			{
-//line window.gox:349
+//line window.gox:373
 				__e = __c.Set("data:first", w.first); if __e != nil { return }
-//line window.gox:349
+//line window.gox:373
 				__e = __c.Set("data:last", w.last); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-				__e = __c.Raw("const script = document.currentScript\n\t\tconst body = script.closest(\".kchat-side-body\")\n\t\tconst seedFirst = $data(\"first\")\n\t\tconst seedLast = $data(\"last\")\n\t\t// the seeded window already matches this range, so an identical first\n\t\t// report needs no round trip\n\t\tlet sent = seedLast ? `${seedFirst}:${seedLast}` : \"\"\n\t\tconst report = () => {\n\t\t\tconst b = body.getBoundingClientRect()\n\t\t\tlet first = \"\"\n\t\t\tlet last = \"\"\n\t\t\tfor (const s of body.querySelectorAll(\".kchat-day[data-id]\")) {\n\t\t\t\tif (s.hasAttribute(\"data-pending\")) continue\n\t\t\t\tconst r = s.getBoundingClientRect()\n\t\t\t\tif (r.height === 0 || r.bottom <= b.top || r.top >= b.bottom) continue\n\t\t\t\t// sections run newest first, so the topmost on screen is last\n\t\t\t\tif (last === \"\") last = s.dataset.id\n\t\t\t\tfirst = s.dataset.id\n\t\t\t}\n\t\t\tif (first === \"\") return\n\t\t\tconst key = `${first}:${last}`\n\t\t\tif (key === sent) return\n\t\t\tsent = key\n\t\t\t$hook(\"sync\", { first, last }).catch(() => {\n\t\t\t\tsent = \"\"\n\t\t\t})\n\t\t}\n\t\tawait $sys.ready()\n\t\trequestAnimationFrame(() => {\n\t\t\tconst top = body.querySelector(`.kchat-day[data-id=\"${seedLast}\"]`)\n\t\t\tif (seedLast && top) {\n\t\t\t\t// first and last are the sections whose boxes met the viewport,\n\t\t\t\t// so last.top <= scrollTop < last.bottom and\n\t\t\t\t// first.top < scrollTop + height <= first.bottom; the position\n\t\t\t\t// satisfying both is where the viewport sat\n\t\t\t\tconst base = body.scrollTop - body.getBoundingClientRect().top\n\t\t\t\tconst t = top.getBoundingClientRect()\n\t\t\t\tlet lo = t.top + base\n\t\t\t\tlet hi = t.bottom + base\n\t\t\t\tconst bottom = body.querySelector(`.kchat-day[data-id=\"${seedFirst}\"]`)\n\t\t\t\tif (bottom) {\n\t\t\t\t\tconst f = bottom.getBoundingClientRect()\n\t\t\t\t\tlo = Math.max(lo, f.top + base - body.clientHeight)\n\t\t\t\t\thi = Math.min(hi, f.bottom + base - body.clientHeight)\n\t\t\t\t}\n\t\t\t\t// a resize can leave no position satisfying both: keep the top\n\t\t\t\tbody.scrollTop = lo <= hi ? (lo + hi) / 2 : t.top + base\n\t\t\t}\n\t\t\tbody.addEventListener(\"scroll\", report, { passive: true })\n\t\t\treport()\n\t\t})"); if __e != nil { return }
+				__e = __c.Raw("const script = document.currentScript\n\t\tconst body = script.closest(\".kchat-side-body\")\n\t\tconst seedFirst = $data(\"first\")\n\t\tconst seedLast = $data(\"last\")\n\t\t// the seeded window already matches this range, so an identical first\n\t\t// report needs no round trip\n\t\tlet sent = seedLast ? `${seedFirst}:${seedLast}` : \"\"\n\t\tconst widget = body.closest(\".kchat-widget\")\n\t\tlet reported = false\n\t\tconst report = () => {\n\t\t\tconst b = body.getBoundingClientRect()\n\t\t\tlet first = \"\"\n\t\t\tlet last = \"\"\n\t\t\tfor (const s of body.querySelectorAll(\".kchat-day[data-id]\")) {\n\t\t\t\tif (s.hasAttribute(\"data-pending\")) continue\n\t\t\t\tconst r = s.getBoundingClientRect()\n\t\t\t\tif (r.height === 0 || r.bottom <= b.top || r.top >= b.bottom) continue\n\t\t\t\t// sections run newest first, so the topmost on screen is last\n\t\t\t\tif (last === \"\") last = s.dataset.id\n\t\t\t\tfirst = s.dataset.id\n\t\t\t}\n\t\t\tif (first === \"\") return\n\t\t\tconst key = `${first}:${last}`\n\t\t\tif (key === sent) return\n\t\t\tsent = key\n\t\t\t$hook(\"sync\", { first, last }).then(\n\t\t\t\t() => {\n\t\t\t\t\treported = false\n\t\t\t\t},\n\t\t\t\t(err) => {\n\t\t\t\t\tsent = \"\"\n\t\t\t\t\tif (reported || !(err instanceof HookErr) || !err.network()) return\n\t\t\t\t\treported = true\n\t\t\t\t\twidget.dispatchEvent(new CustomEvent(\"kchat_error\", { detail: err.kind }))\n\t\t\t\t},\n\t\t\t)\n\t\t}\n\t\tconst edge = (e) => {\n\t\t\tconst top = e.deltaY < 0 && body.scrollTop <= 0\n\t\t\tconst bottom =\n\t\t\t\te.deltaY > 0 && body.scrollTop + body.clientHeight >= body.scrollHeight - 1\n\t\t\tif (!top && !bottom) return\n\t\t\tsent = \"\"\n\t\t\treport()\n\t\t}\n\t\t$sys.clean(() => {\n\t\t\tbody.removeEventListener(\"scroll\", report)\n\t\t\tbody.removeEventListener(\"wheel\", edge)\n\t\t})\n\t\tawait $sys.ready()\n\t\trequestAnimationFrame(() => {\n\t\t\tconst top = body.querySelector(`.kchat-day[data-id=\"${seedLast}\"]`)\n\t\t\tif (seedLast && top) {\n\t\t\t\t// first and last are the sections whose boxes met the viewport,\n\t\t\t\t// so last.top <= scrollTop < last.bottom and\n\t\t\t\t// first.top < scrollTop + height <= first.bottom; the position\n\t\t\t\t// satisfying both is where the viewport sat\n\t\t\t\tconst base = body.scrollTop - body.getBoundingClientRect().top\n\t\t\t\tconst t = top.getBoundingClientRect()\n\t\t\t\tlet lo = t.top + base\n\t\t\t\tlet hi = t.bottom + base\n\t\t\t\tconst bottom = body.querySelector(`.kchat-day[data-id=\"${seedFirst}\"]`)\n\t\t\t\tif (bottom) {\n\t\t\t\t\tconst f = bottom.getBoundingClientRect()\n\t\t\t\t\tlo = Math.max(lo, f.top + base - body.clientHeight)\n\t\t\t\t\thi = Math.min(hi, f.bottom + base - body.clientHeight)\n\t\t\t\t}\n\t\t\t\t// a resize can leave no position satisfying both: keep the top\n\t\t\t\tbody.scrollTop = lo <= hi ? (lo + hi) / 2 : t.top + base\n\t\t\t}\n\t\t\tbody.addEventListener(\"scroll\", report, { passive: true })\n\t\t\tbody.addEventListener(\"wheel\", edge, { passive: true })\n\t\t\treport()\n\t\t})"); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
-//line window.gox:402
+//line window.gox:449
 }
 
 type syncMsg struct {
@@ -410,20 +465,20 @@ type syncMsg struct {
 	Last string `json:"last"`
 }
 
-//line window.gox:409
+//line window.gox:456
 func restoreScroll(batch int, edge string) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("script"); if __e != nil { return }
 		{
-//line window.gox:410
+//line window.gox:457
 			__e = __c.Set("data:batch", batch); if __e != nil { return }
-//line window.gox:410
+//line window.gox:457
 			__e = __c.Set("data:edge", edge); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Raw("const script = document.currentScript\n\t\tconst body = script.closest(\".kchat-side-body\")\n\t\tconst top = body.scrollTop\n\t\tconst h0 = body.scrollHeight\n\t\tfor (const s of body.querySelectorAll(\n\t\t\t`.kchat-day[data-batch=\"${$data(\"batch\")}\"]`,\n\t\t)) {\n\t\t\ts.removeAttribute(\"data-pending\")\n\t\t}\n\t\tconst grew = body.scrollHeight - h0\n\t\tif ($data(\"edge\") === \"top\") {\n\t\t\tbody.scrollTo({ top: top + grew, behavior: \"instant\" })\n\t\t} else {\n\t\t\tbody.scrollTo({ top, behavior: \"instant\" })\n\t\t}\n\t\tbody.dispatchEvent(new Event(\"scroll\"))"); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line window.gox:428
+//line window.gox:475
 }

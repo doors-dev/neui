@@ -9,6 +9,7 @@ import (
 	"neui.dev/api"
 	"neui.dev/kchat/icons"
 	"neui.dev/kchat/params"
+	"neui.dev/kchat/notify"
 )
 
 type renameForm struct {
@@ -53,6 +54,7 @@ elem (r *row) open() {
 				rp.After(doors.ActionEmit[any]{Name: "opened"})
 				return false
 			},
+			OnError: notify.OnError,
 		} <button class="kchat-thread">
 			~(if r.instance == "" {
 				<span class="kchat-dot kchat-dot_off" aria-hidden="true"></span>
@@ -82,6 +84,7 @@ elem (r *row) kebab(toggle func(ctx context.Context)) {
 			toggle(ctx)
 			return false
 		},
+		OnError: notify.OnError,
 	} <button class="kchat-iconbtn" aria-label="Chat actions">
 		~>(doors.Class("kchat-ic")) ~(icons.DotsThreeVertical())
 	</button>
@@ -96,6 +99,7 @@ elem (r *row) actions(hide func(ctx context.Context)) {
 			id, err := r.aside.Instance.ThreadClone(ctx, r.thread.ID)
 			if err != nil {
 				doors.Logger(ctx).Error("aside: clone", "thread", r.thread.ID, "err", err)
+				notify.Error(ctx, err)
 				hide(ctx)
 				return
 			}
@@ -115,6 +119,7 @@ elem (r *row) action(icon gox.Elem, label string, on func(ctx context.Context)) 
 			on(ctx)
 			return false
 		},
+		OnError: notify.OnError,
 	} <button class="kchat-act" role="menuitem">
 		~>(doors.Class("kchat-ic")) ~(icon)
 		<span>~(label)</span>
@@ -129,6 +134,7 @@ elem (r *row) rename(hide func(ctx context.Context)) {
 			if n != r.thread.Name {
 				if err := r.aside.Instance.ThreadRename(ctx, r.thread.ID, n); err != nil {
 					doors.Logger(ctx).Error("aside: rename", "thread", r.thread.ID, "err", err)
+					notify.Error(ctx, err)
 				} else {
 					r.day.Reload(ctx)
 				}
@@ -136,6 +142,7 @@ elem (r *row) rename(hide func(ctx context.Context)) {
 			hide(ctx)
 			return false
 		},
+		OnError: notify.OnError,
 	} <form class="kchat-form" aria-label="Rename chat">
 		<div class="kchat-form-field">
 			~>doors.AKeyDown{
@@ -145,6 +152,7 @@ elem (r *row) rename(hide func(ctx context.Context)) {
 					hide(ctx)
 					return false
 				},
+				OnError: notify.OnError,
 			} <input
 				class="kchat-text"
 				name="name"
@@ -165,6 +173,7 @@ elem (r *row) rename(hide func(ctx context.Context)) {
 					hide(ctx)
 					return false
 				},
+				OnError: notify.OnError,
 			} <button type="button" class="kchat-btn kchat-btn_2nd">Cancel</button>
 			<button type="submit" class="kchat-btn">Save</button>
 		</div>
@@ -187,18 +196,21 @@ elem (r *row) confirm(hide func(ctx context.Context)) {
 					hide(ctx)
 					return false
 				},
+				OnError: notify.OnError,
 			} <button type="button" class="kchat-btn kchat-btn_2nd">Cancel</button>
 			~>doors.AClick{
 				Scope: new(doors.ScopeBlocking),
 				On: func(ctx context.Context, rp doors.RequestPointer) bool {
 					if err := r.aside.Instance.ThreadDelete(ctx, r.thread.ID); err != nil {
 						doors.Logger(ctx).Error("aside: delete", "thread", r.thread.ID, "err", err)
+						notify.Error(ctx, err)
 					} else {
 						r.day.Reload(ctx)
 					}
 					hide(ctx)
 					return false
 				},
+				OnError: notify.OnError,
 			} <button type="button" class="kchat-btn kchat-btn_del">Delete</button>
 		</div>
 	</div>

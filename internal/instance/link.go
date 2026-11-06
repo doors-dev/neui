@@ -131,27 +131,13 @@ func (l Link) Ch() <-chan thread.Message {
 }
 
 func (l *link) prepeare(m thread.Message) (thread.Message, bool) {
-	_, isInit := m.(thread.MessageInit)
-	if l.initialized {
-		if isInit {
-			return nil, false
-		}
+	switch m.(type) {
+	case thread.MessageInit:
+		return m, !l.initialized
+	case thread.MessageReload:
 		return m, true
 	}
-	if isInit {
-		return m, true
-	}
-	if _, isReload := m.(thread.MessageReload); isReload {
-		return m, true
-	}
-	em, ok := m.(thread.MessageEvent)
-	if !ok {
-		return nil, false
-	}
-	if _, ok := em.Event.(api.ChatEventCriticalError); !ok {
-		return nil, false
-	}
-	return em.IntoInit(api.ChatState{}, nil), true
+	return m, l.initialized
 }
 
 func (l *link) send(m thread.Message) {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -90,7 +91,7 @@ func TestEncodeInput(t *testing.T) {
 			)}},
 			want: `[{"role":"user","content":[
 				{"type":"input_text","text":"what is this"},
-				{"type":"input_image","image_url":"data:image/png;base64,iVA=","detail":"auto"}]}]`,
+				{"type":"input_image","image_url":"data:image/png;base64,iVA=","detail":"high"}]}]`,
 		},
 		{
 			name: "a document without a name gets one that matches its media type",
@@ -151,14 +152,14 @@ func TestEncodeInput(t *testing.T) {
 				{"type":"input_text","text":"here"}]}]`,
 		},
 		{
-			name: "assistant text goes back as a typed block array, the same as the user role",
+			name: "assistant text goes back as output_text parts, the only text part an assistant message takes",
 			req: api.Request{Messages: []api.Message{
 				user(api.ContentText{Text: "hi"}),
 				assistant(api.ContentText{Text: "hello"}),
 				user(api.ContentText{Text: "again"}),
 			}},
 			want: `[{"role":"user","content":[{"type":"input_text","text":"hi"}]},
-				{"role":"assistant","content":[{"type":"input_text","text":"hello"}]},
+				{"role":"assistant","content":[{"type":"output_text","text":"hello"}]},
 				{"role":"user","content":[{"type":"input_text","text":"again"}]}]`,
 		},
 		{
@@ -172,11 +173,11 @@ func TestEncodeInput(t *testing.T) {
 				),
 			}},
 			want: `[{"role":"assistant","content":[
-					{"type":"input_text","text":"Let me check."},
-					{"type":"input_text","text":"Two things."}]},
+					{"type":"output_text","text":"Let me check."},
+					{"type":"output_text","text":"Two things."}]},
 				{"type":"function_call","call_id":"call_a","name":"search","arguments":"{}"},
 				{"role":"assistant","content":[
-					{"type":"input_text","text":"Found it."}]}]`,
+					{"type":"output_text","text":"Found it."}]}]`,
 		},
 		{
 			name: "a tool call and its result are top level items, not blocks",
@@ -189,7 +190,7 @@ func TestEncodeInput(t *testing.T) {
 				user(api.ContentToolResult{ID: "call_a", Content: api.UserContents{api.ContentText{Text: "18C"}}}),
 			}},
 			want: `[{"role":"user","content":[{"type":"input_text","text":"weather?"}]},
-				{"role":"assistant","content":[{"type":"input_text","text":"Looking."}]},
+				{"role":"assistant","content":[{"type":"output_text","text":"Looking."}]},
 				{"type":"function_call","call_id":"call_a","name":"get_weather","arguments":"{\"city\":\"Paris\"}"},
 				{"type":"function_call_output","call_id":"call_a","output":[{"type":"input_text","text":"18C"}]}]`,
 		},
@@ -241,7 +242,7 @@ func TestEncodeInput(t *testing.T) {
 			}},
 			want: `[{"type":"function_call_output","call_id":"call_a","output":[
 				{"type":"input_text","text":"here"},
-				{"type":"input_image","image_url":"data:image/jpeg;base64,AQ==","detail":"auto"}]}]`,
+				{"type":"input_image","image_url":"data:image/jpeg;base64,AQ==","detail":"high"}]}]`,
 		},
 		{
 			// Every kind the subset admits today has an output part here, so what
@@ -307,7 +308,7 @@ func TestEncodeInput(t *testing.T) {
 			// function_call names the reasoning item the service would pair it
 			// with, and the result answering it is in the message after this
 			// one.
-			want: `[{"role":"assistant","content":[{"type":"input_text","text":"[reasoning omitted]"}]},
+			want: `[{"role":"assistant","content":[{"type":"output_text","text":"[reasoning omitted]"}]},
 				{"type":"function_call","call_id":"call_a","name":"t","arguments":"{}"}]`,
 		},
 		{
@@ -322,7 +323,7 @@ func TestEncodeInput(t *testing.T) {
 			}},
 			want: `[{"id":"rs_1","type":"reasoning","encrypted_content":"SEALED"},
 				{"type":"function_call","call_id":"call_a","name":"t","arguments":"{}"},
-				{"role":"assistant","content":[{"type":"input_text","text":"[reasoning omitted]"}]},
+				{"role":"assistant","content":[{"type":"output_text","text":"[reasoning omitted]"}]},
 				{"type":"function_call","call_id":"call_b","name":"t","arguments":"{}"}]`,
 		},
 		{
@@ -350,7 +351,7 @@ func TestEncodeInput(t *testing.T) {
 					api.ContentText{Text: "the answer"},
 				),
 			}},
-			want: `[{"role":"assistant","content":[{"type":"input_text","text":"the answer"}]}]`,
+			want: `[{"role":"assistant","content":[{"type":"output_text","text":"the answer"}]}]`,
 		},
 		{
 			name:     "ReplayAlways keeps it",
@@ -362,7 +363,7 @@ func TestEncodeInput(t *testing.T) {
 				),
 			}},
 			want: `[{"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"SEALED"},
-				{"role":"assistant","content":[{"type":"input_text","text":"the answer"}]}]`,
+				{"role":"assistant","content":[{"type":"output_text","text":"the answer"}]}]`,
 		},
 		{
 			// The reasoning items are the whole of what this mode removes. A
@@ -386,7 +387,7 @@ func TestEncodeInput(t *testing.T) {
 			want: `[{"role":"user","content":[{"type":"input_text","text":"weather?"}]},
 				{"type":"function_call","call_id":"call_a","name":"get_weather","arguments":"{\"city\":\"Paris\"}"},
 				{"type":"function_call_output","call_id":"call_a","output":[{"type":"input_text","text":"18C"}]},
-				{"role":"assistant","content":[{"type":"input_text","text":"It is 18C."}]}]`,
+				{"role":"assistant","content":[{"type":"output_text","text":"It is 18C."}]}]`,
 		},
 		{
 			name:     "reasoning at the end of a turn has no following item to be paired with",
@@ -397,7 +398,7 @@ func TestEncodeInput(t *testing.T) {
 					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: json.RawMessage(`{"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"SEALED"}`)},
 				),
 			}},
-			want: `[{"role":"assistant","content":[{"type":"input_text","text":"so far"}]}]`,
+			want: `[{"role":"assistant","content":[{"type":"output_text","text":"so far"}]}]`,
 		},
 		{
 			name: "reasoning carrying neither a summary nor an encoding of its own leaves its note, and its call goes",
@@ -407,7 +408,7 @@ func TestEncodeInput(t *testing.T) {
 					api.ContentToolUse{ID: "call_a", Name: "t", Input: json.RawMessage(`{}`)},
 				),
 			}},
-			want: `[{"role":"assistant","content":[{"type":"input_text","text":"[reasoning omitted]"}]},
+			want: `[{"role":"assistant","content":[{"type":"output_text","text":"[reasoning omitted]"}]},
 				{"type":"function_call","call_id":"call_a","name":"t","arguments":"{}"}]`,
 		},
 		{
@@ -423,9 +424,9 @@ func TestEncodeInput(t *testing.T) {
 				),
 			}},
 			want: `[{"role":"assistant","content":[
-				{"type":"input_text","text":"so far"},
-				{"type":"input_text","text":"[reasoning omitted]"},
-				{"type":"input_text","text":"the answer"}]}]`,
+				{"type":"output_text","text":"so far"},
+				{"type":"output_text","text":"[reasoning omitted]"},
+				{"type":"output_text","text":"the answer"}]}]`,
 		},
 		{
 			// A reasoning item names no model anywhere in it and its payload is
@@ -455,7 +456,7 @@ func TestEncodeInput(t *testing.T) {
 					api.ContentText{Text: "the answer", Meta: phaseMeta("gpt-5.1", "commentary")},
 				),
 			}},
-			want: `[{"role":"assistant","content":[{"type":"input_text","text":"the answer"}]}]`,
+			want: `[{"role":"assistant","content":[{"type":"output_text","text":"the answer"}]}]`,
 		},
 		{
 			name:  "a gateway spelling of the same model still labels the message",
@@ -465,7 +466,7 @@ func TestEncodeInput(t *testing.T) {
 					api.ContentText{Text: "the answer", Meta: phaseMeta("gpt-5.6-sol", "commentary")},
 				),
 			}},
-			want: `[{"role":"assistant","content":[{"type":"input_text","text":"the answer"}],"phase":"commentary"}]`,
+			want: `[{"role":"assistant","content":[{"type":"output_text","text":"the answer"}],"phase":"commentary"}]`,
 		},
 		{
 			// The label is on the block, so it travels with it wherever the block
@@ -478,9 +479,9 @@ func TestEncodeInput(t *testing.T) {
 					api.ContentText{Text: "the answer", Meta: phaseMeta("gpt-5.6-sol", "final_answer")},
 				),
 			}},
-			want: `[{"role":"assistant","content":[{"type":"input_text","text":"let me look"}],"phase":"commentary"},
+			want: `[{"role":"assistant","content":[{"type":"output_text","text":"let me look"}],"phase":"commentary"},
 				{"type":"function_call","call_id":"call_a","name":"t","arguments":"{}"},
-				{"role":"assistant","content":[{"type":"input_text","text":"the answer"}],"phase":"final_answer"}]`,
+				{"role":"assistant","content":[{"type":"output_text","text":"the answer"}],"phase":"final_answer"}]`,
 		},
 		{
 			// A run is one message only as far as the blocks agree, because a
@@ -494,9 +495,9 @@ func TestEncodeInput(t *testing.T) {
 				),
 			}},
 			want: `[{"role":"assistant","content":[
-					{"type":"input_text","text":"let me look"},
-					{"type":"input_text","text":"still looking"}],"phase":"commentary"},
-				{"role":"assistant","content":[{"type":"input_text","text":"the answer"}]}]`,
+					{"type":"output_text","text":"let me look"},
+					{"type":"output_text","text":"still looking"}],"phase":"commentary"},
+				{"role":"assistant","content":[{"type":"output_text","text":"the answer"}]}]`,
 		},
 		{
 			// Meta another adapter wrote parses to nothing this one recognizes,
@@ -507,7 +508,7 @@ func TestEncodeInput(t *testing.T) {
 					api.ContentText{Text: "the answer", Meta: json.RawMessage(`"c3ln"`)},
 				),
 			}},
-			want: `[{"role":"assistant","content":[{"type":"input_text","text":"the answer"}]}]`,
+			want: `[{"role":"assistant","content":[{"type":"output_text","text":"the answer"}]}]`,
 		},
 		{
 			// An opaque payload is an output item the input array takes back, so
@@ -521,9 +522,9 @@ func TestEncodeInput(t *testing.T) {
 					api.ContentText{Text: "the answer"},
 				),
 			}},
-			want: `[{"role":"assistant","content":[{"type":"input_text","text":"let me search"}]},
+			want: `[{"role":"assistant","content":[{"type":"output_text","text":"let me search"}]},
 				{"id":"ws_1","type":"web_search_call","status":"completed"},
-				{"role":"assistant","content":[{"type":"input_text","text":"the answer"}]}]`,
+				{"role":"assistant","content":[{"type":"output_text","text":"the answer"}]}]`,
 		},
 		{
 			// The finished item carried the field its fragments streamed, so the
@@ -549,12 +550,193 @@ func TestEncodeInput(t *testing.T) {
 			name: "a hosted tool call carries the reasoning in front of it",
 			req: api.Request{Messages: []api.Message{
 				assistant(
-					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: json.RawMessage(`{"id":"rs_1","type":"reasoning","summary":[]}`)},
+					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: json.RawMessage(`{"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"SEALED"}`)},
 					api.ContentOpaque{Model: "gpt-5.6-sol", Kind: "web_search_call", Data: json.RawMessage(`{"id":"ws_1","type":"web_search_call","status":"completed"}`)},
 				),
 			}},
-			want: `[{"id":"rs_1","type":"reasoning","summary":[]},
+			want: `[{"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"SEALED"},
 				{"id":"ws_1","type":"web_search_call","status":"completed"}]`,
+		},
+		{
+			name: "a Claude signature as meta is another provider's and leaves a note, and the call goes",
+			req: api.Request{Messages: []api.Message{
+				assistant(
+					api.ContentReasoning{Model: "claude-opus-5", Thoughts: map[int]string{0: "theirs"}, Meta: json.RawMessage(`"EqQBCkYIBRgC"`)},
+					api.ContentToolUse{ID: "call_a", Name: "t", Input: json.RawMessage(`{}`)},
+				),
+			}},
+			want: `[{"role":"assistant","content":[{"type":"output_text","text":"[reasoning omitted]"}]},
+				{"type":"function_call","call_id":"call_a","name":"t","arguments":"{}"}]`,
+		},
+		{
+			name: "a redacted_thinking block as meta is another provider's",
+			req: api.Request{Messages: []api.Message{
+				assistant(
+					api.ContentReasoning{Model: "claude-opus-5", Meta: json.RawMessage(`{"type":"redacted_thinking","data":"EvwBCkYIA"}`)},
+					api.ContentToolUse{ID: "call_a", Name: "t", Input: json.RawMessage(`{}`)},
+				),
+			}},
+			want: `[{"role":"assistant","content":[{"type":"output_text","text":"[reasoning omitted]"}]},
+				{"type":"function_call","call_id":"call_a","name":"t","arguments":"{}"}]`,
+		},
+		{
+			name: "a reasoning item without an rs_ id is not this service's",
+			req: api.Request{Messages: []api.Message{
+				assistant(
+					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: json.RawMessage(`{"id":"x_1","type":"reasoning","encrypted_content":"SEALED"}`)},
+					api.ContentToolUse{ID: "call_a", Name: "t", Input: json.RawMessage(`{}`)},
+				),
+			}},
+			want: `[{"role":"assistant","content":[{"type":"output_text","text":"[reasoning omitted]"}]},
+				{"type":"function_call","call_id":"call_a","name":"t","arguments":"{}"}]`,
+		},
+		{
+			name: "Messages API server tool blocks are another provider's and leave notes",
+			req: api.Request{Messages: []api.Message{
+				assistant(
+					api.ContentOpaque{Model: "claude-opus-5", Kind: "server_tool_use", Data: json.RawMessage(`{"type":"server_tool_use","id":"srvtoolu_1","name":"web_search","input":{"query":"q"}}`)},
+					api.ContentOpaque{Model: "claude-opus-5", Kind: "web_search_tool_result", Data: json.RawMessage(`{"type":"web_search_tool_result","tool_use_id":"srvtoolu_1","content":[]}`)},
+					api.ContentText{Text: "the answer"},
+				),
+			}},
+			want: `[{"role":"assistant","content":[
+				{"type":"output_text","text":"[content omitted]"},
+				{"type":"output_text","text":"[content omitted]"},
+				{"type":"output_text","text":"the answer"}]}]`,
+		},
+		{
+			name: "an opaque payload whose type is not its kind is not this service's",
+			req: api.Request{Messages: []api.Message{
+				assistant(
+					api.ContentOpaque{Model: "gpt-5.6-sol", Kind: "web_search_call", Data: json.RawMessage(`{"id":"ci_1","type":"code_interpreter_call"}`)},
+				),
+			}},
+			want: `[{"role":"assistant","content":[{"type":"output_text","text":"[content omitted]"}]}]`,
+		},
+		{
+			name:  "a reasoning item another model of the family made goes back byte for byte",
+			model: "gpt-5.5",
+			req: api.Request{Messages: []api.Message{
+				assistant(
+					api.ContentReasoning{Model: "gpt-5", Meta: json.RawMessage(`{"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"SEALED"}`)},
+					api.ContentToolUse{ID: "call_a", Name: "t", Input: json.RawMessage(`{}`)},
+				),
+			}},
+			want: `[{"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"SEALED"},
+				{"type":"function_call","call_id":"call_a","name":"t","arguments":"{}"}]`,
+		},
+		{
+			name: "with store off a reasoning item with no encrypted content leaves a note, and the call goes",
+			req: api.Request{Messages: []api.Message{
+				assistant(
+					api.ContentReasoning{Model: "gpt-5.6-sol", Summary: map[int]string{0: "thinking"}, Meta: json.RawMessage(`{"id":"rs_1","type":"reasoning","summary":[{"type":"summary_text","text":"thinking"}]}`)},
+					api.ContentToolUse{ID: "call_a", Name: "t", Input: json.RawMessage(`{}`)},
+				),
+			}},
+			want: `[{"role":"assistant","content":[{"type":"output_text","text":"[reasoning omitted]"}]},
+				{"type":"function_call","call_id":"call_a","name":"t","arguments":"{}"}]`,
+		},
+		{
+			name:     "with store on a reasoning item replays by id",
+			settings: func(s *settings) { s.store = true },
+			req: api.Request{Messages: []api.Message{
+				assistant(
+					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: json.RawMessage(`{"id":"rs_1","type":"reasoning","summary":[]}`)},
+					api.ContentToolUse{ID: "call_a", Name: "t", Input: json.RawMessage(`{}`)},
+				),
+			}},
+			want: `[{"id":"rs_1","type":"reasoning","summary":[]},
+				{"type":"function_call","call_id":"call_a","name":"t","arguments":"{}"}]`,
+		},
+		{
+			name:     "with store on a reasoning item with nothing after it is still not sent",
+			settings: func(s *settings) { s.store = true },
+			req: api.Request{Messages: []api.Message{
+				assistant(
+					api.ContentText{Text: "so far"},
+					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: json.RawMessage(`{"id":"rs_1","type":"reasoning","summary":[]}`)},
+				),
+			}},
+			want: `[{"role":"assistant","content":[{"type":"output_text","text":"so far"}]}]`,
+		},
+		{
+			name: "a commentary preamble between reasoning and its call keeps the pairing",
+			req: api.Request{Messages: []api.Message{
+				assistant(
+					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: json.RawMessage(`{"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"SEALED"}`)},
+					api.ContentText{Text: "let me look", Meta: phaseMeta("gpt-5.6-sol", "commentary")},
+					api.ContentToolUse{ID: "call_a", Name: "t", Input: json.RawMessage(`{}`)},
+				),
+			}},
+			want: `[{"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"SEALED"},
+				{"role":"assistant","content":[{"type":"output_text","text":"let me look"}],"phase":"commentary"},
+				{"type":"function_call","call_id":"call_a","name":"t","arguments":"{}"}]`,
+		},
+		{
+			name: "a reasoning item whose next reasoning item comes before any call is dropped",
+			req: api.Request{Messages: []api.Message{
+				assistant(
+					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: json.RawMessage(`{"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"ONE"}`)},
+					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: json.RawMessage(`{"id":"rs_2","type":"reasoning","summary":[],"encrypted_content":"TWO"}`)},
+					api.ContentText{Text: "let me look"},
+					api.ContentToolUse{ID: "call_a", Name: "t", Input: json.RawMessage(`{}`)},
+				),
+			}},
+			want: `[{"id":"rs_2","type":"reasoning","summary":[],"encrypted_content":"TWO"},
+				{"role":"assistant","content":[{"type":"output_text","text":"let me look"}]},
+				{"type":"function_call","call_id":"call_a","name":"t","arguments":"{}"}]`,
+		},
+		{
+			name: "reasoning last in a turn is not sent by default",
+			req: api.Request{Messages: []api.Message{
+				assistant(
+					api.ContentToolUse{ID: "call_a", Name: "t", Input: json.RawMessage(`{}`)},
+					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: json.RawMessage(`{"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"SEALED"}`)},
+				),
+			}},
+			want: `[{"type":"function_call","call_id":"call_a","name":"t","arguments":"{}"}]`,
+		},
+		{
+			name: "a user image the service refuses by type and a user document with no type leave notes",
+			req: api.Request{Messages: []api.Message{
+				user(
+					api.ContentImage{Data: []byte("BM"), Mime: "image/bmp"},
+					api.ContentDocument{Data: []byte("%PDF")},
+					api.ContentText{Text: "here"},
+				),
+			}},
+			want: `[{"role":"user","content":[
+				{"type":"input_text","text":"[image omitted]"},
+				{"type":"input_text","text":"[document omitted]"},
+				{"type":"input_text","text":"here"}]}]`,
+		},
+		{
+			name: "a docx goes as a file named for its type",
+			req: api.Request{Messages: []api.Message{
+				user(api.ContentDocument{Data: []byte("PK"), Mime: string(api.DocumentDOCX)}),
+			}},
+			want: `[{"role":"user","content":[{"type":"input_file","filename":"document.docx","file_data":"data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,UEs="}]}]`,
+		},
+		{
+			name: "a result with no blocks says the tool returned no output",
+			req: api.Request{Messages: []api.Message{
+				user(api.ContentToolResult{ID: "call_a"}),
+			}},
+			want: `[{"type":"function_call_output","call_id":"call_a","output":[{"type":"input_text","text":"(the tool returned no output)"}]}]`,
+		},
+		{
+			name: "a failed result with no blocks is only its error part",
+			req: api.Request{Messages: []api.Message{
+				user(api.ContentToolResult{ID: "call_a", Error: api.ToolErrRuntime}),
+			}},
+			want: `[{"type":"function_call_output","call_id":"call_a","output":[{"type":"input_text","text":"Error:"}]}]`,
+		},
+		{
+			name: "a result whose only block is an empty image keeps the note rather than the empty-result text",
+			req: api.Request{Messages: []api.Message{
+				user(api.ContentToolResult{ID: "call_a", Content: api.UserContents{api.ContentImage{Mime: "image/png"}}}),
+			}},
+			want: `[{"type":"function_call_output","call_id":"call_a","output":[{"type":"input_text","text":"[image omitted]"}]}]`,
 		},
 		{
 			name: "an attachment on an assistant turn leaves a note, because this wire has no part for one",
@@ -565,8 +747,8 @@ func TestEncodeInput(t *testing.T) {
 				),
 			}},
 			want: `[{"role":"assistant","content":[
-				{"type":"input_text","text":"[image omitted]"},
-				{"type":"input_text","text":"the answer"}]}]`,
+				{"type":"output_text","text":"[image omitted]"},
+				{"type":"output_text","text":"the answer"}]}]`,
 		},
 		{
 			name: "reasoning and a payload in a user turn belong to the assistant turn that produced them",
@@ -735,22 +917,6 @@ func TestEncodeRejections(t *testing.T) {
 			wantSub: "no model",
 		},
 		{
-			name:  "an image type the vision models do not read",
-			model: testModel,
-			req: api.Request{Messages: []api.Message{
-				user(api.ContentImage{Data: []byte("x"), Mime: "image/svg+xml"}),
-			}},
-			wantSub: "image/svg+xml",
-		},
-		{
-			name:  "a document with no media type",
-			model: testModel,
-			req: api.Request{Messages: []api.Message{
-				user(api.ContentDocument{Data: []byte("x")}),
-			}},
-			wantSub: "media type",
-		},
-		{
 			// The result answering it says the call succeeded, so the arguments
 			// the model sent are unaccounted for, and an empty object in their
 			// place would replay as a legitimate call that takes none.
@@ -808,32 +974,38 @@ func TestModelClassification(t *testing.T) {
 }
 
 func TestProviderOptions(t *testing.T) {
+	build := func(t *testing.T, m api.Model, opts ...Option) *Provider {
+		t.Helper()
+		p, err := New(Conf{Model: m}, opts...)
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+		return p
+	}
+
 	t.Run("the key comes from the environment", func(t *testing.T) {
 		t.Setenv(apiKeyEnv, "env-key")
-		p := New(Conf{Model: api.Model{Name: testModel}})
-		if p.apiKey != "env-key" {
+		if p := build(t, api.Model{Name: testModel}); p.apiKey != "env-key" {
 			t.Fatalf("apiKey %q", p.apiKey)
 		}
 	})
 
 	t.Run("a missing key still builds, with an empty key", func(t *testing.T) {
 		t.Setenv(apiKeyEnv, "")
-		p := New(Conf{Model: api.Model{Name: testModel}})
-		if p.apiKey != "" {
+		if p := build(t, api.Model{Name: testModel}); p.apiKey != "" {
 			t.Fatalf("apiKey %q, want empty", p.apiKey)
 		}
 	})
 
 	t.Run("an explicitly empty key means no header", func(t *testing.T) {
 		t.Setenv(apiKeyEnv, "env-key")
-		p := New(Conf{Model: api.Model{Name: testModel}}, WithAPIKey(""))
-		if p.apiKey != "" {
+		if p := build(t, api.Model{Name: testModel}, WithAPIKey("")); p.apiKey != "" {
 			t.Fatalf("apiKey %q, want empty", p.apiKey)
 		}
 	})
 
 	t.Run("options land on the settings the turn is built from", func(t *testing.T) {
-		p := New(Conf{Model: api.Model{Name: testModel}}, WithAPIKey("k"), WithTemperature(0.7), WithMaxTokens(2048))
+		p := build(t, api.Model{Name: testModel}, WithAPIKey("k"), nil, WithTemperature(0.7), WithMaxTokens(2048))
 		if p.set.temperature == nil || *p.set.temperature != 0.7 {
 			t.Fatalf("temperature %v", p.set.temperature)
 		}
@@ -842,72 +1014,76 @@ func TestProviderOptions(t *testing.T) {
 		}
 	})
 
-	// A cap the service answers 400 to is the configuration being wrong, and
-	// whoever wrote it is there to be told, where raising it silently sends a
-	// turn nobody asked for.
-	t.Run("a cap under the schema minimum is refused rather than raised", func(t *testing.T) {
-		p := New(Conf{Model: api.Model{Name: testModel}}, WithAPIKey("k"), WithMaxTokens(4))
-		if p.set.maxTokens != 0 {
-			t.Fatalf("maxTokens %d, want the refused option to have changed nothing", p.set.maxTokens)
-		}
-		if err := WithMaxTokens(-1)(p); err == nil {
-			t.Fatal("a negative cap must be refused")
-		}
-		if err := WithMaxTokens(maxOutputTokensFloor)(p); err != nil {
-			t.Fatalf("the schema minimum must be accepted: %v", err)
+	t.Run("an invalid option fails New", func(t *testing.T) {
+		for name, o := range map[string]Option{
+			"temperature": WithTemperature(3),
+			"base url":    WithBaseURL("no-scheme"),
+			"replay":      WithReasoningReplay(ReplayMode(9)),
+		} {
+			if p, err := New(Conf{Model: GPT56Sol}, WithAPIKey("k"), o); err == nil || p != nil {
+				t.Errorf("%s: New returned %v, %v, want only an error", name, p, err)
+			}
 		}
 	})
 
-	t.Run("a cap over a declared model's output limit is refused", func(t *testing.T) {
-		p := New(Conf{Model: GPT6Sol}, WithAPIKey("k"), WithMaxTokens(128_001))
-		if p.set.maxTokens != 0 {
-			t.Fatalf("maxTokens %d, want the refused option to have changed nothing", p.set.maxTokens)
+	t.Run("max tokens: zero is the default, negative and under the minimum fail", func(t *testing.T) {
+		if p := build(t, GPT56Sol, WithAPIKey("k"), WithMaxTokens(0)); p.set.maxTokens != 0 {
+			t.Fatalf("maxTokens %d, want no cap", p.set.maxTokens)
 		}
-		if err := WithMaxTokens(128_000)(p); err != nil {
-			t.Fatalf("the documented ceiling must be accepted: %v", err)
+		for _, n := range []int{-1, 4, maxOutputTokensFloor - 1} {
+			if _, err := New(Conf{Model: GPT56Sol}, WithAPIKey("k"), WithMaxTokens(n)); err == nil {
+				t.Errorf("WithMaxTokens(%d) built", n)
+			}
 		}
-		own := New(Conf{Model: api.Model{Name: "gpt-7"}}, WithAPIKey("k"), WithMaxTokens(256_000))
-		if own.set.maxTokens != 256_000 {
-			t.Fatalf("maxTokens %d, want an undeclared model left unchecked", own.set.maxTokens)
+		build(t, GPT56Sol, WithAPIKey("k"), WithMaxTokens(maxOutputTokensFloor))
+	})
+
+	t.Run("a cap over a declared model's output limit fails New", func(t *testing.T) {
+		for _, m := range []api.Model{GPT56Sol, GPT56Luna, GPT6Astra, GPT6Sol, GPT6Luna, GPT61Sol, GPT61Terra} {
+			if _, err := New(Conf{Model: m}, WithAPIKey("k"), WithMaxTokens(128_001)); err == nil {
+				t.Errorf("%s took 128,001 output tokens", m.Name)
+			}
+			build(t, m, WithAPIKey("k"), WithMaxTokens(128_000))
+		}
+		if p := build(t, api.Model{Name: "gpt-7"}, WithAPIKey("k"), WithMaxTokens(256_000)); p.set.maxTokens != 256_000 {
+			t.Fatalf("maxTokens %d, want an undeclared model left unchecked", p.set.maxTokens)
 		}
 	})
 
-	t.Run("effort values a declared model leaves out are refused", func(t *testing.T) {
+	t.Run("effort values a declared model leaves out fail New", func(t *testing.T) {
 		refused := map[api.Model][]Effort{
-			GPT56Sol:  {EffortMinimal},
-			GPT56Luna: {EffortMinimal},
-			GPT6Astra: {EffortMinimal, EffortNone},
-			GPT6Sol:   {EffortMinimal},
-			GPT6Luna:  {EffortMinimal},
+			GPT56Sol:   {EffortMinimal},
+			GPT56Luna:  {EffortMinimal},
+			GPT6Astra:  {EffortMinimal, EffortNone},
+			GPT6Sol:    {EffortMinimal},
+			GPT6Luna:   {EffortMinimal},
+			GPT61Sol:   {EffortMinimal, EffortNone},
+			GPT61Terra: {EffortMinimal},
 		}
 		for m, efforts := range refused {
-			p := New(Conf{Model: m}, WithAPIKey("k"))
 			for _, e := range efforts {
-				if err := WithReasoningEffort(e)(p); err == nil {
+				if _, err := New(Conf{Model: m}, WithAPIKey("k"), WithReasoningEffort(e)); err == nil {
 					t.Errorf("%s took effort %q", m.Name, e)
 				}
 			}
 			for _, e := range []Effort{EffortLow, EffortMedium, EffortHigh, EffortXHigh, EffortMax} {
-				if err := WithReasoningEffort(e)(p); err != nil {
+				if _, err := New(Conf{Model: m}, WithAPIKey("k"), WithReasoningEffort(e)); err != nil {
 					t.Errorf("%s refused effort %q: %v", m.Name, e, err)
 				}
 			}
 		}
-		if err := WithReasoningEffort(EffortNone)(New(Conf{Model: GPT6Sol}, WithAPIKey("k"))); err != nil {
-			t.Errorf("gpt-6-sol refused effort none: %v", err)
+		for _, m := range []api.Model{GPT6Sol, GPT61Terra} {
+			build(t, m, WithAPIKey("k"), WithReasoningEffort(EffortNone))
 		}
-		if err := WithReasoningEffort(EffortMinimal)(New(Conf{Model: api.Model{Name: "gpt-5"}}, WithAPIKey("k"))); err != nil {
-			t.Errorf("an undeclared model must be left unchecked: %v", err)
-		}
+		build(t, api.Model{Name: "gpt-5"}, WithAPIKey("k"), WithReasoningEffort(EffortMinimal))
 	})
 
 	t.Run("the model reads back as configured, window included", func(t *testing.T) {
-		p := New(Conf{Model: GPT56Sol}, WithAPIKey("k"))
-		if got := p.Model(); got != GPT56Sol || got.Context != 1_050_000 {
+		if got := build(t, GPT56Sol, WithAPIKey("k")).Model(); got != GPT56Sol || got.Context != 1_050_000 {
 			t.Fatalf("Model %+v", got)
 		}
 		own := api.Model{Name: testModel}
-		if got := New(Conf{Model: own}, WithAPIKey("k")).Model(); got != own {
+		if got := build(t, own, WithAPIKey("k")).Model(); got != own {
 			t.Fatalf("Model %+v, want the literal with an unknown window", got)
 		}
 	})
@@ -965,18 +1141,24 @@ func TestRequestWire(t *testing.T) {
 	sameJSON(t, c.body["reasoning"], `{"effort":"low","summary":"auto"}`)
 }
 
-// The declared caps have to be this service's own. ImagePixels is the area a
-// caller downscales an image to before the request is built, so a threshold
-// borrowed from a sibling API throws away resolution this one would have read,
-// and nothing downstream can see that happening. What the docs publish is 30,000
-// patches of 32x32 pixels per image, exceeded by rejection rather than by
-// resizing; a tool-result image capped at a 20,971,520-character data URL, which
-// ImageBytes declares as the raw size that encodes to it; and 512 MB a request.
+// The declared caps have to be this service's own. Images go at detail "high",
+// which the docs fit within 2,500 patches of 32x32 pixels and 2048 pixels a
+// side on gpt-5.6, with a 65,535-pixel side on gpt-6-astra; the models with no
+// published sizing take the gpt-5.6 limits. A tool-result image is capped at a
+// 20,971,520-character data URL, which ImageBytes declares as the raw size that
+// encodes to it; a request at 512 MB.
 func TestModelLimits(t *testing.T) {
-	const patches = 30_000 * 32 * 32
-	for _, m := range []api.Model{GPT56Sol, GPT56Luna, GPT6Astra, GPT6Sol, GPT6Luna} {
-		if m.ImagePixels != patches {
-			t.Errorf("%s declares %d pixels in an image, want the %d of the documented patch budget", m.Name, m.ImagePixels, patches)
+	const pixels = 2_500 * 32 * 32
+	for _, m := range []api.Model{GPT56Sol, GPT56Luna, GPT6Astra, GPT6Sol, GPT6Luna, GPT61Sol, GPT61Terra} {
+		if m.ImagePixels != pixels {
+			t.Errorf("%s declares %d pixels in an image, want the %d of the high-detail patch budget", m.Name, m.ImagePixels, pixels)
+		}
+		side := 2048
+		if m == GPT6Astra {
+			side = 65_535
+		}
+		if m.ImageSide != side {
+			t.Errorf("%s declares a %d pixel side, want %d", m.Name, m.ImageSide, side)
 		}
 		if m.ImagesPerRequest != 1500 {
 			t.Errorf("%s declares %d images in a request, want the documented 1500", m.Name, m.ImagesPerRequest)
@@ -994,6 +1176,69 @@ func TestModelLimits(t *testing.T) {
 			if url := dataURL(mime, make([]byte, m.ImageBytes+3)); len(url) <= 20_971_520 {
 				t.Errorf("%s: ImageBytes %d leaves room under the data URL limit for %s", m.Name, m.ImageBytes, mime)
 			}
+		}
+	}
+}
+
+func TestOpaqueKindsTheStreamEmitsReplay(t *testing.T) {
+	for _, kind := range []string{
+		"file_search_call", "web_search_call", "code_interpreter_call",
+		"image_generation_call", "mcp_call", "mcp_list_tools", "custom_tool_call",
+	} {
+		if !ownItem(json.RawMessage(`{"id":"x_1","type":"`+kind+`"}`), kind) {
+			t.Errorf("opaque kind %q the stream emits is not in the replay allowlist", kind)
+		}
+	}
+}
+
+type levelCounter map[slog.Level]int
+
+func (c levelCounter) Enabled(context.Context, slog.Level) bool { return true }
+
+func (c levelCounter) Handle(_ context.Context, r slog.Record) error {
+	c[r.Level]++
+	return nil
+}
+
+func (c levelCounter) WithAttrs([]slog.Attr) slog.Handler { return c }
+
+func (c levelCounter) WithGroup(string) slog.Handler { return c }
+
+func TestEncodeLogsOnlyAnUnknownTypeOnce(t *testing.T) {
+	counts := levelCounter{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(counts))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	req := api.Request{Messages: []api.Message{
+		user(api.ContentImage{Data: []byte("BM"), Mime: "image/bmp"}, nil),
+		assistant(api.ContentReasoning{Model: "claude-opus-5", Meta: json.RawMessage(`"sig"`)}, api.ContentText{Text: "ok"}),
+	}}
+	for range 2 {
+		body := encodeBody(t, testModel, defaultSettings(), req)
+		sameJSON(t, body["input"], `[{"role":"user","content":[
+			{"type":"input_text","text":"[image omitted]"},
+			{"type":"input_text","text":"[content omitted]"}]},
+			{"role":"assistant","content":[
+			{"type":"output_text","text":"[reasoning omitted]"},
+			{"type":"output_text","text":"ok"}]}]`)
+	}
+	if counts[slog.LevelWarn] != 0 || counts[slog.LevelError] > 1 {
+		t.Fatalf("two encodes logged %v, want no warnings and at most one error", map[slog.Level]int(counts))
+	}
+}
+
+func TestEveryDocumentMimeEncodes(t *testing.T) {
+	for _, mime := range []api.DocumentMime{
+		api.DocumentPDF, api.DocumentText, api.DocumentJSON, api.DocumentMarkdown,
+		api.DocumentCSV, api.DocumentHTML, api.DocumentXML, api.DocumentYAML,
+		api.DocumentRTF, api.DocumentDOC, api.DocumentXLS, api.DocumentDOCX,
+		api.DocumentXLSX, api.DocumentPPTX,
+	} {
+		body := encodeBody(t, testModel, defaultSettings(), api.Request{Messages: []api.Message{
+			user(api.ContentDocument{Data: []byte("x"), Mime: string(mime)}),
+		}})
+		if raw, _ := json.Marshal(body["input"]); !strings.Contains(string(raw), `"type":"input_file"`) {
+			t.Fatalf("%s: input %s carries no file", mime, raw)
 		}
 	}
 }

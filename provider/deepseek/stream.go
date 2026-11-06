@@ -118,15 +118,15 @@ func (c *converter) Convert(f lib.Frame) ([]api.Event, bool) {
 func (c *converter) End(err error) []api.Event {
 	if e, ok := err.(*lib.HTTPError); ok {
 		failure := apiError(e.Status, e.Header, e.Body)
+		if contextOverflow(failure) {
+			return []api.Event{api.EventErr{Code: api.CodeContextLength, Err: failure}}
+		}
 		code := statusCode(e.Status)
 		if code == api.CodeTooLarge {
 			return []api.Event{api.EventErr{
 				Code: code,
 				Err:  measuredTooLarge(c.model, c.sent, c.declared, failure),
 			}}
-		}
-		if contextOverflow(failure) {
-			code = api.CodeContextLength
 		}
 		return []api.Event{api.EventErr{Code: code, Err: failure}}
 	}
@@ -311,8 +311,9 @@ func (c *converter) done() api.Event {
 // it fails, and api.CodeBusy is what says it is worth sending again after
 // a backoff.
 //
-// aborted is documented only as a generation that was interrupted, with nothing
-// wrong in the request, so it fails as api.CodeNetwork: send it again as sent.
+// aborted is documented only as "the generation was interrupted". That nothing
+// was wrong in the request is this adapter's inference, not DeepSeek's wording,
+// so it fails as api.CodeNetwork: send it again as sent.
 //
 // A value nobody here recognizes fails with api.CodeUnknown and carries
 // the raw string, rather than being rounded to the nearest completion: a

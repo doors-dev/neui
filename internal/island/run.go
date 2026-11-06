@@ -141,7 +141,7 @@ func (r *run) Context() context.Context {
 }
 
 func (r *run) Seed(ctx context.Context, root gox.Comp) {
-	r.island.place.Outer(ctx, screen{status: runningStatus(r.task.ID()), content: r.island.template(root), store: r.store})
+	r.island.updateScreen(ctx, screen{content: r.island.template(root), store: r.store})
 }
 
 func (r *run) eval(code string, interrupt bool) (uint, error) {
@@ -182,14 +182,14 @@ func (r *run) resetHandover() {
 	r.state.ResetHandover()
 }
 
-func (r *run) done() {
+func (r *run) done() <-chan struct{} {
 	r.cancel(errStopped)
-	<-r.end
+	return r.end
 }
 
-func (r *run) overtake() {
+func (r *run) overtake() <-chan struct{} {
 	r.cancel(errOvertaken)
-	<-r.end
+	return r.end
 }
 
 func (r *run) unmount() {

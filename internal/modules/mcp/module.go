@@ -3,6 +3,8 @@ package mcp
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"sync"
@@ -267,7 +269,20 @@ func (m *module) buildModule(list []*mcp.Tool) tools.Module {
 		desc = *d
 	}
 	module := tools.NewModule(m.conf.Name, desc)
+	counts := make(map[string]int, len(list))
 	for _, tool := range list {
+		counts[utils.SanitizeName(tool.Name)] += 1
+	}
+	for _, tool := range list {
+		name := utils.SanitizeName(tool.Name)
+		if name == "" || counts[name] > 1 {
+			sum := sha256.Sum256([]byte(tool.Name))
+			if name == "" {
+				name = "t" + hex.EncodeToString(sum[:4])
+			} else {
+				name = name + "_" + hex.EncodeToString(sum[:4])
+			}
+		}
 		inputSchema, err := schema.NewRawSchema(tool.InputSchema)
 		if err != nil {
 			doors.Logger(m.ctx).Error(
@@ -290,7 +305,7 @@ func (m *module) buildModule(list []*mcp.Tool) tools.Module {
 			}
 		}
 		module.AddRaw(
-			tool.Name,
+			name,
 			tool.Description,
 			inputSchema,
 			outputSchema,
@@ -359,11 +374,12 @@ func (m *module) connect() {
 		var err error
 	retry:
 		attemptCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		changed := make(chan struct{}, 1)
 		s, err = connect(attemptCtx, m.conf.URL, m.conf.Headers, m.conf.Ping, func(session *mcp.ClientSession) {
-			go func() {
-				list, err := getTools(ctx, m.conf.Enable, session)
-				m.send(toolsCommand{list, err, seq})
-			}()
+			select {
+			case changed <- struct{}{}:
+			default:
+			}
 		})
 		if err == nil {
 			if list, err = getTools(attemptCtx, m.conf.Enable, s); err != nil {
@@ -387,7 +403,20 @@ func (m *module) connect() {
 			s.Close()
 			return
 		}
+		closed := make(chan struct{})
+		go func() {
+			for {
+				select {
+				case <-closed:
+					return
+				case <-changed:
+					list, err := getTools(ctx, m.conf.Enable, s)
+					m.send(toolsCommand{list, err, seq})
+				}
+			}
+		}()
 		s.Wait()
+		close(closed)
 		m.send(disconnectCommand{seq})
 	}()
 }
