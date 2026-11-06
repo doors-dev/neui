@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"image/gif"
 	"io"
 	"net/http"
 	"path"
@@ -49,49 +48,8 @@ func readImageTool(ctx context.Context, arg PathArg) (api.Image, error) {
 		return api.Image{}, fmt.Errorf("%q is %s, not a supported image", arg.Path, mimeType)
 	}
 	if mimeType == api.ImageGIF {
-		if _, err := gif.DecodeConfig(bytes.NewReader(data)); err != nil {
-			return api.Image{}, err
-		}
-		i, frames := 13, 0
-		if data[10]&0x80 != 0 {
-			i += 3 << (data[10]&7 + 1)
-		}
-	blocks:
-		for {
-			if i >= len(data) {
-				return api.Image{}, fmt.Errorf("%q is a truncated GIF", arg.Path)
-			}
-			switch data[i] {
-			case 0x3B:
-				break blocks
-			case 0x21:
-				i += 2
-			case 0x2C:
-				frames++
-				if frames > 1 {
-					return api.Image{}, fmt.Errorf("%q is an animated GIF, which providers do not accept", arg.Path)
-				}
-				if i+10 >= len(data) {
-					return api.Image{}, fmt.Errorf("%q is a truncated GIF", arg.Path)
-				}
-				packed := data[i+9]
-				i += 11
-				if packed&0x80 != 0 {
-					i += 3 << (packed&7 + 1)
-				}
-			default:
-				return api.Image{}, fmt.Errorf("%q is a malformed GIF: unknown block 0x%02x", arg.Path, data[i])
-			}
-			for {
-				if i >= len(data) {
-					return api.Image{}, fmt.Errorf("%q is a truncated GIF", arg.Path)
-				}
-				n := int(data[i])
-				i += 1 + n
-				if n == 0 {
-					break
-				}
-			}
+		if err := media.StillGIF(data); err != nil {
+			return api.Image{}, fmt.Errorf("%q is %w", arg.Path, err)
 		}
 	}
 	return media.Shape(data, mimeType, thread.Model())

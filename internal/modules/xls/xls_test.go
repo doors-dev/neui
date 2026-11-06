@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"iter"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -226,6 +227,32 @@ func TestReadRawFormatted(t *testing.T) {
 	}
 	if raw.Rows[0][1] != "=B2*2" {
 		t.Fatalf("raw formula = %q", raw.Rows[0][1])
+	}
+	if res.Rows[0][1] != "21" {
+		t.Fatalf("uncached formula = %q", res.Rows[0][1])
+	}
+}
+
+func TestReadFindUncachedFormulas(t *testing.T) {
+	fs, _ := newFSStore(t)
+	buildBook(t, fs, "book.xlsx")
+	ctx := threadCtx(fs)
+	if _, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "E2", Rows: [][]any{{"=B2/0", "=A2&\"-x\""}}}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := readTool(ctx, readArg{Path: "book.xlsx", Sheet: "Data", Range: "D2:F2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"21", "#DIV/0!", "Alice-x"}; !reflect.DeepEqual(res.Rows[0], want) {
+		t.Fatalf("rows = %q, want %q", res.Rows[0], want)
+	}
+	hits, err := findTool(ctx, findArg{Path: "book.xlsx", Query: "Alice-"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hits.Hits) != 1 || hits.Hits[0].Cell != "F2" || hits.Hits[0].Value != "Alice-x" {
+		t.Fatalf("hits = %+v", hits.Hits)
 	}
 }
 

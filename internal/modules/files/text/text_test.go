@@ -383,7 +383,7 @@ func TestWriteKeepsTheFileEnding(t *testing.T) {
 	if _, err := writeTool(ctx, writeArg{Path: "w.txt", Content: "as\r\nis\n"}); err != nil {
 		t.Fatal(err)
 	}
-	if got := content(t, fs, "w.txt"); got != "as\r\nis\n" {
+	if got := content(t, fs, "w.txt"); got != "\ufeffas\r\nis\n" {
 		t.Fatalf("content with CR: got %q", got)
 	}
 	if _, err := writeTool(ctx, writeArg{Path: "fresh.txt", Content: "a\nb\n"}); err != nil {
@@ -431,5 +431,37 @@ func TestLoneCRSurvives(t *testing.T) {
 	}
 	if got := content(t, fs, "cr.txt"); got != "a\rb\r\nD\r\ne\r\nf\r\n" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+func TestStyleComesFromTheHead(t *testing.T) {
+	fs := newFS(t)
+	ctx := threadCtx(fs)
+	head := strings.Repeat("crlf line\r\n", 70<<10/11)
+	raw(t, fs, "log.txt", head+strings.Repeat("lf\n", 100<<10))
+	if _, err := appendTool(ctx, writeArg{Path: "log.txt", Content: "x\ny\n"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := content(t, fs, "log.txt"); !strings.HasSuffix(got, "lf\nx\r\ny\r\n") {
+		t.Fatalf("tail %q", got[len(got)-20:])
+	}
+}
+
+func TestWriteToAnUploadIsReadOnly(t *testing.T) {
+	store, err := local.NewFileStorage("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Remove() })
+	fs := filesystem.Open("thread", store, store, api.FilesConfig{})
+	t.Cleanup(fs.Dispose)
+	if _, err := store.FilePut(context.Background(), "thread", api.OriginUser, "up.txt", "text/plain", strings.NewReader("a\r\n"), false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writeTool(threadCtx(fs), writeArg{Path: "user_uploads/up.txt", Content: "b\n"}); !errors.Is(err, api.ErrReadOnly) {
+		t.Fatalf("write: %v", err)
+	}
+	if _, err := appendTool(threadCtx(fs), writeArg{Path: "user_uploads/up.txt", Content: "b\n"}); !errors.Is(err, api.ErrReadOnly) {
+		t.Fatalf("append: %v", err)
 	}
 }

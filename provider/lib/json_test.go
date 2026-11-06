@@ -237,3 +237,20 @@ func BenchmarkMarshalBody(b *testing.B) {
 		}
 	})
 }
+
+func TestLargeBodyIsNotPooled(t *testing.T) {
+	body, err := MarshalBody(strings.Repeat("x", maxPooledBody+1))
+	if err != nil {
+		t.Fatalf("MarshalBody: %v", err)
+	}
+	buf := body.buf
+	body.unref()
+	if body.buf != nil {
+		t.Fatalf("a released body kept its buffer")
+	}
+	for range 4 {
+		if got := bodies.Get(); got == buf {
+			t.Fatalf("a buffer over the cap went back to the pool")
+		}
+	}
+}

@@ -126,7 +126,7 @@ func TestRunThrow(t *testing.T) {
 	ctx, fs := newCtx(t)
 	write(t, fs, "bad.js", `throw new Error("boom");`)
 	m := &module{runtime: getRuntime(context.Background())}
-	if _, err := m.run(ctx, RunArg{File: "bad.js"}); !errors.Is(err, errScript) {
+	if _, err := m.run(ctx, RunArg{File: "bad.js"}); !errors.Is(err, errScript) || !strings.Contains(err.Error(), `log file "bad.js.log"`) {
 		t.Fatalf("err = %v", err)
 	}
 	if log := read(t, fs, "bad.js.log"); !strings.Contains(log, "boom") {

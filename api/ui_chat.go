@@ -123,14 +123,17 @@ type Instance interface {
 	// not list it.
 	ThreadNew(ctx context.Context) error
 	// ThreadRename sets the thread's name, replacing whatever it was named
-	// before; an empty name leaves it unnamed again. A thread that is not in
-	// storage, a New one included, returns ErrNotFound. The instance stays on
+	// before. The name is trimmed; one that is then empty, or holds line
+	// breaks, control or format characters, is refused. A thread that is not
+	// in storage, a New one included, returns ErrNotFound. The instance stays on
 	// the thread it has open, whichever thread was renamed, and a chat that
 	// has the renamed thread open sees the new name at once.
 	ThreadRename(ctx context.Context, id ThreadID, name string) error
-	// ThreadClone copies the thread, with its name and all of its stored
-	// history, into a new one and returns the new thread's id. A source that
-	// is not in storage returns the storage's ErrNotFound. The copy is listed
+	// ThreadClone copies the thread, with its name, all of its stored history
+	// and its committed files of both origins, into a new one and returns the
+	// new thread's id. A source that is not in storage returns the storage's
+	// ErrNotFound; when copying the files fails, the clone is deleted and the
+	// error returned. The copy is listed
 	// and ready to ThreadOpen right away, and the instance stays on what it
 	// had open.
 	ThreadClone(ctx context.Context, id ThreadID) (ThreadID, error)
@@ -226,7 +229,10 @@ type ChatThread interface {
 	// with input in its place; it works in any state and stops whatever is
 	// running first. The ChatEventRoundStart it causes carries round in
 	// Truncate. ErrInputTooLarge when the text is over
-	// ThreadConfig.InputBytes; a storage failure arrives as
+	// ThreadConfig.InputBytes. An empty input resumes from the cut, and
+	// returns ErrWrongState with nothing changed when the cut would leave
+	// nothing for the model to answer: no tool calls from the last successful
+	// round before it and no records. A storage failure arrives as
 	// ChatEventCriticalError instead of an error.
 	Rewind(ctx context.Context, round RoundID, input Input) error
 	// Reload re-renders the chat from scratch: the ChatFactory builds a new

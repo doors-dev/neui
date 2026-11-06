@@ -42,7 +42,7 @@ type FetchArg struct {
 	Full    bool   `json:"full" description:"the page as a whole, including navigation, sidebars and comments; use it when the default came back missing something you saw referenced"`
 	Offset  uint   `json:"offset" description:"1-based line of the converted content to start from, for continuing a long page"`
 	Limit   uint   `json:"limit" description:"max lines to return, default 2000"`
-	Timeout uint   `json:"timeoutMs" description:"how long to wait for the whole exchange, default 30000, at most 120000"`
+	Timeout uint   `json:"timeoutMs" description:"how long to wait for the whole exchange, in milliseconds; omitted, the host default applies, and the host caps how long it may be"`
 	SaveAs  string `json:"saveAs" description:"workspace path to stream the raw body to instead of converting it; the only way to fetch a binary, and no format applies"`
 }
 
@@ -87,7 +87,7 @@ func (m *module) fetch(ctx context.Context, arg FetchArg) (string, error) {
 		}
 		m.mu.Unlock()
 		if ok {
-			return page(cached, arg.Offset, arg.Limit)
+			return page(cached, arg.Offset, arg.Limit, true)
 		}
 	}
 	timeout := m.conf.Timeout
@@ -343,10 +343,10 @@ func (m *module) fetch(ctx context.Context, arg FetchArg) (string, error) {
 		m.held += size
 		m.mu.Unlock()
 	}
-	return page(e, arg.Offset, arg.Limit)
+	return page(e, arg.Offset, arg.Limit, size <= m.conf.CacheBytes)
 }
 
-func page(e *entry, offset uint, limit uint) (string, error) {
+func page(e *entry, offset uint, limit uint, kept bool) (string, error) {
 	start := max(offset, 1)
 	if limit == 0 {
 		limit = fetchMaxLines
@@ -396,8 +396,10 @@ func page(e *entry, offset uint, limit uint) (string, error) {
 		}
 		if last == total {
 			fmt.Fprintf(&b, "(end of page, %d lines)", total)
-		} else {
+		} else if kept {
 			fmt.Fprintf(&b, "(showing lines %d-%d of %d, continue with offset=%d)", start, last, total, last+1)
+		} else {
+			fmt.Fprintf(&b, "(showing lines %d-%d of %d, continue with offset=%d; this page is too large to keep, so continuing fetches it again and its lines may have moved)", start, last, total, last+1)
 		}
 	}
 	el := gox.Elem(func(cur gox.Cursor) error {

@@ -12,9 +12,41 @@ import (
 	"neui.dev/internal/common"
 )
 
-const writeDesc = `Write values or formulas into empty cells, row by row from a top-left cell. A string starting with = is a formula; {row} in a formula becomes the row number of the cell it lands in, so one row repeated fills a column: cell E2, rows [["=B{row}*C{row}"]], repeat 19 fills E2:E20. Every target cell must be empty, and the block must sit wholly inside or wholly outside each table and the sheet's autofilter; merged cells and array formulas are refused. Cells written next to a table stay outside it — tables are never resized.`
+const writeDesc = `Write values or formulas into empty cells, row by row from a top-left cell. A string starting with = is a formula; functions newer than Excel 2007, such as IFS, SWITCH, MAXIFS, TEXTJOIN or CONCAT, get Excel's _xlfn. prefix automatically, and links outside the workbook (WEBSERVICE, FILTERXML, RTD, DDE) are refused. {row} in a formula becomes the row number of the cell it lands in, so one row repeated fills a column: cell E2, rows [["=B{row}*C{row}"]], repeat 19 fills E2:E20. Every target cell must be empty, and the block must sit wholly inside or wholly outside each table and the sheet's autofilter; merged cells and array formulas are refused. Cells written next to a table stay outside it — tables are never resized.`
 
-var dynamicFn = regexp.MustCompile(`(?i)(?:^|[^\w.])(?:_xlfn\.)?(?:_xlws\.)?(FILTER|SORT|SORTBY|UNIQUE|SEQUENCE|RANDARRAY|XLOOKUP|XMATCH|LET|LAMBDA|TEXTSPLIT|TEXTBEFORE|TEXTAFTER|VSTACK|HSTACK|TOCOL|TOROW|TAKE|DROP|CHOOSEROWS|CHOOSECOLS|EXPAND|WRAPROWS|WRAPCOLS)\s*\(`)
+var futureFn = map[string]bool{
+	"ACOT": true, "ACOTH": true, "AGGREGATE": true, "ARABIC": true, "ARRAYTOTEXT": true, "BASE": true, "BETA.DIST": true, "BETA.INV": true,
+	"BINOM.DIST": true, "BINOM.DIST.RANGE": true, "BINOM.INV": true, "BITAND": true, "BITLSHIFT": true, "BITOR": true, "BITRSHIFT": true, "BITXOR": true,
+	"CEILING.MATH": true, "CEILING.PRECISE": true, "CHISQ.DIST": true, "CHISQ.DIST.RT": true, "CHISQ.INV": true, "CHISQ.INV.RT": true, "CHISQ.TEST": true, "COMBINA": true,
+	"CONCAT": true, "CONFIDENCE.NORM": true, "CONFIDENCE.T": true, "COT": true, "COTH": true, "COVARIANCE.P": true, "COVARIANCE.S": true, "CSC": true,
+	"CSCH": true, "DAYS": true, "DECIMAL": true, "ERF.PRECISE": true, "ERFC.PRECISE": true, "EXPON.DIST": true, "F.DIST": true, "F.DIST.RT": true,
+	"F.INV": true, "F.INV.RT": true, "F.TEST": true, "FLOOR.MATH": true, "FLOOR.PRECISE": true, "FORECAST.ETS": true, "FORECAST.ETS.CONFINT": true, "FORECAST.ETS.SEASONALITY": true,
+	"FORECAST.ETS.STAT": true, "FORECAST.LINEAR": true, "FORMULATEXT": true, "GAMMA": true, "GAMMA.DIST": true, "GAMMA.INV": true, "GAMMALN.PRECISE": true, "GAUSS": true,
+	"HYPGEOM.DIST": true, "IFNA": true, "IFS": true, "IMCOSH": true, "IMCOT": true, "IMCSC": true, "IMCSCH": true, "IMSEC": true,
+	"IMSECH": true, "IMSINH": true, "IMTAN": true, "ISFORMULA": true, "ISOWEEKNUM": true, "LOGNORM.DIST": true, "LOGNORM.INV": true, "MAXIFS": true,
+	"MINIFS": true, "MODE.MULT": true, "MODE.SNGL": true, "MUNIT": true, "NEGBINOM.DIST": true, "NORM.DIST": true, "NORM.INV": true, "NORM.S.DIST": true,
+	"NORM.S.INV": true, "NUMBERVALUE": true, "PDURATION": true, "PERCENTILE.EXC": true, "PERCENTILE.INC": true, "PERCENTRANK.EXC": true, "PERCENTRANK.INC": true, "PERMUTATIONA": true,
+	"PHI": true, "POISSON.DIST": true, "QUARTILE.EXC": true, "QUARTILE.INC": true, "RANK.AVG": true, "RANK.EQ": true, "RRI": true, "SEC": true,
+	"SECH": true, "SHEET": true, "SHEETS": true, "SKEW.P": true, "STDEV.P": true, "STDEV.S": true, "SWITCH": true, "T.DIST": true,
+	"T.DIST.2T": true, "T.DIST.RT": true, "T.INV": true, "T.INV.2T": true, "T.TEST": true, "TEXTJOIN": true, "UNICHAR": true, "UNICODE": true,
+	"VALUETOTEXT": true, "VAR.P": true, "VAR.S": true, "WEIBULL.DIST": true, "XOR": true, "Z.TEST": true,
+}
+
+var newerFn = map[string]bool{
+	"FILTER": true, "SORT": true, "SORTBY": true, "UNIQUE": true, "SEQUENCE": true, "RANDARRAY": true, "XLOOKUP": true, "XMATCH": true,
+	"LET": true, "LAMBDA": true, "ISOMITTED": true, "MAP": true, "REDUCE": true, "SCAN": true, "MAKEARRAY": true, "BYROW": true,
+	"BYCOL": true, "GROUPBY": true, "PIVOTBY": true, "PERCENTOF": true, "REGEXTEST": true, "REGEXEXTRACT": true, "REGEXREPLACE": true, "TEXTSPLIT": true,
+	"TEXTBEFORE": true, "TEXTAFTER": true, "VSTACK": true, "HSTACK": true, "TOCOL": true, "TOROW": true, "TAKE": true, "DROP": true,
+	"CHOOSEROWS": true, "CHOOSECOLS": true, "EXPAND": true, "WRAPROWS": true, "WRAPCOLS": true, "ANCHORARRAY": true,
+}
+
+var outsideFn = map[string]bool{
+	"WEBSERVICE": true, "FILTERXML": true, "RTD": true, "CALL": true, "REGISTER.ID": true,
+}
+
+var fnName = regexp.MustCompile(`[A-Za-z_][\w.]*`)
+
+var stringLit = regexp.MustCompile(`"[^"]*"`)
 
 var externalRef = regexp.MustCompile(`(?i)\[[^\[\]]*\.(xlsx|xlsm|xlsb|xltx|xls|csv)\]|\[\d+\][^\[\]()]*!`)
 
@@ -45,15 +77,11 @@ func writeTool(ctx context.Context, arg writeArg) (writeResult, error) {
 				if !strings.HasPrefix(v, "=") {
 					continue
 				}
-				if strings.TrimSpace(v[1:]) == "" {
-					return writeResult{}, fmt.Errorf("row %d cell %d: formula %q is empty", i, j, v)
+				fl, err := formula(v)
+				if err != nil {
+					return writeResult{}, fmt.Errorf("row %d cell %d: %w", i, j, err)
 				}
-				if m := dynamicFn.FindStringSubmatch(v[1:]); m != nil {
-					return writeResult{}, fmt.Errorf("row %d cell %d: %s is a dynamic-array or Excel 365 function, which is not supported — use classic functions such as INDEX/MATCH, SUMIFS or COUNTIFS", i, j, strings.ToUpper(m[1]))
-				}
-				if externalRef.MatchString(v[1:]) {
-					return writeResult{}, fmt.Errorf("row %d cell %d: formula %q links another workbook, and external links are not supported — copy the data into this workbook first", i, j, v)
-				}
+				row[j] = "=" + fl
 			default:
 				return writeResult{}, fmt.Errorf("row %d cell %d: %T is not a cell value, pass a number, boolean, string or null", i, j, v)
 			}
@@ -115,6 +143,41 @@ func writeTool(ctx context.Context, arg writeArg) (writeResult, error) {
 		return writeResult{}, err
 	}
 	return writeResult{Range: start + ":" + end}, nil
+}
+
+func formula(s string) (string, error) {
+	body := s[1:]
+	if strings.TrimSpace(body) == "" {
+		return "", fmt.Errorf("formula %q is empty", s)
+	}
+	code := stringLit.ReplaceAllStringFunc(body, func(lit string) string {
+		return `"` + strings.Repeat(" ", len(lit)-2) + `"`
+	})
+	outside := fmt.Errorf("formula %q reaches outside this workbook (another workbook, a web service, a DDE link or another program), and external links are not supported — copy the data into this workbook first", s)
+	if externalRef.MatchString(code) || strings.Contains(code, "|") {
+		return "", outside
+	}
+	var b strings.Builder
+	last := 0
+	for _, m := range fnName.FindAllStringIndex(code, -1) {
+		if !strings.HasPrefix(strings.TrimLeft(code[m[1]:], " \t\r\n"), "(") {
+			continue
+		}
+		name := strings.ToUpper(code[m[0]:m[1]])
+		bare := strings.TrimPrefix(strings.TrimPrefix(name, "_XLFN."), "_XLWS.")
+		switch {
+		case outsideFn[bare]:
+			return "", outside
+		case newerFn[bare]:
+			return "", fmt.Errorf("%s is a dynamic-array, LAMBDA or other Excel 365 function, which is not supported — use classic functions such as INDEX/MATCH, SUMIFS or COUNTIFS", bare)
+		case futureFn[name]:
+			b.WriteString(body[last:m[0]])
+			b.WriteString("_xlfn." + name)
+			last = m[1]
+		}
+	}
+	b.WriteString(body[last:])
+	return b.String(), nil
 }
 
 func checkTarget(ctx context.Context, fs api.FS, f *excelize.File, name, sheet string, t bounds, nested bool) error {

@@ -18,6 +18,8 @@ const syncAfter = 10 * time.Second
 const clientTimeout = 10 * time.Second
 const maxDelay = 24 * time.Hour
 
+var errCancelled = errors.New("cancelled by time__cancel")
+
 const moduleDesc = `The clock. time__now is the server's clock, time__client the clock of the browser the user has open — they differ in offset and may differ in wall time; quote the client's when talking to the user. time__timer waits until a moment: short waits complete inside the call, longer ones return deferred and arrive later as a <task_result> element in the conversation, so use it to continue work at a chosen moment, not to pause a conversation. One deferred timer at a time: another deferred call errors while one is pending; short waits always work. time__cancel drops a deferred one.`
 const nowDesc = `Current time of the machine this runs on, in its own zone. Use it for anything timestamped by the server; for what the user's clock says, call time__client.`
 const clientDesc = `Current time of the browser the user has the page open in, with the user's UTC offset. Errors when the browser does not answer. The reading carries no zone name, only the offset.`
@@ -62,11 +64,7 @@ type NowResult struct {
 
 func (m *module) now(ctx context.Context, _ struct{}) (NowResult, error) {
 	t := time.Now()
-	abbr, off := t.Zone()
-	zone := t.Location().String()
-	if zone == "Local" {
-		zone = abbr
-	}
+	zone, off := t.Zone()
 	if zone == "" {
 		zone = t.Format("-07:00")
 	}
@@ -221,7 +219,7 @@ func (m *module) cancel(ctx context.Context, _ struct{}) (struct{}, error) {
 		return struct{}{}, errors.New("the timer already fired: its task_result reports the firing")
 	}
 	m.pending.CompareAndSwap(p, nil)
-	p.cancel(nil)
+	p.cancel(errCancelled)
 	select {
 	case <-p.done:
 		return struct{}{}, nil

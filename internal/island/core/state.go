@@ -21,6 +21,9 @@ import (
 
 type Run interface {
 	Context() context.Context
+	TurnContext() context.Context
+	PauseTurn()
+	ResumeTurn()
 	PageContext() context.Context
 	Library() Library
 	Notify(script uint, data json.RawMessage, idle bool)
@@ -164,7 +167,7 @@ func (s *state) RegisterTools(vm *quickjs.VM) error {
 	if err != nil {
 		panic(err)
 	}
-	err = js.RegisterTools(vm, s.run.Context, "__", m.List())
+	err = js.RegisterTools(vm, s.run.TurnContext, "__", m.List())
 	return err
 }
 
@@ -327,15 +330,18 @@ func (s *state) toolNotify(ctx context.Context, data json.RawMessage) (struct{},
 
 func (s *state) toolDraw(ctx context.Context, ms int) (*Result, error) {
 	if s.applied != nil {
+		s.run.PauseTurn()
 		select {
-		case <-s.run.Context().Done():
+		case <-ctx.Done():
 			return &Result{Interrupt: true}, nil
 		case <-s.applied:
 		}
+		s.run.ResumeTurn()
 	}
 	if err := s.run.GC(); err != nil {
 		return nil, err
 	}
+	s.run.PauseTurn()
 	s.mu.Lock()
 	handover := s.handover
 	s.handover = false
@@ -356,7 +362,7 @@ func (s *state) toolDraw(ctx context.Context, ms int) (*Result, error) {
 		timeout = time.After(time.Duration(ms) * time.Millisecond)
 	}
 	select {
-	case <-s.run.Context().Done():
+	case <-ctx.Done():
 		return &Result{Interrupt: true}, nil
 	case <-timeout:
 	case <-ch:

@@ -3,6 +3,7 @@ package instance
 import (
 	"context"
 	"errors"
+	"io"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -392,5 +393,133 @@ func TestThreadDeleteRemovesTheThreadsFiles(t *testing.T) {
 	}
 	if _, err := backend.FileStorage().FileStat(ctx, "delete-files", api.OriginUser, "a.txt"); !errors.Is(err, api.ErrNotFound) {
 		t.Fatalf("the deleted thread's upload is still there: %v", err)
+	}
+}
+
+func TestRenameRefusesEmptyAndNonPlainNames(t *testing.T) {
+	inst := deadTestInstance(t)
+	ctx := context.Background()
+	storage := inst.backend.Load().Storage()
+	if _, err := storage.ThreadCreate(ctx, "rename-plain"); err != nil {
+		t.Fatalf("ThreadCreate: %v", err)
+	}
+	for _, name := range []string{"", "  ", "​", "a‮b", "a\nb", "a\x00b"} {
+		if err := inst.ThreadRename(ctx, "rename-plain", name); err == nil {
+			t.Errorf("%q: the rename was accepted", name)
+		}
+	}
+	if err := inst.ThreadRename(ctx, "rename-plain", "  Trip plan "); err != nil {
+		t.Fatalf("ThreadRename: %v", err)
+	}
+	th, err := storage.ThreadGet(ctx, "rename-plain")
+	if err != nil {
+		t.Fatalf("ThreadGet: %v", err)
+	}
+	if th.Name != "Trip plan" {
+		t.Fatalf("the thread is named %q", th.Name)
+	}
+}
+
+func TestDeadLinkReadsAreUnlinked(t *testing.T) {
+	inst := deadTestInstance(t)
+	pane := newLink(inst)
+	pane.backend = inst.backend.Load()
+	pane.thread = inst.uplink.ID()
+	pane.initialized = true
+	inst.links[pane] = struct{}{}
+	ctx := context.Background()
+	if _, err := pane.RoundBefore(ctx, 0, 10); errors.Is(err, api.ErrUnlinked) {
+		t.Fatal("a live pane's read was unlinked")
+	}
+	inst.uplink.Close()
+	inst.onCriticalErr()
+	if _, err := pane.RoundBefore(ctx, 0, 10); !errors.Is(err, api.ErrUnlinked) {
+		t.Fatalf("a dead pane's RoundBefore returned %v", err)
+	}
+	if _, err := pane.RoundAfter(ctx, 0, 10); !errors.Is(err, api.ErrUnlinked) {
+		t.Fatalf("a dead pane's RoundAfter returned %v", err)
+	}
+}
+
+type failingPut struct {
+	api.FileStorage
+}
+
+func (failingPut) FilePut(context.Context, api.ThreadID, api.Origin, string, string, io.Reader, bool) (api.File, error) {
+	return api.File{}, errors.New("disk full")
+}
+
+func TestThreadCloneCopiesCommittedFiles(t *testing.T) {
+	inst := deadTestInstance(t)
+	ctx := context.Background()
+	backend := inst.backend.Load()
+	files := backend.FileStorage()
+	if _, err := backend.Storage().ThreadCreate(ctx, "clone-files"); err != nil {
+		t.Fatalf("ThreadCreate: %v", err)
+	}
+	for _, f := range []struct {
+		origin api.Origin
+		name   string
+		draft  bool
+	}{{api.OriginUser, "up.txt", false}, {api.OriginAgent, "out.txt", false}, {api.OriginUser, "draft.txt", true}} {
+		if _, err := files.FilePut(ctx, "clone-files", f.origin, f.name, "text/plain", strings.NewReader(f.name), f.draft); err != nil {
+			t.Fatalf("FilePut: %v", err)
+		}
+	}
+	id, err := inst.ThreadClone(ctx, "clone-files")
+	if err != nil {
+		t.Fatalf("ThreadClone: %v", err)
+	}
+	for _, f := range []struct {
+		origin api.Origin
+		name   string
+	}{{api.OriginUser, "up.txt"}, {api.OriginAgent, "out.txt"}} {
+		got, err := files.FileStat(ctx, id, f.origin, f.name)
+		if err != nil {
+			t.Fatalf("the clone lacks %s/%s: %v", f.origin, f.name, err)
+		}
+		if got.Draft || got.MIME != "text/plain" || got.Size != int64(len(f.name)) {
+			t.Fatalf("the clone's %s/%s is %+v", f.origin, f.name, got)
+		}
+		r, err := files.FileRead(ctx, id, f.origin, f.name, 0, -1)
+		if err != nil {
+			t.Fatalf("FileRead: %v", err)
+		}
+		b, _ := io.ReadAll(r)
+		r.Close()
+		if string(b) != f.name {
+			t.Fatalf("the clone's %s/%s holds %q", f.origin, f.name, b)
+		}
+	}
+	if _, err := files.FileStat(ctx, id, api.OriginUser, "draft.txt"); !errors.Is(err, api.ErrNotFound) {
+		t.Fatalf("the clone got the draft: %v", err)
+	}
+}
+
+func TestThreadCloneIsDeletedWhenCopyingFilesFails(t *testing.T) {
+	inst := deadTestInstance(t)
+	ctx := context.Background()
+	backend := inst.backend.Load()
+	if _, err := backend.Storage().ThreadCreate(ctx, "clone-fail"); err != nil {
+		t.Fatalf("ThreadCreate: %v", err)
+	}
+	if _, err := backend.FileStorage().FilePut(ctx, "clone-fail", api.OriginUser, "a.txt", "text/plain", strings.NewReader("a"), false); err != nil {
+		t.Fatalf("FilePut: %v", err)
+	}
+	store := backend.FileStorage()
+	inst.backend.Store(common.NewBackend(inst.ctx, backend.Storage(), backend.WorkspaceStorage(), failingPut{store}, []common.Option{common.OptionProvider(stubProvider{})}))
+	before, err := backend.Storage().ThreadList(ctx, time.Time{}, time.Now().Add(time.Hour), true, 100, "")
+	if err != nil {
+		t.Fatalf("ThreadList: %v", err)
+	}
+	if _, err := inst.ThreadClone(ctx, "clone-fail"); err == nil {
+		t.Fatal("the clone succeeded without its files")
+	}
+	after, err := backend.Storage().ThreadList(ctx, time.Time{}, time.Now().Add(time.Hour), true, 100, "")
+	if err != nil {
+		t.Fatalf("ThreadList: %v", err)
+	}
+	if len(after) != len(before) {
+		t.Fatalf("the failed clone was left in storage: %d threads before, %d after", len(before), len(after))
 	}
 }

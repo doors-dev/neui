@@ -858,18 +858,10 @@ func TestEncodeTopLevel(t *testing.T) {
 		}
 	})
 
-	t.Run("sampling is dropped on a reasoning model and kept otherwise", func(t *testing.T) {
+	t.Run("a non reasoning model gets sampling and no reasoning block", func(t *testing.T) {
 		set := defaultSettings()
 		temp := 0.2
 		set.temperature = &temp
-		set.effort = "high"
-
-		reasoning := encodeBody(t, testModel, set, base)
-		if _, ok := reasoning["temperature"]; ok {
-			t.Fatal("temperature reached a reasoning model")
-		}
-		sameJSON(t, reasoning["reasoning"], `{"effort":"high"}`)
-
 		body := encodeBody(t, "gpt-4o", set, base)
 		if body["temperature"] != 0.2 {
 			t.Fatalf("temperature %v, want 0.2", body["temperature"])
@@ -1001,7 +993,7 @@ func TestProviderOptions(t *testing.T) {
 	})
 
 	t.Run("options land on the settings the turn is built from", func(t *testing.T) {
-		p := build(t, api.Model{Name: testModel}, WithAPIKey("k"), nil, WithTemperature(0.7), WithMaxTokens(2048))
+		p := build(t, api.Model{Name: "gpt-4o"}, WithAPIKey("k"), nil, WithTemperature(0.7), WithMaxTokens(2048))
 		if p.set.temperature == nil || *p.set.temperature != 0.7 {
 			t.Fatalf("temperature %v", p.set.temperature)
 		}
@@ -1020,6 +1012,27 @@ func TestProviderOptions(t *testing.T) {
 				t.Errorf("%s: New returned %v, %v, want only an error", name, p, err)
 			}
 		}
+	})
+
+	t.Run("New refuses sampling on a reasoning model and reasoning on any other", func(t *testing.T) {
+		for name, tc := range map[string]struct {
+			model string
+			opts  []Option
+		}{
+			"temperature on a reasoning model": {testModel, []Option{WithTemperature(0.2)}},
+			"top_p on a reasoning model":       {testModel, []Option{WithTopP(0.9), WithReasoningEffort(EffortHigh)}},
+			"effort on gpt-4o":                 {"gpt-4o", []Option{WithReasoningEffort(EffortHigh)}},
+			"summary on gpt-4o":                {"gpt-4o", []Option{WithReasoningSummary(SummaryAuto)}},
+			"mode on gpt-4o":                   {"gpt-4o", []Option{WithReasoningMode(ReasoningPro)}},
+			"context on gpt-4o":                {"gpt-4o", []Option{WithReasoningContext(ContextAllTurns)}},
+		} {
+			if p, err := New(Conf{Model: api.Model{Name: tc.model}}, append([]Option{WithAPIKey("k")}, tc.opts...)...); err == nil || p != nil {
+				t.Errorf("%s: New returned %v, %v, want only an error", name, p, err)
+			}
+		}
+		build(t, api.Model{Name: testModel}, WithAPIKey("k"), WithTemperature(0.2), WithReasoningEffort(EffortNone))
+		build(t, api.Model{Name: testModel}, WithAPIKey("k"), WithTopP(0.9), WithForcedSampling())
+		build(t, api.Model{Name: "gpt-4o"}, WithAPIKey("k"), WithTemperature(0.2), WithTopP(0.9))
 	})
 
 	t.Run("an empty model name fails New", func(t *testing.T) {
@@ -1190,6 +1203,15 @@ func TestOpaqueKindsTheStreamEmitsReplay(t *testing.T) {
 		if !ownItem(json.RawMessage(`{"id":"x_1","type":"`+kind+`"}`), kind) {
 			t.Errorf("opaque kind %q the stream emits is not in the replay allowlist", kind)
 		}
+	}
+}
+
+func TestOpaqueItemWithoutIDIsForeign(t *testing.T) {
+	if ownItem(json.RawMessage(`{"type":"compaction","content":"summary"}`), "compaction") {
+		t.Fatal("a compaction block with no id passed as a Responses item")
+	}
+	if !ownItem(json.RawMessage(`{"id":"cmp_1","type":"compaction","encrypted_content":"x"}`), "compaction") {
+		t.Fatal("a compaction item with an id was refused")
 	}
 }
 

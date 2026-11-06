@@ -52,11 +52,6 @@ type inputItem struct {
 // replaced the include list. Stateless mode populates it on its own now, and the
 // include value is still accepted, still documented and still what older models
 // need. Sending it costs a string.
-//
-// Sampling is dropped on reasoning models rather than forwarded, unless the
-// effort is none. At any other effort they answer 400 to the parameter whatever
-// its value, including the default, so there is nothing to send that would
-// work; at none the docs keep it.
 func encodeRequest(model string, set settings, req api.Request) (*requestBody, error) {
 	reasoner := isReasoningModel(model)
 	b := &requestBody{
@@ -84,23 +79,19 @@ func encodeRequest(model string, set settings, req api.Request) (*requestBody, e
 	b.Tools = tools
 	b.ToolChoice = encodeToolChoice(req.ToolChoice)
 	b.ParallelToolCalls = set.parallelToolCalls
-	if reasoner {
-		if r := (reasoningConfig{
-			Effort:  set.effort,
-			Summary: set.summary,
-			Mode:    set.reasoningMode,
-			Context: set.reasoningContext,
-		}); r != (reasoningConfig{}) {
-			b.Reasoning = &r
-		}
+	if r := (reasoningConfig{
+		Effort:  set.effort,
+		Summary: set.summary,
+		Mode:    set.reasoningMode,
+		Context: set.reasoningContext,
+	}); r != (reasoningConfig{}) {
+		b.Reasoning = &r
 	}
 	if set.verbosity != "" {
 		b.Text = &textConfig{Verbosity: set.verbosity}
 	}
-	if !reasoner || set.forceSampling || set.effort == string(EffortNone) {
-		b.Temperature = set.temperature
-		b.TopP = set.topP
-	}
+	b.Temperature = set.temperature
+	b.TopP = set.topP
 	b.PromptCacheKey = set.promptCacheKey
 	if set.cacheMode != "" || set.cacheTTL != "" {
 		b.PromptCacheOpts = &promptCacheConfig{Mode: set.cacheMode, TTL: set.cacheTTL}
@@ -425,7 +416,7 @@ func reasoningReplay(c api.ContentReasoning, store bool) any {
 
 func ownItem(raw json.RawMessage, kind string) bool {
 	var item outputItem
-	if json.Unmarshal(raw, &item) != nil || item.Type != kind {
+	if json.Unmarshal(raw, &item) != nil || item.Type != kind || item.ID == "" {
 		return false
 	}
 	if kind == "reasoning" {

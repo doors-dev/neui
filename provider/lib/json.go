@@ -94,13 +94,17 @@ func (b *Body) release() {
 	b.unref()
 }
 
+const maxPooledBody = 4 << 20
+
 func (b *Body) unref() {
 	b.refs--
 	if b.refs > 0 {
 		return
 	}
-	b.buf.Reset()
-	bodies.Put(b.buf)
+	if b.buf.Cap() <= maxPooledBody {
+		b.buf.Reset()
+		bodies.Put(b.buf)
+	}
 	b.buf = nil
 }
 

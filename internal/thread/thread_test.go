@@ -1120,19 +1120,33 @@ func TestTaskKeepsTheRoundOfItsTool(t *testing.T) {
 	if tools.round.ID == origin {
 		t.Fatalf("the tools round has the earlier round's id: the test cannot tell them apart")
 	}
-	result := make(chan common.Task, 1)
-	go func() {
-		task, err := controller{origin: origin, link: th.link}.Task("", nil, func(error) {})
-		if err != nil {
-			t.Errorf("Task: %v", err)
-		}
-		result <- task
-	}()
-	tools.on(<-th.ch)
-	task := <-result
-	got, ok := th.link.taskGet(task.ID())
-	if !ok || got.origin != origin {
-		t.Fatalf("the task was filed under round %v, want its tool's round %v", got.origin, origin)
+	type issued struct {
+		task common.Task
+		err  error
+	}
+	issue := func(from api.RoundID) issued {
+		result := make(chan issued, 1)
+		go func() {
+			task, err := controller{origin: from, link: th.link}.Task("", nil, func(error) {})
+			result <- issued{task, err}
+		}()
+		tools.on(<-th.ch)
+		return <-result
+	}
+	stale := issue(origin)
+	if stale.err == nil {
+		t.Fatalf("a task from round %v was accepted during the tools round %v", origin, tools.round.ID)
+	}
+	if len(th.link.taskList()) != 0 {
+		t.Fatalf("the refused task was filed: %v", th.link.taskList())
+	}
+	own := issue(tools.round.ID)
+	if own.err != nil {
+		t.Fatalf("Task from the tools round: %v", own.err)
+	}
+	got, ok := th.link.taskGet(own.task.ID())
+	if !ok || got.origin != tools.round.ID {
+		t.Fatalf("the task was filed under round %v, want its tool's round %v", got.origin, tools.round.ID)
 	}
 }
 

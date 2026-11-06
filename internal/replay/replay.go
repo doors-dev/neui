@@ -173,9 +173,13 @@ func (r Replay) Rewind(end api.RoundID, input api.Input) (api.Round, []api.Messa
 		return api.Round{}, nil, nil, errors.New("state missmatch")
 	}
 	var removed []string
+	pending := input.Len() != 0
 	for round, err := range r.storage.RoundRange(r.ctx, r.id, end, api.NoRoundID) {
 		if err != nil {
 			return api.Round{}, nil, nil, err
+		}
+		if slices.ContainsFunc(round.PinnedRecords, func(rec api.Record) bool { return rec.Origin < end }) {
+			pending = true
 		}
 		if round.ID != end {
 			removed = append(removed, round.Input.Attachments...)
@@ -186,6 +190,37 @@ func (r Replay) Rewind(end api.RoundID, input api.Input) (api.Round, []api.Messa
 				removed = append(removed, name)
 			}
 		}
+	}
+	if !pending {
+		records, err := r.storage.RecordList(r.ctx, r.id)
+		if err != nil {
+			return api.Round{}, nil, nil, err
+		}
+		pending = slices.ContainsFunc(records, func(rec api.Record) bool { return rec.Origin < end })
+	}
+	for start, found := end, false; !pending && !found; {
+		rounds, err := r.storage.RoundBefore(r.ctx, r.id, start, 16)
+		if err != nil {
+			return api.Round{}, nil, nil, err
+		}
+		if len(rounds) == 0 {
+			break
+		}
+		for i := len(rounds) - 1; i >= 0 && !found; i-- {
+			if rounds[i].State != api.RoundOk {
+				continue
+			}
+			found = true
+			for _, c := range rounds[i].Response {
+				if _, ok := c.(api.ContentToolUse); ok {
+					pending = true
+				}
+			}
+		}
+		start = rounds[0].ID
+	}
+	if !pending {
+		return api.Round{}, nil, nil, api.ErrWrongState
 	}
 	_, err := r.storage.ThreadCut(r.ctx, r.id, r.seq(), end)
 	if err != nil {

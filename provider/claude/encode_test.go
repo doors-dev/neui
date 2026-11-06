@@ -517,9 +517,8 @@ func TestReplayReasoningAndOpaque(t *testing.T) {
 				// The other shape meta holds here: a redacted_thinking block is
 				// bytes this API sent, so it goes back as they are.
 				api.ContentReasoning{Model: model, Meta: sealed},
-				// A payload another model produced means nothing to this one, so
-				// what goes in its place is the note that it was there.
-				api.ContentOpaque{Kind: "web_search_tool_result", Data: result},
+				api.ContentOpaque{Model: "claude-sonnet-5", Kind: "web_search_tool_result", Data: result},
+				api.ContentOpaque{Model: model, Kind: "compaction", Data: json.RawMessage(`{"id":"cmp_1","type":"compaction","encrypted_content":"x"}`)},
 				api.ContentText{Text: "answer"},
 			}},
 		},
@@ -529,6 +528,7 @@ func TestReplayReasoningAndOpaque(t *testing.T) {
 		`{"type":"thinking","thinking":"because","signature":"sig2"},` +
 		`{"type":"thinking","thinking":"in short","signature":"sig3"},` +
 		string(sealed) + `,` +
+		string(result) + `,` +
 		`{"type":"text","text":"[content omitted]"},` +
 		`{"type":"text","text":"answer"}]}`
 	if !strings.Contains(string(got["messages"]), want) {

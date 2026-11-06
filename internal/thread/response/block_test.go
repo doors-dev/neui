@@ -3,7 +3,6 @@ package response
 import (
 	"bytes"
 	"log/slog"
-	"strings"
 	"testing"
 
 	"neui.dev/api"
@@ -94,7 +93,7 @@ func TestLiveStateDoesNotWarnAboutUnfinishedArguments(t *testing.T) {
 	}
 }
 
-func TestAbortWarnsAboutGenuinelyDiscardedArguments(t *testing.T) {
+func TestAbortDoesNotWarnAboutUnfinishedArguments(t *testing.T) {
 	var logged bytes.Buffer
 	restore := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
@@ -113,7 +112,7 @@ func TestAbortWarnsAboutGenuinelyDiscardedArguments(t *testing.T) {
 	if use, ok := content[0].(api.ContentToolUse); !ok || !bytes.Equal(use.Input, api.DiscardedArguments) {
 		t.Fatalf("the aborted call assembled %#v", content[0])
 	}
-	if !strings.Contains(logged.String(), "arguments discarded") {
-		t.Fatalf("a user stop discarded the arguments for real and logged %q", logged.String())
+	if logged.Len() != 0 {
+		t.Fatalf("a user stop mid arguments logged %q", logged.String())
 	}
 }

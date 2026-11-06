@@ -2,6 +2,7 @@ package uploader
 
 import (
 	"context"
+	"errors"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -189,7 +190,14 @@ func (f *fileProgress) download(ctx context.Context, part *multipart.Part) (adde
 			return false, err
 		}
 		f.status = errored
-		f.w.WriteHeader(http.StatusInternalServerError)
+		status := http.StatusInternalServerError
+		var maxBytes *http.MaxBytesError
+		if errors.Is(err, api.ErrTooLarge) || errors.As(err, &maxBytes) {
+			status = http.StatusRequestEntityTooLarge
+		} else if errors.Is(err, api.ErrQuota) || errors.Is(err, api.ErrExists) || errors.Is(err, api.ErrInvalidName) {
+			status = http.StatusUnprocessableEntity
+		}
+		f.w.WriteHeader(status)
 		f.intoError(ctx, describe(ctx, err, f.params))
 		return false, err
 	}

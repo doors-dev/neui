@@ -253,3 +253,36 @@ func TestShapeRejectsOversizedDeclaredDimensions(t *testing.T) {
 		t.Fatalf("Shape on a 100000x100000 header = %v, want a pixel cap error", err)
 	}
 }
+
+func TestShapeFlattensTransparencyOntoWhiteForJPEG(t *testing.T) {
+	img := image.NewNRGBA(image.Rect(0, 0, 1000, 1000))
+	r := rand.New(rand.NewPCG(1, 2))
+	for y := range 200 {
+		for x := range 200 {
+			i := img.PixOffset(x, y)
+			img.Pix[i], img.Pix[i+1], img.Pix[i+2], img.Pix[i+3] = uint8(r.UintN(256)), uint8(r.UintN(256)), uint8(r.UintN(256)), 0xff
+		}
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	byteCap := buf.Len() / 2
+	for _, model := range []api.Model{{ImageBytes: byteCap}, {ImageBytes: byteCap / 3}} {
+		shaped, err := Shape(buf.Bytes(), api.ImagePNG, model)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if shaped.Mime != api.ImageJPEG {
+			t.Fatalf("mime = %s", shaped.Mime)
+		}
+		out, err := jpeg.Decode(bytes.NewReader(shaped.Data))
+		if err != nil {
+			t.Fatal(err)
+		}
+		b := out.Bounds()
+		if cr, cg, cb, _ := out.At(b.Dx()*4/5, b.Dy()*4/5).RGBA(); cr < 0xf000 || cg < 0xf000 || cb < 0xf000 {
+			t.Fatalf("cap %d: a transparent pixel came out as %x %x %x, want white", model.ImageBytes, cr, cg, cb)
+		}
+	}
+}

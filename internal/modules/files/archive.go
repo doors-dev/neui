@@ -3,6 +3,7 @@ package files
 import (
 	"archive/zip"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -136,17 +137,18 @@ func unzipTool(ctx context.Context, arg unzipArg) (unzipResult, error) {
 		if total >= 0 {
 			budget = total - used
 		}
-		n, err := unzipEntry(ctx, fs, f, path.Join(arg.Dst, name), budget)
+		target := path.Join(arg.Dst, name)
+		n, err := unzipEntry(ctx, fs, f, target, budget)
 		if err != nil {
 			return res, err
 		}
 		used += n
 		if total >= 0 && used > total {
-			return res, fmt.Errorf("%q exceeds the %d-byte uncompressed cap", arg.Src, total)
+			return res, errors.Join(fmt.Errorf("%q exceeds the %d-byte uncompressed cap", arg.Src, total), fs.Remove(ctx, target))
 		}
 		res.Count++
 		if len(res.Extracted) < unzipListCap {
-			res.Extracted = append(res.Extracted, path.Join(arg.Dst, name))
+			res.Extracted = append(res.Extracted, target)
 		} else {
 			res.Truncated = true
 		}
@@ -174,7 +176,10 @@ func unzipEntry(ctx context.Context, fs api.FS, f *zip.File, target string, budg
 	if cerr := w.Close(); err == nil {
 		err = cerr
 	}
-	return n, err
+	if err != nil {
+		return n, errors.Join(err, fs.Remove(context.WithoutCancel(ctx), target))
+	}
+	return n, nil
 }
 
 type ctxReader struct {

@@ -333,6 +333,9 @@ func (p *Provider) toolResult(c api.ContentToolResult) message {
 			parts = append(parts, note(rc, "a DeepSeek tool result carries text and images only"))
 		}
 	}
+	if len(parts) == 0 && c.Error == api.ToolOk {
+		parts = append(parts, textPart{Type: "text", Text: lib.EmptyResult})
+	}
 	body := content(parts)
 	if c.Error != api.ToolOk {
 		if s, ok := body.(string); ok {

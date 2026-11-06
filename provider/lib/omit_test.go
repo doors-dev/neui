@@ -69,6 +69,7 @@ func TestOmittedLogsNothing(t *testing.T) {
 }
 
 func TestUnknownLogsOncePerProviderAndType(t *testing.T) {
+	unknownSeen.Clear()
 	r := record(t)
 	if got := Unknown("test-unknown", 0, api.ContentText{}); got != "[content omitted]" {
 		t.Fatalf("Unknown = %q, want [content omitted]", got)

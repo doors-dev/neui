@@ -241,6 +241,38 @@ func TestTableBadDate(t *testing.T) {
 	}
 }
 
+func TestTableFormulas(t *testing.T) {
+	fs, _ := newFSStore(t)
+	ctx := threadCtx(fs)
+	cols := []columnSpec{{Header: "Qty", Format: "integer"}, {Header: "Price", Format: "currency"}, {Header: "Total", Format: "currency"}, {Header: "Note"}}
+	rows := [][]any{{2.0, 1.5, "=A{row}*B{row}", "=IFS(A{row}>1,\"many\",TRUE,\"one\")"}, {1.0, 4.0, "=A{row}*B{row}", "=\"one\""}}
+	if _, err := tableTool(ctx, tableArg{Path: "t.xlsx", Sheet: "S", Cell: "A5", Columns: cols, Rows: rows}); err != nil {
+		t.Fatal(err)
+	}
+	f := reopen(t, fs, "t.xlsx")
+	for _, c := range []struct{ cell, formula, value string }{
+		{"C6", "A6*B6", "$3.00"},
+		{"C7", "A7*B7", "$4.00"},
+		{"D6", `_xlfn.IFS(A6>1,"many",TRUE,"one")`, "many"},
+	} {
+		if fl, _ := f.GetCellFormula("S", c.cell); fl != c.formula {
+			t.Fatalf("%s formula = %q, want %q", c.cell, fl, c.formula)
+		}
+		if v, err := f.CalcCellValue("S", c.cell); err != nil || v != c.value {
+			t.Fatalf("%s = %q, %v, want %q", c.cell, v, err, c.value)
+		}
+	}
+	for _, bad := range []struct {
+		v    string
+		want string
+	}{{"=WEBSERVICE(\"https://x.test\")", "external links"}, {"=XLOOKUP(1,A:A,B:B)", "XLOOKUP is a dynamic-array"}, {"=", "is empty"}} {
+		_, err := tableTool(ctx, tableArg{Path: "t.xlsx", Sheet: "Other", Columns: []columnSpec{{Header: "K"}}, Rows: [][]any{{bad.v}}})
+		if err == nil || !strings.Contains(err.Error(), bad.want) {
+			t.Fatalf("%q: err = %v, want %q", bad.v, err, bad.want)
+		}
+	}
+}
+
 func TestTableKeepsPanes(t *testing.T) {
 	fs, _ := newFSStore(t)
 	f := excelize.NewFile()

@@ -150,25 +150,84 @@ func NewModule(name string, desc string) Module {
 var ModuleJS ModuleFactory = js.Module
 
 // JSConfig tunes the js runtime; a zero or negative field takes its default.
-type JSConfig = js.Config
+// The limits are shared by every session of an app that sets WithJSConfig,
+// and by every app in the process that does not: a script waits to start
+// until a worker and enough of TotalMemory are free.
+type JSConfig struct {
+	// TotalMemory is the sum in bytes of the memory budgets of all scripts
+	// executing at once across the app. Default 512 MiB; a value below
+	// WorkerMemory is raised to it.
+	TotalMemory int
+	// WorkerMemory is the largest memory budget in bytes one script may
+	// take. Default 128 MiB; a value below DefaultMemory is raised to it.
+	WorkerMemory int
+	// DefaultMemory is the memory budget in bytes of a script that asks for
+	// less or none. Default 16 MiB, at least 4 MiB.
+	DefaultMemory int
+	// MaxWorkers is how many scripts may execute at once across the app.
+	// Default 16.
+	MaxWorkers int
+	// JobTimeout caps how long one script may execute, its tool calls
+	// included: tool calls in flight are cancelled at the limit. A script may
+	// ask for less. Default 30s.
+	JobTimeout time.Duration
+	// AsyncAfter is how long a run keeps the tool call waiting before it
+	// detaches and delivers its result later as a background task. Default
+	// 10s.
+	AsyncAfter time.Duration
+	// MaxQueue is how many scripts may wait to start across the app; one
+	// submitted past it is rejected. Default 100.
+	MaxQueue int
+	// MaxCallDepth is how many nested JS calls a script may make before an
+	// error is thrown. Default 1000.
+	MaxCallDepth int
+}
 
 // WithJSConfig tunes the js runtime of ModuleJS, as an app option for
 // doors.NewApp: the app then schedules scripts against its own memory and
 // worker limits. Without it, the app runs on defaults and shares one set of
-// limits with every other app in the process that does not set it.
+// limits with every other app in the process that does not set it. The
+// runtime and its scheduling goroutine live for the rest of the process, even
+// after the app is dropped, so build each app once per process.
 func WithJSConfig(c JSConfig) doors.With {
+	config := js.Config{
+		TotalMemory:   c.TotalMemory,
+		WorkerMemory:  c.WorkerMemory,
+		DefaultMemory: c.DefaultMemory,
+		MaxWorkers:    c.MaxWorkers,
+		JobTimeout:    c.JobTimeout,
+		AsyncAfter:    c.AsyncAfter,
+		MaxQueue:      c.MaxQueue,
+		MaxCallDepth:  c.MaxCallDepth,
+	}
 	return doors.WithFunc(func() doors.With {
-		return doors.WithValue(js.ConfigKey{}, js.NewSeed(c))
+		return doors.WithValue(js.ConfigKey{}, js.NewSeed(config))
 	})
 }
 
 // XLSConfig tunes the xls module; a zero field takes its default.
-type XLSConfig = xls.Config
+type XLSConfig struct {
+	// MaxFileSize is the largest workbook file on disk, in bytes, the module
+	// opens; a larger one is refused. Default 50 MiB.
+	MaxFileSize int64
+	// MaxUnzipSize caps the uncompressed contents of a workbook in bytes; a
+	// workbook that expands past it, or holds a part compressed over 100x, is
+	// refused. Default 1 GiB.
+	MaxUnzipSize int64
+	// MaxReadRows caps the rows returned, or matches collected, by one call;
+	// it also caps the rows profile reads to guess column types and the
+	// errors check reports. Default 200.
+	MaxReadRows uint
+}
 
 // ModuleXLS is the xls module: Excel workbooks read and written through the
 // workspace. The zero XLSConfig takes every default.
 func ModuleXLS(c XLSConfig) ModuleFactory {
-	return xls.Module(c)
+	return xls.Module(xls.Config{
+		MaxFileSize:  c.MaxFileSize,
+		MaxUnzipSize: c.MaxUnzipSize,
+		MaxReadRows:  c.MaxReadRows,
+	})
 }
 
 // ModuleWeb is the web module: web__fetch for one URL over HTTP and, when
@@ -248,14 +307,16 @@ type WebConfig struct {
 	// MaxBytes caps one response body, aborted mid-stream. Default 5<<20.
 	MaxBytes int64
 	// Timeout bounds a fetch that passes no timeoutMs, and every search.
-	// Default 30s.
+	// Default 30s; a value above MaxTimeout is lowered to it.
 	Timeout time.Duration
-	// MaxTimeout clamps timeoutMs. Default 120s.
+	// MaxTimeout clamps timeoutMs and Timeout. Default 120s.
 	MaxTimeout time.Duration
 	// CacheTTL is how long a converted page stays pageable without a second
 	// request. Default 15m.
 	CacheTTL time.Duration
-	// CacheBytes caps the converted text held per thread. Default 8<<20.
+	// CacheBytes caps the converted text held per thread. Default 8<<20; a
+	// value below twice MaxBytes is raised to it, so with the default MaxBytes
+	// the cap is 10<<20.
 	CacheBytes int64
 	// SearchChars caps the page content of each search result on its own,
 	// in characters; a result cut there ends with "… (content truncated)".

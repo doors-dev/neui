@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"neui.dev/api"
+	"neui.dev/provider/lib"
 )
 
 func encodeBody(t *testing.T, p *Provider, req api.Request) *chatRequest {
@@ -246,6 +247,25 @@ func TestEncodeToolResults(t *testing.T) {
 	}
 	if body.Messages[2].Role != "user" || body.Messages[2].Content.(string) != "and now?" {
 		t.Fatalf("trailing user message %+v", body.Messages[2])
+	}
+}
+
+func TestEncodeEmptyToolResult(t *testing.T) {
+	p := mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k"))
+	body := encodeBody(t, p, api.Request{
+		Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{
+			api.ContentToolResult{ID: "call_a"},
+			api.ContentToolResult{ID: "call_b", Error: api.ToolErrRuntime},
+		}}},
+	})
+	if len(body.Messages) != 2 {
+		t.Fatalf("messages %+v", body.Messages)
+	}
+	if got := body.Messages[0].Content.(string); got != lib.EmptyResult {
+		t.Fatalf("empty result %q", got)
+	}
+	if got := body.Messages[1].Content.(string); got != "Error: " {
+		t.Fatalf("empty failed result %q", got)
 	}
 }
 

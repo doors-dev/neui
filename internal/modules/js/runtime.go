@@ -47,38 +47,15 @@ func getRuntime(ctx context.Context) *runtime {
 	return rt.(*runtime)
 }
 
-// Config tunes the js runtime; a zero or negative field takes its default. The limits
-// are shared by every session of an app that sets WithJSConfig, and by every
-// app in the process that does not: a script waits to start until a
-// worker and enough of TotalMemory are free.
 type Config struct {
-	// TotalMemory is the sum in bytes of the memory budgets of all scripts
-	// executing at once across the app. Default 512 MiB; a value below
-	// WorkerMemory is raised to it.
-	TotalMemory int
-	// WorkerMemory is the largest memory budget in bytes one script may
-	// take. Default 128 MiB; a value below DefaultMemory is raised to it.
-	WorkerMemory int
-	// DefaultMemory is the memory budget in bytes of a script that asks for
-	// less or none. Default 16 MiB, at least 4 MiB.
+	TotalMemory   int
+	WorkerMemory  int
 	DefaultMemory int
-	// MaxWorkers is how many scripts may execute at once across the app.
-	// Default 16.
-	MaxWorkers int
-	// JobTimeout caps how long one script may execute, its tool calls
-	// included: tool calls in flight are cancelled at the limit. A script may
-	// ask for less. Default 30s.
-	JobTimeout time.Duration
-	// AsyncAfter is how long a run keeps the tool call waiting before it
-	// detaches and delivers its result later as a background task. Default
-	// 10s.
-	AsyncAfter time.Duration
-	// MaxQueue is how many scripts may wait to start across the app; one
-	// submitted past it is rejected. Default 100.
-	MaxQueue int
-	// MaxCallDepth is how many nested JS calls a script may make before an
-	// error is thrown. Default 1000.
-	MaxCallDepth int
+	MaxWorkers    int
+	JobTimeout    time.Duration
+	AsyncAfter    time.Duration
+	MaxQueue      int
+	MaxCallDepth  int
 }
 
 const minMemory = 4 * 1024 * 1024
@@ -226,11 +203,11 @@ func (r *runtime) execute(vm *quickjs.VM, input task.Input) (out string, err err
 	}
 	res, err := vm.Eval(input.Script, quickjs.EvalGlobal)
 	if err != nil {
-		return "", fmt.Errorf("%q: %v: %w", input.Name, err, errScript)
+		return "", fmt.Errorf("%q (log file %q): %v: %w", input.Name, logName(input.Name), err, errScript)
 	}
 	s, ok := res.(string)
 	if !ok {
-		return "", fmt.Errorf("%q: the returned value does not serialize to JSON, such as a function, a symbol or a toJSON returning undefined: %w", input.Name, errScript)
+		return "", fmt.Errorf("%q (log file %q): the returned value does not serialize to JSON, such as a function, a symbol or a toJSON returning undefined: %w", input.Name, logName(input.Name), errScript)
 	}
 	return s, nil
 }

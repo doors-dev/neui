@@ -151,3 +151,27 @@ func TestCompactBeforeTheThreadIsStoredIsWrongState(t *testing.T) {
 		t.Fatalf("Compact on a thread not stored yet returned %v, want ErrWrongState", err)
 	}
 }
+
+func TestEmptyRewindWithNothingPendingKeepsTheChat(t *testing.T) {
+	th, messages, r := stubThread(t, "rewind-empty", stubProvider{api.Model{Name: "stub"}, nil}, api.ThreadConfig{})
+	first, _, err := r.RoundInit(api.Input{Text: "one"})
+	if err != nil {
+		t.Fatalf("replay RoundInit: %v", err)
+	}
+	if _, err := r.RoundOk(api.EventUsage{}, api.Indexed[api.Content]{0: api.ContentText{Text: "ok"}}); err != nil {
+		t.Fatalf("replay RoundOk: %v", err)
+	}
+	state := startRound(t, th, r, api.Input{Text: "two"})
+	op := NewOperation(context.Background())
+	state.on(commandRewind{link: th.link, round: first.ID, input: api.Input{}, Operation: op})
+	if err := op.Receive(); err != api.ErrWrongState {
+		t.Fatalf("an empty rewind with nothing pending answered %v, want ErrWrongState", err)
+	}
+	if th.link == nil || th.state != any(state) || state.ctx.Err() != nil {
+		t.Fatalf("the refused rewind disturbed the running round: link %v, state %T, ctx %v", th.link != nil, th.state, state.ctx.Err())
+	}
+	stored, err := messages.RoundAfter(context.Background(), "rewind-empty", api.NoRoundID, 100)
+	if err != nil || len(stored) != 2 {
+		t.Fatalf("the refused rewind left %d rounds (%v), want 2", len(stored), err)
+	}
+}

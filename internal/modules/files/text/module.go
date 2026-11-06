@@ -1,7 +1,6 @@
 package text
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -15,7 +14,7 @@ import (
 	"neui.dev/internal/tools"
 )
 
-const writeDesc = `Write a whole text file, replacing existing content, creating parent directories. An existing file keeps its line endings and BOM; content with \r is written as is. Binary goes through writeBytes.`
+const writeDesc = `Write a whole text file, replacing existing content, creating parent directories. An existing file keeps its line endings and BOM; content with \r keeps its line breaks as given. Binary goes through writeBytes.`
 const appendDesc = `Append to the end of a text file, creating it if missing. Line breaks take the file's existing ending.`
 const editDesc = `Replace text in a file; check content with read first. old must match the current content exactly, including whitespace and indentation; write line breaks as \n; the "N: " line prefixes shown by the read tool are not part of the content.`
 const replaceDesc = `Replace text matching an RE2 regular expression. Without all the pattern must match exactly once; capture groups work in the replacement, e.g. $1.`
@@ -77,8 +76,11 @@ func writeTool(ctx context.Context, arg writeArg) (writeResult, error) {
 	if err != nil {
 		return writeResult{}, err
 	}
-	if exists && !strings.Contains(arg.Content, "\r") {
+	switch {
+	case exists && !strings.Contains(arg.Content, "\r"):
 		arg.Content = s.format(arg.Content)
+	case s.bom && !strings.HasPrefix(arg.Content, bom):
+		arg.Content = bom + arg.Content
 	}
 	return put(ctx, fs, fs.Create, arg)
 }
@@ -227,40 +229,32 @@ func readCapped(ctx context.Context, fs api.FS, path string) (string, style, err
 }
 
 func existingStyle(ctx context.Context, fs api.FS, path string) (style, bool, error) {
-	rc, err := fs.ReadAll(ctx, path)
+	e, err := fs.Stat(ctx, path)
 	if errors.Is(err, api.ErrNotFound) {
 		return style{}, false, nil
 	}
 	if err != nil {
 		return style{}, false, err
 	}
-	defer rc.Close()
-	br := bufio.NewReaderSize(rc, 64<<10)
-	head, _ := br.Peek(len(bom))
-	s := style{bom: string(head) == bom}
-	buf := make([]byte, 64<<10)
-	var crlf, lines int
-	cr := false
-	for {
-		n, err := br.Read(buf)
-		if n > 0 {
-			chunk := buf[:n]
-			lines += bytes.Count(chunk, []byte("\n"))
-			crlf += bytes.Count(chunk, []byte("\r\n"))
-			if cr && chunk[0] == '\n' {
-				crlf++
-			}
-			cr = chunk[n-1] == '\r'
-		}
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return style{}, false, err
-		}
+	if e.Virtual {
+		return style{}, false, api.ErrReadOnly
 	}
-	s.crlf = crlf > lines-crlf
-	return s, true, nil
+	if e.Size == 0 {
+		return style{}, true, nil
+	}
+	rc, err := fs.ReadRange(ctx, path, 0, 64<<10)
+	if err != nil {
+		return style{}, false, err
+	}
+	head, err := io.ReadAll(rc)
+	if cerr := rc.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return style{}, false, err
+	}
+	crlf := bytes.Count(head, []byte("\r\n"))
+	return style{bom: bytes.HasPrefix(head, []byte(bom)), crlf: crlf > bytes.Count(head, []byte("\n"))-crlf}, true, nil
 }
 
 type style struct {

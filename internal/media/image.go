@@ -66,12 +66,18 @@ func Shape(data []byte, mimeType api.ImageMime, model api.Model) (api.Image, err
 	}
 	size := 0
 	for round := range 2 {
-		if round > 0 {
+		var flat *image.RGBA
+		if round == 0 {
+			flat = image.NewRGBA(dst.Bounds())
+			draw.Draw(flat, flat.Bounds(), image.White, image.Point{}, draw.Src)
+			draw.Draw(flat, flat.Bounds(), dst, image.Point{}, draw.Over)
+		} else {
 			w, h = scaleSidesByArea(w, h, retryArea)
-			shrunk := image.NewRGBA(image.Rect(0, 0, max(w, 1), max(h, 1)))
-			draw.BiLinear.Scale(shrunk, shrunk.Bounds(), src, src.Bounds(), draw.Src, nil)
-			dst = shrunk
+			flat = image.NewRGBA(image.Rect(0, 0, max(w, 1), max(h, 1)))
+			draw.Draw(flat, flat.Bounds(), image.White, image.Point{}, draw.Src)
+			draw.BiLinear.Scale(flat, flat.Bounds(), src, src.Bounds(), draw.Over, nil)
 		}
+		dst = flat
 		for _, quality := range [3]int{85, 70, 55} {
 			buf.Reset()
 			if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: quality}); err != nil {

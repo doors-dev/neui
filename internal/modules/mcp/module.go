@@ -73,6 +73,8 @@ type module struct {
 	inflight         int
 	desc             atomic.Pointer[string]
 	connErrored      bool
+	connectedAt      time.Time
+	backoff          backoff
 	waiters          []getSessionCommand
 	once             sync.Once
 }
@@ -143,7 +145,7 @@ func (m *module) List() []common.Tool {
 var _ common.Module = (*module)(nil)
 
 func (m *module) run() {
-	m.connect()
+	m.connect(false)
 	defer m.closeConnection()
 	for {
 		var idle <-chan time.Time
@@ -176,6 +178,7 @@ func (m *module) on(cmd command) {
 		m.closeInit()
 		m.cancelConnection = nil
 		m.connErrored = false
+		m.connectedAt = time.Now()
 		m.client = cmd.client
 		m.desc.Store(&cmd.desc)
 		m.module = m.buildModule(cmd.tools)
@@ -212,8 +215,7 @@ func (m *module) on(cmd command) {
 				"module", m.conf.Name,
 				"err", cmd.err,
 			)
-			m.closeConnection()
-			m.connect()
+			m.reconnect()
 			return
 		}
 		m.module = m.buildModule(cmd.tools)
@@ -234,7 +236,7 @@ func (m *module) on(cmd command) {
 			m.waiters = append(m.waiters, cmd)
 		default:
 			m.waiters = append(m.waiters, cmd)
-			m.connect()
+			m.connect(false)
 		}
 	case apiCommand:
 		cmd.f(m)
@@ -246,8 +248,7 @@ func (m *module) on(cmd command) {
 			"mcp: connection lost, reconnecting",
 			"module", m.conf.Name,
 		)
-		m.closeConnection()
-		m.connect()
+		m.reconnect()
 	}
 }
 
@@ -327,7 +328,7 @@ func (m *module) buildModule(list []*mcp.Tool) tools.Module {
 				case client = <-ch:
 				}
 				if client == nil {
-					return nil, errors.New("MCP connection lost, please retry again later")
+					return nil, errors.New("the MCP server is unreachable right now; calls fail until it reconnects. Do not retry now; tell the user.")
 				}
 				defer m.send(callDoneCommand{})
 				res, err := client.CallTool(
@@ -357,7 +358,16 @@ func (m *module) isConnecting() bool {
 	return m.cancelConnection != nil && m.client == nil
 }
 
-func (m *module) connect() {
+func (m *module) reconnect() {
+	healthy := time.Since(m.connectedAt) >= 30*time.Second
+	m.closeConnection()
+	if healthy {
+		m.backoff.reset()
+	}
+	m.connect(!healthy)
+}
+
+func (m *module) connect(delayed bool) {
 	if m.ctx.Err() != nil {
 		return
 	}
@@ -367,8 +377,10 @@ func (m *module) connect() {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.cancelConnection = cancel
 	go func() {
+		if delayed && !m.backoff.wait(ctx) {
+			return
+		}
 		reported := false
-		backoff := newBackoff(ctx, time.Second, 30*time.Second)
 		var s *mcp.ClientSession
 		var list []*mcp.Tool
 		var err error
@@ -394,7 +406,7 @@ func (m *module) connect() {
 					return
 				}
 			}
-			if !backoff.wait() {
+			if !m.backoff.wait(ctx) {
 				return
 			}
 			goto retry

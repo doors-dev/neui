@@ -518,7 +518,10 @@ func (t *thread) applyCompaction(cmd commandApplyCompaction) bool {
 	}
 	if code, isErr := cmd.resp.Err(); isErr {
 		t.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}}))
-		slog.Error("thread: compaction failed", "thread", t.id, "code", code)
+		switch code {
+		case api.CodeAccess, api.CodeBusy, api.CodeNetwork, api.CodeUnknown, api.CodeInvalid:
+			doors.Logger(t.link.backend.Context()).Error("thread: compaction failed", "thread", t.id, "code", code, "err", cmd.resp.Cause)
+		}
 		return false
 	}
 	if code, _ := cmd.resp.Ok(); code != api.CodeTurn {

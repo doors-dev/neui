@@ -120,13 +120,17 @@ func (s *threadRound) on(cmd any) {
 			cmd.Err(api.ErrInputTooLarge)
 			return
 		}
+		round, replay, removed, err := s.thread.replay.Rewind(cmd.round, cmd.input)
+		if errors.Is(err, api.ErrWrongState) {
+			cmd.Err(err)
+			return
+		}
 		wasPending := s.thread.pending
 		s.thread.pending = false
 		s.cancel(api.ErrCanceledByUser)
 		if s.thread.compaction.cut(cmd.round) {
 			s.thread.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}}))
 		}
-		round, replay, removed, err := s.thread.replay.Rewind(cmd.round, cmd.input)
 		if err != nil {
 			s.thread.criticalErr(cmd.intoMessage(), err)
 			return
@@ -231,12 +235,16 @@ func (s *threadRound) err(code api.ErrCode, cause error, content api.Indexed[api
 		api.CodeNetwork,
 		api.CodeUnknown,
 		api.CodeCapped:
+		if code != api.CodeCapped {
+			doors.Logger(s.thread.link.backend.Context()).Error("thread: turn failed", "thread", s.thread.id, "code", code, "err", cause)
+		}
 		if err := s.thread.replay.RoundError(errors.New(string(code)), usage, content); err != nil {
 			s.thread.criticalErr(nil, err)
 			return
 		}
 		s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundEnd{Round: s.round.ID, State: api.RoundError, Error: string(code), Usage: usage, Final: true}))
 	case api.CodeInvalid:
+		doors.Logger(s.thread.link.backend.Context()).Error("thread: turn failed", "thread", s.thread.id, "code", code, "err", cause)
 		if err := s.thread.replay.RoundReject(code, usage, content); err != nil {
 			s.thread.criticalErr(nil, err)
 			return

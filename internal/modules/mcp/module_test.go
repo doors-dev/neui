@@ -475,6 +475,12 @@ func TestParkedWaiterHoldsAttempt(t *testing.T) {
 	if session == nil {
 		t.Fatal("first call left no session to close")
 	}
+	aged := make(chan struct{})
+	mod.send(apiCommand{func(m *module) {
+		m.connectedAt = m.connectedAt.Add(-time.Minute)
+		close(aged)
+	}})
+	<-aged
 	hold.Store(true)
 	session.Close()
 	select {

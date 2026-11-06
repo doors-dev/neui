@@ -3,29 +3,33 @@ package mcp
 import (
 	"context"
 	"math/rand/v2"
+	"sync"
 	"time"
 )
 
 type backoff struct {
-	ctx   context.Context
-	base  time.Duration
-	limit time.Duration
+	mu    sync.Mutex
 	delay time.Duration
 }
 
-func newBackoff(ctx context.Context, base time.Duration, limit time.Duration) *backoff {
-	return &backoff{ctx: ctx, base: base, limit: limit}
+func (b *backoff) wait(ctx context.Context) bool {
+	b.mu.Lock()
+	if b.delay == 0 {
+		b.delay = time.Second
+	}
+	delay := b.delay
+	b.delay = min(b.delay*2, 30*time.Second)
+	b.mu.Unlock()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-time.After(delay + rand.N(delay/2)):
+		return true
+	}
 }
 
-func (b *backoff) wait() bool {
-	if b.delay == 0 {
-		b.delay = b.base
-	}
-	select {
-	case <-b.ctx.Done():
-		return false
-	case <-time.After(b.delay + rand.N(b.delay/2)):
-	}
-	b.delay = min(b.delay*2, b.limit)
-	return true
+func (b *backoff) reset() {
+	b.mu.Lock()
+	b.delay = 0
+	b.mu.Unlock()
 }

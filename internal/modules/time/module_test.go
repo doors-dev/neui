@@ -68,10 +68,10 @@ func TestCancelClaimedBeforeFiringReportsCancellation(t *testing.T) {
 	m.pending.Store(nil)
 	go m.wait(ctx, p, task, time.Now())
 	time.Sleep(20 * time.Millisecond)
-	p.cancel(nil)
+	p.cancel(errCancelled)
 	select {
 	case err := <-task.err:
-		if !errors.Is(err, context.Canceled) {
+		if !errors.Is(err, errCancelled) {
 			t.Fatalf("unexpected cause %v", err)
 		}
 	case <-task.ok:
@@ -90,7 +90,7 @@ func TestCancelPendingTimer(t *testing.T) {
 	if _, err := m.cancel(context.Background(), struct{}{}); err != nil {
 		t.Fatal(err)
 	}
-	if err := <-task.err; !errors.Is(err, context.Canceled) {
+	if err := <-task.err; !errors.Is(err, errCancelled) {
 		t.Fatalf("unexpected cause %v", err)
 	}
 	if m.pending.Load() != nil {
@@ -154,5 +154,24 @@ func TestCancelReturnsOnCallerDone(t *testing.T) {
 	cancel(stop)
 	if _, err := m.cancel(ctx, struct{}{}); !errors.Is(err, stop) {
 		t.Fatalf("cancel with a done caller: %v", err)
+	}
+}
+
+func TestNowZoneIsAbbreviation(t *testing.T) {
+	saved := time.Local
+	defer func() { time.Local = saved }()
+	loc, err := time.LoadLocation("Europe/Berlin")
+	if err != nil {
+		t.Skip(err)
+	}
+	time.Local = loc
+	got, _ := (&module{}).now(context.Background(), struct{}{})
+	if got.Zone != "CET" && got.Zone != "CEST" {
+		t.Fatalf("zone %q", got.Zone)
+	}
+	time.Local = time.FixedZone("", 3*3600)
+	got, _ = (&module{}).now(context.Background(), struct{}{})
+	if got.Zone != "+03:00" {
+		t.Fatalf("unnamed zone %q", got.Zone)
 	}
 }

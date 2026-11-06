@@ -3,7 +3,6 @@ package response
 import (
 	"errors"
 	"fmt"
-	"log/slog"
 	"sort"
 
 	"neui.dev/api"
@@ -77,7 +76,7 @@ func (r Builder) Abort() (usage api.EventUsage, content api.Indexed[api.Content]
 	}
 	content = make(api.Indexed[api.Content], len(r.blocks))
 	for index, block := range r.blocks {
-		content[index] = block.assemble(true)
+		content[index] = block.assemble(false)
 	}
 	return usage, content
 }
@@ -94,7 +93,6 @@ func (r Builder) Flush() (response Response) {
 	if r.err != nil {
 		response.code = r.err.Code
 		response.Cause = r.err.Err
-		slog.Error("thread: turn failed", "code", r.err.Code, "err", r.err.Err)
 	} else if r.ok != nil {
 		response.code = r.ok.Code
 	}

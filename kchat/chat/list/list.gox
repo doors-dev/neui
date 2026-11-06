@@ -120,9 +120,9 @@ func (l List) seed(ctx context.Context, active *api.Round, anchor api.RoundID) (
 		above, aboveEnded, err := l.loadBefore(ctx, anchor + 1, margin + 1)
 		if err != nil {
 			doors.Logger(ctx).Error("list: anchor resolve", "round", anchor, "err", err)
-		} else if len(above) != 0 && above[len(above) - 1][0].Input.Len() != 0 {
+		} else if len(above) != 0 {
 			at := above[len(above) - 1][0].ID
-			below, belowEnded, err := l.loadAfter(ctx, at - 1, margin + 1, stop)
+			below, belowEnded, err := l.loadAfter(ctx, at - 1, margin + 1, stop, false)
 			if err != nil {
 				doors.Logger(ctx).Error("list: anchor load", "round", at, "err", err)
 			} else {
@@ -417,11 +417,10 @@ elem (e entry) Main() {
 	~(e.door)
 }
 
-func (l List) loadAfter(ctx context.Context, cursor api.RoundID, num int, stop api.RoundID) ([][]api.Round, bool, error) {
+func (l List) loadAfter(ctx context.Context, cursor api.RoundID, num int, stop api.RoundID, strip bool) ([][]api.Round, bool, error) {
 	sections := make([][]api.Round, 0, num)
 	var buffer []api.Round
 	var ended bool
-	strip := true
 	page := max(num, margin)
 	outer: for {
 		rounds, err := l.thread.RoundAfter(ctx, cursor, page)

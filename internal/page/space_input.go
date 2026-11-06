@@ -91,7 +91,7 @@ func (s Space) Radio(ctx context.Context, permissios Rights, desc string, attrs 
 	name, _ := attrs.Get("name").Value().(string)
 	group := -1
 	for i := range s.list {
-		if s.list[i].Kind == kindRadio && s.list[i].Name == name {
+		if name != "" && s.list[i].Kind == kindRadio && s.list[i].Name == name {
 			group = i
 			break
 		}

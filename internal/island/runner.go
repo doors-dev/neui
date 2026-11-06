@@ -17,14 +17,8 @@ import (
 	"neui.dev/internal/schema"
 )
 
-// Call is a function an island script hands a widget as a param or patch
-// field: the source of a single-argument JavaScript function, such as
-// `(row) => app.price(row.sku) * row.qty`. Its syntax is checked when the
-// params are decoded, so a broken source throws at the script's line.
 type Call[I any, O any] string
 
-// UnmarshalJSON decodes the source from a JSON string and fails when it is
-// not a syntactically valid JavaScript expression.
 func (c *Call[I, O]) UnmarshalJSON(data []byte) error {
 	var src string
 	if err := json.Unmarshal(data, &src); err != nil {
@@ -37,11 +31,8 @@ func (c *Call[I, O]) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// InlineJSONSchema marks Call to be inlined where it appears in a schema.
 func (Call[I, O]) InlineJSONSchema() {}
 
-// JSONSchemaBytes describes Call to the model as a string holding a function
-// from the schema of I to the schema of O.
 func (Call[I, O]) JSONSchemaBytes() ([]byte, error) {
 	in, err := schema.NewSchema[I]()
 	if err != nil {
@@ -62,17 +53,6 @@ type runnerKey struct{}
 //go:embed runner.js
 var runnerJS string
 
-// Call runs the function with i and decodes its result into O. Calls of one
-// app run one at a time on a JS runtime separate from the island script,
-// limited by IslandConfig.FnMemory, with each call limited by
-// IslandConfig.FnTime and IslandConfig.MaxCallDepth. Its globals are frozen,
-// so no call leaves state for the next, and a call sees only its argument,
-// the app functions, console and the standard built-ins. ctx must come from
-// the island (a widget's render, Update or event handlers); elsewhere Call
-// returns an error. A failure caused by the function, including a result that
-// does not decode into O, is written to the app's log and, the first time for
-// each source during a script turn and for at most 16 sources, reported to
-// the agent as a call_error notification.
 func (c Call[I, O]) Call(ctx context.Context, i I) (O, error) {
 	json, err := json.Marshal(i)
 	if err != nil {

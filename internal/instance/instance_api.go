@@ -3,11 +3,13 @@ package instance
 import (
 	"context"
 	"errors"
+	"io"
 	"time"
 
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
 	"neui.dev/api"
+	chatmod "neui.dev/internal/modules/chat"
 	"neui.dev/internal/thread"
 	"neui.dev/internal/utils"
 )
@@ -99,6 +101,10 @@ func (inst *instance) ThreadRename(ctx context.Context, id api.ThreadID, name st
 	if ctx.Err() != nil {
 		return context.Canceled
 	}
+	name, err := chatmod.CheckName(name)
+	if err != nil {
+		return err
+	}
 	if _, err := backend.Storage().ThreadGet(ctx, id); err != nil {
 		return err
 	}
@@ -115,6 +121,37 @@ func (inst *instance) ThreadClone(ctx context.Context, id api.ThreadID) (api.Thr
 	}
 	clone, err := backend.Storage().ThreadClone(ctx, id, api.ThreadID(utils.NewID()))
 	if err != nil {
+		return "", err
+	}
+	files := backend.FileStorage()
+	var f api.File
+copyFiles:
+	for _, origin := range []api.Origin{api.OriginUser, api.OriginAgent} {
+		for f, err = range files.FileList(ctx, id, origin) {
+			if err == nil && f.Draft {
+				continue
+			}
+			var r io.ReadCloser
+			if err == nil {
+				r, err = files.FileRead(ctx, id, origin, f.Name, 0, -1)
+			}
+			if err == nil {
+				_, err = files.FilePut(ctx, clone.ID, origin, f.Name, f.MIME, r, false)
+				r.Close()
+			}
+			if err != nil {
+				break copyFiles
+			}
+		}
+	}
+	if err != nil {
+		cleanup := context.WithoutCancel(ctx)
+		if derr := thread.Delete(cleanup, backend.Storage(), clone.ID); derr != nil {
+			err = errors.Join(err, derr)
+		}
+		if derr := files.FileDeleteAll(cleanup, clone.ID); derr != nil {
+			err = errors.Join(err, derr)
+		}
 		return "", err
 	}
 	return clone.ID, nil

@@ -1155,3 +1155,64 @@ func BenchmarkReplayOverStoredPDFs(b *testing.B) {
 		}
 	}
 }
+
+func TestEmptyRewindNeedsSomethingPending(t *testing.T) {
+	count := func(t *testing.T, s api.MessageStorage) int {
+		t.Helper()
+		n := 0
+		for _, err := range s.RoundRange(context.Background(), "a", api.NoRoundID, api.NoRoundID) {
+			if err != nil {
+				t.Fatalf("RoundRange: %v", err)
+			}
+			n++
+		}
+		return n
+	}
+
+	t.Run("nothing pending", func(t *testing.T) {
+		s := local.NewMessageStorage()
+		r := NewReplay(context.Background(), "a", s, api.ThreadConfig{}, api.Model{})
+		mustCreate(t, r)
+		okRound(t, r, "one", 10)
+		second := okRound(t, r, "two", 20)
+		if _, _, _, err := r.Rewind(second, api.Input{}); !errors.Is(err, api.ErrWrongState) {
+			t.Fatalf("an empty rewind with nothing pending answered %v, want ErrWrongState", err)
+		}
+		if n := count(t, s); n != 2 {
+			t.Fatalf("the refused rewind left %d rounds, want 2", n)
+		}
+		if !r.IsLoaded() {
+			t.Fatalf("the refused rewind unloaded the replay")
+		}
+	})
+
+	t.Run("stashed results", func(t *testing.T) {
+		s := local.NewMessageStorage()
+		r := NewReplay(context.Background(), "a", s, api.ThreadConfig{}, api.Model{})
+		mustCreate(t, r)
+		toolRound(t, r, "c", "call")
+		after := okRound(t, r, "after", 20)
+		round, messages, _, err := r.Rewind(after, api.Input{})
+		if err != nil {
+			t.Fatalf("an empty rewind over stashed results: %v", err)
+		}
+		last := messages[len(messages)-1]
+		if _, ok := last.Content[0].(api.ContentToolResult); !ok || round.ID == api.NoRoundID {
+			t.Fatalf("the resumed round replays %#v, want the stashed tool result", last.Content)
+		}
+	})
+
+	t.Run("pinned record", func(t *testing.T) {
+		s := local.NewMessageStorage()
+		r := NewReplay(context.Background(), "a", s, api.ThreadConfig{}, api.Model{})
+		mustCreate(t, r)
+		first := okRound(t, r, "one", 10)
+		if err := r.Record(first, "note", nil, "kept"); err != nil {
+			t.Fatalf("Record: %v", err)
+		}
+		second := okRound(t, r, "two", 20)
+		if _, _, _, err := r.Rewind(second, api.Input{}); err != nil {
+			t.Fatalf("an empty rewind over a record of an earlier round: %v", err)
+		}
+	})
+}

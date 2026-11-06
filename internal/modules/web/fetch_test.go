@@ -649,3 +649,59 @@ func TestFetchKeepsFormContent(t *testing.T) {
 		}
 	}
 }
+
+func TestConfigDefaultsFollowTheLimits(t *testing.T) {
+	c := Config{MaxBytes: 10 << 20, Timeout: 5 * time.Minute, MaxTimeout: time.Minute, CacheBytes: 1 << 20}
+	c.initDefaults()
+	if c.Timeout != time.Minute {
+		t.Errorf("default timeout %s exceeds the %s maximum", c.Timeout, c.MaxTimeout)
+	}
+	if c.CacheBytes != 20<<20 {
+		t.Errorf("cache of %d bytes cannot keep one decoded %d-byte page", c.CacheBytes, c.MaxBytes)
+	}
+}
+
+func TestFetchNotesAPageTooLargeToKeep(t *testing.T) {
+	requests := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		w.Header().Set("Content-Type", "text/plain")
+		fmt.Fprint(w, strings.Repeat("a line of text\n", 50))
+	}))
+	defer srv.Close()
+	m := &module{
+		conf:   Config{HTTPClient: srv.Client()},
+		client: srv.Client(),
+		cache:  make(map[string]*entry),
+	}
+	m.conf.initDefaults()
+	m.conf.CacheBytes = 100
+	out, err := m.fetch(context.Background(), FetchArg{URL: srv.URL + "/a.txt", Limit: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "continue with offset=6; this page is too large to keep, so continuing fetches it again") {
+		t.Errorf("no note that the copy was not kept: %s", out)
+	}
+	if len(m.cache) != 0 || m.held != 0 {
+		t.Errorf("an oversized page was cached: %d keys, %d bytes", len(m.cache), m.held)
+	}
+	if _, err := m.fetch(context.Background(), FetchArg{URL: srv.URL + "/a.txt", Offset: 6, Limit: 5}); err != nil {
+		t.Fatal(err)
+	}
+	if requests != 2 {
+		t.Errorf("%d requests, continuing an unkept page must fetch it again", requests)
+	}
+}
+
+func TestModuleDescriptionNamesTheCacheTTL(t *testing.T) {
+	for ttl, want := range map[time.Duration]string{0: "about 15 minutes", 40 * time.Minute: "about 40 minutes", 30 * time.Second: "about 30 seconds"} {
+		m, ok := Module(Config{CacheTTL: ttl})(context.Background()).(interface{ Desc() string })
+		if !ok {
+			t.Fatal("web module has no description")
+		}
+		if !strings.Contains(m.Desc(), "costs no second request for "+want+".") {
+			t.Errorf("ttl %s: description does not say %q: %s", ttl, want, m.Desc())
+		}
+	}
+}

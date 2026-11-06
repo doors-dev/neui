@@ -334,8 +334,21 @@ func (i Island) Main() gox.Elem {
 // IslandCall is a widget param or patch field that takes a function from the
 // island script: the source of a single-argument JavaScript function, such as
 // `(row) => app.price(row.sku) * row.qty`. Its syntax is checked when the
-// params are decoded, so a broken source throws at the script's line. The
-// widget runs it with Call, passing an I and getting an O back.
+// params are decoded, so a broken source throws at the script's line. In the
+// widget's schema it reads as a string holding a function from the schema of I
+// to the schema of O.
+//
+// The widget runs it with Call(ctx, i), which decodes the result into an O.
+// Calls of one app run one at a time on a JS runtime separate from the island
+// script, limited by IslandConfig.FnMemory, with each call limited by
+// IslandConfig.FnTime and IslandConfig.MaxCallDepth. Its globals are frozen,
+// so no call leaves state for the next, and a call sees only its argument,
+// the app functions, console and the standard built-ins. ctx must come from
+// the island (a widget's render, Update or event handlers); elsewhere Call
+// returns an error. A failure caused by the function, including a result that
+// does not decode into O, is written to the app's log and, the first time for
+// each source during a script turn and for at most 16 sources, reported to
+// the agent as a call_error notification.
 type IslandCall[I, O any] = island.Call[I, O]
 
 // IslandStore returns the store of the island app ctx renders or handles

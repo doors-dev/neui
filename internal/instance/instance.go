@@ -297,6 +297,7 @@ func (inst *instance) onMessage(m thread.Message) {
 
 func (inst *instance) onCriticalErr() {
 	for link := range inst.links {
+		link.dead.Store(true)
 		if link.initialized {
 			inst.dead[link] = struct{}{}
 			continue

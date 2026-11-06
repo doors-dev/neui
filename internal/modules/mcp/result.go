@@ -42,48 +42,8 @@ func result(ctx context.Context, res *mcp.CallToolResult, structured bool) any {
 			out = append(out, api.ContentText{Text: c.Text})
 		case *mcp.ImageContent:
 			if mimeType := api.ImageMime(http.DetectContentType(c.Data)); mimeType.IsValid() {
-				data, frames, i := c.Data, 0, 13
-				if mimeType == api.ImageGIF {
-					if len(data) > 10 && data[10]&0x80 != 0 {
-						i += 3 << (data[10]&7 + 1)
-					}
-				gif:
-					for frames < 2 {
-						if i >= len(data) {
-							frames = 2
-							break
-						}
-						switch data[i] {
-						case 0x3B:
-							break gif
-						case 0x21:
-							i += 2
-						case 0x2C:
-							frames++
-							if i+10 >= len(data) {
-								frames = 2
-								break gif
-							}
-							packed := data[i+9]
-							i += 11
-							if packed&0x80 != 0 {
-								i += 3 << (packed&7 + 1)
-							}
-						default:
-							frames = 2
-							break gif
-						}
-						for i < len(data) {
-							n := int(data[i])
-							i += 1 + n
-							if n == 0 {
-								break
-							}
-						}
-					}
-				}
-				if frames < 2 {
-					if shaped, err := media.Shape(data, mimeType, model); err == nil {
+				if mimeType != api.ImageGIF || media.StillGIF(c.Data) == nil {
+					if shaped, err := media.Shape(c.Data, mimeType, model); err == nil {
 						out = append(out, api.ContentImage{Data: shaped.Data, Mime: string(shaped.Mime)})
 						continue
 					}

@@ -99,12 +99,16 @@ func (s *threadCompact) on(cmd any) {
 			cmd.Err(api.ErrInputTooLarge)
 			return
 		}
+		round, replay, removed, err := s.thread.replay.Rewind(cmd.round, cmd.input)
+		if errors.Is(err, api.ErrWrongState) {
+			cmd.Err(err)
+			return
+		}
 		wasPending := s.thread.pending
 		s.thread.pending = false
 		if s.thread.compaction.cut(cmd.round) {
 			s.thread.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}}))
 		}
-		round, replay, removed, err := s.thread.replay.Rewind(cmd.round, cmd.input)
 		if err != nil {
 			s.thread.criticalErr(cmd.intoMessage(), err)
 			return

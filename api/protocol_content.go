@@ -322,7 +322,8 @@ func (ContentToolResult) contentType() string {
 // and drops the rest; nothing upstream strips them.
 type ContentReasoning struct {
 	// Model is the model the provider was configured with, as EventStart.Model
-	// reports, so it compares with == to the model of a later request.
+	// reports. It is informational: adapters judge a stored block by its shape,
+	// not by comparing this with the model of a later request.
 	Model    string          `json:"model"`
 	Summary  Indexed[string] `json:"summary"`        // paraphrase written by the service
 	Thoughts Indexed[string] `json:"thoughts"`       // thinking as the model generated it

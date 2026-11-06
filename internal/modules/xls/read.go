@@ -14,7 +14,7 @@ const profileSampleRows = 5
 
 const sheetsDesc = `List a workbook's sheets with row and column counts, tables, merged ranges and the autofilter. Start here before reading.`
 const profileDesc = `Profile one sheet or range of an .xlsx workbook: the header row, per-column types (number, text, date, bool, formula or mixed), the data row count and a 5-row sample. Types are guessed from the first data rows, up to the read cap. Use it to plan reads.`
-const readDesc = `Read cell values from a sheet, paged: offset is the 0-based row within the range to start at (offset 0 is the range's first row, header included), up to limit rows come back with nextOffset and truncated for the next page. Formatted values by default; raw returns underlying serial numbers and formulas. A merged cell reports its value at the anchor cell only.`
+const readDesc = `Read cell values from a sheet, paged: offset is the 0-based row within the range to start at (offset 0 is the range's first row, header included), up to limit rows come back with nextOffset and truncated for the next page. Formatted values by default, with a formula that has no saved result yet evaluated on the spot (an evaluation error shows as its text); raw returns underlying serial numbers and formulas. A merged cell reports its value at the anchor cell only.`
 const findDesc = `Find cells whose value contains a substring, across all sheets or one, returning sheet, cell and value. Results are capped — truncated means more matches exist; narrow the query or restrict to one sheet.`
 
 type sheetsArg struct {
@@ -373,17 +373,23 @@ func readTool(ctx context.Context, arg readArg) (readResult, error) {
 	if err := rows.Close(); err != nil {
 		return readResult{}, err
 	}
-	if arg.Raw {
-		for i, n := range nums {
-			row := res.Rows[i]
-			for j := range row {
-				cell, err := excelize.CoordinatesToCellName(b.x1+j, n)
-				if err != nil {
-					return readResult{}, err
-				}
-				if fl, _ := f.GetCellFormula(arg.Sheet, cell); fl != "" {
-					row[j] = "=" + fl
-				}
+	for i, n := range nums {
+		row := res.Rows[i]
+		for j := range row {
+			if !arg.Raw && row[j] != "" {
+				continue
+			}
+			cell, err := excelize.CoordinatesToCellName(b.x1+j, n)
+			if err != nil {
+				return readResult{}, err
+			}
+			fl, _ := f.GetCellFormula(arg.Sheet, cell)
+			switch {
+			case fl == "":
+			case arg.Raw:
+				row[j] = "=" + fl
+			default:
+				row[j] = calcText(f, arg.Sheet, cell)
 			}
 		}
 	}
@@ -421,13 +427,21 @@ func findTool(ctx context.Context, arg findArg) (findResult, error) {
 				return findResult{}, err
 			}
 			for i, val := range v {
-				if val == "" || !strings.Contains(val, arg.Query) {
+				if val != "" && !strings.Contains(val, arg.Query) {
 					continue
 				}
 				cell, err := excelize.CoordinatesToCellName(i+1, num)
 				if err != nil {
 					rows.Close()
 					return findResult{}, err
+				}
+				if val == "" {
+					if fl, _ := f.GetCellFormula(sheet, cell); fl != "" {
+						val = calcText(f, sheet, cell)
+					}
+					if !strings.Contains(val, arg.Query) {
+						continue
+					}
 				}
 				res.Hits = append(res.Hits, findHit{Sheet: sheet, Cell: cell, Value: val})
 				if uint(len(res.Hits)) == c.MaxReadRows {
@@ -442,4 +456,12 @@ func findTool(ctx context.Context, arg findArg) (findResult, error) {
 		}
 	}
 	return res, nil
+}
+
+func calcText(f *excelize.File, sheet, cell string) string {
+	v, err := f.CalcCellValue(sheet, cell)
+	if err != nil {
+		return err.Error()
+	}
+	return v
 }

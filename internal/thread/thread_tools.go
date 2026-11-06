@@ -2,6 +2,7 @@ package thread
 
 import (
 	"context"
+	"errors"
 	"github.com/doors-dev/doors"
 	"maps"
 
@@ -116,6 +117,11 @@ func (s *threadTools) on(cmd any) {
 			cmd.Err(api.ErrInputTooLarge)
 			return
 		}
+		round, replay, removed, err := s.thread.replay.Rewind(cmd.round, cmd.input)
+		if errors.Is(err, api.ErrWrongState) {
+			cmd.Err(err)
+			return
+		}
 		wasPending := s.thread.pending
 		s.thread.pending = false
 		s.cancel(api.ErrCanceledByUser)
@@ -126,7 +132,6 @@ func (s *threadTools) on(cmd any) {
 		if s.thread.compaction.cut(cmd.round) {
 			s.thread.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}}))
 		}
-		round, replay, removed, err := s.thread.replay.Rewind(cmd.round, cmd.input)
 		if err != nil {
 			s.thread.criticalErr(cmd.intoMessage(), err)
 			return
@@ -146,6 +151,10 @@ func (s *threadTools) on(cmd any) {
 	case commandTask:
 		if s.thread.link == nil || s.thread.link.linkTasks != cmd.linkTasks {
 			cmd.Err(context.Canceled)
+			return
+		}
+		if cmd.origin != s.round.ID {
+			cmd.Err(errors.New("task can be issued only during the tool calls round of its tool"))
 			return
 		}
 		cmd.Ok(s.thread.link.taskAdd(cmd.origin, cmd.module, cmd.name, cmd.comment, cmd.attrs, cmd.cancel))

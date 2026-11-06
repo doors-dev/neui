@@ -89,7 +89,11 @@ type Conf struct {
 
 // New builds a Provider. A nil option is skipped; an option with an invalid
 // value, or one the declared model does not take, makes New return its error,
-// as does an empty Conf.Model.Name. Without
+// as does an empty Conf.Model.Name. So do WithTemperature or WithTopP on a
+// model this provider classifies as reasoning (see WithTemperature), unless the
+// reasoning effort is EffortNone or WithForcedSampling is set, and any of
+// WithReasoningEffort, WithReasoningSummary, WithReasoningMode or
+// WithReasoningContext on a model it does not. Without
 // WithAPIKey, New reads the key from OPENAI_API_KEY once. If that is empty, it
 // logs a warning and requests carry no Authorization header, which
 // api.openai.com refuses with CodeAccess.
@@ -110,6 +114,13 @@ func New(conf Conf, opts ...Option) (*Provider, error) {
 	}
 	if p.model.Name == "" {
 		return nil, errors.New("gpt: no model, set Conf.Model")
+	}
+	if isReasoningModel(p.model.Name) {
+		if (p.set.temperature != nil || p.set.topP != nil) && !p.set.forceSampling && p.set.effort != string(EffortNone) {
+			return nil, fmt.Errorf("gpt: %s is a reasoning model and takes temperature and top_p only with reasoning effort none or WithForcedSampling", p.model.Name)
+		}
+	} else if p.set.effort != "" || p.set.summary != "" || p.set.reasoningMode != "" || p.set.reasoningContext != "" {
+		return nil, fmt.Errorf("gpt: %s is not a reasoning model and takes no reasoning options", p.model.Name)
 	}
 	if !p.keyExplicit {
 		p.apiKey = os.Getenv(apiKeyEnv)
@@ -220,8 +231,8 @@ func WithMaxTokens(n int) Option {
 	}
 }
 
-// WithTemperature sets the sampling temperature, 0 to 2. It is not sent to
-// a model this provider classifies as reasoning (an id in the gpt-5, gpt-6,
+// WithTemperature sets the sampling temperature, 0 to 2. New refuses it on a
+// model this provider classifies as reasoning (an id in the gpt-5, gpt-6,
 // o1, o3, o4 or codex families, other than *-chat-latest), unless the
 // reasoning effort is EffortNone or WithForcedSampling is set.
 func WithTemperature(v float64) Option {
@@ -234,8 +245,8 @@ func WithTemperature(v float64) Option {
 	}
 }
 
-// WithTopP sets nucleus sampling, 0 to 1. Like WithTemperature it is not
-// sent to models classified as reasoning unless the reasoning effort is
+// WithTopP sets nucleus sampling, 0 to 1. Like WithTemperature, New refuses
+// it on models classified as reasoning unless the reasoning effort is
 // EffortNone or WithForcedSampling is set.
 func WithTopP(v float64) Option {
 	return func(p *Provider) error {
@@ -247,8 +258,8 @@ func WithTopP(v float64) Option {
 	}
 }
 
-// WithForcedSampling sends WithTemperature and WithTopP to every model, for a
-// model this provider wrongly classifies as reasoning.
+// WithForcedSampling lets WithTemperature and WithTopP reach every model, for
+// a model this provider wrongly classifies as reasoning.
 func WithForcedSampling() Option {
 	return func(p *Provider) error {
 		p.set.forceSampling = true
@@ -275,8 +286,8 @@ const (
 // When Conf.Model is one of the models declared in this package, the values
 // its docs leave out are rejected: EffortMinimal on all of them, and EffortNone
 // on gpt-6-astra and gpt-6.1-sol. For any other model nothing is checked, and
-// an unsupported value fails the turn with a 400. It is sent only to models this provider
-// classifies as reasoning (see WithTemperature).
+// an unsupported value fails the turn with a 400. New refuses it on a model this
+// provider does not classify as reasoning (see WithTemperature).
 func WithReasoningEffort(effort Effort) Option {
 	return func(p *Provider) error {
 		switch m := baseModel(p.model.Name); m {
@@ -304,8 +315,8 @@ const (
 // WithReasoningSummary asks for readable reasoning summaries, which arrive
 // as EventSummary and fill ContentReasoning.Summary. Off by default, so
 // Summary stays empty. Recent models require a verified organization and
-// answer 400 otherwise. Like WithReasoningEffort, it is sent only to models
-// classified as reasoning.
+// answer 400 otherwise. Like WithReasoningEffort, New refuses it on a model
+// not classified as reasoning.
 func WithReasoningSummary(summary Summary) Option {
 	return func(p *Provider) error {
 		p.set.summary = string(summary)
@@ -324,7 +335,7 @@ const (
 )
 
 // WithReasoningMode sets reasoning.mode, standard or pro, for the gpt-5.6 and
-// gpt-6 families. Like WithReasoningEffort, it is sent only to models
+// gpt-6 families. Like WithReasoningEffort, New refuses it on a model not
 // classified as reasoning.
 func WithReasoningMode(mode ReasoningMode) Option {
 	return func(p *Provider) error {
@@ -350,7 +361,7 @@ const (
 // WithReasoningContext sets reasoning.context: auto, current_turn or all_turns.
 // all_turns only does anything if the earlier reasoning items are actually in
 // the request, which here means WithReasoningReplay is not ReplayNever. Like
-// WithReasoningEffort, it is sent only to models classified as reasoning.
+// WithReasoningEffort, New refuses it on a model not classified as reasoning.
 func WithReasoningContext(context ReasoningContext) Option {
 	return func(p *Provider) error {
 		p.set.reasoningContext = string(context)

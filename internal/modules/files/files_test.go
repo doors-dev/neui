@@ -759,3 +759,49 @@ func TestUnzipWithoutFilesListsAnEmptyArray(t *testing.T) {
 		t.Fatalf("got %s", out)
 	}
 }
+
+func TestUnzipRemovesTheCutEntry(t *testing.T) {
+	fs := newFS(t)
+	ctx := context.WithValue(context.Background(), common.KeyController, testThread{fs: fs, files: api.FilesConfig{UnzipLimit: 10}})
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	w, _ := zw.Create("first.txt")
+	io.WriteString(w, "12345")
+	w, _ = zw.Create("second.txt")
+	io.WriteString(w, "1234567890")
+	zw.Close()
+	if _, err := writeBytesTool(ctx, writeBytesArg{Path: "a.zip", Data: buf.Bytes()}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := unzipTool(ctx, unzipArg{Src: "a.zip", Dst: "out"}); err == nil || !strings.Contains(err.Error(), "cap") {
+		t.Fatalf("err = %v", err)
+	}
+	if _, err := fs.Stat(context.Background(), "out/first.txt"); err != nil {
+		t.Fatalf("the complete entry: %v", err)
+	}
+	if _, err := fs.Stat(context.Background(), "out/second.txt"); !errors.Is(err, api.ErrNotFound) {
+		t.Fatalf("the cut entry: %v", err)
+	}
+}
+
+func TestUnzipRemovesTheEntryCutByCancel(t *testing.T) {
+	fs := newFS(t)
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	w, _ := zw.Create("big.txt")
+	io.WriteString(w, strings.Repeat("x", 1<<20))
+	zw.Close()
+	f, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cause := errors.New("stopped")
+	cancel(cause)
+	if _, err := unzipEntry(ctx, fs, f.File[0], "out/big.txt", -1); !errors.Is(err, cause) {
+		t.Fatalf("err = %v", err)
+	}
+	if _, err := fs.Stat(context.Background(), "out/big.txt"); !errors.Is(err, api.ErrNotFound) {
+		t.Fatalf("the cut entry: %v", err)
+	}
+}

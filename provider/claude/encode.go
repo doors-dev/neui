@@ -250,8 +250,8 @@ func replayThinking(m api.Message) bool {
 // it, an image or a document that arrived with no bytes in it, an image of a
 // type this API does not take, a document in an assistant message or one
 // encodeDocument cannot send, thinking the message does not replay, a payload
-// another model produced or that arrived with nothing in it to replay, a
-// payload whose streamed fragments never parsed back into it, and a tool result
+// this API did not issue, a payload whose streamed fragments never parsed back
+// into it, and a tool result
 // in an assistant message. A type this version
 // of the adapter has no case for becomes the note lib.Unknown returns.
 //
@@ -331,7 +331,7 @@ func (p *Provider) encodeContent(c api.Content, role string, replay bool, discar
 	case api.ContentReasoning:
 		return encodeReasoning(c, replay)
 	case api.ContentOpaque:
-		return encodeOpaque(c, p.model.Name)
+		return encodeOpaque(c)
 	}
 	raw, err := json.Marshal(textBlock{Type: "text", Text: lib.Unknown(providerName, at, c)})
 	return raw, true, err
@@ -505,17 +505,25 @@ func encodeReasoning(c api.ContentReasoning, replay bool) (json.RawMessage, bool
 // inside such a payload, the arguments of a tool it ran itself, and they are
 // spliced back into it without the rest of it being decoded.
 //
-// A payload another model produced, or one that arrived with nothing in it, has
-// no signature this turn can use and leaves a note in its place, and so does one
-// the splice cannot be done on. A turn cut inside a server tool's arguments
-// stores fragments that never became JSON, and then there is neither anything to
-// put back nor a half written field worth sending: the placeholder the payload
-// opened with would replay as a call made with arguments it never had. Failing
-// the request instead would end the thread on stored history the caller cannot
-// rewrite, over one block that is already lost.
-func encodeOpaque(c api.ContentOpaque, model string) (json.RawMessage, bool, error) {
-	if c.Model != model || len(c.Data) == 0 {
-		return omitted(c, "the payload is signed against the turn that issued it and this one arrived from another model or with nothing in it")
+// Models are not compared, as replayThinking does not compare them: the API
+// restores what it sealed in a server tool's result whichever Claude model reads
+// it. A payload this API did not issue leaves a note in its place: one that is
+// not a JSON object whose type is its Kind, or one that carries an id without
+// being a *_use block, which is the shape of a Responses item, since every
+// Responses item carries an id and the only Messages blocks that do are tool
+// calls. So does one the splice cannot be done on. A turn cut inside a server
+// tool's arguments stores fragments that never became JSON, and then there is
+// neither anything to put back nor a half written field worth sending: the
+// placeholder the payload opened with would replay as a call made with
+// arguments it never had. Failing the request instead would end the thread on
+// stored history the caller cannot rewrite, over one block that is already lost.
+func encodeOpaque(c api.ContentOpaque) (json.RawMessage, bool, error) {
+	var block struct {
+		Type string `json:"type"`
+		ID   string `json:"id"`
+	}
+	if json.Unmarshal(c.Data, &block) != nil || block.Type == "" || block.Type != c.Kind || block.ID != "" && !strings.HasSuffix(block.Type, "_use") {
+		return omitted(c, "the payload was issued by another provider")
 	}
 	if len(c.Deltas) == 0 {
 		return c.Data, false, nil

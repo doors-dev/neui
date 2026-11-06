@@ -125,7 +125,7 @@ func (l *list) sync(ctx context.Context) (more bool) {
 		anchor := l.history.Back().id
 		tail := l.lastSection.entry.id
 		l.mu.Unlock()
-		sections, ended, err := l.loadAfter(ctx, anchor, wantAfter - after, tail)
+		sections, ended, err := l.loadAfter(ctx, anchor, wantAfter - after, tail, true)
 		l.mu.Lock()
 		if seq != l.seq {
 			return true

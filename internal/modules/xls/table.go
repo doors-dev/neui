@@ -17,7 +17,7 @@ import (
 
 const maxFormatCells = 100000
 
-const tableDesc = `Create a new styled table: header row, per-column number formats, banded rows. Creates the workbook and sheet when missing; on a new sheet it also freezes the rows through the header. Every target cell must be empty and clear of other tables, the autofilter and merged cells; column widths are set only on columns that are empty and keep the sheet default. Existing tables are never changed — no resizing, no added rows or columns. The table is the unit of report building — prefer it over ad-hoc cell writes.`
+const tableDesc = `Create a new styled table: header row, per-column number formats, banded rows. A string starting with = is a formula, checked and prefixed like write's, with {row} becoming the row number of its cell. Creates the workbook and sheet when missing; on a new sheet it also freezes the rows through the header. Every target cell must be empty and clear of other tables, the autofilter and merged cells; column widths are set only on columns that are empty and keep the sheet default. Existing tables are never changed — no resizing, no added rows or columns. The table is the unit of report building — prefer it over ad-hoc cell writes.`
 const formatDesc = `Restyle a range: bold, a named fill, a number format, alignment. Only the flags you pass change.`
 
 var numText = regexp.MustCompile(`^[+-]?((\d{1,3}(,\d{3})+|\d+)(\.\d+)?|\.\d+)$`)
@@ -32,7 +32,7 @@ type tableArg struct {
 	Sheet   string       `json:"sheet" required:"true" description:"created when missing"`
 	Cell    string       `json:"cell" description:"top-left cell, where the header row starts; default A1"`
 	Columns []columnSpec `json:"columns" required:"true"`
-	Rows    [][]any      `json:"rows" required:"true" description:"one array per data row, in column order"`
+	Rows    [][]any      `json:"rows" required:"true" description:"one array per data row, in column order; a string starting with = is a formula, {row} in it becomes the row number"`
 	Preset  string       `json:"preset" description:"plain, report or financial; default plain"`
 	Name    string       `json:"name" description:"table name, for sheets output and structured references"`
 }
@@ -149,8 +149,17 @@ func tableTool(ctx context.Context, arg tableArg) (tableResult, error) {
 			return tableResult{}, fmt.Errorf("row %d has %d cells, table has %d columns", i, len(row), len(arg.Columns))
 		}
 		for j, v := range row {
-			switch v.(type) {
-			case nil, bool, float64, string:
+			switch v := v.(type) {
+			case nil, bool, float64:
+			case string:
+				if !strings.HasPrefix(v, "=") {
+					continue
+				}
+				fl, err := formula(v)
+				if err != nil {
+					return tableResult{}, fmt.Errorf("row %d cell %d: %w", i, j, err)
+				}
+				row[j] = "=" + fl
 			default:
 				return tableResult{}, fmt.Errorf("row %d cell %d: %T is not a cell value, pass a number, boolean, string or null", i, j, v)
 			}
@@ -241,13 +250,20 @@ func tableTool(ctx context.Context, arg tableArg) (tableResult, error) {
 		return tableResult{}, err
 	}
 	timed := make([]bool, len(arg.Columns))
+	formulas := false
 	for i, row := range arg.Rows {
 		vals := slices.Clone(row)
+		var cells []int
 		for j, col := range arg.Columns {
 			if j >= len(row) {
 				continue
 			}
 			s, isStr := row[j].(string)
+			if isStr && strings.HasPrefix(s, "=") {
+				vals[j] = nil
+				cells = append(cells, j)
+				continue
+			}
 			switch col.Format {
 			case "date":
 				switch v := row[j].(type) {
@@ -302,6 +318,22 @@ func tableTool(ctx context.Context, arg tableArg) (tableResult, error) {
 		if err := f.SetSheetRow(arg.Sheet, start, &vals); err != nil {
 			return tableResult{}, err
 		}
+		for _, j := range cells {
+			cell, err := excelize.CoordinatesToCellName(x1+j, y1+1+i)
+			if err != nil {
+				return tableResult{}, err
+			}
+			if err := f.SetCellFormula(arg.Sheet, cell, strings.ReplaceAll(row[j].(string)[1:], "{row}", strconv.Itoa(y1+1+i))); err != nil {
+				return tableResult{}, err
+			}
+			formulas = true
+		}
+	}
+	if formulas {
+		recalc := true
+		if err := f.SetCalcProps(&excelize.CalcPropsOptions{FullCalcOnLoad: &recalc}); err != nil {
+			return tableResult{}, err
+		}
 	}
 	cache := styleCache{}
 	for j, col := range arg.Columns {
@@ -344,7 +376,10 @@ func tableTool(ctx context.Context, arg tableArg) (tableResult, error) {
 		}
 		w := utf8.RuneCountInString(col.Header)
 		for _, row := range arg.Rows {
-			if j < len(row) {
+			if j >= len(row) {
+				continue
+			}
+			if s, ok := row[j].(string); !ok || !strings.HasPrefix(s, "=") {
 				w = max(w, utf8.RuneCountInString(fmt.Sprint(row[j])))
 			}
 		}
