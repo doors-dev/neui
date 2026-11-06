@@ -14,6 +14,7 @@ import (
 	"neui.dev/kchat/aside/controller"
 	"neui.dev/kchat/aside/window"
 	"neui.dev/kchat/icons"
+	"neui.dev/kchat/notify"
 )
 
 const margin = 12
@@ -26,6 +27,7 @@ type days struct {
 	window controller.Window
 	save func(ctx context.Context, w controller.Window)
 	name string
+	empty gox.Comp
 	pinned api.ThreadID
 	active api.ThreadID
 }
@@ -36,6 +38,7 @@ elem (d *days) Main() {
 		Driver: d,
 		InitialWindow: d.window,
 		SaveWindow: d.save,
+		Empty: d.empty,
 	})
 }
 
@@ -176,16 +179,18 @@ elem (d *day) content() {
 	threads, seeded := d.rows, d.seeded
 	d.rows, d.seeded = nil, false
 	d.days.mu.Unlock()
+	failed := false
 	if !seeded {
 		var err error
 		threads, err = d.days.aside.Instance.ThreadList(ctx, d.start, d.end, false, 0, d.days.name)
 		if err != nil {
 			doors.Logger(ctx).Error("aside: day", "day", label, "err", err)
+			failed = true
 		}
 	}
 	var all map[api.ThreadID]api.InstanceChat
 	all, _ = d.days.aside.Instance.Chats().ReadAndSub(ctx, func(ctx context.Context, m map[api.ThreadID]api.InstanceChat) bool {
-		if !today {
+		if !today && !failed {
 			same := true
 			for _, t := range threads {
 				if m[t.ID] != all[t.ID] {
@@ -237,8 +242,11 @@ elem (d *day) content() {
 		}
 	}
 	~~
-	~(if today || len(threads) != 0 {
+	~(if today || len(threads) != 0 || failed {
 		<div class="kchat-side-label">~(label)</div>
+	})
+	~(if failed {
+		~(retry(d.body))
 	})
 	~(if today {
 		~(if fresh {
@@ -253,10 +261,15 @@ elem (d *day) content() {
 				~>doors.AClick{
 					Scope: new(doors.ScopeBlocking),
 					On: func(ctx context.Context, rp doors.RequestPointer) bool {
-						d.days.aside.Instance.ThreadNew(ctx)
+						if err := d.days.aside.Instance.ThreadNew(ctx); err != nil {
+							doors.Logger(ctx).Error("aside: new", "err", err)
+							notify.Error(ctx, err)
+							return false
+						}
 						rp.After(doors.ActionEmit[any]{Name: "opened"})
 						return false
 					},
+					OnError: notify.OnError,
 				} <button class="kchat-thread kchat-thread_new">
 					~>(doors.Class("kchat-ic")) ~(icons.Plus())
 					<span class="kchat-thread-name">New chat</span>

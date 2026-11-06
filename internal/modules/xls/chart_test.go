@@ -17,8 +17,8 @@ func TestChart(t *testing.T) {
 		Path:       "book.xlsx",
 		Sheet:      "Data",
 		Type:       "column",
-		DataRange:  "B2:B4",
-		Categories: "A2:A4",
+		DataRange:  "B1:B4",
+		Categories: "A1:A4",
 		Anchor:     "F2",
 		Title:      "Amounts",
 	})
@@ -38,14 +38,20 @@ func TestChart(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer zr.Close()
-	found := false
+	chart := ""
 	for _, zf := range zr.File {
 		if strings.HasPrefix(zf.Name, "xl/charts/chart") {
-			found = true
+			chart = readPart(t, fs, "book.xlsx", zf.Name)
 		}
 	}
-	if !found {
-		t.Fatal("no chart part in workbook")
+	for _, want := range []string{"<f>&#39;Data&#39;!$B$1</f>", "<f>&#39;Data&#39;!$B$2:$B$4</f>", "<f>&#39;Data&#39;!$A$2:$A$4</f>"} {
+		if !strings.Contains(chart, want) {
+			t.Fatalf("chart lacks %s:\n%s", want, chart)
+		}
+	}
+	_, err = chartTool(c.Ctx(), chartArg{Path: "book.xlsx", Sheet: "Data", Type: "line", DataRange: "B2:B2", Anchor: "F20"})
+	if err == nil || !strings.Contains(err.Error(), "no data rows") {
+		t.Fatalf("header-only err = %v", err)
 	}
 }
 
@@ -53,7 +59,7 @@ func TestChartBadType(t *testing.T) {
 	c := testkit.NewController(t, testkit.Setup{})
 	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	_, err := chartTool(c.Ctx(), chartArg{Path: "book.xlsx", Sheet: "Data", Type: "donut", DataRange: "B2:B4", Anchor: "F2"})
+	_, err := chartTool(c.Ctx(), chartArg{Path: "book.xlsx", Sheet: "Data", Type: "donut", DataRange: "B1:B4", Anchor: "F2"})
 	if err == nil || !strings.Contains(err.Error(), "donut") {
 		t.Fatalf("err = %v", err)
 	}
@@ -107,6 +113,51 @@ func TestHighlightColorScale(t *testing.T) {
 	opts := formats["B2:B4"]
 	if len(opts) != 1 || opts[0].Type != "3_color_scale" {
 		t.Fatalf("formats = %+v", formats)
+	}
+}
+
+func TestHighlightRules(t *testing.T) {
+	for _, c := range []struct {
+		rule           highlightRule
+		typ, criteria  string
+		value, wantErr string
+	}{
+		{rule: highlightRule{Type: "lt", Value: "15"}, typ: "cell", criteria: "less than", value: "15"},
+		{rule: highlightRule{Type: "top", Value: "2"}, typ: "top", criteria: "=", value: "2"},
+		{rule: highlightRule{Type: "bottom", Value: "1"}, typ: "bottom", criteria: "=", value: "1"},
+		{rule: highlightRule{Type: "contains", Value: "li"}, typ: "text", criteria: "containing", value: "li"},
+		{rule: highlightRule{Type: "dataBar"}, typ: "data_bar"},
+		{rule: highlightRule{Type: "gt"}, wantErr: "needs a value"},
+		{rule: highlightRule{Type: "gt", Value: " 2.50 "}, typ: "cell", criteria: "greater than", value: "2.5"},
+		{rule: highlightRule{Type: "gt", Value: "1,000"}, wantErr: "plain number"},
+		{rule: highlightRule{Type: "lt", Value: "500€"}, wantErr: "plain number"},
+		{rule: highlightRule{Type: "gt", Value: "10%"}, wantErr: "plain number"},
+		{rule: highlightRule{Type: "gt", Value: "NaN"}, wantErr: "plain number"},
+		{rule: highlightRule{Type: "top", Value: "x"}, wantErr: "integer count"},
+		{rule: highlightRule{Type: "top", Value: "0"}, wantErr: "integer count"},
+		{rule: highlightRule{Type: "between", Value: "1"}, wantErr: "between"},
+	} {
+		ctl := testkit.NewController(t, testkit.Setup{})
+		fs := ctl.FS()
+		buildBook(t, fs, "book.xlsx")
+		_, err := highlightTool(ctl.Ctx(), highlightArg{Path: "book.xlsx", Sheet: "Data", Range: "A2:B4", Rule: c.rule})
+		if c.wantErr != "" {
+			if err == nil || !strings.Contains(err.Error(), c.wantErr) {
+				t.Fatalf("%+v: err = %v", c.rule, err)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("%+v: %v", c.rule, err)
+		}
+		formats, err := reopen(t, fs, "book.xlsx").GetConditionalFormats("Data")
+		if err != nil {
+			t.Fatal(err)
+		}
+		opts := formats["A2:B4"]
+		if len(opts) != 1 || opts[0].Type != c.typ || c.criteria != "" && opts[0].Criteria != c.criteria || opts[0].Value != c.value {
+			t.Fatalf("%+v: formats = %+v", c.rule, formats)
+		}
 	}
 }
 

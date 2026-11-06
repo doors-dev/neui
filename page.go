@@ -25,8 +25,11 @@ import (
 // as long as its render: when that part of the page re-renders or unmounts,
 // the space and everything in it go away.
 type Space struct {
-	// Name is the space's segment of the path, sanitized as NewModule does.
-	// A sibling rendered later with the same name replaces the earlier one.
+	// Name is the space's segment of the path. Names are reduced to ASCII
+	// letters, digits and _ (runs of other characters become one _); names
+	// that reduce to the same value replace each other, and a name with no
+	// letter or digit becomes empty. A sibling rendered later with the same
+	// name replaces the earlier one.
 	Name string
 	// Desc tells the agent what the region is and what it is for.
 	Desc string
@@ -46,7 +49,10 @@ func (s Space) Proxy(cur gox.Cursor, el gox.Elem) error {
 // Tool defines a tool. Add it to a Module or a Library, or render it to add it
 // to the page space it is rendered in.
 type Tool[I any, O any] struct {
-	// Name is the tool's name, sanitized as NewModule does.
+	// Name is the tool's name. Names are reduced to ASCII letters, digits
+	// and _ (runs of other characters become one _); names that reduce to
+	// the same value replace each other, and a name must keep at least one
+	// letter or digit.
 	Name string
 	// Desc tells the agent what the tool does and when to call it; the
 	// output schema is appended to it.
@@ -82,7 +88,10 @@ var _ gox.Comp = Tool[any, any]{}
 // Ask defines a tool that shows the user a question in the chat and returns
 // their answer. Add it to a Module; a Library refuses it with ErrAskInIsland.
 type Ask[I any, O any] struct {
-	// Name is the tool's name, sanitized as NewModule does.
+	// Name is the tool's name. Names are reduced to ASCII letters, digits
+	// and _ (runs of other characters become one _); names that reduce to
+	// the same value replace each other, and a name must keep at least one
+	// letter or digit.
 	Name string
 	// Desc tells the agent what the question is for; a note that the call
 	// waits for the user and fails when they dismiss it is appended.
@@ -273,8 +282,10 @@ var _ gox.Proxy = Input{}
 // reacts to what the user does there. It appears to the agent as a space
 // marked as an island. Template and Library are required.
 type Island struct {
-	// Name is the island space's segment of the path, sanitized as
-	// NewModule does.
+	// Name is the island space's segment of the path. Names are reduced to
+	// ASCII letters, digits and _ (runs of other characters become one _);
+	// names that reduce to the same value replace each other, and a name
+	// with no letter or digit becomes empty.
 	Name string
 	// Desc tells the agent what the island is for.
 	Desc string
@@ -290,7 +301,7 @@ type Island struct {
 	// Calling close shows Placeholder.
 	Failure func(close func(ctx context.Context), err error) gox.Elem
 	// Library fills l with what scripts may use; it runs on every render.
-	// IslandLayouts adds the built-in layouts.
+	// Package ui has built-in layouts and widgets to add.
 	Library func(l Library) error
 }
 
@@ -323,8 +334,21 @@ func (i Island) Main() gox.Elem {
 // IslandCall is a widget param or patch field that takes a function from the
 // island script: the source of a single-argument JavaScript function, such as
 // `(row) => app.price(row.sku) * row.qty`. Its syntax is checked when the
-// params are decoded, so a broken source throws at the script's line. The
-// widget runs it with Call, passing an I and getting an O back.
+// params are decoded, so a broken source throws at the script's line. In the
+// widget's schema it reads as a string holding a function from the schema of I
+// to the schema of O.
+//
+// The widget runs it with Call(ctx, i), which decodes the result into an O.
+// Calls of one app run one at a time on a JS runtime separate from the island
+// script, limited by IslandConfig.FnMemory, with each call limited by
+// IslandConfig.FnTime and IslandConfig.MaxCallDepth. Its globals are frozen,
+// so no call leaves state for the next, and a call sees only its argument,
+// the app functions, console and the standard built-ins. ctx must come from
+// the island (a widget's render, Update or event handlers); elsewhere Call
+// returns an error. A failure caused by the function, including a result that
+// does not decode into O, is written to the app's log and, the first time for
+// each source during a script turn and for at most 16 sources, reported to
+// the agent as a call_error notification.
 type IslandCall[I, O any] = island.Call[I, O]
 
 // IslandStore returns the store of the island app ctx renders or handles

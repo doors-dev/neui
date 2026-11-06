@@ -2,16 +2,23 @@ package instance
 
 import (
 	"context"
+	"errors"
+	"io"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
 	"neui.dev/api"
+	chatmod "neui.dev/internal/modules/chat"
 	"neui.dev/internal/thread"
 	"neui.dev/internal/utils"
 )
 
 var _ api.Instance = (*instance)(nil)
+
+const nameLimit = 80
 
 func (inst *instance) ID() string {
 	return inst.id
@@ -37,14 +44,20 @@ func (inst *instance) ThreadOpen(ctx context.Context, id api.ThreadID, meta any)
 	if ctx.Err() != nil {
 		return context.Canceled
 	}
+	if !inst.synced.Get() {
+		return api.ErrUnlinked
+	}
 	if _, err := backend.Storage().ThreadGet(ctx, id); err != nil {
 		return err
 	}
-	uplink, err := thread.OpenLink(id, backend, inst.page, meta)
+	op := thread.NewOperation(ctx)
+	uplink, err := thread.OpenLink(id, backend, inst.page, meta, op)
+	if errors.Is(err, thread.ErrLinked) {
+		return op.Receive()
+	}
 	if err != nil {
 		return err
 	}
-	op := thread.NewOperation(ctx)
 	setCmd := commandSetUplink{
 		ctx:       ctx,
 		backend:   backend,
@@ -65,6 +78,9 @@ func (inst *instance) ThreadNew(ctx context.Context) error {
 	}
 	if ctx.Err() != nil {
 		return context.Canceled
+	}
+	if !inst.synced.Get() {
+		return api.ErrUnlinked
 	}
 	op := thread.NewOperation(ctx)
 	uplink := thread.NewLink(backend, inst.page)
@@ -89,6 +105,16 @@ func (inst *instance) ThreadRename(ctx context.Context, id api.ThreadID, name st
 	if ctx.Err() != nil {
 		return context.Canceled
 	}
+	name, err := chatmod.CheckName(name)
+	if err != nil {
+		return err
+	}
+	if utf8.RuneCountInString(name) > nameLimit {
+		name = strings.TrimSpace(string([]rune(name)[:nameLimit]))
+	}
+	if _, err := backend.Storage().ThreadGet(ctx, id); err != nil {
+		return err
+	}
 	return thread.Rename(context.WithoutCancel(ctx), backend.Storage(), id, name)
 }
 
@@ -102,6 +128,37 @@ func (inst *instance) ThreadClone(ctx context.Context, id api.ThreadID) (api.Thr
 	}
 	clone, err := backend.Storage().ThreadClone(ctx, id, api.ThreadID(utils.NewID()))
 	if err != nil {
+		return "", err
+	}
+	files := backend.FileStorage()
+	var f api.File
+copyFiles:
+	for _, origin := range []api.Origin{api.OriginUser, api.OriginAgent} {
+		for f, err = range files.FileList(ctx, id, origin) {
+			if err == nil && f.Draft {
+				continue
+			}
+			var r io.ReadCloser
+			if err == nil {
+				r, err = files.FileRead(ctx, id, origin, f.Name, 0, -1)
+			}
+			if err == nil {
+				_, err = files.FilePut(ctx, clone.ID, origin, f.Name, f.MIME, r, false)
+				r.Close()
+			}
+			if err != nil {
+				break copyFiles
+			}
+		}
+	}
+	if err != nil {
+		cleanup := context.WithoutCancel(ctx)
+		if derr := thread.Delete(cleanup, backend.Storage(), clone.ID); derr != nil {
+			err = errors.Join(err, derr)
+		}
+		if derr := files.FileDeleteAll(cleanup, clone.ID); derr != nil {
+			err = errors.Join(err, derr)
+		}
 		return "", err
 	}
 	return clone.ID, nil
@@ -122,7 +179,15 @@ func (inst *instance) ThreadDelete(ctx context.Context, id api.ThreadID) error {
 	if err := op.Receive(); err != nil {
 		return err
 	}
-	return thread.Delete(context.WithoutCancel(ctx), backend.Storage(), id)
+	if _, err := backend.Storage().ThreadGet(ctx, id); errors.Is(err, api.ErrNotFound) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	if err := thread.Delete(context.WithoutCancel(ctx), backend.Storage(), id); err != nil {
+		return err
+	}
+	return backend.FileStorage().FileDeleteAll(context.WithoutCancel(ctx), id)
 }
 
 func (inst *instance) ThreadGet(ctx context.Context, id api.ThreadID) (api.Thread, error) {

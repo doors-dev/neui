@@ -4,8 +4,11 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"image"
+	"image/color"
+	"image/gif"
 	"image/png"
 	"io"
 	"strings"
@@ -135,6 +138,14 @@ func TestWriteBytes(t *testing.T) {
 	e, err := writeBytesTool(c.Ctx(), writeBytesArg{Path: "out/x.bin", Data: []byte{1, 2, 3}})
 	if err != nil || e.Size != 3 || e.Path != "out/x.bin" {
 		t.Fatalf("%+v, %v", e, err)
+	}
+}
+
+func TestWriteBytesErrorsNameThePath(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	_, err := writeBytesTool(c.Ctx(), writeBytesArg{Path: "agent_uploads/x.bin", Data: []byte{1}})
+	if !errors.Is(err, api.ErrReadOnly) || !strings.HasPrefix(err.Error(), `"agent_uploads/x.bin": `) {
+		t.Fatalf("%v", err)
 	}
 }
 
@@ -510,5 +521,304 @@ func TestReadImageRejectsOversizedGIF(t *testing.T) {
 	_, err := readImageTool(c.Ctx(), PathArg{Path: "huge.gif"})
 	if err == nil || !strings.Contains(err.Error(), "65535x65535") {
 		t.Fatalf("err %v", err)
+	}
+}
+
+func TestGlobRelativeToPath(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
+	write(t, fs, "src/a.go", "package a\n")
+	write(t, fs, "src/sub/b.go", "package b\n")
+	write(t, fs, "c.go", "package c\n")
+	res, err := globTool(c.Ctx(), globArg{Pattern: "*.go", Path: "src"})
+	if err != nil || len(res.Paths) != 1 || res.Paths[0] != "src/a.go" {
+		t.Fatalf("%+v, %v", res, err)
+	}
+	res, err = globTool(c.Ctx(), globArg{Pattern: "sub/*.go", Path: "src/"})
+	if err != nil || len(res.Paths) != 1 || res.Paths[0] != "src/sub/b.go" {
+		t.Fatalf("%+v, %v", res, err)
+	}
+	res, err = globTool(c.Ctx(), globArg{Pattern: "*.go"})
+	if err != nil || len(res.Paths) != 1 || res.Paths[0] != "c.go" {
+		t.Fatalf("%+v, %v", res, err)
+	}
+	gres, err := grepTool(c.Ctx(), grepArg{Pattern: "package", Path: "src", Glob: "*.go"})
+	if err != nil || len(gres.Matches) != 1 || gres.Matches[0].Path != "src/a.go" {
+		t.Fatalf("%+v, %v", gres, err)
+	}
+	gres, err = grepTool(c.Ctx(), grepArg{Pattern: "package", Path: "src/sub/b.go", Glob: "*.go"})
+	if err != nil || len(gres.Matches) != 1 || gres.Matches[0].Path != "src/sub/b.go" {
+		t.Fatalf("%+v, %v", gres, err)
+	}
+}
+
+func TestReadDocumentExtensionsAndMagic(t *testing.T) {
+	ctl := testkit.NewController(t, testkit.Setup{})
+	fs := ctl.FS()
+	cases := []struct {
+		name, content string
+		mime          api.DocumentMime
+	}{
+		{"notes.md", "# hi", api.DocumentMarkdown},
+		{"notes.MARKDOWN", "# hi", api.DocumentMarkdown},
+		{"conf.yml", "a: 1", api.DocumentYAML},
+		{"page.htm", "<p>x</p>", api.DocumentHTML},
+		{"data.csv", "a,b", api.DocumentCSV},
+		{"old.xls", "\xd0\xcf\x11\xe0", api.DocumentXLS},
+		{"sheet.xlsx", "PK\x03\x04", api.DocumentXLSX},
+		{"noext", "plain words", api.DocumentText},
+	}
+	for _, c := range cases {
+		write(t, fs, c.name, c.content)
+		doc, err := readDocumentTool(ctl.Ctx(), PathArg{Path: c.name})
+		if err != nil || doc.Mime != c.mime {
+			t.Fatalf("%s: mime %s, %v", c.name, doc.Mime, err)
+		}
+	}
+	for _, name := range []string{"fake.pdf", "fake.docx", "fake.pptx"} {
+		write(t, fs, name, "not the real thing")
+		if _, err := readDocumentTool(ctl.Ctx(), PathArg{Path: name}); err == nil {
+			t.Fatalf("%s accepted", name)
+		}
+	}
+}
+
+func gifBytes(t *testing.T, frames int) []byte {
+	t.Helper()
+	g := &gif.GIF{}
+	for range frames {
+		g.Image = append(g.Image, image.NewPaletted(image.Rect(0, 0, 4, 4), color.Palette{color.Black, color.White}))
+		g.Delay = append(g.Delay, 10)
+	}
+	var buf bytes.Buffer
+	if err := gif.EncodeAll(&buf, g); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+func TestReadImageGIFFrames(t *testing.T) {
+	ctx := testkit.NewController(t, testkit.Setup{}).Ctx()
+	single := gifBytes(t, 1)
+	many := []byte("GIF89a\x04\x00\x04\x00\x00\x00\x00")
+	for range 100000 {
+		many = append(many, 0x21, 0xF9, 4, 0, 10, 0, 0, 0)
+		many = append(many, 0x2C, 0, 0, 0, 0, 0xff, 0xff, 0xff, 0xff, 0, 2, 2, 0x4C, 0x01, 0)
+	}
+	many = append(many, 0x3B)
+	cases := []struct {
+		name string
+		data []byte
+		want string
+	}{
+		{"single.gif", single, ""},
+		{"anim.gif", gifBytes(t, 3), "animated"},
+		{"many.gif", many, "animated"},
+		{"cut.gif", single[:len(single)-3], "truncated"},
+	}
+	for _, c := range cases {
+		if _, err := writeBytesTool(ctx, writeBytesArg{Path: c.name, Data: c.data}); err != nil {
+			t.Fatal(err)
+		}
+		img, err := readImageTool(ctx, PathArg{Path: c.name})
+		if c.want == "" {
+			if err != nil || img.Mime != api.ImageGIF {
+				t.Fatalf("%s: mime %s, %v", c.name, img.Mime, err)
+			}
+			continue
+		}
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Fatalf("%s: err %v", c.name, err)
+		}
+	}
+}
+
+func TestReadHidesTheBOMAndAgreesWithGrepOnLoneCR(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
+	write(t, fs, "b.txt", "\ufeffa\rb\r\nneedle\n")
+	out, err := readTool(c.Ctx(), readArg{Path: "b.txt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "1: a\rb\n2: needle\n(end of file, 2 lines)"; out != want {
+		t.Fatalf("got %q", out)
+	}
+	res, err := grepTool(c.Ctx(), grepArg{Pattern: "needle", Path: "b.txt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Matches) != 1 || res.Matches[0].Line != 2 {
+		t.Fatalf("got %+v", res.Matches)
+	}
+	res, err = grepTool(c.Ctx(), grepArg{Pattern: "^a", Path: "b.txt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Matches) != 1 || res.Matches[0].Line != 1 || res.Matches[0].Text != "a\rb" {
+		t.Fatalf("BOM line: got %+v", res.Matches)
+	}
+}
+
+func TestLineCutsKeepWholeRunes(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
+	write(t, fs, "u.txt", "x"+strings.Repeat("é", 1500)+"\n")
+	out, err := readTool(c.Ctx(), readArg{Path: "u.txt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "1: x" + strings.Repeat("é", 999) + "... (line truncated)\n(end of file, 1 lines)"; out != want {
+		t.Fatalf("read: got %q", out)
+	}
+	res, err := grepTool(c.Ctx(), grepArg{Pattern: "x", Path: "u.txt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Matches) != 1 || res.Matches[0].Text != "x"+strings.Repeat("é", 199)+"... (line truncated)" {
+		t.Fatalf("grep: got %+v", res.Matches)
+	}
+}
+
+func TestLongToolsStopOnCancel(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
+	write(t, fs, "a/b.txt", "needle\n")
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	w, _ := zw.Create("inner.txt")
+	io.WriteString(w, "x")
+	zw.Close()
+	if _, err := writeBytesTool(c.Ctx(), writeBytesArg{Path: "a.zip", Data: buf.Bytes()}); err != nil {
+		t.Fatal(err)
+	}
+	stop := errors.New("stopped")
+	ctx, cancel := context.WithCancelCause(c.Ctx())
+	cancel(stop)
+	if _, err := grepTool(ctx, grepArg{Pattern: "needle"}); !errors.Is(err, stop) {
+		t.Fatalf("grep: %v", err)
+	}
+	if _, err := grepTool(ctx, grepArg{Pattern: "needle", Path: "a/b.txt"}); !errors.Is(err, stop) {
+		t.Fatalf("grep file: %v", err)
+	}
+	if _, err := readTool(ctx, readArg{Path: "a/b.txt"}); !errors.Is(err, stop) {
+		t.Fatalf("read: %v", err)
+	}
+	if _, err := zipTool(ctx, zipArg{Paths: []string{"a"}, Dst: "out.zip"}); !errors.Is(err, stop) {
+		t.Fatalf("zip: %v", err)
+	}
+	if _, err := unzipTool(ctx, unzipArg{Src: "a.zip", Dst: "out"}); !errors.Is(err, stop) {
+		t.Fatalf("unzip: %v", err)
+	}
+}
+
+func TestUnzipWithoutFilesListsAnEmptyArray(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	zw.Create("dir/")
+	zw.Close()
+	if _, err := writeBytesTool(c.Ctx(), writeBytesArg{Path: "d.zip", Data: buf.Bytes()}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := unzipTool(c.Ctx(), unzipArg{Src: "d.zip"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out, _ := json.Marshal(res); !strings.Contains(string(out), `"extracted":[]`) {
+		t.Fatalf("got %s", out)
+	}
+}
+
+func TestUnzipRemovesTheCutEntry(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{Files: api.FilesConfig{UnzipLimit: 10}})
+	fs, ctx := c.FS(), c.Ctx()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	w, _ := zw.Create("first.txt")
+	io.WriteString(w, "12345")
+	w, _ = zw.Create("second.txt")
+	io.WriteString(w, "1234567890")
+	zw.Close()
+	if _, err := writeBytesTool(ctx, writeBytesArg{Path: "a.zip", Data: buf.Bytes()}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := unzipTool(ctx, unzipArg{Src: "a.zip", Dst: "out"}); err == nil || !strings.Contains(err.Error(), "cap") {
+		t.Fatalf("err = %v", err)
+	}
+	if _, err := fs.Stat(context.Background(), "out/first.txt"); err != nil {
+		t.Fatalf("the complete entry: %v", err)
+	}
+	if _, err := fs.Stat(context.Background(), "out/second.txt"); !errors.Is(err, api.ErrNotFound) {
+		t.Fatalf("the cut entry: %v", err)
+	}
+}
+
+func TestUnzipRemovesTheEntryCutByCancel(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	w, _ := zw.Create("big.txt")
+	io.WriteString(w, strings.Repeat("x", 1<<20))
+	zw.Close()
+	f, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cause := errors.New("stopped")
+	cancel(cause)
+	if _, err := unzipEntry(ctx, fs, f.File[0], "out/big.txt", -1); !errors.Is(err, cause) {
+		t.Fatalf("err = %v", err)
+	}
+	if _, err := fs.Stat(context.Background(), "out/big.txt"); !errors.Is(err, api.ErrNotFound) {
+		t.Fatalf("the cut entry: %v", err)
+	}
+}
+
+func TestZipSkipsOverlappingArgs(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
+	write(t, fs, "src/main.go", "package main")
+	write(t, fs, "src/b.go", "package main")
+	if _, err := zipTool(c.Ctx(), zipArg{Paths: []string{"src", "src/main.go", "src/b.go", "src"}, Dst: "out.zip"}); err != nil {
+		t.Fatal(err)
+	}
+	if names := zipNames(t, fs, "out.zip"); len(names) != 2 {
+		t.Fatalf("got %v", names)
+	}
+}
+
+func TestWalkStopsAtTheFirstStop(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
+	write(t, fs, "a/x.txt", "x")
+	write(t, fs, "a/y.txt", "y")
+	write(t, fs, "b/z.txt", "z")
+	calls := 0
+	cont, err := walkFiles(context.Background(), fs, ".", false, func(api.FSEntry) (bool, error) {
+		calls++
+		return false, nil
+	})
+	if err != nil || cont || calls != 1 {
+		t.Fatalf("cont %v, err %v, calls %d", cont, err, calls)
+	}
+}
+
+func TestFailedWriteBytesKeepsTheOriginal(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{Files: api.FilesConfig{MaxBytes: 20}})
+	fs := c.FS()
+	write(t, fs, "a.bin", "0123456789")
+	if _, err := writeBytesTool(c.Ctx(), writeBytesArg{Path: "a.bin", Data: make([]byte, 15)}); !errors.Is(err, api.ErrQuota) {
+		t.Fatalf("got %v", err)
+	}
+	rc, err := fs.ReadAll(context.Background(), "a.bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rc.Close()
+	if b, _ := io.ReadAll(rc); string(b) != "0123456789" {
+		t.Fatalf("got %q", b)
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"neui.dev/api"
 	"neui.dev/internal/testkit"
@@ -139,5 +140,46 @@ func TestFetchSaveAsFailureKeepsExistingFile(t *testing.T) {
 	}
 	if got := read(); got != "fresh" {
 		t.Errorf("a successful fetch must replace the file, got %q", got)
+	}
+}
+
+func TestFetchSaveAsTimeoutNamesTheFetch(t *testing.T) {
+	ctx := testkit.NewController(t, testkit.Setup{}).Ctx()
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Write([]byte("partial"))
+		w.(http.Flusher).Flush()
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	}))
+	defer srv.Close()
+	defer close(release)
+	m := Module(Config{HTTPClient: srv.Client(), Timeout: 200 * time.Millisecond})(ctx)
+	tool, _ := m.Get("fetch")
+	_, err := tool.Agent(ctx, json.RawMessage(fmt.Sprintf(`{"url":%q,"saveAs":"slow.pdf"}`, srv.URL)))
+	if err == nil || !strings.Contains(err.Error(), "fetching "+srv.URL+" timed out after 200ms") {
+		t.Errorf("a timeout mid-download must name the url and the timeout: %v", err)
+	}
+}
+
+func TestFetchSaveAsErrorsNameSaveAs(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	ctx := c.Ctx()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Write([]byte("body"))
+	}))
+	defer srv.Close()
+	m := Module(Config{HTTPClient: srv.Client()})(ctx)
+	tool, _ := m.Get("fetch")
+	_, err := tool.Agent(ctx, json.RawMessage(fmt.Sprintf(`{"url":%q,"saveAs":"user_uploads/x.pdf"}`, srv.URL)))
+	if err == nil {
+		t.Fatal("a saveAs into uploads was accepted")
+	}
+	if !strings.Contains(err.Error(), `"user_uploads/x.pdf"`) || strings.Contains(err.Error(), ".part") {
+		t.Errorf("the error must name saveAs, not the partial file: %v", err)
 	}
 }

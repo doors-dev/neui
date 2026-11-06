@@ -67,7 +67,8 @@ func (i Image) ContentType() string {
 var _ Container = Image{}
 
 // ImageMime is an image type the Claude and GPT adapters both accept. The
-// DeepSeek adapter takes no images and leaves a note in place of each.
+// DeepSeek adapter accepts them on Flash models only and leaves a note in
+// place of each image elsewhere.
 type ImageMime string
 
 // The accepted image types.
@@ -89,13 +90,15 @@ func (m ImageMime) IsValid() bool {
 }
 
 // DocumentMime is a document type at least one provider accepts. The GPT
-// adapter takes them all. The Claude adapter takes DocumentPDF and
-// DocumentText in a message, fails the request on any other type there, and
-// leaves a note in place of every document in a tool result. The DeepSeek
-// adapter takes no documents and leaves a note in place of each.
+// adapter takes them all. The Claude adapter, in a message, sends DocumentPDF
+// as a PDF, sends the text types (DocumentText, DocumentMarkdown, DocumentCSV,
+// DocumentHTML, DocumentXML, DocumentJSON, DocumentYAML, DocumentRTF) as plain
+// text, and leaves a note in place of the binary Office types, of text that is
+// not UTF-8 and of every document in a tool result. The DeepSeek adapter takes
+// no documents and leaves a note in place of each.
 type DocumentMime string
 
-// The accepted document types. Only DocumentPDF and DocumentText reach both
+// The accepted document types. Only DocumentPDF and the text types reach both
 // the Claude and GPT adapters.
 const (
 	DocumentPDF      DocumentMime = "application/pdf"

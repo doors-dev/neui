@@ -40,6 +40,7 @@ const (
 	Files
 	Sidebar
 	ThreadEdit
+	MessageSearch
 )
 
 // Disable hides features.

@@ -192,12 +192,17 @@ func inBandCode(code, typ string) api.ErrCode {
 // code, where the sibling adapters have only a sentence written for a person to
 // match and pay for it with a matcher that a rewording silently defeats.
 //
+// CodeContextLength comes from context_length_exceeded alone.
+// string_above_max_length is a per-field schema limit, one string past its
+// maxLength with the field named in param, and neither compaction nor media
+// shedding shortens it, so it is CodeInvalid: the request is refused as written.
+//
 // A spelling nobody here knows is CodeUnknown rather than the nearest code that
 // looks close, so a vocabulary that grew arrives unclassified and the raw string
 // stays on the APIError for whoever reads it.
 func errorVocabulary(code string) api.ErrCode {
 	switch code {
-	case "context_length_exceeded", "string_above_max_length":
+	case "context_length_exceeded":
 		return api.CodeContextLength
 	case "rate_limit_exceeded", "rate_limit_error", "overloaded_error",
 		"slow_down", "server_is_overloaded", "service_unavailable_error":
@@ -208,7 +213,8 @@ func errorVocabulary(code string) api.ErrCode {
 		return api.CodeAccess
 	case "server_error", "vector_store_timeout":
 		return api.CodeNetwork
-	case "invalid_request_error", "invalid_prompt", "bio_policy", "data_residency_mismatch":
+	case "invalid_request_error", "invalid_prompt", "bio_policy", "data_residency_mismatch",
+		"string_above_max_length":
 		return api.CodeInvalid
 	case "":
 		return api.CodeUnknown

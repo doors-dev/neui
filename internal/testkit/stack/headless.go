@@ -48,7 +48,7 @@ func Headless(t *testing.T, h Host) *Chat {
 
 func open(t *testing.T, h Host, ctx context.Context, p page.Page) *Chat {
 	t.Helper()
-	store, err := local.NewFileStorage()
+	store, err := local.NewFileStorage("")
 	if err != nil {
 		t.Fatal(err)
 	}

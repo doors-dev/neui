@@ -50,10 +50,13 @@ type converter struct {
 	reasoning int         // -1 until reasoning_content is seen
 	tools     map[int]int // tool_calls[].index to block index
 	ids       map[string]bool
+	real      map[int]string
 	stopped   bool
 	sent      int
 	declared  int
 	finish    string // the wire value, verbatim, once a choice named one
+	k         chunk
+	events    []api.Event
 }
 
 func newConverter(model string, sent int, declared int) *converter {
@@ -63,6 +66,7 @@ func newConverter(model string, sent int, declared int) *converter {
 		reasoning: -1,
 		tools:     make(map[int]int),
 		ids:       make(map[string]bool),
+		real:      make(map[int]string),
 		sent:      sent,
 		declared:  declared,
 	}
@@ -78,35 +82,36 @@ func (c *converter) Convert(f lib.Frame) ([]api.Event, bool) {
 	if string(f.Data) == doneSentinel {
 		return []api.Event{c.done()}, false
 	}
-	var k chunk
-	if err := json.Unmarshal(f.Data, &k); err != nil {
+	c.k = chunk{}
+	c.events = c.events[:0]
+	if err := json.Unmarshal(f.Data, &c.k); err != nil {
 		return []api.Event{api.EventErr{
 			Code: api.CodeNetwork,
 			Err:  fmt.Errorf("deepseek: stream frame did not parse: %w", err),
 		}}, false
 	}
-	if e, ok := inbandError(&k); ok {
-		return append(c.chunk(&k), e), false
+	if err := c.chunk(&c.k); err != nil {
+		return append(c.events, api.EventErr{Code: api.CodeNetwork, Err: err}), false
 	}
-	return c.chunk(&k), true
+	if e, ok := inbandError(&c.k); ok {
+		return append(c.events, e), false
+	}
+	return c.events, true
 }
 
 // End is every ending the sentinel did not announce. Convert says the turn is
 // over at [DONE] and nothing is read after that, so a turn that ran to the
 // sentinel never reaches here at all.
 //
-// A body that ran out carries whatever finish_reason already arrived. The reason
-// is what says how the turn ended and the sentinel only says nothing more is
-// coming, so a socket that dies in the gap between them — the usage frame still
-// rides there — ends a turn that finished, and swallowing that EOF discards a
-// complete reply and reads to the caller as one cut off, which is a retry of a
-// turn already generated and already paid for. With no reason yet, the reply
-// really was cut, and the absence of a terminal event is the whole of the
-// report: neither io.EOF nor io.ErrUnexpectedEOF says anything about whether the
-// server meant to stop, and the unexpected one is manufactured by lib's frame
-// reader for a body that stopped mid event rather than reported by the transport.
-// A cancelled ctx is silent for the other reason: the caller decided it, so
-// there is nobody left to tell.
+// A body that ran out after a finish_reason but before the sentinel fails the
+// turn with api.CodeNetwork: the usage frame and the sentinel never arrived, and
+// only a reply that arrived whole is kept. With no reason yet, the reply really
+// was cut, and the absence of a terminal event is the whole of the report:
+// neither io.EOF nor io.ErrUnexpectedEOF says anything about whether the server
+// meant to stop, and the unexpected one is manufactured by lib's frame reader
+// for a body that stopped mid event rather than reported by the transport. A
+// cancelled ctx is silent for the other reason: the caller decided it, so there
+// is nobody left to tell.
 //
 // Everything else is api.CodeNetwork, lib.ErrIdle and a read deadline
 // included. They are one outcome to a caller, which is that the same request
@@ -118,6 +123,9 @@ func (c *converter) Convert(f lib.Frame) ([]api.Event, bool) {
 func (c *converter) End(err error) []api.Event {
 	if e, ok := err.(*lib.HTTPError); ok {
 		failure := apiError(e.Status, e.Header, e.Body)
+		if contextOverflow(failure) {
+			return []api.Event{api.EventErr{Code: api.CodeContextLength, Err: failure}}
+		}
 		code := statusCode(e.Status)
 		if code == api.CodeTooLarge {
 			return []api.Event{api.EventErr{
@@ -125,15 +133,15 @@ func (c *converter) End(err error) []api.Event {
 				Err:  measuredTooLarge(c.model, c.sent, c.declared, failure),
 			}}
 		}
-		if contextOverflow(failure) {
-			code = api.CodeContextLength
-		}
 		return []api.Event{api.EventErr{Code: code, Err: failure}}
 	}
 	switch {
 	case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
 		if c.stopped {
-			return []api.Event{finishEvent(c.finish)}
+			return []api.Event{api.EventErr{
+				Code: api.CodeNetwork,
+				Err:  fmt.Errorf("deepseek: the stream ended after finish_reason %q but before [DONE]: %w", c.finish, err),
+			}}
 		}
 		return nil
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
@@ -150,17 +158,22 @@ func (c *converter) End(err error) []api.Event {
 // a stamp is only worth having if the next request writes the same string.
 //
 // The frame carrying usage may have an empty choices array, so nothing here may
-// assume a first choice exists.
-func (c *converter) chunk(k *chunk) []api.Event {
-	var events []api.Event
+// assume a first choice exists. Only the choice at index 0 is this turn; any
+// other is ignored.
+func (c *converter) chunk(k *chunk) error {
 	if !c.started {
 		c.started = true
 		c.id = k.ID
-		events = append(events, api.EventStart{ID: k.ID, Model: c.model})
+		c.events = append(c.events, api.EventStart{ID: k.ID, Model: c.model})
 	}
 	for i := range k.Choices {
 		ch := &k.Choices[i]
-		events = append(events, c.delta(&ch.Delta)...)
+		if ch.Index != 0 {
+			continue
+		}
+		if err := c.delta(&ch.Delta); err != nil {
+			return err
+		}
 		if ch.FinishReason == nil || *ch.FinishReason == "" {
 			continue
 		}
@@ -168,9 +181,9 @@ func (c *converter) chunk(k *chunk) []api.Event {
 		c.finish = *ch.FinishReason
 	}
 	if k.Usage != nil {
-		events = append(events, k.Usage.event())
+		c.events = append(c.events, k.Usage.event())
 	}
-	return events
+	return nil
 }
 
 // delta applies one incremental message.
@@ -186,24 +199,36 @@ func (c *converter) chunk(k *chunk) []api.Event {
 // as null on frames that do not carry them, and the opening frame of a turn
 // carries content as an empty string, so an index handed out on presence would
 // put an empty text block in front of every reply.
-func (c *converter) delta(d *delta) []api.Event {
-	var events []api.Event
+//
+// A tool call fragment without an index cannot be correlated and fails the
+// turn, and so does a later fragment naming a different real id than the call
+// already has.
+func (c *converter) delta(d *delta) error {
 	if d.ReasoningContent != "" {
 		if c.reasoning < 0 {
 			c.reasoning = c.alloc()
 		}
-		events = append(events, api.EventThinking{Index: c.reasoning, Text: d.ReasoningContent})
+		c.events = append(c.events, api.EventThinking{Index: c.reasoning, Text: d.ReasoningContent})
 	}
 	if d.Content != "" {
 		if c.text < 0 {
 			c.text = c.alloc()
 		}
-		events = append(events, api.EventText{Index: c.text, Text: d.Content})
+		c.events = append(c.events, api.EventText{Index: c.text, Text: d.Content})
 	}
 	for i := range d.ToolCalls {
-		events = append(events, c.toolCall(&d.ToolCalls[i])...)
+		if d.ToolCalls[i].Index == nil {
+			return errors.New("deepseek: tool call fragment without an index")
+		}
+		e, ok, err := c.toolCall(&d.ToolCalls[i])
+		if err != nil {
+			return err
+		}
+		if ok {
+			c.events = append(c.events, e)
+		}
 	}
-	return events
+	return nil
 }
 
 // toolCall applies one tool call fragment. Fragments are correlated by the
@@ -225,32 +250,40 @@ func (c *converter) delta(d *delta) []api.Event {
 // carrying a minted handle, and api.EventTool.ID replaces, so the real one
 // arriving late replaces it rather than being dropped: the id is what a tool
 // result is matched by. A handle another block already claimed is never taken,
-// on either path.
-func (c *converter) toolCall(t *toolDelta) []api.Event {
+// on either path. Once a call has a real id, a fragment naming another one is a
+// broken frame.
+func (c *converter) toolCall(t *toolDelta) (api.EventTool, bool, error) {
 	e := api.EventTool{}
-	index, seen := c.tools[t.Index]
+	index, seen := c.tools[*t.Index]
 	switch {
 	case !seen:
 		index = c.alloc()
-		c.tools[t.Index] = index
+		c.tools[*t.Index] = index
+		c.real[*t.Index] = t.ID
 		id := t.ID
 		if id == "" || c.ids[id] {
 			id = c.mintID(index)
 		}
 		c.ids[id] = true
 		e.ID = id
-	case t.ID != "" && !c.ids[t.ID]:
-		c.ids[t.ID] = true
-		e.ID = t.ID
+	case t.ID == "" || t.ID == c.real[*t.Index]:
+	case c.real[*t.Index] != "":
+		return e, false, fmt.Errorf("deepseek: tool call %d named %q after %q", *t.Index, t.ID, c.real[*t.Index])
+	default:
+		c.real[*t.Index] = t.ID
+		if !c.ids[t.ID] {
+			c.ids[t.ID] = true
+			e.ID = t.ID
+		}
 	}
 	e.Index = index
 	if t.Function != nil {
 		e.Name, e.Args = t.Function.Name, t.Function.Arguments
 	}
 	if e.ID == "" && e.Name == "" && e.Args == "" {
-		return nil
+		return e, false, nil
 	}
-	return []api.Event{e}
+	return e, true, nil
 }
 
 // mintID names a call whose id was missing or already used. It is derived from
@@ -273,13 +306,9 @@ func (c *converter) alloc() int {
 
 // done ends the turn at the sentinel.
 //
-// A sentinel with no finish_reason before it is an ordinary completion. Absent
-// is not the same as unrecognized: the server did say the stream was over, so
-// nothing was cut, it only failed to say why, and there is no documented rule
-// for it. Failing the turn would discard healthy replies if DeepSeek ever omits
-// the reason on short ones, which costs more than an unlabelled completion,
-// while a named value nobody knows is a vocabulary that grew and does fail. See
-// finishEvent.
+// A sentinel with no finish_reason before it fails the turn with
+// api.CodeNetwork: the flow requires a reason, and only a reply that arrived
+// whole is kept. A named value nobody knows fails as well. See finishEvent.
 //
 // No block of this turn carries an EventClose, here or anywhere earlier,
 // because this wire frames no block ends at all: deltas arrive on one choice
@@ -291,7 +320,7 @@ func (c *converter) alloc() int {
 // applies it.
 func (c *converter) done() api.Event {
 	if !c.stopped {
-		return api.EventOk{Code: api.CodeTurn}
+		return api.EventErr{Code: api.CodeNetwork, Err: errors.New("deepseek: [DONE] without a finish_reason")}
 	}
 	return finishEvent(c.finish)
 }
@@ -311,8 +340,9 @@ func (c *converter) done() api.Event {
 // it fails, and api.CodeBusy is what says it is worth sending again after
 // a backoff.
 //
-// aborted is documented only as a generation that was interrupted, with nothing
-// wrong in the request, so it fails as api.CodeNetwork: send it again as sent.
+// aborted is documented only as "the generation was interrupted". That nothing
+// was wrong in the request is this adapter's inference, not DeepSeek's wording,
+// so it fails as api.CodeNetwork: send it again as sent.
 //
 // A value nobody here recognizes fails with api.CodeUnknown and carries
 // the raw string, rather than being rounded to the nearest completion: a

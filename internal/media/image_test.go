@@ -139,7 +139,7 @@ func TestShapeBoundsBothDimensions(t *testing.T) {
 			t.Fatalf("%dx%d: %v", size[0], size[1], err)
 		}
 		w, h := dims(t, img.Data)
-		if w > maxImageDim || h > maxImageDim {
+		if w > fallbackImageSide || h > fallbackImageSide {
 			t.Fatalf("%dx%d came back as %dx%d: neither dimension is bounded", size[0], size[1], w, h)
 		}
 		if w*h > pixels {
@@ -163,14 +163,36 @@ func TestShapeClampStaysUnderThePixelBudget(t *testing.T) {
 	}
 }
 
+func TestShapeCapsTheLongestSide(t *testing.T) {
+	model := api.Model{ImageSide: 1568}
+	for _, size := range [][2]int{{4000, 1000}, {1000, 4000}} {
+		img, err := Shape(flatPNG(t, size[0], size[1]), api.ImagePNG, model)
+		if err != nil {
+			t.Fatal(err)
+		}
+		w, h := dims(t, img.Data)
+		if max(w, h) != 1568 || min(w, h) != 1568*1000/4000 {
+			t.Fatalf("%dx%d came back as %dx%d, want the long side at 1568", size[0], size[1], w, h)
+		}
+	}
+	data := flatPNG(t, 2500, 1000)
+	img, err := Shape(data, api.ImagePNG, api.Model{ImageSide: 2576})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(img.Data, data) {
+		t.Fatal("re-encoded a 2500x1000 image that fits a 2576 side")
+	}
+}
+
 func TestShapeFallsBackWithoutModelLimits(t *testing.T) {
 	img, err := Shape(flatPNG(t, 4000, 100), api.ImagePNG, api.Model{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	w, h := dims(t, img.Data)
-	if want := 100 * maxImageDim / 4000; w != maxImageDim || h != want {
-		t.Fatalf("%dx%d, want %dx%d", w, h, maxImageDim, want)
+	if want := 100 * fallbackImageSide / 4000; w != fallbackImageSide || h != want {
+		t.Fatalf("%dx%d, want %dx%d", w, h, fallbackImageSide, want)
 	}
 	big := noisePNG(t, 1600, 1600)
 	if len(big) <= fallbackByteCap {
@@ -229,5 +251,46 @@ func TestShapeRejectsOversizedDeclaredDimensions(t *testing.T) {
 	_, err := Shape(data.Bytes(), api.ImagePNG, api.Model{})
 	if err == nil || !strings.Contains(err.Error(), "100000x100000") {
 		t.Fatalf("Shape on a 100000x100000 header = %v, want a pixel cap error", err)
+	}
+}
+
+func TestShapeFlattensTransparencyOntoWhiteForJPEG(t *testing.T) {
+	img := image.NewNRGBA(image.Rect(0, 0, 1000, 1000))
+	r := rand.New(rand.NewPCG(1, 2))
+	for y := range 200 {
+		for x := range 200 {
+			i := img.PixOffset(x, y)
+			img.Pix[i], img.Pix[i+1], img.Pix[i+2], img.Pix[i+3] = uint8(r.UintN(256)), uint8(r.UintN(256)), uint8(r.UintN(256)), 0xff
+		}
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	byteCap := buf.Len() / 2
+	for _, model := range []api.Model{{ImageBytes: byteCap}, {ImageBytes: byteCap / 3}} {
+		shaped, err := Shape(buf.Bytes(), api.ImagePNG, model)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if shaped.Mime != api.ImageJPEG {
+			t.Fatalf("mime = %s", shaped.Mime)
+		}
+		out, err := jpeg.Decode(bytes.NewReader(shaped.Data))
+		if err != nil {
+			t.Fatal(err)
+		}
+		b := out.Bounds()
+		if cr, cg, cb, _ := out.At(b.Dx()*4/5, b.Dy()*4/5).RGBA(); cr < 0xf000 || cg < 0xf000 || cb < 0xf000 {
+			t.Fatalf("cap %d: a transparent pixel came out as %x %x %x, want white", model.ImageBytes, cr, cg, cb)
+		}
+	}
+}
+
+func TestShapeZeroSizeImageHasNoPixels(t *testing.T) {
+	data := []byte("GIF89a\x00\x00\x00\x00\x00\x00\x00;")
+	_, err := Shape(data, api.ImageGIF, api.Model{})
+	if err == nil || !strings.Contains(err.Error(), "no pixels (0x0)") {
+		t.Fatalf("err = %v", err)
 	}
 }

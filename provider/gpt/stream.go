@@ -1,14 +1,13 @@
 package gpt
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/maphash"
 	"io"
 	"net/http"
-	"strconv"
 
 	"neui.dev/api"
 	"neui.dev/provider/lib"
@@ -24,27 +23,32 @@ var errTooLarge = errors.New("gpt: request too large")
 // idx is the protocol Index, or -1 until the block opens. A message has no index
 // of its own; its content parts are in parts, which maps a message's
 // content_index to a protocol Index for the parts that are open, and an entry is
-// dropped when its part closes.
+// dropped when its part closes. phase is the meta of a message that announced
+// one, which every content part of that message opens with.
+//
+// kind is the item type output_item.added announced, which every later frame at
+// the same output_index has to agree with.
 //
 // sawArgs says a fragment of a function call's arguments was emitted. It is what
 // tells a call that takes no arguments from one whose arguments never arrived,
-// which protocol keeps apart.
+// which protocol keeps apart. args hashes the fragments, so the arguments the
+// done event repeats can be checked against what streamed without keeping them.
 type block struct {
 	idx     int
+	kind    string
 	parts   map[int]int
+	phase   json.RawMessage
 	sawArgs bool
+	args    maphash.Hash
 }
 
 // converter turns one frame of the Responses wire format into protocol events.
 //
 // events is what the frame being converted has produced so far. It is reset at
 // the top of every Convert, so nothing survives the frame that made it.
-//
-// respID is the id of the response being streamed, kept because a minted tool
-// call handle folds it in.
 type converter struct {
 	model      string
-	respID     string
+	seed       maphash.Seed
 	out        map[int]*block
 	next       int
 	sent       int
@@ -54,10 +58,12 @@ type converter struct {
 	usage      api.EventUsage
 	hasUsage   bool
 	events     []api.Event
+	head       frameHead
+	ev         streamEvent
 }
 
 func newConverter(model string, sent int, declared int) *converter {
-	return &converter{model: model, out: map[int]*block{}, sent: sent, declared: declared}
+	return &converter{model: model, seed: maphash.MakeSeed(), out: map[int]*block{}, sent: sent, declared: declared}
 }
 
 func (c *converter) emit(e api.Event) {
@@ -78,6 +84,16 @@ func (c *converter) take() int {
 
 // Convert applies one frame. A returned error is a frame that did not parse,
 // which is a stream that cannot be trusted to continue.
+//
+// The type is read first and the rest of the frame only for a type handled
+// here, so a new event type produces nothing whatever shape its fields take. A
+// handled frame that breaks the flow fails the turn: a stream that does not open
+// with a response, an index the event needs that is absent, an item that does
+// not parse or names no type, a function call with no call_id, a text,
+// reasoning or hosted tool fragment for an item that was announced as another
+// kind or not at all, an item done that was never announced, arguments done
+// that differ from the fragments that streamed, and a completed frame with no
+// response.
 //
 // The terminal frames read the usage before they emit their own event, because
 // the final usage rides the same frame and the terminal event is the last thing
@@ -136,9 +152,39 @@ func (c *converter) take() int {
 // this one was told nothing. No code describes it, so it ends as CodeUnknown
 // with the fact in Err rather than as an ending it does not mean.
 func (c *converter) Convert(f lib.Frame) ([]api.Event, bool) {
-	c.events = nil
-	var ev streamEvent
-	if err := json.Unmarshal(f.Data, &ev); err != nil {
+	c.events = c.events[:0]
+	c.head = frameHead{}
+	if err := json.Unmarshal(f.Data, &c.head); err != nil {
+		return []api.Event{api.EventErr{
+			Code: api.CodeNetwork,
+			Err:  fmt.Errorf("gpt: stream frame did not parse: %w", err),
+		}}, false
+	}
+	c.ev = streamEvent{Type: c.head.Type}
+	ev := &c.ev
+	var err error
+	switch ev.Type {
+	case "error", "response.created", "response.in_progress", "response.queued",
+		"response.failed", "response.completed", "response.incomplete":
+		err = json.Unmarshal(f.Data, ev)
+	case "response.output_item.added", "response.output_item.done",
+		"response.function_call_arguments.delta", "response.function_call_arguments.done",
+		"response.code_interpreter_call_code.delta", "response.mcp_call_arguments.delta", "response.custom_tool_call_input.delta":
+		if err = json.Unmarshal(f.Data, ev); err == nil && ev.OutputIndex == nil {
+			err = fmt.Errorf("gpt: %s without output_index", ev.Type)
+		}
+	case "response.output_text.delta", "response.refusal.delta",
+		"response.output_text.done", "response.refusal.done", "response.content_part.done",
+		"response.reasoning_text.delta":
+		if err = json.Unmarshal(f.Data, ev); err == nil && (ev.OutputIndex == nil || ev.ContentIndex == nil) {
+			err = fmt.Errorf("gpt: %s without output_index or content_index", ev.Type)
+		}
+	case "response.reasoning_summary_text.delta":
+		if err = json.Unmarshal(f.Data, ev); err == nil && (ev.OutputIndex == nil || ev.SummaryIndex == nil) {
+			err = fmt.Errorf("gpt: %s without output_index or summary_index", ev.Type)
+		}
+	}
+	if err != nil {
 		return []api.Event{api.EventErr{
 			Code: api.CodeNetwork,
 			Err:  fmt.Errorf("gpt: stream frame did not parse: %w", err),
@@ -147,7 +193,16 @@ func (c *converter) Convert(f lib.Frame) ([]api.Event, bool) {
 	if ev.Type == "error" {
 		return []api.Event{c.inBandError(ev)}, false
 	}
-	c.ensureStart(ev.Response)
+	if !c.started {
+		if ev.Response == nil || ev.Type != "response.created" && ev.Type != "response.in_progress" && ev.Type != "response.queued" {
+			return []api.Event{api.EventErr{
+				Code: api.CodeNetwork,
+				Err:  fmt.Errorf("gpt: the stream opened with %q, not a response", ev.Type),
+			}}, false
+		}
+		c.started = true
+		c.emit(api.EventStart{ID: ev.Response.ID, Model: c.model})
+	}
 	if ev.Response != nil && ev.Response.Status == "cancelled" {
 		c.readUsage(ev.Response)
 		c.emit(api.EventErr{
@@ -162,57 +217,83 @@ func (c *converter) Convert(f lib.Frame) ([]api.Event, bool) {
 		c.emit(c.responseFailed(ev))
 		return c.events, false
 	case "response.completed", "response.incomplete":
+		if ev.Response == nil && ev.Type == "response.completed" {
+			c.emit(api.EventErr{Code: api.CodeNetwork, Err: errors.New("gpt: response.completed without a response")})
+			return c.events, false
+		}
 		c.readUsage(ev.Response)
 		c.emit(c.endFor(ev))
 		return c.events, false
 	case "response.output_item.added":
-		c.itemAdded(ev)
+		err = c.itemAdded(ev)
 	case "response.output_item.done":
-		c.itemDone(ev)
-	case "response.output_text.delta":
-		if ev.Delta != "" {
-			c.emit(api.EventText{Index: c.textIndex(ev.OutputIndex, ev.ContentIndex), Text: ev.Delta})
+		err = c.itemDone(ev)
+	case "response.output_text.delta", "response.refusal.delta":
+		if ev.Type == "response.refusal.delta" {
+			c.sawRefusal = true
 		}
-	case "response.refusal.delta":
-		c.sawRefusal = true
-		if ev.Delta != "" {
-			c.emit(api.EventText{Index: c.textIndex(ev.OutputIndex, ev.ContentIndex), Text: ev.Delta})
+		if b := c.out[*ev.OutputIndex]; b == nil || b.kind != "message" {
+			err = fmt.Errorf("gpt: %s for output %d, which was not announced as a message", ev.Type, *ev.OutputIndex)
+		} else if ev.Delta != "" {
+			c.emit(api.EventText{Index: c.textIndex(*ev.OutputIndex, *ev.ContentIndex), Text: ev.Delta})
 		}
 	case "response.output_text.done", "response.refusal.done", "response.content_part.done":
 		if ev.Type == "response.refusal.done" {
 			c.sawRefusal = true
 		}
-		c.closeText(ev.OutputIndex, ev.ContentIndex)
+		c.closeText(*ev.OutputIndex, *ev.ContentIndex)
 	case "response.function_call_arguments.delta":
 		if ev.Delta != "" {
-			b := c.tool(ev.OutputIndex)
+			b := c.tool(*ev.OutputIndex)
+			if !b.sawArgs {
+				b.args.SetSeed(c.seed)
+			}
 			b.sawArgs = true
+			b.args.WriteString(ev.Delta)
 			c.emit(api.EventTool{Index: b.idx, Args: ev.Delta})
 		}
 	case "response.function_call_arguments.done":
-		b := c.tool(ev.OutputIndex)
-		if !b.sawArgs {
+		b := c.tool(*ev.OutputIndex)
+		switch {
+		case !b.sawArgs:
 			args := ev.Arguments
 			if args == "" {
 				args = "{}"
 			}
 			b.sawArgs = true
 			c.emit(api.EventTool{Index: b.idx, Args: args})
+		case b.args.Sum64() != maphash.String(c.seed, ev.Arguments):
+			err = fmt.Errorf("gpt: the arguments done for output %d differ from the ones that streamed", *ev.OutputIndex)
 		}
-		c.emit(api.EventClose{Index: b.idx})
+		if err == nil {
+			c.emit(api.EventClose{Index: b.idx})
+		}
 	case "response.code_interpreter_call_code.delta", "response.mcp_call_arguments.delta", "response.custom_tool_call_input.delta":
-		if ev.Delta != "" {
-			c.emit(api.EventOpaque{Index: c.itemIndex(ev.OutputIndex), Delta: ev.Delta})
+		want := "code_interpreter_call"
+		switch ev.Type {
+		case "response.mcp_call_arguments.delta":
+			want = "mcp_call"
+		case "response.custom_tool_call_input.delta":
+			want = "custom_tool_call"
 		}
-	case "response.reasoning_summary_text.delta":
-		if ev.Delta != "" {
-			c.emit(api.EventSummary{Index: c.itemIndex(ev.OutputIndex), Part: ev.SummaryIndex, Text: ev.Delta})
+		if b := c.out[*ev.OutputIndex]; b == nil || b.kind != want {
+			err = fmt.Errorf("gpt: %s for output %d, which was not announced as a %s", ev.Type, *ev.OutputIndex, want)
+		} else if ev.Delta != "" {
+			c.emit(api.EventOpaque{Index: c.itemIndex(*ev.OutputIndex), Delta: ev.Delta})
 		}
-	case "response.reasoning_text.delta":
-		if ev.Delta != "" {
-			c.emit(api.EventThinking{Index: c.itemIndex(ev.OutputIndex), Part: ev.ContentIndex, Text: ev.Delta})
+	case "response.reasoning_summary_text.delta", "response.reasoning_text.delta":
+		if b := c.out[*ev.OutputIndex]; b == nil || b.kind != "reasoning" {
+			err = fmt.Errorf("gpt: %s for output %d, which was not announced as reasoning", ev.Type, *ev.OutputIndex)
+		} else if ev.Delta != "" && ev.Type == "response.reasoning_summary_text.delta" {
+			c.emit(api.EventSummary{Index: c.itemIndex(*ev.OutputIndex), Part: *ev.SummaryIndex, Text: ev.Delta})
+		} else if ev.Delta != "" {
+			c.emit(api.EventThinking{Index: c.itemIndex(*ev.OutputIndex), Part: *ev.ContentIndex, Text: ev.Delta})
 		}
 	default:
+	}
+	if err != nil {
+		c.emit(api.EventErr{Code: api.CodeNetwork, Err: err})
+		return c.events, false
 	}
 	c.readUsage(ev.Response)
 	return c.events, true
@@ -245,25 +326,6 @@ func (c *converter) End(err error) []api.Event {
 	return []api.Event{api.EventErr{Code: api.CodeNetwork, Err: err}}
 }
 
-// ensureStart opens the turn on the first frame that could carry the response
-// object. Model is the name this Provider is configured with, which is what
-// went out on the wire, and never the one the response reports: an alias
-// resolves to a snapshot with a name of its own, and the stored blocks of this
-// turn are stamped from here, so the served name would stamp every block with a
-// string no later request writes.
-func (c *converter) ensureStart(r *responseObject) {
-	if c.started {
-		return
-	}
-	c.started = true
-	e := api.EventStart{Model: c.model}
-	if r != nil {
-		c.respID = r.ID
-		e.ID = r.ID
-	}
-	c.emit(e)
-}
-
 func (c *converter) item(oi int) *block {
 	b, ok := c.out[oi]
 	if !ok {
@@ -278,11 +340,12 @@ func (c *converter) item(oi int) *block {
 // opens the opaque block that carries it.
 //
 // A message carries a phase, which separates a preamble before a tool call from
-// a final answer, and the codex models want it back on replay. It goes on the
-// first content part of that message, which is the block the message produces
-// and the block the phase is a label on; a message that announces no phase
-// leaves nothing behind, because a value the adapter cannot replay anyway would
-// be noise.
+// a final answer, and the codex models want it back on replay. It goes on every
+// content part of that message, each of which is a block of its own, so replay
+// keeps the parts in one message under the one phase; part zero opens with it
+// here and a later part as it opens. A message that announces no phase leaves
+// nothing behind, because a value the adapter cannot replay anyway would be
+// noise.
 //
 // The meta stores the phase and the model that claimed it, because those two are
 // what replay reads: a phase is one model's label and protocol stamps no model
@@ -297,26 +360,39 @@ func (c *converter) item(oi int) *block {
 // is what an opaque block is for. Kind is the item's type as the service spells
 // it, because that is the name the input array reads it back by, and Data is the
 // item as it stands, which the finished item replaces.
-func (c *converter) itemAdded(ev streamEvent) {
+//
+// The item's type is what every later frame at its output_index is checked
+// against. A call_id is what a tool result is matched by, so a function call
+// without one fails the turn.
+func (c *converter) itemAdded(ev *streamEvent) error {
 	var item outputItem
-	_ = json.Unmarshal(ev.Item, &item)
+	if err := json.Unmarshal(ev.Item, &item); err != nil {
+		return fmt.Errorf("gpt: %s item did not parse: %w", ev.Type, err)
+	}
+	if item.Type == "" {
+		return fmt.Errorf("gpt: %s item without a type", ev.Type)
+	}
+	oi := *ev.OutputIndex
+	c.item(oi).kind = item.Type
 	switch item.Type {
 	case "message":
 		if item.Phase == "" {
-			return
+			return nil
 		}
 		data, _ := json.Marshal(messageMeta{Model: c.model, Phase: item.Phase})
-		idx := c.textIndex(ev.OutputIndex, 0)
-		c.emit(api.EventText{Index: idx})
-		c.emit(api.EventMeta{Index: idx, Data: data})
+		c.item(oi).phase = data
+		c.textIndex(oi, 0)
 	case "function_call":
-		b := c.tool(ev.OutputIndex)
-		c.emit(api.EventTool{Index: b.idx, ID: c.callID(item, ev.OutputIndex), Name: item.Name})
+		if item.CallID == "" {
+			return fmt.Errorf("gpt: function_call at output %d without a call_id", oi)
+		}
+		b := c.tool(oi)
+		c.emit(api.EventTool{Index: b.idx, ID: item.CallID, Name: item.Name})
 	case "reasoning":
-		return
 	default:
-		c.emit(api.EventOpaque{Index: c.itemIndex(ev.OutputIndex), Kind: item.Type, Data: ev.Item})
+		c.emit(api.EventOpaque{Index: c.itemIndex(oi), Kind: item.Type, Data: ev.Item})
 	}
+	return nil
 }
 
 // itemDone reads the finished output item, which is the whole of a hosted tool
@@ -329,24 +405,35 @@ func (c *converter) itemAdded(ev streamEvent) {
 //
 // A reasoning item's encrypted_content exists on the item alone and never
 // streams, and the whole item is the provider's own encoding of the thinking,
-// which is what goes back on a later turn. Nothing readable and nothing sealed
+// which is what goes back on a later turn. A block whose summary streamed keeps
+// the item even without encrypted_content, and encode replays it only with
+// encrypted_content, or by id when store is on. Nothing readable and nothing sealed
 // is an item carrying only its own id, and with no stored response to reference
 // it by there is nothing to put in a block.
 //
 // A hosted tool item arrives complete, results and all, and every field that
 // streamed is filled in on it, so this is the payload a later turn sends back
 // and it replaces what the item opened with. The block ends where the item does.
-func (c *converter) itemDone(ev streamEvent) {
+//
+// An item output_item.added never announced is a broken frame and fails the
+// turn.
+func (c *converter) itemDone(ev *streamEvent) error {
 	var item outputItem
-	_ = json.Unmarshal(ev.Item, &item)
+	if err := json.Unmarshal(ev.Item, &item); err != nil {
+		return fmt.Errorf("gpt: %s item did not parse: %w", ev.Type, err)
+	}
+	if b := c.out[*ev.OutputIndex]; b == nil || b.kind == "" {
+		return fmt.Errorf("gpt: %s for output %d, which was never announced", ev.Type, *ev.OutputIndex)
+	}
 	switch item.Type {
+	case "":
+		return fmt.Errorf("gpt: %s item without a type", ev.Type)
 	case "message", "function_call":
-		return
 	case "reasoning":
-		b := c.item(ev.OutputIndex)
+		b := c.item(*ev.OutputIndex)
 		if b.idx < 0 {
 			if item.EncryptedContent == "" {
-				return
+				return nil
 			}
 			b.idx = c.take()
 			c.emit(api.EventThinking{Index: b.idx})
@@ -354,10 +441,11 @@ func (c *converter) itemDone(ev streamEvent) {
 		c.emit(api.EventMeta{Index: b.idx, Data: ev.Item})
 		c.closeItem(b.idx, item.Status)
 	default:
-		idx := c.itemIndex(ev.OutputIndex)
+		idx := c.itemIndex(*ev.OutputIndex)
 		c.emit(api.EventOpaque{Index: idx, Kind: item.Type, Data: ev.Item})
 		c.closeItem(idx, item.Status)
 	}
+	return nil
 }
 
 // closeItem ends the block an output item became. An item the token cap cut ends
@@ -384,6 +472,10 @@ func (c *converter) textIndex(oi, ci int) int {
 		b.parts = map[int]int{}
 	}
 	b.parts[ci] = idx
+	if b.phase != nil {
+		c.emit(api.EventText{Index: idx})
+		c.emit(api.EventMeta{Index: idx, Data: b.phase})
+	}
 	return idx
 }
 
@@ -411,26 +503,6 @@ func (c *converter) tool(oi int) *block {
 		b.idx = c.take()
 	}
 	return b
-}
-
-// callID is what a tool result is matched by. call_id is the field that links a
-// call to its result, the item id is what is left when the service sent no
-// call_id, and a minted one keeps the caller able to answer a call named with
-// neither.
-//
-// A minted handle folds in the response id, because output_index counts within
-// one turn and a thread runs several: on output_index alone the first call of
-// every turn mints the same string, and a result would answer either.
-func (c *converter) callID(item outputItem, oi int) string {
-	switch {
-	case item.CallID != "":
-		return item.CallID
-	case item.ID != "":
-		return item.ID
-	case c.respID != "":
-		return c.respID + "_call_" + strconv.Itoa(oi)
-	}
-	return "gpt_call_" + strconv.Itoa(oi)
 }
 
 // itemIndex opens the block an output item becomes whole, which is a reasoning
@@ -503,7 +575,7 @@ func clampZero(n int) int {
 // reason is CodeUnknown with the spelling in Err: a reason nobody here knows
 // rounded to the nearest code is a turn the caller mishandles quietly, where an
 // unclassified one is a turn it can look at.
-func (c *converter) endFor(ev streamEvent) api.Event {
+func (c *converter) endFor(ev *streamEvent) api.Event {
 	if ev.Type == "response.incomplete" {
 		reason := ""
 		if ev.Response != nil && ev.Response.IncompleteDetails != nil {
@@ -529,7 +601,7 @@ func (c *converter) endFor(ev streamEvent) api.Event {
 // inBandError reads the error frame. It arrives in two incompatible shapes: the
 // documented one is flat, the one seen on the wire nests everything under
 // error, and both official SDKs detect only the nested one.
-func (c *converter) inBandError(ev streamEvent) api.EventErr {
+func (c *converter) inBandError(ev *streamEvent) api.EventErr {
 	e := &APIError{}
 	if ev.Error != nil {
 		e.Type, e.Code, e.Message, e.Param = ev.Error.Type, ev.Error.Code, ev.Error.Message, ev.Error.Param
@@ -544,7 +616,7 @@ func (c *converter) inBandError(ev streamEvent) api.EventErr {
 // classifies as CodeUnknown: what went wrong is unnamed, and guessing at it from
 // the sentence beside it is how a caller ends up retrying something no retry
 // fixes.
-func (c *converter) responseFailed(ev streamEvent) api.EventErr {
+func (c *converter) responseFailed(ev *streamEvent) api.EventErr {
 	e := &APIError{Message: "the response failed"}
 	if ev.Response != nil && ev.Response.Error != nil {
 		e.Type, e.Code, e.Message, e.Param = ev.Response.Error.Type, ev.Response.Error.Code, ev.Response.Error.Message, ev.Response.Error.Param
@@ -561,14 +633,15 @@ func (p *Provider) request(ctx context.Context, req api.Request) (*http.Request,
 	if err != nil {
 		return nil, 0, err
 	}
-	payload, err := lib.MarshalRaw(body)
+	payload, err := lib.MarshalBody(body)
 	if err != nil {
 		return nil, 0, fmt.Errorf("gpt: encoding the request: %w", err)
 	}
-	if p.model.RequestBytes > 0 && len(payload) > p.model.RequestBytes {
-		return nil, len(payload), fmt.Errorf("%w: the request is %d bytes, over the %d the model %s takes", errTooLarge, len(payload), p.model.RequestBytes, p.model.Name)
+	sent := len(payload.Bytes())
+	if p.model.RequestBytes > 0 && sent > p.model.RequestBytes {
+		return nil, sent, fmt.Errorf("%w: the request is %d bytes, over the %d the model %s takes", errTooLarge, sent, p.model.RequestBytes, p.model.Name)
 	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, p.baseURL+"/responses", bytes.NewReader(payload))
+	httpReq, err := payload.Request(ctx, p.baseURL+"/responses")
 	if err != nil {
 		panic(err)
 	}
@@ -583,5 +656,5 @@ func (p *Provider) request(ctx context.Context, req api.Request) (*http.Request,
 	if p.project != "" {
 		httpReq.Header.Set("OpenAI-Project", p.project)
 	}
-	return httpReq, len(payload), nil
+	return httpReq, sent, nil
 }

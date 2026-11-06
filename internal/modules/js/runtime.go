@@ -2,6 +2,7 @@ package js
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -46,67 +47,45 @@ func getRuntime(ctx context.Context) *runtime {
 	return rt.(*runtime)
 }
 
-// Config tunes the js runtime; a zero field takes its default. The limits
-// are shared by every session of an app that sets WithJSConfig, and by every
-// app in the process that does not: a script waits to start until a
-// worker and enough of TotalMemory are free.
 type Config struct {
-	// TotalMemory is the sum in bytes of the memory budgets of all scripts
-	// executing at once across the app. Default 512 MiB; a value below
-	// WorkerMemory is raised to it.
-	TotalMemory int
-	// WorkerMemory is the largest memory budget in bytes one script may
-	// take. Default 128 MiB; a value below DefaultMemory is raised to it.
-	WorkerMemory int
-	// DefaultMemory is the memory budget in bytes of a script that asks for
-	// less or none. Default 16 MiB, at least 4 MiB.
+	TotalMemory   int
+	WorkerMemory  int
 	DefaultMemory int
-	// MaxWorkers is how many scripts may execute at once across the app.
-	// Default 16.
-	MaxWorkers int
-	// JobTimeout caps how long one script may execute; a script may ask for
-	// less. Default 30s.
-	JobTimeout time.Duration
-	// AsyncAfter is how long a run keeps the tool call waiting before it
-	// detaches and delivers its result later as a background task. Default
-	// 10s.
-	AsyncAfter time.Duration
-	// MaxQueue is how many scripts may wait to start across the app; one
-	// submitted past it is rejected. Default 100.
-	MaxQueue int
-	// MaxCallDepth is how many nested JS calls a script may make before an
-	// error is thrown. Default 1000.
-	MaxCallDepth int
+	MaxWorkers    int
+	JobTimeout    time.Duration
+	AsyncAfter    time.Duration
+	MaxQueue      int
+	MaxCallDepth  int
 }
 
 const minMemory = 4 * 1024 * 1024
 
 func (c *Config) initDefaults() {
-	if c.DefaultMemory == 0 {
+	if c.DefaultMemory <= 0 {
 		c.DefaultMemory = 16 * 1024 * 1024
 	}
 	c.DefaultMemory = max(c.DefaultMemory, minMemory)
-	if c.WorkerMemory == 0 {
+	if c.WorkerMemory <= 0 {
 		c.WorkerMemory = 128 * 1024 * 1024
 	}
 	c.WorkerMemory = max(c.WorkerMemory, c.DefaultMemory)
-	if c.TotalMemory == 0 {
+	if c.TotalMemory <= 0 {
 		c.TotalMemory = 512 * 1024 * 1024
 	}
 	c.TotalMemory = max(c.TotalMemory, c.WorkerMemory)
-	if c.MaxWorkers == 0 {
+	if c.MaxWorkers <= 0 {
 		c.MaxWorkers = 16
 	}
-	if c.JobTimeout == 0 {
+	if c.JobTimeout <= 0 {
 		c.JobTimeout = 30 * time.Second
 	}
-	if c.AsyncAfter == 0 {
+	if c.AsyncAfter <= 0 {
 		c.AsyncAfter = 10 * time.Second
 	}
-	if c.MaxQueue == 0 {
+	if c.MaxQueue <= 0 {
 		c.MaxQueue = 100
 	}
-	if c.MaxCallDepth == 0 {
+	if c.MaxCallDepth <= 0 {
 		c.MaxCallDepth = 1000
 	}
 }
@@ -121,6 +100,9 @@ type runtime struct {
 func (r *runtime) submit(params task.Params, done func()) (<-chan task.Result, context.CancelCauseFunc) {
 	r.init()
 	params.Memory = min(max(params.Memory, r.config.DefaultMemory), r.config.WorkerMemory)
+	if params.Timeout <= 0 || params.Timeout > r.config.JobTimeout {
+		params.Timeout = r.config.JobTimeout
+	}
 	task, res, cancel := task.NewTask(params, done, r.config.AsyncAfter)
 	r.tasks <- task
 	return res, cancel
@@ -199,17 +181,15 @@ func (r *runtime) execute(vm *quickjs.VM, input task.Input) (out string, err err
 			out = ""
 			err = fmt.Errorf("%q: %v: %w", input.Name, rec, errRuntime)
 		}
+		if err != nil && errors.Is(context.Cause(input.Context), task.ErrTimeout) {
+			err = fmt.Errorf("%q: limit %v: %w", input.Name, input.Timeout, task.ErrTimeout)
+		}
 	}()
-	timeout := r.config.JobTimeout
-	if input.Timeout > 0 && input.Timeout < r.config.JobTimeout {
-		timeout = input.Timeout
-	}
-	vm.SetEvalTimeout(timeout)
 	vm.SetMemoryLimit(uintptr(input.Memory))
 	vm.SetMaxStackSize(uintptr(r.config.MaxCallDepth))
 	if !input.AppendLogs {
 		if err := ClearLog(input.Controller.FS(), logName(input.Name)); err != nil {
-			return "", fmt.Errorf("%q: %v: %w", input.Name, err, errRuntime)
+			return "", fmt.Errorf("%q: clearing log %q: %w", input.Name, logName(input.Name), err)
 		}
 	}
 	if err := RegisterSerializers(vm); err != nil {
@@ -223,11 +203,11 @@ func (r *runtime) execute(vm *quickjs.VM, input task.Input) (out string, err err
 	}
 	res, err := vm.Eval(input.Script, quickjs.EvalGlobal)
 	if err != nil {
-		return "", fmt.Errorf("%q: %v: %w", input.Name, err, errScript)
+		return "", fmt.Errorf("%q (log file %q): %v: %w", input.Name, logName(input.Name), err, errScript)
 	}
 	s, ok := res.(string)
 	if !ok {
-		return "", fmt.Errorf("%q: the returned value does not serialize to JSON, such as a function, a symbol or a toJSON returning undefined: %w", input.Name, errScript)
+		return "", fmt.Errorf("%q (log file %q): the returned value does not serialize to JSON, such as a function, a symbol or a toJSON returning undefined: %w", input.Name, logName(input.Name), errScript)
 	}
 	return s, nil
 }

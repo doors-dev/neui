@@ -18,8 +18,9 @@ import (
 const threadID api.ThreadID = "thread"
 
 type Setup struct {
-	Model api.Model
-	Files api.FilesConfig
+	Model   api.Model
+	Files   api.FilesConfig
+	Modules []common.Module
 }
 
 type Controller struct {
@@ -33,17 +34,14 @@ type Controller struct {
 
 func NewController(t *testing.T, s Setup) *Controller {
 	t.Helper()
-	store, err := local.NewFileStorage()
+	store, err := local.NewFileStorage("")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { store.Remove() })
-	ws, err := store.WorkspaceOpen(threadID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { ws.Close() })
-	c := &Controller{setup: s, fs: filesystem.New(threadID, ws, store, common.FilesConfigDefaults(s.Files)), store: store}
+	fs := filesystem.Open(threadID, store, store, common.FilesConfigDefaults(s.Files))
+	t.Cleanup(func() { fs.Dispose() })
+	c := &Controller{setup: s, fs: fs, store: store}
 	c.ctx = context.WithValue(context.Background(), common.KeyController, common.Controller(c))
 	return c
 }
@@ -65,7 +63,13 @@ func (c *Controller) Context() context.Context { return context.Background() }
 func (c *Controller) PageContext() context.Context { return context.Background() }
 
 func (c *Controller) Modules() iter.Seq[common.Module] {
-	return func(func(common.Module) bool) {}
+	return func(yield func(common.Module) bool) {
+		for _, m := range c.setup.Modules {
+			if !yield(m) {
+				return
+			}
+		}
+	}
 }
 
 func (c *Controller) Config() api.ThreadConfig { return common.ConfigDefaults(api.ThreadConfig{}) }

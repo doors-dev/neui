@@ -11,6 +11,7 @@ import (
 	"neui.dev/kchat/pops"
 	"neui.dev/kchat/icons"
 	"neui.dev/kchat/params"
+	"neui.dev/kchat/notify"
 )
 
 type chatMenuMode int
@@ -22,8 +23,6 @@ const (
 	chatMenuDelete
 )
 
-// chatMenu is which row has an overlay up and which one; one row at a time
-// falls out of there being a single value.
 type chatMenu struct {
 	id api.ThreadID
 	mode chatMenuMode
@@ -39,7 +38,7 @@ type Aside struct {
 
 elem (p Aside) Main() {
 	~~
-	p.controller = controller.New()
+	p.controller = controller.New(p.Params.Off(params.MessageSearch))
 	p.menu = p.Pops.Popup[chatMenu]()
 	~~
 	~(p.controller.Show(p.aside()))
@@ -49,6 +48,7 @@ elem (p Aside) Main() {
 			p.controller.Toggle(ctx)
 			return false
 		},
+		OnError: notify.OnError,
 	} <button class="kchat-iconbtn kchat-burger" title="Menu">
 		~(p.controller.RouteToggle(
 			<>~>(doors.Class("kchat-ic")) ~(icons.List())</>,
@@ -74,6 +74,7 @@ elem (p *Aside) aside() {
 							p.controller.SearchInput(ctx, ri.Event().Value)
 							return false
 						},
+						OnError: notify.OnError,
 					} <input
 						value=(v)
 						class="kchat-text"
@@ -123,16 +124,18 @@ elem (p *Aside) aside() {
 			},
 		} <script>
 			const side = document.currentScript.closest(".kchat-aside")
+			const widget = side.closest(".kchat-widget")
 			$on("opened", () => {
 				if (getComputedStyle(side).position !== "absolute") return
-				return $hook("collapse", true)
+				return $hook("collapse", true).catch((err) => {
+					if (err instanceof HookErr)
+						widget.dispatchEvent(new CustomEvent("kchat_error", { detail: err.kind }))
+				})
 			})
 		</script>
 		~(if !p.Params.Off(params.ThreadEdit) {
 			<script>
 				const side = document.currentScript.closest(".kchat-aside")
-				// touch has no hover, so a press that outlasts the timer opens the
-				// same menu the kebab does and swallows the click that follows
 				let timer = null
 				let fired = false
 				const cancel = () => {
@@ -179,10 +182,15 @@ elem (p *Aside) match(t api.Thread) {
 		~>doors.AClick{
 			Scope: new(doors.ScopeBlocking),
 			On: func(ctx context.Context, rp doors.RequestPointer) bool {
-				p.Instance.ThreadOpen(ctx, t.ID, nil)
+				if err := p.Instance.ThreadOpen(ctx, t.ID, nil); err != nil {
+					doors.Logger(ctx).Error("aside: open", "thread", t.ID, "err", err)
+					notify.Error(ctx, err)
+					return false
+				}
 				rp.After(doors.ActionEmit[any]{Name: "opened"})
 				return false
 			},
+			OnError: notify.OnError,
 		} <button class="kchat-thread">
 			<span class="kchat-dot kchat-dot_off" aria-hidden="true"></span>
 			~(name(t.Name))

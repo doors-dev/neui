@@ -38,8 +38,8 @@ type File struct {
 	CreatedAt time.Time `json:"created_at"` // when FilePut committed it
 	// Draft marks a blob stored ahead of the message that will carry it. A
 	// draft is not part of the conversation: FileStorage lists it like any
-	// file, but FS leaves it out of Stat and ReadDir. It stays a draft until
-	// FileCommit clears it or it is deleted.
+	// file, but FS leaves it out of Stat, ReadDir and every read. It stays a
+	// draft until FileCommit clears it or it is deleted.
 	Draft bool `json:"draft"`
 }
 
@@ -53,8 +53,9 @@ type FileStorage interface {
 	// and CreatedAt filled. Name is the key within the thread and origin:
 	// one path element, not empty, not "." or ".." and holding no
 	// separator — anything else is ErrInvalidName, so every stored name is
-	// addressable. An empty threadID or an origin that is not Valid is
-	// refused too. It commits whole or not at all, and a name already
+	// addressable. A storage may also refuse, as ErrInvalidName, a name it
+	// cannot hold, such as one too long for its keys. An empty threadID or
+	// an origin that is not Valid is refused too. It commits whole or not at all, and a name already
 	// taken is ErrExists with nothing written: blobs are immutable, so the
 	// caller resolves a collision by choosing another name (on S3, a
 	// conditional If-None-Match put). draft stores the blob as a draft, see
@@ -80,14 +81,14 @@ type FileStorage interface {
 	FileRead(ctx context.Context, threadID ThreadID, origin Origin, name string, off int64, n int64) (io.ReadCloser, error)
 	// FileList yields the origin's files sorted lexically by name in byte
 	// order, which is what a keyed store lists in. A missing thread or
-	// origin yields nothing rather than an error. A record that cannot be
-	// read comes out as a zero File with its error and iteration continues,
-	// so one bad entry never hides the rest.
+	// origin yields nothing rather than an error. Records that cannot be
+	// read are skipped; an error means the listing failed.
 	FileList(ctx context.Context, threadID ThreadID, origin Origin) iter.Seq2[File, error]
 	// FileDelete removes the blob and its record; a missing key is nil, so
 	// deletes are idempotent.
 	FileDelete(ctx context.Context, threadID ThreadID, origin Origin, name string) error
-	// FileDeleteAll removes every blob in the thread, all origins; a
-	// missing thread is nil, so it too is idempotent.
+	// FileDeleteAll removes every blob in the thread, all origins; it is
+	// called when the thread is deleted. A missing thread is nil, so it too
+	// is idempotent.
 	FileDeleteAll(ctx context.Context, threadID ThreadID) error
 }

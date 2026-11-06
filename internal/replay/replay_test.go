@@ -282,6 +282,104 @@ func TestNeedCompactionUnavailable(t *testing.T) {
 	}
 }
 
+func TestCanCompact(t *testing.T) {
+	config := api.ThreadConfig{CompactionAllowed: 0.2, CompactionTrigger: 0.9, CompactionPreserve: 0.25}
+	s := local.NewMessageStorage()
+	r := NewReplay(context.Background(), "a", s, config, api.Model{Context: 1000})
+	if r.CanCompact() {
+		t.Fatalf("not loaded: CanCompact is true")
+	}
+	mustCreate(t, r)
+	okRound(t, r, "one", 500)
+	if r.CanCompact() {
+		t.Fatalf("one round: CanCompact is true")
+	}
+	if _, _, err := r.RoundInit(api.Input{Text: "failed"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.RoundError(errors.New("network"), api.EventUsage{}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if r.CanCompact() {
+		t.Fatalf("an error round counted as a completed round")
+	}
+	okRound(t, r, "two", 100)
+	if r.CanCompact() {
+		t.Fatalf("two rounds below CompactionAllowed: CanCompact is true")
+	}
+	okRound(t, r, "three", 200)
+	if !r.CanCompact() {
+		t.Fatalf("rounds at CompactionAllowed: CanCompact is false")
+	}
+	c, _, err := r.PrepareCompaction()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.ApplyCompaction(c, api.Indexed[api.Content]{0: api.ContentText{Text: "the summary"}}, api.EventUsage{Output: 50}); err != nil {
+		t.Fatal(err)
+	}
+	if r.CanCompact() {
+		t.Fatalf("right after a compaction: CanCompact is true")
+	}
+	okRound(t, r, "four", 300)
+	okRound(t, r, "five", 300)
+	if !r.CanCompact() {
+		t.Fatalf("two rounds past the tail: CanCompact is false")
+	}
+	loaded := NewReplay(context.Background(), "a", s, config, api.Model{Context: 1000})
+	if err := loaded.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if !loaded.CanCompact() {
+		t.Fatalf("after a reload: CanCompact is false")
+	}
+	unknown := NewReplay(context.Background(), "b", local.NewMessageStorage(), config, api.Model{})
+	mustCreate(t, unknown)
+	okRound(t, unknown, "one", 1)
+	if unknown.CanCompact() {
+		t.Fatalf("unknown context, one round: CanCompact is true")
+	}
+	okRound(t, unknown, "two", 1)
+	if !unknown.CanCompact() {
+		t.Fatalf("unknown context, two rounds: CanCompact is false")
+	}
+}
+
+func TestFailedCompactionWaitsForTheHistoryToGrow(t *testing.T) {
+	config := api.ThreadConfig{CompactionTrigger: 0.5, CompactionPreserve: 0.25}
+	r := NewReplay(context.Background(), "a", local.NewMessageStorage(), config, api.Model{Context: 1000})
+	mustCreate(t, r)
+	okRound(t, r, strings.Repeat("long history ", 100), 600)
+	okRound(t, r, strings.Repeat("long history ", 100), 800)
+	if got := r.NeedCompaction(); got != CompactionTokens {
+		t.Fatalf("got %v, want %v", got, CompactionTokens)
+	}
+	r.CompactionFailed()
+	if got := r.NeedCompaction(); got != CompactionNone {
+		t.Fatalf("right after a failure: got %v", got)
+	}
+	okRound(t, r, "a little more", 900)
+	if got := r.NeedCompaction(); got != CompactionNone {
+		t.Fatalf("history grew under 25%%: got %v", got)
+	}
+	okRound(t, r, "much more", 1001)
+	if got := r.NeedCompaction(); got != CompactionTokens {
+		t.Fatalf("history grew past 25%%: got %v, want %v", got, CompactionTokens)
+	}
+	r.CompactionFailed()
+	c, _, err := r.PrepareCompaction()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.ApplyCompaction(c, api.Indexed[api.Content]{0: api.ContentText{Text: "the summary"}}, api.EventUsage{Output: 50}); err != nil {
+		t.Fatal(err)
+	}
+	growingRounds(t, r, 600, 700)
+	if got := r.NeedCompaction(); got != CompactionTokens {
+		t.Fatalf("an applied compaction clears the backoff: got %v, want %v", got, CompactionTokens)
+	}
+}
+
 func TestPDFPagesChargeImageBudget(t *testing.T) {
 	doc := api.ContentDocument{Data: pdfDoc(4), Mime: string(api.DocumentPDF), Name: "report.pdf"}
 	if got := countImages(doc); got != 4 {
@@ -1072,4 +1170,169 @@ func TestRequestBytesBudgetUndoesBase64(t *testing.T) {
 	if got := memoryLimit(config, api.Model{}, 1); got != config.ThreadMemoryLimit {
 		t.Fatalf("budget with RequestBytes unknown: got %d, want ThreadMemoryLimit %d", got, config.ThreadMemoryLimit)
 	}
+}
+
+func pdfThread(t *testing.T, s api.MessageStorage) {
+	t.Helper()
+	r := NewReplay(context.Background(), "a", s, unboundedConfig, api.Model{})
+	mustCreate(t, r)
+	toolRound(t, r, "pdf 2", "start", api.ContentDocument{Data: pdfDoc(2), Mime: string(api.DocumentPDF), Name: "a.pdf"})
+	toolRound(t, r, "pdf 3", "", api.ContentDocument{Data: pdfDoc(3), Mime: string(api.DocumentPDF), Name: "b.pdf"}, api.ContentImage{Data: make([]byte, 64), Mime: "image/png"})
+	toolRound(t, r, "pdf 5", "", api.ContentDocument{Data: pdfDoc(5), Mime: string(api.DocumentPDF), Name: "c.pdf"})
+	toolRound(t, r, "broken", "", api.ContentDocument{Data: []byte("%PDF-1.4 truncated"), Mime: string(api.DocumentPDF), Name: "d.pdf"})
+	okRound(t, r, "fold", 10)
+}
+
+func TestStoredPDFPagesAreCountedOnce(t *testing.T) {
+	model := api.Model{ImagesPerRequest: 8}
+	reference := local.NewMessageStorage()
+	pdfThread(t, reference)
+	cached := local.NewMessageStorage()
+	pdfThread(t, cached)
+	want := NewReplay(context.Background(), "a", reference, unboundedConfig, model)
+	if err := want.Load(); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	r := NewReplay(context.Background(), "a", cached, unboundedConfig, model)
+	if err := r.Load(); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := historyImages(r); got != 11 {
+		t.Fatalf("the loaded thread charges %d images, want 2+3+1+5 = 11", got)
+	}
+	for i, round := range r.messages.rounds {
+		if got := countImages(round.user...); round.images != got {
+			t.Fatalf("round %d keeps %d images, but its content charges %d", i, round.images, got)
+		}
+	}
+	for _, round := range r.messages.rounds {
+		for _, block := range round.user {
+			res, ok := block.(api.ContentToolResult)
+			if !ok {
+				continue
+			}
+			for _, nested := range res.Content {
+				if doc, ok := nested.(api.ContentDocument); ok {
+					clear(doc.Data)
+				}
+			}
+		}
+	}
+	if got := historyImages(r); got != 1 {
+		t.Fatalf("the cleared PDFs still charge %d images, so clearing them says nothing about re-parsing", got)
+	}
+	_, wantMessages, err := want.RoundInit(api.Input{Text: "next"})
+	if err != nil {
+		t.Fatalf("RoundInit: %v", err)
+	}
+	_, gotMessages, err := r.RoundInit(api.Input{Text: "next"})
+	if err != nil {
+		t.Fatalf("RoundInit: %v", err)
+	}
+	if len(gotMessages) != len(wantMessages) {
+		t.Fatalf("got %d messages, want %d", len(gotMessages), len(wantMessages))
+	}
+	evicted := 0
+	for i := range wantMessages {
+		for j := range wantMessages[i].Content {
+			w, _ := json.Marshal(omitAllMedia([]api.Content{wantMessages[i].Content[j]}, "x"))
+			g, _ := json.Marshal(omitAllMedia([]api.Content{gotMessages[i].Content[j]}, "x"))
+			if string(w) != string(g) {
+				t.Fatalf("message %d block %d: got %s, want %s", i, j, g, w)
+			}
+			if strings.Contains(string(w), "removed to fit") {
+				evicted++
+			}
+		}
+	}
+	if evicted == 0 {
+		t.Fatalf("nothing was evicted, so the 11 images over the 8 the model takes were not what the replay measured")
+	}
+	for i, round := range want.messages.rounds {
+		if got := countImages(round.user...); round.images != got {
+			t.Fatalf("after eviction round %d keeps %d images, but its content charges %d", i, round.images, got)
+		}
+	}
+}
+
+func BenchmarkReplayOverStoredPDFs(b *testing.B) {
+	s := newMessages(api.Compaction{}, unboundedConfig, api.Model{ImagesPerRequest: 1 << 20}, 1)
+	doc := api.ContentDocument{Data: pdfDoc(50), Mime: string(api.DocumentPDF), Name: "report.pdf"}
+	for i := range 21 {
+		id := fmt.Sprintf("call %d", i)
+		s.appendRound(api.Round{
+			ID:       api.RoundID(i + 1),
+			State:    api.RoundOk,
+			Input:    api.Input{Text: "go"},
+			Response: api.Indexed[api.Content]{0: api.ContentToolUse{ID: id, Name: "attach", Input: json.RawMessage(`{}`)}},
+			Results:  map[string]api.ContentToolResult{id: {ID: id, Content: api.UserContents{doc}}},
+		})
+	}
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := s.replay(api.Input{Text: "next"}); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func TestEmptyRewindNeedsSomethingPending(t *testing.T) {
+	count := func(t *testing.T, s api.MessageStorage) int {
+		t.Helper()
+		n := 0
+		for _, err := range s.RoundRange(context.Background(), "a", api.NoRoundID, api.NoRoundID) {
+			if err != nil {
+				t.Fatalf("RoundRange: %v", err)
+			}
+			n++
+		}
+		return n
+	}
+
+	t.Run("nothing pending", func(t *testing.T) {
+		s := local.NewMessageStorage()
+		r := NewReplay(context.Background(), "a", s, api.ThreadConfig{}, api.Model{})
+		mustCreate(t, r)
+		okRound(t, r, "one", 10)
+		second := okRound(t, r, "two", 20)
+		if _, _, _, err := r.Rewind(second, api.Input{}); !errors.Is(err, api.ErrWrongState) {
+			t.Fatalf("an empty rewind with nothing pending answered %v, want ErrWrongState", err)
+		}
+		if n := count(t, s); n != 2 {
+			t.Fatalf("the refused rewind left %d rounds, want 2", n)
+		}
+		if !r.IsLoaded() {
+			t.Fatalf("the refused rewind unloaded the replay")
+		}
+	})
+
+	t.Run("stashed results", func(t *testing.T) {
+		s := local.NewMessageStorage()
+		r := NewReplay(context.Background(), "a", s, api.ThreadConfig{}, api.Model{})
+		mustCreate(t, r)
+		toolRound(t, r, "c", "call")
+		after := okRound(t, r, "after", 20)
+		round, messages, _, err := r.Rewind(after, api.Input{})
+		if err != nil {
+			t.Fatalf("an empty rewind over stashed results: %v", err)
+		}
+		last := messages[len(messages)-1]
+		if _, ok := last.Content[0].(api.ContentToolResult); !ok || round.ID == api.NoRoundID {
+			t.Fatalf("the resumed round replays %#v, want the stashed tool result", last.Content)
+		}
+	})
+
+	t.Run("pinned record", func(t *testing.T) {
+		s := local.NewMessageStorage()
+		r := NewReplay(context.Background(), "a", s, api.ThreadConfig{}, api.Model{})
+		mustCreate(t, r)
+		first := okRound(t, r, "one", 10)
+		if err := r.Record(first, "note", nil, "kept"); err != nil {
+			t.Fatalf("Record: %v", err)
+		}
+		second := okRound(t, r, "two", 20)
+		if _, _, _, err := r.Rewind(second, api.Input{}); err != nil {
+			t.Fatalf("an empty rewind over a record of an earlier round: %v", err)
+		}
+	})
 }

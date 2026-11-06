@@ -2,6 +2,9 @@ package chat
 
 import (
 	"context"
+	"errors"
+	"sync"
+	"time"
 	
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
@@ -13,6 +16,7 @@ import (
 	"neui.dev/kchat/chat/list"
 	"neui.dev/kchat/pops"
 	"neui.dev/kchat/params"
+	"neui.dev/kchat/notify"
 )
 
 type Chat struct {
@@ -28,17 +32,36 @@ func (c Chat) Main() gox.Elem {
 }
 
 func (c Chat) Chat(thread api.ChatThread, s api.ChatState) api.Chat {
-	controller := controller.NewComposerController(thread, s.Input, s.Round != nil, s.Usage, s.Tasks, s.Compaction, s.Ask)
+	controller := controller.NewComposerController(thread, s.Input, s.Round != nil, s.Usage, s.Tasks, s.Compaction, s.CanCompact, s.Ask)
 	at := anchor.Read(s.Meta)
+	dead := doors.NewSource(alive)
 	return &chat{
 		params: c.Params,
 		thread: thread,
 		inst: c.Inst,
 		composer: controller,
 		pops: c.Pops,
-		list: list.NewList(c.Params, c.Inst, thread, controller, s.ID, s.Round, at),
+		list: list.NewList(c.Params, c.Inst, thread, controller, s.ID, s.Round, at, func(ctx context.Context, err error) {
+			dead.Update(ctx, closedKindOf(err))
+		}),
 		name: doors.NewSource(s.Name),
+		dead: dead,
 	}
+}
+
+type closedKind int
+
+const (
+	alive closedKind = iota
+	failed
+	deleted
+)
+
+func closedKindOf(err error) closedKind {
+	if errors.Is(err, api.ErrNotFound) {
+		return deleted
+	}
+	return failed
 }
 
 elem (c Chat) Placeholder(enabled doors.Beam[bool]) {
@@ -85,6 +108,7 @@ type chat struct {
 	pops pops.Popup[string]
 	list list.List
 	name doors.Source[string]
+	dead doors.Source[closedKind]
 }
 
 func (c *chat) Update(ctx context.Context, e api.ChatEvent) {
@@ -96,10 +120,10 @@ func (c *chat) Update(ctx context.Context, e api.ChatEvent) {
 		case api.ChatEventName:
 			c.name.Update(ctx, e.Name)
 		case api.ChatEventRoundEnd:
-			c.composer.RoundDone(ctx, e.State, e.Usage)
-			c.list.RoundDone(ctx, e.State, e.Error)
+			c.composer.RoundDone(ctx, e.State, e.Usage, e.CanCompact)
+			c.list.RoundDone(ctx, e.State)
 		case api.ChatEventRoundStart:
-			c.composer.UpdateActive(ctx, true)
+			c.composer.RoundStart(ctx, e.Usage, e.CanCompact)
 			if e.Round.Input.Len() != 0 {
 				c.composer.FlushInput(ctx)
 			}
@@ -109,7 +133,7 @@ func (c *chat) Update(ctx context.Context, e api.ChatEvent) {
 		case api.ChatEventTasks:
 			c.composer.UpdateTasks(ctx, e.Tasks)
 		case api.ChatEventCompacting:
-			c.composer.UpdateCompaction(ctx, e.Running, e.Usage)
+			c.composer.UpdateCompaction(ctx, e.Running, e.Usage, e.CanCompact)
 		case api.ChatEventRoundUsage:
 			c.composer.UpdateUsage(ctx, e.Usage)
 		case api.ChatEventAsk:
@@ -120,19 +144,15 @@ func (c *chat) Update(ctx context.Context, e api.ChatEvent) {
 			c.list.IndexedEvent(e.Event)
 		case api.ChatEventToolResults:
 			c.list.ToolsDone()
+		case api.ChatEventCriticalError:
+			c.dead.Update(ctx, closedKindOf(e.Err))
+			c.pops.Hide(ctx, "files")
 		}
 	})
 }
 
 elem (c *chat) Main() {
-	~>doors.AKeyDown{
-		Key: doors.Key{Key: "Escape"},
-		Scope: new(doors.ScopeBlocking),
-		On: func(ctx context.Context, rk doors.RequestKeyboard) bool {
-			c.composer.Escape(ctx)
-			return false
-		},
-	} <div
+	<div
 		class="kchat-pane"
 		data-attach=({
 			if c.params.Off(params.Attachments) {
@@ -146,19 +166,32 @@ elem (c *chat) Main() {
 				~(c.files())
 			})
 		</div>
-		<div class="kchat-log kchat-log_scroll" role="log" aria-label="Chat messages" data-seeding="">
-			~(c.list.Main())
-			~(c.list.Script())
-		</div>
-		~composer.Composer{
-			Controller: c.composer,
-			Params: c.params,
-			Pops: c.pops,
-		}
-		<script data:id=(c.params.ID) data:paste=(pasteAsFile)>
+		~(notify.Toasts())
+		~(c.dead.Bind(c.body))
+		~>doors.AHook[bool]{
+			Name: "escape",
+			Scope: new(doors.ScopeBlocking),
+			On: func(ctx context.Context, r doors.RequestHook[bool]) (any, bool) {
+				c.composer.Escape(ctx)
+				return nil, false
+			},
+		} <script data:id=(c.params.ID) data:paste=(pasteAsFile)>
 			const main = document.currentScript.parentElement
+			const widget = main.closest(".kchat-widget")
 			const id = $data("id")
 			const pasteAsFile = $data("paste")
+			const keydown = (e) => {
+				if (e.key !== "Escape") return
+				const escape = new CustomEvent("kchat_escape", { cancelable: true })
+				if (!widget.dispatchEvent(escape)) return
+				if (!main.contains(e.target)) return
+				$hook("escape", true).catch((err) => {
+					if (err instanceof HookErr)
+						widget.dispatchEvent(new CustomEvent("kchat_error", { detail: err.kind }))
+				})
+			}
+			widget.addEventListener("keydown", keydown)
+			$sys.clean(() => widget.removeEventListener("keydown", keydown))
 			const attach = (files) => {
 				const composer = main.querySelector("#composer" + id)
 				if (!composer || composer.getAttribute("aria-busy") === "true") return false
@@ -214,10 +247,61 @@ elem (c *chat) Main() {
 	</div>
 }
 
-elem title(name string) {
-	~(if name == "" {
-		<span class="kchat-top-title kchat-top-title_quiet">New Chat</span>
+elem (c *chat) body(kind closedKind) {
+	~(if kind == alive {
+		<div class="kchat-log kchat-log_scroll" role="log" aria-label="Chat messages" data-seeding="">
+			~(c.list.Main())
+			~(c.list.Script())
+		</div>
+		~composer.Composer{
+			Controller: c.composer,
+			Params: c.params,
+			Pops: c.pops,
+		}
 	} else {
-		<span class="kchat-top-title">~(name)</span>
+		<div class="kchat-closed-area">
+			~(c.closed(kind))
+		</div>
 	})
+}
+
+elem (c *chat) closed(kind closedKind) {
+	~~
+	icon, head, text := icons.WarningFill(), "Something went wrong", "This chat hit an error."
+	if kind == deleted {
+		icon, head, text = icons.Trash(), "This chat was deleted.", "It was deleted elsewhere."
+	}
+	var once sync.Once
+	confirm := func(ctx context.Context) {
+		once.Do(func() {
+			c.thread.Reload(ctx)
+		})
+	}
+	~~
+	<div class="kchat-closed-card" role="alert">
+		~>(doors.Class("kchat-ic kchat-closed-ic")) ~(icon)
+		<p class="kchat-closed-title">~(head)</p>
+		<p class="kchat-closed-text">~(text)</p>
+		<div class="kchat-closed-acts">
+			~>doors.AClick{
+				Scope: new(doors.ScopeBlocking),
+				On: func(ctx context.Context, rp doors.RequestPointer) bool {
+					confirm(ctx)
+					return true
+				},
+				OnError: notify.OnError,
+			} <button type="button" class="kchat-btn kchat-btn_auto">OK<i class="kchat-file-fill" aria-hidden="true"></i></button>
+		</div>
+		~(doors.Go(func(ctx context.Context) {
+			select {
+			case <-ctx.Done():
+			case <-time.After(10 * time.Second):
+				confirm(ctx)
+			}
+		}))
+	</div>
+}
+
+elem title(name string) {
+	<span class="kchat-top-title">~(name)</span>
 }

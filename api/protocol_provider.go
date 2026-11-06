@@ -40,8 +40,11 @@ type Provider interface {
 type Model struct {
 	// Name is the id as it goes on the wire.
 	Name string `json:"name"`
-	// Context is how many tokens the model reads at once. Zero means unknown,
-	// not a window of zero; a caller reading zero skips token-based compaction,
+	// Context is the model's total window in tokens, input and output
+	// together, as the provider publishes it. A provider that also caps input
+	// lower than that refuses an over-long request with its context-length
+	// error, which starts compaction like any other. Zero means unknown, not a
+	// window of zero; a caller reading zero skips token-based compaction,
 	// leaving the ThreadMemoryLimit byte budget and the API's own over-length
 	// error to start it.
 	Context int `json:"context"`
@@ -50,6 +53,10 @@ type Model struct {
 	// buy nothing. Zero means unknown, and a caller reading zero sends what it
 	// has.
 	ImagePixels int `json:"imagePixels"`
+	// ImageSide is the longest side, in pixels, worth sending in one image:
+	// past it the API downscales or refuses, whatever the area. Zero means
+	// unknown, and a caller reading zero holds an image it shapes to 2000.
+	ImageSide int `json:"imageSide"`
 	// ImageBytes is the largest one image the API takes, counted in raw file
 	// bytes before base64 or any other encoding. A provider whose docs state
 	// the limit on the encoded form declares the raw size that encodes to it:

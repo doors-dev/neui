@@ -2,6 +2,7 @@ package uploader
 
 import (
 	"context"
+	"errors"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -17,6 +18,7 @@ import (
 	"neui.dev/api"
 	"neui.dev/kchat/icons"
 	"neui.dev/kchat/params"
+	"neui.dev/kchat/notify"
 )
 
 func fileIcon(mime string) gox.Elem {
@@ -86,6 +88,7 @@ elem (f fileDone) main() {
 						f.door.Static(ctx, nil)
 						return true
 					},
+					OnError: notify.OnError,
 				} <button class="kchat-ctl" aria-label=("Remove " + path.Base(f.name))>
 					~>(doors.Class("kchat-ic")) ~(icons.Close())
 				</button>
@@ -187,7 +190,16 @@ func (f *fileProgress) download(ctx context.Context, part *multipart.Part) (adde
 			return false, err
 		}
 		f.status = errored
-		f.w.WriteHeader(http.StatusInternalServerError)
+		status := http.StatusInternalServerError
+		var maxBytes *http.MaxBytesError
+		if errors.Is(err, api.ErrTooLarge) || errors.As(err, &maxBytes) {
+			status = http.StatusRequestEntityTooLarge
+		} else if errors.Is(err, api.ErrQuota) || errors.Is(err, api.ErrExists) || errors.Is(err, api.ErrInvalidName) || errors.Is(err, api.ErrNotFound) {
+			status = http.StatusUnprocessableEntity
+		} else if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, io.ErrUnexpectedEOF) {
+			status = http.StatusRequestTimeout
+		}
+		f.w.WriteHeader(status)
 		f.intoError(ctx, describe(ctx, err, f.params))
 		return false, err
 	}
@@ -234,6 +246,7 @@ elem (f *fileProgress) main() {
 					f.door.Static(ctx, nil)
 					return true
 				},
+				OnError: notify.OnError,
 			} <button class="kchat-ctl" aria-label="Cancel upload">
 				~>(doors.Class("kchat-ic")) ~(icons.Close())
 			</button>
@@ -293,6 +306,7 @@ elem (f fileErr) main() {
 					f.door.Static(ctx, nil)
 					return true
 				},
+				OnError: notify.OnError,
 			} <button class="kchat-ctl" aria-label="Dismiss">
 				~>(doors.Class("kchat-ic")) ~(icons.Close())
 			</button>

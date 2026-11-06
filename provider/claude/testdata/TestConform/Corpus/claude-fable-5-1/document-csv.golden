@@ -1,0 +1,24 @@
+{
+  "model": "claude-fable-5-1",
+  "max_tokens": 16384,
+  "stream": true,
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "summarize"
+        },
+        {
+          "type": "document",
+          "source": {
+            "type": "text",
+            "media_type": "text/plain",
+            "data": "a,b\n1,2\n"
+          }
+        }
+      ]
+    }
+  ]
+}

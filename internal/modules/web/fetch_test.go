@@ -3,11 +3,14 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"github.com/JohannesKaufmann/html-to-markdown/v2/converter"
@@ -156,7 +159,7 @@ func TestFetchPagesByLine(t *testing.T) {
 func TestFetchRefusals(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/pdf")
-		fmt.Fprint(w, "%PDF-1.7 not really")
+		fmt.Fprint(w, "%PDF-1.7\n%\xe2\xe3\xcf\xd3\n")
 	}))
 	defer srv.Close()
 	guarded := fetchTool(t, Config{})
@@ -173,6 +176,24 @@ func TestFetchRefusals(t *testing.T) {
 		{`{"url":"http://198.18.0.1/x"}`, "an address web__fetch does not connect to"},
 		{`{"url":"http://240.1.2.3/x"}`, "an address web__fetch does not connect to"},
 		{`{"url":"http://[fec0::1]/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://[::ffff:127.0.0.1]/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://[::127.0.0.1]/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://[64:ff9b::7f00:1]/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://[64:ff9b::a00:1]/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://[64:ff9b:1::1]/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://[2002:7f00:1::1]/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://[2001::1]/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://[2001:db8::1]/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://[3fff::1]/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://[100::1]/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://[5f00::1]/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://[fd00:ec2::254]/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://169.254.169.254/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://192.0.2.1/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://203.0.113.1/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://100.64.0.1/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://[fe80::1%25lo0]/x"}`, "an address web__fetch does not connect to"},
+		{`{"url":"http://8.8.8.8:25/x"}`, "uses port 25, which web__fetch does not connect to"},
 	} {
 		if _, err := guarded(c.arg); err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: got %v, want %q", c.arg, err, c.want)
@@ -427,5 +448,348 @@ func TestFetchForeignCancelIsAnError(t *testing.T) {
 	fetch := fetchTool(t, Config{HTTPClient: &http.Client{Transport: canceledTransport{}}})
 	if _, err := fetch(`{"url":"https://example.com/"}`); err == nil {
 		t.Error("a Canceled not caused by the call's context was reported as success")
+	}
+}
+
+func TestFetchRefusesHexLoopback(t *testing.T) {
+	_, err := fetchTool(t, Config{})(`{"url":"http://0x7f.1/x"}`)
+	if err == nil {
+		t.Fatal("0x7f.1 was fetched")
+	}
+	var dns *net.DNSError
+	if !strings.Contains(err.Error(), "an address web__fetch does not connect to") && !errors.As(err, &dns) {
+		t.Errorf("0x7f.1 must be refused or fail to resolve: %v", err)
+	}
+}
+
+func TestGuardPolicy(t *testing.T) {
+	for _, address := range []string{"[64:ff9b::808:808]:443", "8.8.8.8:443", "[2606:4700::1111]:80", "8.8.8.8:8080"} {
+		if err := guard("tcp", address, nil); err != nil {
+			t.Errorf("%s refused: %v", address, err)
+		}
+	}
+	for _, address := range []string{"127.0.0.1:80", "[64:ff9b::7f00:1]:80", "[::ffff:10.0.0.1]:443", "bogus"} {
+		var refused blocked
+		if err := guard("tcp", address, nil); !errors.As(err, &refused) {
+			t.Errorf("%s allowed: %v", address, err)
+		}
+	}
+	for _, address := range []string{"8.8.8.8:25", "8.8.8.8:6667", "8.8.8.8:0", "[64:ff9b::808:808]:25"} {
+		var port badPorted
+		if err := guard("tcp", address, nil); !errors.As(err, &port) {
+			t.Errorf("%s not refused as a bad port: %v", address, err)
+		}
+	}
+}
+
+func TestFetchBadPortNamesThePort(t *testing.T) {
+	_, err := fetchTool(t, Config{})(`{"url":"http://8.8.8.8:25/"}`)
+	if err == nil {
+		t.Fatal("port 25 was fetched")
+	}
+	if !strings.Contains(err.Error(), "8.8.8.8:25 uses port 25, which web__fetch does not connect to") || strings.Contains(err.Error(), "resolves to") {
+		t.Errorf("a bad port must be reported as a port, not an address: %v", err)
+	}
+}
+
+func TestFetchConnectTimeoutIsNotAFetchTimeout(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer srv.Close()
+	dialer := &net.Dialer{Timeout: time.Nanosecond}
+	client := &http.Client{Transport: &http.Transport{DialContext: dialer.DialContext}}
+	_, err := fetchTool(t, Config{HTTPClient: client})(fmt.Sprintf(`{"url":%q}`, srv.URL))
+	if err == nil {
+		t.Fatal("a dial that timed out was reported as success")
+	}
+	if !strings.Contains(err.Error(), "connecting to "+srv.Listener.Addr().String()+" timed out") || strings.Contains(err.Error(), "timed out after") {
+		t.Errorf("a connect timeout must not be reported as the fetch timeout: %v", err)
+	}
+}
+
+func TestFetchIgnoresProxyEnvironment(t *testing.T) {
+	proxied := 0
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		proxied++
+		fmt.Fprint(w, "proxied")
+	}))
+	defer proxy.Close()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "direct")
+	}))
+	defer srv.Close()
+	t.Setenv("HTTP_PROXY", proxy.URL)
+	t.Setenv("HTTPS_PROXY", proxy.URL)
+	t.Setenv("NO_PROXY", "")
+	if _, err := fetchTool(t, Config{})(fmt.Sprintf(`{"url":%q}`, srv.URL)); err == nil || !strings.Contains(err.Error(), "an address web__fetch does not connect to") {
+		t.Errorf("a loopback target behind a proxy setting: %v", err)
+	}
+	if proxied != 0 {
+		t.Errorf("the proxy got %d requests", proxied)
+	}
+	if guardedClient().Transport.(*http.Transport).Proxy != nil {
+		t.Error("the default client consults a proxy")
+	}
+}
+
+func TestFetchRefusesRedirectToLoopback(t *testing.T) {
+	reached := false
+	inner := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reached = true
+		fmt.Fprint(w, "secret")
+	}))
+	defer inner.Close()
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, inner.URL+"/secret", http.StatusFound)
+	}))
+	defer origin.Close()
+	client := guardedClient()
+	transport := client.Transport.(*http.Transport)
+	guarded := transport.DialContext
+	transport.DialContext = func(ctx context.Context, network string, address string) (net.Conn, error) {
+		if address == "origin.example:80" {
+			return (&net.Dialer{}).DialContext(ctx, network, origin.Listener.Addr().String())
+		}
+		return guarded(ctx, network, address)
+	}
+	_, err := fetchTool(t, Config{HTTPClient: client})(`{"url":"http://origin.example/start"}`)
+	if err == nil || !strings.Contains(err.Error(), "127.0.0.1, an address web__fetch does not connect to") {
+		t.Errorf("a redirect to loopback: %v", err)
+	}
+	if reached {
+		t.Error("the redirect target was reached")
+	}
+}
+
+const webFormsPage = `<!doctype html>
+<html><head><title>Orders</title></head><body>
+<form method="post" action="./orders.aspx" id="form1">
+<input type="hidden" name="__VIEWSTATE" id="__VIEWSTATE" value="dDwtMTA4NzE3MjA4Njs7Pj5aVIEWSTATEBLOB">
+<div id="content">
+<article>
+<h1>Order processing guide</h1>
+<p>Orders placed before noon ship the same day, and every order is checked by a person before it leaves the warehouse.</p>
+<p>Returns are accepted for thirty days after delivery, provided the item is unused and still in its original packaging.</p>
+<p>Refunds reach the original payment method within five working days of the warehouse receiving the returned item.</p>
+</article>
+</div>
+</form>
+</body></html>`
+
+const searchHeaderPage = `<!doctype html>
+<html><head><title>Guide</title></head><body>
+<header><form role="search"><label for="q">Search</label><input id="q" name="q"><button>Go</button></form></header>
+<article>
+<header><h1>Pruning the right things</h1></header>
+<p>A page converter has to keep the content a reader came for, and drop the controls and chrome around it.</p>
+<p>Titles often live inside the article's own header element, so removing every header loses them.</p>
+<p>Forms are not boilerplate by themselves, since whole pages are sometimes wrapped in a single form.</p>
+<p>Select options must never be glued together:</p>
+<select><option>Alpha</option><option>Beta</option></select>
+<pre>line one
+    indented two</pre>
+</article>
+</body></html>`
+
+func TestFetchKeepsFormContent(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/forms", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, webFormsPage)
+	})
+	mux.HandleFunc("/header", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, searchHeaderPage)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	fetch := fetchTool(t, Config{HTTPClient: srv.Client()})
+	for _, format := range []string{"markdown", "text", "html"} {
+		for _, full := range []bool{false, true} {
+			out, err := fetch(fmt.Sprintf(`{"url":%q,"format":%q,"full":%t}`, srv.URL+"/forms", format, full))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(out, "Orders placed before noon ship the same day") || !strings.Contains(out, "Order processing guide") {
+				t.Errorf("%s full=%t: a page wrapped in a form lost its article: %s", format, full, out)
+			}
+			if strings.Contains(out, "__VIEWSTATE") || strings.Contains(out, "VIEWSTATEBLOB") {
+				t.Errorf("%s full=%t: hidden form state leaked: %s", format, full, out)
+			}
+			page, err := fetch(fmt.Sprintf(`{"url":%q,"format":%q,"full":%t}`, srv.URL+"/header", format, full))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(page, "Pruning the right things") {
+				t.Errorf("%s full=%t: the article's own header title was dropped: %s", format, full, page)
+			}
+			if strings.Contains(page, "Go") {
+				t.Errorf("%s full=%t: button text survived: %s", format, full, page)
+			}
+			if strings.Contains(page, "AlphaBeta") {
+				t.Errorf("%s full=%t: select options were glued: %s", format, full, page)
+			}
+			if full && !strings.Contains(page, "Search") {
+				t.Errorf("%s full: the search label was dropped: %s", format, page)
+			}
+			if !full && strings.Contains(page, "Search") {
+				t.Errorf("%s: the site header's search form survived main-content extraction: %s", format, page)
+			}
+		}
+	}
+	text, err := fetch(fmt.Sprintf(`{"url":%q,"format":"text","full":true}`, srv.URL+"/header"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(text, "line one\n    indented two") {
+		t.Errorf("text mode collapsed a pre block: %s", text)
+	}
+	for _, line := range strings.Split(text, "\n") {
+		if strings.TrimSpace(line) == "Go" {
+			t.Errorf("button text survived in text mode: %s", text)
+		}
+	}
+}
+
+func TestConfigDefaultsFollowTheLimits(t *testing.T) {
+	c := Config{MaxBytes: 10 << 20, Timeout: 5 * time.Minute, MaxTimeout: time.Minute, CacheBytes: 1 << 20}
+	c.initDefaults()
+	if c.Timeout != time.Minute {
+		t.Errorf("default timeout %s exceeds the %s maximum", c.Timeout, c.MaxTimeout)
+	}
+	if c.CacheBytes != 20<<20 {
+		t.Errorf("cache of %d bytes cannot keep one decoded %d-byte page", c.CacheBytes, c.MaxBytes)
+	}
+}
+
+func TestFetchNotesAPageTooLargeToKeep(t *testing.T) {
+	requests := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		w.Header().Set("Content-Type", "text/plain")
+		fmt.Fprint(w, strings.Repeat("a line of text\n", 50))
+	}))
+	defer srv.Close()
+	m := &module{
+		conf:   Config{HTTPClient: srv.Client()},
+		client: srv.Client(),
+		cache:  make(map[string]*entry),
+	}
+	m.conf.initDefaults()
+	m.conf.CacheBytes = 100
+	out, err := m.fetch(context.Background(), FetchArg{URL: srv.URL + "/a.txt", Limit: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "continue with offset=6; this page is too large to keep, so continuing fetches it again") {
+		t.Errorf("no note that the copy was not kept: %s", out)
+	}
+	if len(m.cache) != 0 || m.held != 0 {
+		t.Errorf("an oversized page was cached: %d keys, %d bytes", len(m.cache), m.held)
+	}
+	if _, err := m.fetch(context.Background(), FetchArg{URL: srv.URL + "/a.txt", Offset: 6, Limit: 5}); err != nil {
+		t.Fatal(err)
+	}
+	if requests != 2 {
+		t.Errorf("%d requests, continuing an unkept page must fetch it again", requests)
+	}
+}
+
+func TestModuleDescriptionNamesTheCacheTTL(t *testing.T) {
+	for ttl, want := range map[time.Duration]string{0: "about 15 minutes", 40 * time.Minute: "about 40 minutes", 30 * time.Second: "about 30 seconds"} {
+		m, ok := Module(Config{CacheTTL: ttl})(context.Background()).(interface{ Desc() string })
+		if !ok {
+			t.Fatal("web module has no description")
+		}
+		if !strings.Contains(m.Desc(), "costs no second request for "+want+".") {
+			t.Errorf("ttl %s: description does not say %q: %s", ttl, want, m.Desc())
+		}
+	}
+}
+
+func TestFetchSniffsUnlistedTypes(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/yaml":
+			w.Header().Set("Content-Type", "application/x-yaml")
+			fmt.Fprint(w, "key: value\nlist:\n  - one\n")
+		case "/nul":
+			w.Header().Set("Content-Type", "application/x-thing")
+			w.Write([]byte("abc\x00def"))
+		}
+	}))
+	defer srv.Close()
+	fetch := fetchTool(t, Config{HTTPClient: srv.Client()})
+	out, err := fetch(fmt.Sprintf(`{"url":%q}`, srv.URL+"/yaml"))
+	if err != nil || !strings.Contains(out, "key: value\nlist:") {
+		t.Errorf("yaml: %v %q", err, out)
+	}
+	if _, err := fetch(fmt.Sprintf(`{"url":%q}`, srv.URL+"/nul")); err == nil || !strings.Contains(err.Error(), "which web__fetch does not convert") {
+		t.Errorf("binary: %v", err)
+	}
+}
+
+func TestFetchReindentsJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"items":[%s{"id":0}]}`, strings.Repeat(`{"id":1,"name":"a long enough name"},`, 200))
+	}))
+	defer srv.Close()
+	out, err := fetchTool(t, Config{HTTPClient: srv.Client()})(fmt.Sprintf(`{"url":%q}`, srv.URL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "line truncated") || !strings.Contains(out, "\n      \"id\": 0\n") {
+		t.Errorf("not re-indented: %q", out[:min(len(out), 300)])
+	}
+}
+
+func TestFetchLongLineNotePointsToSaveAs(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		fmt.Fprint(w, strings.Repeat("x", 3000))
+	}))
+	defer srv.Close()
+	out, err := fetchTool(t, Config{HTTPClient: srv.Client()})(fmt.Sprintf(`{"url":%q}`, srv.URL))
+	if err != nil || !strings.Contains(out, "fetch again with saveAs") {
+		t.Errorf("%v %q", err, out[len(out)-300:])
+	}
+}
+
+func TestFetchTitleIgnoresSVG(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<html><body><svg><title>Close menu</title></svg><p>Body text of the page.</p></body></html>`)
+	}))
+	defer srv.Close()
+	out, err := fetchTool(t, Config{HTTPClient: srv.Client()})(fmt.Sprintf(`{"url":%q}`, srv.URL))
+	if err != nil || strings.Contains(out, `title="Close menu"`) {
+		t.Errorf("%v %q", err, out)
+	}
+}
+
+func TestFetchHugeTimeoutAppliesTheLimit(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(1500 * time.Millisecond)
+		fmt.Fprint(w, "slow")
+	}))
+	defer srv.Close()
+	if _, err := fetchTool(t, Config{HTTPClient: srv.Client()})(fmt.Sprintf(`{"url":%q,"timeoutMs":10000000000000}`, srv.URL)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestFetchParentDeadlineIsNotTheFetchTimeout(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.(http.Flusher).Flush()
+		time.Sleep(2 * time.Second)
+	}))
+	defer srv.Close()
+	tool, _ := Module(Config{HTTPClient: srv.Client()})(context.Background()).Get("fetch")
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	_, err := tool.Agent(ctx, json.RawMessage(fmt.Sprintf(`{"url":%q,"timeoutMs":20000}`, srv.URL)))
+	if !errors.Is(err, context.DeadlineExceeded) || strings.Contains(err.Error(), "timed out after 20s") {
+		t.Fatalf("err = %v", err)
 	}
 }

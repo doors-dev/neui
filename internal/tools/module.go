@@ -113,6 +113,7 @@ func Asking[I any, O any](f func(input I, reply common.Answer[O]) api.ChatAsk) f
 	return func(ctx context.Context, input I) (O, error) {
 		ctrl := common.GetController(ctx)
 		answer := newAnswer[O](ctx)
+		defer answer.ctxCancel()
 		ask := f(input, answer)
 		ask.Cancel = answer.cancel
 		done, err := ctrl.Ask(ask)

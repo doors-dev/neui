@@ -29,15 +29,18 @@ func NewReplay(ctx context.Context, thread api.ThreadID, s api.MessageStorage, c
 }
 
 type replay struct {
-	ctx       context.Context
-	id        api.ThreadID
-	storage   api.MessageStorage
-	config    api.ThreadConfig
-	model     api.Model
-	factor    float32
-	thread    api.Thread
-	messages  *messages
-	lastRound lastRound
+	ctx          context.Context
+	id           api.ThreadID
+	storage      api.MessageStorage
+	config       api.ThreadConfig
+	model        api.Model
+	factor       float32
+	thread       api.Thread
+	messages     *messages
+	lastRound    lastRound
+	failed       bool
+	failedWeight int64
+	failedTokens int
 }
 
 func (r Replay) Tighten() bool {
@@ -95,6 +98,9 @@ func (r Replay) NeedCompaction() CompactionCause {
 	if last < 1 || rounds[last].id <= tail || rounds[last-1].id <= tail {
 		return CompactionNone
 	}
+	if r.failed && r.messages.weight*4 <= r.failedWeight*5 && r.Usage().Total()*4 <= r.failedTokens*5 {
+		return CompactionNone
+	}
 	limit := memoryLimit(r.config, r.model, r.factor)
 	if limit > 0 && r.messages.weight+weigh(r.messages.pendingContent(api.Input{})...) > limit {
 		return CompactionBytes
@@ -103,6 +109,28 @@ func (r Replay) NeedCompaction() CompactionCause {
 		return CompactionTokens
 	}
 	return CompactionNone
+}
+
+func (r Replay) CanCompact() bool {
+	if !r.IsLoaded() {
+		return false
+	}
+	rounds := r.messages.rounds
+	last := len(rounds) - 1
+	tail := r.messages.compaction.Tail
+	if last < 1 || rounds[last].id <= tail || rounds[last-1].id <= tail {
+		return false
+	}
+	return r.model.Context == 0 || float32(r.Usage().Total()) >= r.config.CompactionAllowed*float32(r.model.Context)
+}
+
+func (r Replay) CompactionFailed() {
+	if !r.IsLoaded() {
+		return
+	}
+	r.failed = true
+	r.failedWeight = r.messages.weight
+	r.failedTokens = r.Usage().Total()
 }
 
 func (r Replay) PrepareCompaction() (Compaction, []api.Message, error) {
@@ -151,6 +179,7 @@ func (r Replay) ApplyCompaction(c Compaction, content api.Indexed[api.Content], 
 	}
 	r.updateSeq(seq)
 	r.messages.applyCompaction(c, record)
+	r.failed = false
 	return nil
 }
 
@@ -173,9 +202,13 @@ func (r Replay) Rewind(end api.RoundID, input api.Input) (api.Round, []api.Messa
 		return api.Round{}, nil, nil, errors.New("state missmatch")
 	}
 	var removed []string
+	pending := input.Len() != 0
 	for round, err := range r.storage.RoundRange(r.ctx, r.id, end, api.NoRoundID) {
 		if err != nil {
 			return api.Round{}, nil, nil, err
+		}
+		if slices.ContainsFunc(round.PinnedRecords, func(rec api.Record) bool { return rec.Origin < end }) {
+			pending = true
 		}
 		if round.ID != end {
 			removed = append(removed, round.Input.Attachments...)
@@ -186,6 +219,37 @@ func (r Replay) Rewind(end api.RoundID, input api.Input) (api.Round, []api.Messa
 				removed = append(removed, name)
 			}
 		}
+	}
+	if !pending {
+		records, err := r.storage.RecordList(r.ctx, r.id)
+		if err != nil {
+			return api.Round{}, nil, nil, err
+		}
+		pending = slices.ContainsFunc(records, func(rec api.Record) bool { return rec.Origin < end })
+	}
+	for start, found := end, false; !pending && !found; {
+		rounds, err := r.storage.RoundBefore(r.ctx, r.id, start, 16)
+		if err != nil {
+			return api.Round{}, nil, nil, err
+		}
+		if len(rounds) == 0 {
+			break
+		}
+		for i := len(rounds) - 1; i >= 0 && !found; i-- {
+			if rounds[i].State != api.RoundOk {
+				continue
+			}
+			found = true
+			for _, c := range rounds[i].Response {
+				if _, ok := c.(api.ContentToolUse); ok {
+					pending = true
+				}
+			}
+		}
+		start = rounds[0].ID
+	}
+	if !pending {
+		return api.Round{}, nil, nil, api.ErrWrongState
 	}
 	_, err := r.storage.ThreadCut(r.ctx, r.id, r.seq(), end)
 	if err != nil {

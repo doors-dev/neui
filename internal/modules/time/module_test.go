@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"neui.dev/internal/common"
 )
 
 type fakeTask struct {
@@ -33,11 +35,11 @@ func (t *fakeTask) Notify(json.RawMessage, map[string]any) {}
 func arm(m *module) (*pending, context.Context) {
 	ctx, cancel := context.WithCancelCause(context.Background())
 	p := &pending{comment: "c", cancel: cancel, done: make(chan struct{})}
-	m.pending = p
+	m.pending.Store(p)
 	return p, ctx
 }
 
-func TestCancelAfterFiringReportsFired(t *testing.T) {
+func TestCancelDuringFiringFindsNoTimer(t *testing.T) {
 	m := &module{}
 	p, ctx := arm(m)
 	task := newFakeTask()
@@ -47,30 +49,29 @@ func TestCancelAfterFiringReportsFired(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timer did not fire")
 	}
+	if m.pending.Load() != nil {
+		t.Fatal("pending not cleared before task.Ok")
+	}
 	_, err := m.cancel(context.Background(), struct{}{})
-	if err == nil || !strings.Contains(err.Error(), "already fired") {
+	if err == nil || !strings.Contains(err.Error(), "no timer is pending") {
 		t.Fatalf("cancel during firing: %v", err)
 	}
 	close(task.release)
 	<-p.done
-	if m.pending != nil {
-		t.Fatal("pending not cleared after firing")
-	}
 }
 
 func TestCancelClaimedBeforeFiringReportsCancellation(t *testing.T) {
 	m := &module{}
 	p, ctx := arm(m)
 	task := newFakeTask()
-	m.mu.Lock()
+	p.claimed.Store(true)
+	m.pending.Store(nil)
 	go m.wait(ctx, p, task, time.Now())
 	time.Sleep(20 * time.Millisecond)
-	m.pending = nil
-	m.mu.Unlock()
-	p.cancel(nil)
+	p.cancel(errCancelled)
 	select {
 	case err := <-task.err:
-		if !errors.Is(err, context.Canceled) {
+		if !errors.Is(err, errCancelled) {
 			t.Fatalf("unexpected cause %v", err)
 		}
 	case <-task.ok:
@@ -89,10 +90,10 @@ func TestCancelPendingTimer(t *testing.T) {
 	if _, err := m.cancel(context.Background(), struct{}{}); err != nil {
 		t.Fatal(err)
 	}
-	if err := <-task.err; !errors.Is(err, context.Canceled) {
+	if err := <-task.err; !errors.Is(err, errCancelled) {
 		t.Fatalf("unexpected cause %v", err)
 	}
-	if m.pending != nil {
+	if m.pending.Load() != nil {
 		t.Fatal("pending not cleared")
 	}
 }
@@ -104,5 +105,111 @@ func TestTimerHugeAfterRejected(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "at most") {
 			t.Fatalf("afterMs=%d: %v", after, err)
 		}
+	}
+}
+
+type failingThread struct {
+	common.Controller
+	onTask func()
+}
+
+func (t *failingThread) Context() context.Context { return context.Background() }
+
+func (t *failingThread) Task(string, map[string]any, context.CancelCauseFunc) (common.Task, error) {
+	t.onTask()
+	return nil, errors.New("task can be issued only during tool calls round")
+}
+
+func TestCancelDuringFailedTaskReturns(t *testing.T) {
+	m := &module{}
+	cancelled := make(chan error, 1)
+	thread := &failingThread{onTask: func() {
+		go func() {
+			_, err := m.cancel(context.Background(), struct{}{})
+			cancelled <- err
+		}()
+		for m.pending.Load() != nil {
+			time.Sleep(time.Millisecond)
+		}
+	}}
+	ctx := context.WithValue(context.Background(), common.KeyController, thread)
+	if _, err := m.timer(ctx, TimerArg{After: uint(time.Hour.Milliseconds()), Comment: "c"}); err == nil {
+		t.Fatal("timer succeeded without a task")
+	}
+	select {
+	case err := <-cancelled:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("cancel hangs after a failed task")
+	}
+}
+
+func TestCancelReturnsOnCallerDone(t *testing.T) {
+	m := &module{}
+	arm(m)
+	ctx, cancel := context.WithCancelCause(context.Background())
+	stop := errors.New("stopped")
+	cancel(stop)
+	if _, err := m.cancel(ctx, struct{}{}); !errors.Is(err, stop) {
+		t.Fatalf("cancel with a done caller: %v", err)
+	}
+}
+
+func TestNowZoneIsAbbreviation(t *testing.T) {
+	saved := time.Local
+	defer func() { time.Local = saved }()
+	loc, err := time.LoadLocation("Europe/Berlin")
+	if err != nil {
+		t.Skip(err)
+	}
+	time.Local = loc
+	got, _ := (&module{}).now(context.Background(), struct{}{})
+	if got.Zone != "CET" && got.Zone != "CEST" {
+		t.Fatalf("zone %q", got.Zone)
+	}
+	time.Local = time.FixedZone("", 3*3600)
+	got, _ = (&module{}).now(context.Background(), struct{}{})
+	if got.Zone != "+03:00" {
+		t.Fatalf("unnamed zone %q", got.Zone)
+	}
+}
+
+func TestScriptTimerPastTheDeadlineErrorsAtOnce(t *testing.T) {
+	tool, ok := Module(context.Background()).Get("timer")
+	if !ok {
+		t.Fatal("no timer tool")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	start := time.Now()
+	_, err := tool.JS(ctx)([]any{`{"afterMs":60000,"comment":"c"}`})
+	if err == nil || !strings.Contains(err.Error(), "script's time limit") {
+		t.Fatalf("err = %v", err)
+	}
+	if time.Since(start) > time.Second {
+		t.Fatal("did not error at once")
+	}
+	if _, err := tool.JS(ctx)([]any{`{"afterMs":10,"comment":"c"}`}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestTimerWhilePendingNamesTheComment(t *testing.T) {
+	m := &module{}
+	arm(m)
+	ctx := context.WithValue(context.Background(), common.KeyController, &failingThread{onTask: func() { t.Fatal("task issued") }})
+	if _, err := m.timer(ctx, TimerArg{After: uint(time.Hour.Milliseconds()), Comment: "d"}); err == nil || !strings.Contains(err.Error(), "already pending (c)") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestCancelOfAClaimedTimerIsNeutral(t *testing.T) {
+	m := &module{}
+	p, _ := arm(m)
+	p.claimed.Store(true)
+	if _, err := m.cancel(context.Background(), struct{}{}); err == nil || !strings.Contains(err.Error(), "already ending") {
+		t.Fatalf("err = %v", err)
 	}
 }

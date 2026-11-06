@@ -1,7 +1,12 @@
 package xls
 
 import (
+	"archive/zip"
 	"context"
+	"math"
+	"reflect"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -181,6 +186,70 @@ func TestReadRawFormatted(t *testing.T) {
 	}
 }
 
+func TestWrittenFormulasHaveNoSavedValue(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
+	buildBook(t, fs, "book.xlsx")
+	ctx := c.Ctx()
+	if _, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "E2", Rows: [][]any{{"=B2*3", "=A2&\"-x\""}}}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := readTool(ctx, readArg{Path: "book.xlsx", Sheet: "Data", Range: "E2:F2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"", ""}; !reflect.DeepEqual(res.Rows[0], want) {
+		t.Fatalf("rows = %q, want %q", res.Rows[0], want)
+	}
+	raw, err := readTool(ctx, readArg{Path: "book.xlsx", Sheet: "Data", Range: "E2:F2", Raw: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"=B2*3", "=A2&\"-x\""}; !reflect.DeepEqual(raw.Rows[0], want) {
+		t.Fatalf("raw = %q, want %q", raw.Rows[0], want)
+	}
+	hits, err := findTool(ctx, findArg{Path: "book.xlsx", Query: "Alice-"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hits.Hits) != 0 {
+		t.Fatalf("hits = %+v", hits.Hits)
+	}
+}
+
+func TestReadRawMergedFormula(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
+	f := excelize.NewFile()
+	if err := f.SetCellFormula("Sheet1", "A1", "1+1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.MergeCell("Sheet1", "A1", "C1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.SetCellValue("Sheet1", "D1", "x"); err != nil {
+		t.Fatal(err)
+	}
+	writeBook(t, fs, "m.xlsx", f)
+	res, err := readTool(c.Ctx(), readArg{Path: "m.xlsx", Sheet: "Sheet1", Range: "A1:D1", Raw: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"=1+1", "", "", "x"}; !reflect.DeepEqual(res.Rows[0], want) {
+		t.Fatalf("raw = %q, want %q", res.Rows[0], want)
+	}
+}
+
+func TestReadRefusesHugeOffset(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
+	buildBook(t, fs, "book.xlsx")
+	_, err := readTool(c.Ctx(), readArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:B4", Offset: math.MaxUint64})
+	if err == nil || !strings.Contains(err.Error(), "offset") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func TestFind(t *testing.T) {
 	c := testkit.NewController(t, testkit.Setup{})
 	fs := c.FS()
@@ -250,5 +319,153 @@ func TestProfileBlankHeaderRow(t *testing.T) {
 	}
 	if res.Headers == nil {
 		t.Fatal("headers = nil")
+	}
+}
+
+func TestOpenRepetitiveWorkbook(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
+	f := excelize.NewFile()
+	sw, err := f.NewStreamWriter("Sheet1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := []any{"same text", 12345.678, 42}
+	for r := 1; r <= 20000; r++ {
+		cell, _ := excelize.CoordinatesToCellName(1, r)
+		if err := sw.SetRow(cell, row); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := sw.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	writeBook(t, fs, "big.xlsx", f)
+	path, err := fs.LocalPath(context.Background(), "big.xlsx")
+	if err != nil {
+		t.Fatal(err)
+	}
+	z, err := zip.OpenReader(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw uint64
+	for _, zf := range z.File {
+		raw += zf.UncompressedSize64
+	}
+	z.Close()
+	e, err := fs.Stat(context.Background(), "big.xlsx")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if raw <= 4*uint64(e.Size) {
+		t.Fatalf("fixture inflates only %d -> %d", e.Size, raw)
+	}
+	tight := context.WithValue(c.Ctx(), configKey{}, Config{MaxFileSize: e.Size})
+	if _, err := sheetsTool(tight, sheetsArg{Path: "big.xlsx"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestOpenZipBomb(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
+	w, err := fs.Create("bomb.xlsx")
+	if err != nil {
+		t.Fatal(err)
+	}
+	zw := zip.NewWriter(w)
+	ct, err := zw.Create("[Content_Types].xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ct.Write([]byte(`<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>`))
+	sheet, err := zw.Create("xl/worksheets/sheet1.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sheet.Write(make([]byte, 16<<20)); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	_, err = sheetsTool(c.Ctx(), sheetsArg{Path: "bomb.xlsx"})
+	if err == nil || !strings.Contains(err.Error(), "100x") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestOpenMaxUnzipSize(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
+	buildBook(t, fs, "book.xlsx")
+	low := context.WithValue(c.Ctx(), configKey{}, Config{MaxUnzipSize: 1000})
+	_, err := sheetsTool(low, sheetsArg{Path: "book.xlsx"})
+	if err == nil || !strings.Contains(err.Error(), "uncompressed") {
+		t.Fatalf("err = %v", err)
+	}
+	small := context.WithValue(c.Ctx(), configKey{}, Config{MaxUnzipSize: 10 << 20})
+	if _, err := sheetsTool(small, sheetsArg{Path: "book.xlsx"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestProfileTypesPastSample(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
+	f := excelize.NewFile()
+	for cell, v := range map[string]any{"A1": "Late", "B1": "Mixed", "C1": "Num"} {
+		if err := f.SetCellValue("Sheet1", cell, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for r := 2; r <= 12; r++ {
+		if err := f.SetCellValue("Sheet1", "C"+strconv.Itoa(r), r); err != nil {
+			t.Fatal(err)
+		}
+		if err := f.SetCellValue("Sheet1", "B"+strconv.Itoa(r), r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := f.SetCellValue("Sheet1", "A10", 3.5); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.SetCellValue("Sheet1", "B11", "n/a"); err != nil {
+		t.Fatal(err)
+	}
+	writeBook(t, fs, "book.xlsx", f)
+	res, err := profileTool(c.Ctx(), profileArg{Path: "book.xlsx", Sheet: "Sheet1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"number", "mixed", "number"}; !slices.Equal(res.Types, want) {
+		t.Fatalf("types = %v, want %v", res.Types, want)
+	}
+	if len(res.Sample) != profileSampleRows || res.RowCount != 11 {
+		t.Fatalf("sample = %d rows, rowCount = %d", len(res.Sample), res.RowCount)
+	}
+}
+
+func TestSheetsAutoFilter(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
+	f := excelize.NewFile()
+	if err := f.SetCellValue("Sheet1", "A1", "N"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.AutoFilter("Sheet1", "A1:C9", nil); err != nil {
+		t.Fatal(err)
+	}
+	writeBook(t, fs, "book.xlsx", f)
+	infos, err := sheetsTool(c.Ctx(), sheetsArg{Path: "book.xlsx"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(infos) != 1 || infos[0].Filter != "A1:C9" {
+		t.Fatalf("infos = %+v", infos)
 	}
 }

@@ -20,17 +20,16 @@ const testThread = "thread"
 
 func newTestFS(t *testing.T) (*workFS, *local.FileStorage) {
 	t.Helper()
-	store, err := local.NewFileStorage()
+	store, err := local.NewFileStorage("")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { store.Remove() })
-	ws, err := store.WorkspaceOpen(testThread)
-	if err != nil {
+	w := Open(testThread, store, store, api.FilesConfig{})
+	t.Cleanup(func() { w.Dispose() })
+	if _, err := w.root(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { ws.Close() })
-	w := New(testThread, ws, store, api.FilesConfig{})
 	return w, store
 }
 
@@ -50,6 +49,13 @@ func putAgentFile(t *testing.T, store *local.FileStorage, name, mime, content st
 		t.Fatal(err)
 	}
 	return f
+}
+
+func commitUpload(t *testing.T, store *local.FileStorage, name string) {
+	t.Helper()
+	if err := store.FileCommit(context.Background(), testThread, api.OriginUser, name); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func writeFile(t *testing.T, w *workFS, name, content string) {
@@ -500,7 +506,7 @@ func TestUploadsDirThroughFileMethods(t *testing.T) {
 }
 
 func TestUploadNameWithSeparators(t *testing.T) {
-	w, _ := newTestFS(t)
+	w, store := newTestFS(t)
 	e, err := w.UserUpload(context.Background(), "a/b.txt", strings.NewReader("nested"))
 	if err != nil {
 		t.Fatal(err)
@@ -515,6 +521,8 @@ func TestUploadNameWithSeparators(t *testing.T) {
 	if e.Name != "user_uploads/unnamed" {
 		t.Fatalf("entry: %+v", e)
 	}
+	commitUpload(t, store, "b.txt")
+	commitUpload(t, store, "unnamed")
 	if got := readAll(t, w, "user_uploads/b.txt"); got != "nested" {
 		t.Fatalf("b.txt: %q", got)
 	}
@@ -686,7 +694,7 @@ func TestSameNameInBothUploadsDirs(t *testing.T) {
 }
 
 func TestUserUpload(t *testing.T) {
-	w, _ := newTestFS(t)
+	w, store := newTestFS(t)
 	e, err := w.UserUpload(context.Background(), "notes.txt", strings.NewReader("hello world"))
 	if err != nil {
 		t.Fatal(err)
@@ -697,6 +705,7 @@ func TestUserUpload(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(w.workspace.Dir, "user_uploads", "notes.txt")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("materialized early: %v", err)
 	}
+	commitUpload(t, store, "notes.txt")
 	if got := readAll(t, w, e.Name); got != "hello world" {
 		t.Fatalf("got %q", got)
 	}
@@ -715,7 +724,7 @@ func TestUserUploadSniffsMIME(t *testing.T) {
 }
 
 func TestUserUploadDedupsName(t *testing.T) {
-	w, _ := newTestFS(t)
+	w, store := newTestFS(t)
 	if _, err := w.UserUpload(context.Background(), "x.txt", strings.NewReader("first")); err != nil {
 		t.Fatal(err)
 	}
@@ -727,8 +736,30 @@ func TestUserUploadDedupsName(t *testing.T) {
 	if e.Name != "user_uploads/x(1).txt" {
 		t.Fatalf("entry: %+v", e)
 	}
+	commitUpload(t, store, "x(1).txt")
 	if got := readAll(t, w, "user_uploads/x(1).txt"); got != "second" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+func TestUserUploadTrimsLongNamesToFit(t *testing.T) {
+	w, store := newTestFS(t)
+	long := strings.Repeat("界", 90) + ".txt"
+	first, err := w.UserUpload(context.Background(), long, strings.NewReader("first"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stem := strings.Repeat("界", 83)
+	if first.Name != "user_uploads/"+stem+".txt" {
+		t.Fatalf("first: %q", first.Name)
+	}
+	commitUpload(t, store, stem+".txt")
+	second, err := w.UserUpload(context.Background(), long, strings.NewReader("second"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Name != "user_uploads/"+strings.Repeat("界", 82)+"(1).txt" {
+		t.Fatalf("second: %q", second.Name)
 	}
 }
 
@@ -754,6 +785,7 @@ func TestDeleteUpload(t *testing.T) {
 	if err != nil || e.Name != "user_uploads/doc.txt" {
 		t.Fatalf("re-upload: %+v, %v", e, err)
 	}
+	commitUpload(t, store, "doc.txt")
 	if got := readAll(t, w, "user_uploads/doc.txt"); got != "new" {
 		t.Fatalf("after re-upload got %q", got)
 	}
@@ -818,6 +850,83 @@ func TestUserUploadConcurrentSameName(t *testing.T) {
 	}
 	if len(seen) != n {
 		t.Fatalf("stored %d distinct names, want %d", len(seen), n)
+	}
+}
+
+func TestDraftUnreadableUntilCommitted(t *testing.T) {
+	w, store := newTestFS(t)
+	ctx := context.Background()
+	e, err := w.UserUpload(ctx, "draft.txt", strings.NewReader("secret"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.ReadAll(ctx, e.Name); !errors.Is(err, api.ErrNotFound) {
+		t.Fatalf("ReadAll draft: %v", err)
+	}
+	if _, err := w.ReadRange(ctx, e.Name, 0, 2); !errors.Is(err, api.ErrNotFound) {
+		t.Fatalf("ReadRange draft: %v", err)
+	}
+	if err := w.Copy(ctx, e.Name, "copy.txt"); !errors.Is(err, api.ErrNotFound) {
+		t.Fatalf("Copy draft: %v", err)
+	}
+	if err := w.Copy(ctx, e.Name, "agent_uploads/copy.txt"); !errors.Is(err, api.ErrNotFound) {
+		t.Fatalf("Copy draft to agent_uploads: %v", err)
+	}
+	got, err := w.UploadStat(ctx, e.Name)
+	if err != nil || got.Size != 6 {
+		t.Fatalf("UploadStat draft: %+v, %v", got, err)
+	}
+	commitUpload(t, store, "draft.txt")
+	if got := readAll(t, w, e.Name); got != "secret" {
+		t.Fatalf("after commit got %q", got)
+	}
+}
+
+type clashStorage struct {
+	api.FileStorage
+	calls  int
+	drains int
+}
+
+func (c *clashStorage) FilePut(ctx context.Context, threadID api.ThreadID, origin api.Origin, name string, mime string, r io.Reader, draft bool) (api.File, error) {
+	c.calls++
+	if c.calls <= c.drains {
+		io.Copy(io.Discard, r)
+		return api.File{}, api.ErrExists
+	}
+	return c.FileStorage.FilePut(ctx, threadID, origin, name, mime, r, draft)
+}
+
+func TestUserUploadRetriesOnlyUnreadBody(t *testing.T) {
+	ctx := context.Background()
+	for _, tc := range []struct {
+		name   string
+		body   string
+		drains int
+		ok     bool
+	}{
+		{"short body drained", "tiny", 2, true},
+		{"long body drained", strings.Repeat("x", 2000), 1, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, store := newTestFS(t)
+			clash := &clashStorage{FileStorage: store, drains: tc.drains}
+			w := Open(testThread, store, clash, api.FilesConfig{})
+			t.Cleanup(func() { w.Dispose() })
+			e, err := w.UserUpload(ctx, "f.txt", strings.NewReader(tc.body))
+			if !tc.ok {
+				if !errors.Is(err, api.ErrExists) || !strings.Contains(err.Error(), "upload it again") {
+					t.Fatalf("got %+v, %v", e, err)
+				}
+				if clash.calls != 1 {
+					t.Fatalf("FilePut calls %d, want 1", clash.calls)
+				}
+				return
+			}
+			if err != nil || e.Name != "user_uploads/f(2).txt" || e.Size != int64(len(tc.body)) {
+				t.Fatalf("got %+v, %v", e, err)
+			}
+		})
 	}
 }
 
@@ -1100,5 +1209,118 @@ func TestCopyDirectorySourceKeepsDestination(t *testing.T) {
 	err = w.Copy(context.Background(), "folder", "agent_uploads/folder")
 	if err == nil || strings.Contains(err.Error(), w.workspace.Dir) {
 		t.Fatalf("Copy from a directory to agent_uploads = %v", err)
+	}
+}
+
+type flakyStorage struct {
+	dir     string
+	fails   int
+	opens   int
+	deletes int
+}
+
+func (s *flakyStorage) WorkspaceOpen(threadID api.ThreadID) (api.Workspace, error) {
+	s.opens++
+	if s.fails > 0 {
+		s.fails--
+		return api.Workspace{}, errors.New("disk")
+	}
+	dir := filepath.Join(s.dir, string(threadID))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return api.Workspace{}, err
+	}
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return api.Workspace{}, err
+	}
+	return api.Workspace{Dir: dir, Root: root}, nil
+}
+
+func (s *flakyStorage) WorkspaceDelete(threadID api.ThreadID) error {
+	s.deletes++
+	return os.RemoveAll(filepath.Join(s.dir, string(threadID)))
+}
+
+func newLazyFS(t *testing.T, fails int) (*workFS, *flakyStorage, *local.FileStorage) {
+	t.Helper()
+	store, err := local.NewFileStorage("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Remove() })
+	storage := &flakyStorage{dir: t.TempDir(), fails: fails}
+	w := Open(testThread, storage, store, api.FilesConfig{})
+	t.Cleanup(func() { w.Dispose() })
+	return w, storage, store
+}
+
+func TestOpenRetriesAFailedWorkspace(t *testing.T) {
+	w, storage, _ := newLazyFS(t, 2)
+	for i := range 2 {
+		if _, err := w.Create("a.txt"); err == nil || err.Error() != "disk" {
+			t.Fatalf("Create %d with a broken workspace = %v, want the open error", i, err)
+		}
+	}
+	writeFile(t, w, "a.txt", "ok")
+	if got := readAll(t, w, "a.txt"); got != "ok" {
+		t.Fatalf("read back %q", got)
+	}
+	if storage.opens != 3 {
+		t.Fatalf("workspace opened %d times, want 3", storage.opens)
+	}
+}
+
+func TestUploadPathsNeverOpenTheWorkspace(t *testing.T) {
+	w, storage, store := newLazyFS(t, 0)
+	ctx := context.Background()
+	if _, err := w.UserUpload(ctx, "a.txt", strings.NewReader("a")); err != nil {
+		t.Fatalf("UserUpload: %v", err)
+	}
+	putAgentFile(t, store, "b.txt", "text/plain", "b")
+	if _, err := w.ReadDir(ctx, agentUploadsDirName); err != nil {
+		t.Fatalf("ReadDir(agent_uploads): %v", err)
+	}
+	if err := w.TempWipe(); err != nil {
+		t.Fatalf("TempWipe: %v", err)
+	}
+	if storage.opens != 0 {
+		t.Fatalf("upload-only calls opened the workspace %d times", storage.opens)
+	}
+	if left, _ := os.ReadDir(storage.dir); len(left) != 0 {
+		t.Fatalf("upload-only calls left %v on disk", left)
+	}
+}
+
+func TestDisposeOfANeverOpenedFSTouchesNothing(t *testing.T) {
+	w, storage, _ := newLazyFS(t, 0)
+	w.Dispose()
+	if storage.opens != 0 || storage.deletes != 0 {
+		t.Fatalf("Dispose opened %d and deleted %d workspaces", storage.opens, storage.deletes)
+	}
+}
+
+func TestDisposeDeletesAnOpenedWorkspace(t *testing.T) {
+	w, storage, _ := newLazyFS(t, 0)
+	writeFile(t, w, "a.txt", "a")
+	w.Dispose()
+	if storage.deletes != 1 {
+		t.Fatalf("Dispose deleted %d workspaces, want 1", storage.deletes)
+	}
+	if left, _ := os.ReadDir(storage.dir); len(left) != 0 {
+		t.Fatalf("Dispose left %v on disk", left)
+	}
+}
+
+func TestCreateAfterDisposeIsClosed(t *testing.T) {
+	w, storage, _ := newLazyFS(t, 0)
+	w.Dispose()
+	if _, err := w.Create("a.txt"); !errors.Is(err, os.ErrClosed) {
+		t.Fatalf("Create after Dispose = %v, want os.ErrClosed", err)
+	}
+	if storage.opens != 0 {
+		t.Fatalf("Create after Dispose opened the workspace")
+	}
+	if left, _ := os.ReadDir(storage.dir); len(left) != 0 {
+		t.Fatalf("Create after Dispose left %v on disk", left)
 	}
 }

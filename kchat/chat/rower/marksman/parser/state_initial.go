@@ -17,7 +17,7 @@ func (s initalState) line(ctrl ctrl) {
 		if s.paragraph {
 			cells := tableCells(content)
 			ctrl.write(cells != 0)
-			ctrl.update(initalState{paragraph: true, cells: cells}) // indented code can't interrupt a paragraph
+			ctrl.update(initalState{paragraph: true, cells: cells})
 			return
 		}
 		ctrl.flush()

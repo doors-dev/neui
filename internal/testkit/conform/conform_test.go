@@ -64,7 +64,7 @@ func TestGrammar(t *testing.T) {
 
 func TestSpecsArePinned(t *testing.T) {
 	for _, file := range []string{"anthropic.json.gz", "openai.json.gz"} {
-		s, err := loadSpec(file, false)
+		s, err := loadSpec(file, false, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -77,12 +77,41 @@ func TestSpecsArePinned(t *testing.T) {
 	}
 }
 
-func TestValidatorRefuses(t *testing.T) {
-	ant, err := loadSpec("anthropic.json.gz", false)
+func TestAcceptWidensOneSchema(t *testing.T) {
+	const request = "/components/schemas/CreateChatCompletionRequest"
+	body := []byte(`{"model":"m","messages":[{"role":"tool","tool_call_id":"c","content":[{"type":"image_url","image_url":{"url":"data:image/png;base64,AA=="}}]}]}`)
+	strict, err := loadSpec("openai.json.gz", true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	oai, err := loadSpec("openai.json.gz", true)
+	if err := strict.validate(request, body, nil, nil); err == nil {
+		t.Fatal("the pinned spec took an image in a tool message")
+	}
+	wide, err := loadSpec("openai.json.gz", true, []Accept{{
+		At:     "/components/schemas/ChatCompletionRequestToolMessageContentPart",
+		Also:   map[string]any{"$ref": "#/components/schemas/ChatCompletionRequestMessageContentPartImage"},
+		Source: "test",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := wide.validate(request, body, nil, nil); err != nil {
+		t.Fatalf("the accepted image part is still refused: %v", err)
+	}
+	if err := strict.validate(request, body, nil, nil); err == nil {
+		t.Fatal("accepting on one load widened the strict spec too")
+	}
+	if _, err := loadSpec("openai.json.gz", true, []Accept{{At: "/components/schemas/Nope", Also: true, Source: "test"}}); err == nil {
+		t.Fatal("an accept at a schema the spec lacks loaded")
+	}
+}
+
+func TestValidatorRefuses(t *testing.T) {
+	ant, err := loadSpec("anthropic.json.gz", false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oai, err := loadSpec("openai.json.gz", true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +124,7 @@ func TestValidatorRefuses(t *testing.T) {
 		ok   bool
 	}{
 		{"anthropic minimal", ant, "/components/schemas/CreateMessageParams", `{"model":"m","max_tokens":1,"stream":true,` + msgs + `}`, true},
-		{"anthropic sampling at 2023-06-01", ant, "/components/schemas/CreateMessageParams", `{"model":"m","max_tokens":1,"temperature":0.5,"top_p":0.9,` + msgs + `}`, true},
+		{"anthropic sampling at 2026-10-21", ant, "/components/schemas/CreateMessageParams", `{"model":"m","max_tokens":1,"temperature":0.5,"top_p":0.9,` + msgs + `}`, false},
 		{"anthropic unknown field", ant, "/components/schemas/CreateMessageParams", `{"model":"m","max_tokens":1,"bogus":1,` + msgs + `}`, false},
 		{"anthropic bad block", ant, "/components/schemas/CreateMessageParams", `{"model":"m","max_tokens":1,"messages":[{"role":"user","content":[{"type":"bogus"}]}]}`, false},
 		{"anthropic bad effort", ant, "/components/schemas/CreateMessageParams", `{"model":"m","max_tokens":1,"output_config":{"effort":"bogus"},` + msgs + `}`, false},
@@ -140,10 +169,24 @@ func TestExpectPrecedence(t *testing.T) {
 	if e := a.expect("other", "f", Params{Temperature: 0.5}); e.want != Remote || e.omits("/x") {
 		t.Fatalf("got %+v", e)
 	}
-	if n := len(Matrix(10)); n != 5*5*4*4 {
+	b := Adapter{Rules: []Rule{
+		{When: Params.Sampling, Want: RefuseNew, Source: "https://a"},
+		{Entry: "e", Want: RefuseLocal, Source: "https://b"},
+		{Want: Remote, Source: "https://c"},
+	}}
+	if e := b.expect("m", "e", Params{Temperature: 0.5}); e.want != RefuseNew {
+		t.Fatalf("got %v, want New to refuse before any request is built", e.want)
+	}
+	if e := b.expect("m", "e", Params{}); e.want != RefuseLocal {
+		t.Fatalf("got %v, want the local refusal to win over a remote one", e.want)
+	}
+	if n := len(Matrix(10, true)); n != 5*5*4*4 {
 		t.Fatalf("matrix has %d cells", n)
 	}
-	if n := len(Matrix(0)); n != 5*5*4*2 {
+	if n := len(Matrix(0, true)); n != 5*5*4*2 {
 		t.Fatalf("matrix without a ceiling has %d cells", n)
+	}
+	if n := len(Matrix(10, false)); n != 5*5*4 {
+		t.Fatalf("matrix without sampling has %d cells", n)
 	}
 }

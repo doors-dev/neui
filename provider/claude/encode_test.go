@@ -1,10 +1,12 @@
 package claude
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,6 +15,26 @@ import (
 	"neui.dev/api"
 )
 
+func mustNew(t *testing.T, conf Conf, opts ...Option) *Provider {
+	t.Helper()
+	p, err := New(conf, opts...)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	return p
+}
+
+func mustRefuse(t *testing.T, conf Conf, want string, opts ...Option) {
+	t.Helper()
+	_, err := New(conf, opts...)
+	if err == nil {
+		t.Fatalf("New succeeded, want a refusal mentioning %q", want)
+	}
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("error %q does not mention %q", err, want)
+	}
+}
+
 func mustEncode(t *testing.T, p *Provider, req api.Request) map[string]json.RawMessage {
 	t.Helper()
 	raw, err := p.encode(req)
@@ -20,7 +42,7 @@ func mustEncode(t *testing.T, p *Provider, req api.Request) map[string]json.RawM
 		t.Fatalf("encode: %v", err)
 	}
 	var out map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &out); err != nil {
+	if err := json.Unmarshal(raw.Bytes(), &out); err != nil {
 		t.Fatalf("encoded request is not an object: %v", err)
 	}
 	return out
@@ -42,7 +64,7 @@ func userText(s string) api.Message {
 }
 
 func TestEncodeRequestShape(t *testing.T) {
-	p := New(Conf{Model: api.Model{Name: testModel}}, WithAPIKey("k"), WithMaxTokens(2048), WithEffort("medium"), WithThinking(Thinking{Type: "adaptive", Display: "summarized"}))
+	p := mustNew(t, Conf{Model: api.Model{Name: testModel}}, WithAPIKey("k"), WithMaxTokens(2048), WithEffort("medium"), WithThinking(Thinking{Type: "adaptive", Display: "summarized"}))
 	got := mustEncode(t, p, api.Request{
 		ToolChoice: api.ToolChoiceAny,
 		Tools: []api.Tool{{
@@ -69,9 +91,6 @@ func TestEncodeRequestShape(t *testing.T) {
 			t.Errorf("%s = %s, want %s", field, got[field], want)
 		}
 	}
-	if _, ok := got["temperature"]; ok {
-		t.Errorf("temperature was sent without being configured")
-	}
 }
 
 func TestEncodeToolChoice(t *testing.T) {
@@ -82,7 +101,7 @@ func TestEncodeToolChoice(t *testing.T) {
 		api.ToolChoiceAny:   `{"type":"any"}`,
 		api.ToolChoice("f"): `{"type":"tool","name":"f"}`,
 	} {
-		p := New(Conf{Model: api.Model{Name: testModel}}, WithAPIKey("k"))
+		p := mustNew(t, Conf{Model: api.Model{Name: testModel}}, WithAPIKey("k"))
 		got := mustEncode(t, p, api.Request{
 			ToolChoice: choice,
 			Messages:   []api.Message{userText("hi")},
@@ -93,16 +112,20 @@ func TestEncodeToolChoice(t *testing.T) {
 	}
 }
 
-// Forcing a tool is refused only alongside manual extended thinking. Adaptive
-// thinking accepts it, including on models that think by default.
+// Forcing a tool is refused only alongside manual extended thinking, and only on
+// a declared model. Adaptive thinking accepts it, including on models that think
+// by default.
 func TestForcedToolChoiceWithExtendedThinking(t *testing.T) {
 	req := api.Request{
 		ToolChoice: api.ToolChoiceAny,
 		Messages:   []api.Message{userText("hi")},
 	}
-	mustFail(t, New(Conf{Model: api.Model{Name: "claude-sonnet-4-5"}}, WithThinking(Thinking{Type: "enabled", Budget: 4096})), req, "extended thinking")
+	mustFail(t, mustNew(t, Conf{Model: Haiku45}, WithThinking(Thinking{Type: "enabled", Budget: 4096})), req, "extended thinking")
+	if got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: "claude-sonnet-4-5"}}, WithThinking(Thinking{Type: "enabled", Budget: 4096})), req); string(got["tool_choice"]) != `{"type":"any"}` {
+		t.Fatalf("unknown model: tool_choice = %s", got["tool_choice"])
+	}
 
-	p := New(Conf{Model: api.Model{Name: testModel}}, WithThinking(Thinking{Type: "adaptive"}))
+	p := mustNew(t, Conf{Model: api.Model{Name: testModel}}, WithThinking(Thinking{Type: "adaptive"}))
 	if got := mustEncode(t, p, api.Request{
 		ToolChoice: api.ToolChoiceAny,
 		Messages:   []api.Message{userText("hi")},
@@ -112,50 +135,23 @@ func TestForcedToolChoiceWithExtendedThinking(t *testing.T) {
 }
 
 func TestForcedToolChoiceRefusedByModel(t *testing.T) {
-	for _, model := range []string{"claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5-1", "claude-mythos-5-1", "anthropic.claude-opus-5-5"} {
+	for _, model := range []string{"claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5-1"} {
 		for _, choice := range []api.ToolChoice{api.ToolChoiceAny, api.ToolChoice("f")} {
-			mustFail(t, New(Conf{Model: api.Model{Name: model}}), api.Request{ToolChoice: choice, Messages: []api.Message{userText("hi")}}, "refuses tool choice")
+			mustFail(t, mustNew(t, Conf{Model: api.Model{Name: model}}), api.Request{ToolChoice: choice, Messages: []api.Message{userText("hi")}}, "refuses tool choice")
 		}
 		for choice, want := range map[api.ToolChoice]string{api.ToolChoiceAuto: `{"type":"auto"}`, api.ToolChoiceNone: `{"type":"none"}`} {
-			got := mustEncode(t, New(Conf{Model: api.Model{Name: model}}), api.Request{ToolChoice: choice, Messages: []api.Message{userText("hi")}})
+			got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: model}}), api.Request{ToolChoice: choice, Messages: []api.Message{userText("hi")}})
 			if string(got["tool_choice"]) != want {
 				t.Errorf("%s: tool_choice = %s, want %s", model, got["tool_choice"], want)
 			}
 		}
 	}
-	for _, model := range []string{"claude-opus-5", "claude-sonnet-5", "claude-fable-5", "claude-haiku-5-5"} {
-		got := mustEncode(t, New(Conf{Model: api.Model{Name: model}}), api.Request{ToolChoice: api.ToolChoiceAny, Messages: []api.Message{userText("hi")}})
+	for _, model := range []string{"claude-opus-5", "claude-sonnet-5", "claude-fable-5", "claude-haiku-5-5", "claude-mythos-5-1", "anthropic.claude-opus-5-5"} {
+		got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: model}}), api.Request{ToolChoice: api.ToolChoiceAny, Messages: []api.Message{userText("hi")}})
 		if string(got["tool_choice"]) != `{"type":"any"}` {
 			t.Errorf("%s: tool_choice = %s, want any", model, got["tool_choice"])
 		}
 	}
-}
-
-func TestSamplingRefusedByVersion(t *testing.T) {
-	req := api.Request{Messages: []api.Message{userText("hi")}}
-	mustFail(t, New(Conf{Model: api.Model{Name: "claude-sonnet-4-5"}}, WithVersion("2026-10-21"), WithTopK(40)), req, "API version 2026-10-21")
-	mustFail(t, New(Conf{Model: api.Model{Name: "claude-sonnet-4-5"}}, WithVersion("2026-12-01"), WithTemperature(0.5)), req, "every model")
-	got := mustEncode(t, New(Conf{Model: api.Model{Name: "claude-sonnet-4-5"}}, WithVersion("2026-08-01"), WithTemperature(0.5)), req)
-	if string(got["temperature"]) != "0.5" {
-		t.Fatalf("temperature = %s before the version that removed it", got["temperature"])
-	}
-}
-
-func TestTopPWithThinkingOnOlderModels(t *testing.T) {
-	req := api.Request{Messages: []api.Message{userText("hi")}}
-	thinking := WithThinking(Thinking{Type: ThinkingEnabled, Budget: 2048})
-	for _, v := range []float64{0.95, 0.99, 1} {
-		got := mustEncode(t, New(Conf{Model: api.Model{Name: "claude-sonnet-4-5"}}, thinking, WithTopP(v)), req)
-		if string(got["top_p"]) != fmt.Sprint(v) {
-			t.Errorf("top_p %v with thinking: sent %s", v, got["top_p"])
-		}
-	}
-	for _, v := range []float64{0.9, 1.01} {
-		mustFail(t, New(Conf{Model: api.Model{Name: "claude-sonnet-4-5"}}, thinking, WithTopP(v)), req, "0.95 to 1")
-	}
-	mustFail(t, New(Conf{Model: api.Model{Name: "claude-sonnet-4-5"}}, thinking, WithTopP(0.99), WithTemperature(1)), req, "temperature and top_k")
-	mustFail(t, New(Conf{Model: api.Model{Name: "claude-opus-4-6"}}, WithThinking(Thinking{Type: ThinkingAdaptive}), WithTopK(5)), req, "temperature and top_k")
-	mustFail(t, New(Conf{Model: api.Model{Name: "claude-haiku-5-5"}}, WithTopP(0.99)), req, "refuses temperature")
 }
 
 func TestImageMimeChecked(t *testing.T) {
@@ -163,13 +159,17 @@ func TestImageMimeChecked(t *testing.T) {
 		return api.Request{Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{c, api.ContentText{Text: "what is it"}}}}}
 	}
 	for _, mime := range []string{"", "image/bmp", "application/pdf"} {
-		mustFail(t, New(Conf{Model: api.Model{Name: testModel}}), user(api.ContentImage{Data: []byte{1}, Mime: mime}), "is not accepted")
+		got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), user(api.ContentImage{Data: []byte{1}, Mime: mime}))
+		want := `{"role":"user","content":[{"type":"text","text":"[image omitted]"},{"type":"text","text":"what is it"}]}`
+		if !strings.Contains(string(got["messages"]), want) {
+			t.Fatalf("mime %q: messages =\n%s\nwant to contain\n%s", mime, got["messages"], want)
+		}
 	}
 	for _, mime := range []string{"image/png", "image/jpeg", "image/gif", "image/webp"} {
-		mustEncode(t, New(Conf{Model: api.Model{Name: testModel}}), user(api.ContentImage{Data: []byte{1}, Mime: mime}))
+		mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), user(api.ContentImage{Data: []byte{1}, Mime: mime}))
 	}
 
-	got := mustEncode(t, New(Conf{Model: api.Model{Name: testModel}}), api.Request{
+	got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{
 		Messages: []api.Message{
 			userText("look"),
 			{Role: api.RoleAssistant, Content: api.Contents{api.ContentToolUse{ID: "toolu_1", Name: "shot", Input: json.RawMessage(`{}`)}}},
@@ -187,56 +187,8 @@ func TestImageMimeChecked(t *testing.T) {
 	}
 }
 
-func TestSamplingRefusedByModel(t *testing.T) {
-	tests := []struct {
-		model    string
-		thinking Thinking
-		refused  bool
-	}{
-		// Refused on every request, whether or not thinking is on.
-		{"claude-opus-5", Thinking{}, true},
-		{"claude-opus-4-8", Thinking{}, true},
-		{"claude-opus-4-7", Thinking{}, true},
-		{"claude-sonnet-5", Thinking{}, true},
-		{"claude-fable-5", Thinking{}, true},
-		{"claude-haiku-5-5", Thinking{}, true},
-		{"claude-sonnet-5-5", Thinking{}, true},
-		{"claude-opus-5-5", Thinking{}, true},
-		{"claude-fable-5-1", Thinking{}, true},
-		{"claude-haiku-4-5-20251001", Thinking{}, false},
-		{"anthropic.claude-opus-5", Thinking{}, true},
-		// Older models take them, but only while thinking is off.
-		{"claude-opus-4-6", Thinking{}, false},
-		{"claude-sonnet-4-5", Thinking{}, false},
-		{"claude-opus-4-5", Thinking{}, false},
-		{"claude-sonnet-4-5", Thinking{Type: "enabled", Budget: 2048}, true},
-		{"claude-opus-4-6", Thinking{Type: "adaptive"}, true},
-		{"claude-opus-4-6", Thinking{Type: "disabled"}, false},
-	}
-	for _, tc := range tests {
-		p := New(Conf{Model: api.Model{Name: tc.model}}, WithTemperature(0.7), WithThinking(tc.thinking))
-		req := api.Request{Messages: []api.Message{userText("hi")}}
-		_, err := p.encode(req)
-		if tc.refused {
-			if err == nil {
-				t.Errorf("%s with thinking %q: sampling was sent, want a refusal", tc.model, tc.thinking.Type)
-			}
-			continue
-		}
-		if err != nil {
-			t.Errorf("%s with thinking %q: %v", tc.model, tc.thinking.Type, err)
-		}
-	}
-
-	got := mustEncode(t, New(Conf{Model: api.Model{Name: "claude-sonnet-4-5"}}, WithTemperature(0.7), WithTopP(0.9), WithTopK(40)),
-		api.Request{Messages: []api.Message{userText("hi")}})
-	if string(got["temperature"]) != "0.7" || string(got["top_p"]) != "0.9" || string(got["top_k"]) != "40" {
-		t.Fatalf("sampling not carried through: %s %s %s", got["temperature"], got["top_p"], got["top_k"])
-	}
-}
-
 func TestEncodeContentBlocks(t *testing.T) {
-	p := New(Conf{Model: api.Model{Name: testModel}}, WithAPIKey("k"))
+	p := mustNew(t, Conf{Model: api.Model{Name: testModel}}, WithAPIKey("k"))
 	got := mustEncode(t, p, api.Request{
 		Messages: []api.Message{{
 			Role: api.RoleUser,
@@ -259,15 +211,9 @@ func TestEncodeContentBlocks(t *testing.T) {
 }
 
 func TestEncodeRefusesWhatItCannotCarry(t *testing.T) {
-	mustFail(t, New(Conf{Model: api.Model{Name: testModel}}), api.Request{
-		Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{
-			api.ContentDocument{Data: []byte("x"), Mime: "application/zip"},
-		}}},
-	}, "application/pdf")
-
 	// A result with no id is not content this API cannot carry, it is a result
 	// matched to no call, so it is refused where an unsendable block is noted.
-	mustFail(t, New(Conf{Model: api.Model{Name: testModel}}), api.Request{
+	mustFail(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{
 		Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{
 			api.ContentToolResult{Content: api.UserContents{
 				api.ContentText{Text: "72F"},
@@ -275,29 +221,26 @@ func TestEncodeRefusesWhatItCannotCarry(t *testing.T) {
 		}}},
 	}, "no tool use id")
 
-	// A Conf left empty is the one way a provider still reaches encoding with no
-	// model, since the field is mandatory but not non empty.
-	mustFail(t, New(Conf{}), api.Request{Messages: []api.Message{userText("hi")}}, "no model")
-	mustFail(t, New(Conf{Model: api.Model{Name: testModel}}), api.Request{}, "no messages")
+	mustFail(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{}, "no messages")
 
 	// The one message that has nothing to send is the one the caller wrote with
 	// nothing in it. Every block that cannot be carried leaves a note behind, so
 	// a message that held anything at all still holds something here.
-	mustFail(t, New(Conf{Model: api.Model{Name: testModel}}), api.Request{
+	mustFail(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{
 		Messages: []api.Message{{Role: api.RoleAssistant}},
 	}, "has no content")
 }
 
-// A message whose every block was another model's still goes out, as the note
+// A message whose every block was another provider's still goes out, as the note
 // each of those blocks left. Failing the request instead would end a thread on
 // stored history the caller cannot rewrite, and dropping the message would take
 // the turn out of the conversation.
 func TestEncodeEmptiedMessageStillEncodes(t *testing.T) {
-	got := mustEncode(t, New(Conf{Model: api.Model{Name: testModel}}), api.Request{
+	got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{
 		Messages: []api.Message{
 			userText("go"),
 			{Role: api.RoleAssistant, Content: api.Contents{
-				api.ContentReasoning{Model: "claude-sonnet-5", Thoughts: map[int]string{0: "..."}, Meta: json.RawMessage(`"sig"`)},
+				api.ContentReasoning{Model: "gpt-5.6-sol", Summary: map[int]string{0: "..."}, Meta: json.RawMessage(`{"id":"rs_1","type":"reasoning","encrypted_content":"SEALED"}`)},
 			}},
 			userText("again"),
 		},
@@ -312,11 +255,11 @@ func TestEncodeEmptiedMessageStillEncodes(t *testing.T) {
 // and the message keeps whatever else it held.
 func TestEncodeNotesWhatItCannotSend(t *testing.T) {
 	const model = "claude-opus-5"
-	got := mustEncode(t, New(Conf{Model: api.Model{Name: testModel}}), api.Request{
+	got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{
 		Messages: []api.Message{
 			userText("go"),
 			{Role: api.RoleAssistant, Content: api.Contents{
-				api.ContentReasoning{Model: "claude-sonnet-5", Thoughts: map[int]string{0: "theirs"}, Meta: json.RawMessage(`"sig"`)},
+				api.ContentReasoning{Model: "gpt-5.6-sol", Summary: map[int]string{0: "theirs"}, Meta: json.RawMessage(`{"id":"rs_1","type":"reasoning","encrypted_content":"SEALED"}`)},
 				api.ContentOpaque{Model: "gpt-5.6-sol", Kind: "web_search_call", Data: json.RawMessage(`{"id":"ws_1","type":"web_search_call","status":"completed"}`)},
 				api.ContentText{Text: "answer"},
 			}},
@@ -336,7 +279,7 @@ func TestEncodeNotesWhatItCannotSend(t *testing.T) {
 // one written into an assistant message leaves a note, and moving it into a turn
 // the caller never wrote is not the adapter's to do.
 func TestToolResultOutsideAUserMessageIsANote(t *testing.T) {
-	got := mustEncode(t, New(Conf{Model: api.Model{Name: testModel}}), api.Request{
+	got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{
 		Messages: []api.Message{
 			userText("weather?"),
 			{Role: api.RoleAssistant, Content: api.Contents{
@@ -356,7 +299,7 @@ func TestToolResultOutsideAUserMessageIsANote(t *testing.T) {
 }
 
 func TestEncodeToolUseAndResult(t *testing.T) {
-	got := mustEncode(t, New(Conf{Model: api.Model{Name: testModel}}), api.Request{
+	got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{
 		Messages: []api.Message{
 			userText("weather?"),
 			{Role: api.RoleAssistant, Content: api.Contents{
@@ -405,7 +348,7 @@ func TestEncodeToolUseAndResult(t *testing.T) {
 // refused rather than sent, because {} there replays as a call that legitimately
 // took none, on this turn and every later one.
 func TestDiscardedArgumentsNeedTheirResult(t *testing.T) {
-	mustFail(t, New(Conf{Model: api.Model{Name: testModel}}), api.Request{
+	mustFail(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{
 		Messages: []api.Message{
 			userText("weather?"),
 			{Role: api.RoleAssistant, Content: api.Contents{
@@ -425,7 +368,7 @@ func TestDiscardedArgumentsNeedTheirResult(t *testing.T) {
 // deliver the document either, and it would take the rest of the result with it,
 // leaving the model waiting on a call nothing answered.
 func TestToolResultNotesWhatItCannotCarry(t *testing.T) {
-	got := mustEncode(t, New(Conf{Model: api.Model{Name: testModel}}), api.Request{
+	got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{
 		Messages: []api.Message{
 			userText("read it"),
 			{Role: api.RoleAssistant, Content: api.Contents{
@@ -454,7 +397,7 @@ func TestToolResultNotesWhatItCannotCarry(t *testing.T) {
 // neither refusal this arm has fires on a block that could not be sent whatever
 // it claimed to be.
 func TestEmptyAttachmentIsANote(t *testing.T) {
-	got := mustEncode(t, New(Conf{Model: api.Model{Name: testModel}}), api.Request{
+	got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{
 		Messages: []api.Message{
 			{Role: api.RoleUser, Content: api.Contents{
 				api.ContentImage{Mime: "image/png"},
@@ -508,7 +451,7 @@ func TestEmptyAttachmentIsANote(t *testing.T) {
 // would encode as an empty content array, which this API does not document
 // accepting, so it takes the note too and the result still answers its call.
 func TestEmptyTextIsANote(t *testing.T) {
-	got := mustEncode(t, New(Conf{Model: api.Model{Name: testModel}}), api.Request{
+	got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{
 		Messages: []api.Message{
 			{Role: api.RoleUser, Content: api.Contents{
 				api.ContentText{},
@@ -540,7 +483,7 @@ func TestEmptyTextIsANote(t *testing.T) {
 			`{"type":"text","text":"[content omitted]"},` +
 			`{"type":"text","text":"72F"}],"is_error":false}`,
 		`{"type":"tool_result","tool_use_id":"toolu_2","content":[` +
-			`{"type":"text","text":"[content omitted]"}],"is_error":false}`,
+			`{"type":"text","text":"(the tool returned no output)"}],"is_error":false}`,
 	} {
 		if !strings.Contains(msgs, want) {
 			t.Fatalf("messages =\n%s\nwant to contain\n%s", msgs, want)
@@ -560,7 +503,7 @@ func TestReplayReasoningAndOpaque(t *testing.T) {
 	signed := json.RawMessage(`"sig2"`)
 	summarized := json.RawMessage(`"sig3"`)
 	result := json.RawMessage(`{"type":"web_search_tool_result","tool_use_id":"srvtoolu_1","content":[]}`)
-	got := mustEncode(t, New(Conf{Model: api.Model{Name: testModel}}), api.Request{
+	got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{
 		Messages: []api.Message{
 			userText("go"),
 			{Role: api.RoleAssistant, Content: api.Contents{
@@ -578,9 +521,8 @@ func TestReplayReasoningAndOpaque(t *testing.T) {
 				// The other shape meta holds here: a redacted_thinking block is
 				// bytes this API sent, so it goes back as they are.
 				api.ContentReasoning{Model: model, Meta: sealed},
-				// A payload another model produced means nothing to this one, so
-				// what goes in its place is the note that it was there.
-				api.ContentOpaque{Kind: "web_search_tool_result", Data: result},
+				api.ContentOpaque{Model: "claude-sonnet-5", Kind: "web_search_tool_result", Data: result},
+				api.ContentOpaque{Model: model, Kind: "compaction", Data: json.RawMessage(`{"id":"cmp_1","type":"compaction","encrypted_content":"x"}`)},
 				api.ContentText{Text: "answer"},
 			}},
 		},
@@ -590,6 +532,7 @@ func TestReplayReasoningAndOpaque(t *testing.T) {
 		`{"type":"thinking","thinking":"because","signature":"sig2"},` +
 		`{"type":"thinking","thinking":"in short","signature":"sig3"},` +
 		string(sealed) + `,` +
+		string(result) + `,` +
 		`{"type":"text","text":"[content omitted]"},` +
 		`{"type":"text","text":"answer"}]}`
 	if !strings.Contains(string(got["messages"]), want) {
@@ -611,18 +554,17 @@ func TestThinkingReplayIsAllOrNothing(t *testing.T) {
 		name    string
 		spoiler api.Content
 	}{
-		// Another model's thinking is ignored by this one rather than refused,
-		// and billed for either way, so it does not travel; the blocks beside it
-		// cannot travel without it.
-		{"another model", api.ContentReasoning{Model: "claude-sonnet-5", Thoughts: map[int]string{0: "x"}, Meta: signed}},
-		{"no model", api.ContentReasoning{Thoughts: map[int]string{0: "nobody's"}, Meta: signed}},
+		// Another provider's sealed payload is no block of this API's, so it
+		// does not travel; the blocks beside it cannot travel without it.
+		{"another provider", api.ContentReasoning{Model: "gpt-5.6-sol", Meta: json.RawMessage(`{"id":"rs_1","type":"reasoning","encrypted_content":"SEALED"}`)}},
+		{"an empty signature", api.ContentReasoning{Model: model, Thoughts: map[int]string{0: "x"}, Meta: json.RawMessage(`""`)}},
 		// A block with no meta has no signature, and this API rejects unsigned
 		// thinking, so it can never be sent and the rest goes with it.
 		{"no meta", api.ContentReasoning{Model: model, Thoughts: map[int]string{0: "unsigned"}}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := mustEncode(t, New(Conf{Model: api.Model{Name: testModel}}), api.Request{
+			got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{
 				Messages: []api.Message{
 					userText("go"),
 					{Role: api.RoleAssistant, Content: api.Contents{
@@ -651,11 +593,11 @@ func TestThinkingReplayIsAllOrNothing(t *testing.T) {
 func TestThinkingReplayIsPerMessage(t *testing.T) {
 	const model = "claude-opus-5"
 	signed := json.RawMessage(`"sig"`)
-	got := mustEncode(t, New(Conf{Model: api.Model{Name: testModel}}), api.Request{
+	got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{
 		Messages: []api.Message{
 			userText("go"),
 			{Role: api.RoleAssistant, Content: api.Contents{
-				api.ContentReasoning{Model: "claude-sonnet-5", Thoughts: map[int]string{0: "theirs"}, Meta: signed},
+				api.ContentReasoning{Model: "gpt-5.6-sol", Meta: json.RawMessage(`{"id":"rs_1","type":"reasoning","encrypted_content":"SEALED"}`)},
 				api.ContentText{Text: "first"},
 			}},
 			userText("again"),
@@ -678,7 +620,7 @@ func TestOpaqueStaysByteExact(t *testing.T) {
 	// Deliberately not in the order or spacing Go would marshal, because the
 	// point is that nothing here re-encodes it.
 	sealed := json.RawMessage(`{"tool_use_id":"srvtoolu_1","type":"web_search_tool_result","content":[1,2,3]}`)
-	got := mustEncode(t, New(Conf{Model: api.Model{Name: testModel}}), api.Request{
+	got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{
 		Messages: []api.Message{
 			userText("go"),
 			{Role: api.RoleAssistant, Content: api.Contents{
@@ -696,7 +638,7 @@ func TestOpaqueStaysByteExact(t *testing.T) {
 // rather than spliced into it, so this is where they go back in.
 func TestOpaquePartsGoBackIntoThePayload(t *testing.T) {
 	data := json.RawMessage(`{"type":"server_tool_use","id":"srvtoolu_1","name":"web_search","input":{}}`)
-	got := mustEncode(t, New(Conf{Model: api.Model{Name: testModel}}), api.Request{
+	got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{
 		Messages: []api.Message{
 			userText("go"),
 			{Role: api.RoleAssistant, Content: api.Contents{
@@ -741,7 +683,7 @@ func TestOpaqueThatCannotBeSplicedIsANote(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := mustEncode(t, New(Conf{Model: api.Model{Name: testModel}}), api.Request{
+			got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{
 				Messages: []api.Message{
 					userText("go"),
 					{Role: api.RoleAssistant, Content: api.Contents{
@@ -792,7 +734,7 @@ func TestSpliceFieldKeepsEveryOtherByte(t *testing.T) {
 }
 
 func TestCacheBreakpoints(t *testing.T) {
-	p := New(Conf{Model: api.Model{Name: testModel}}, WithCacheBreakpoints(CacheTools, CacheSystem, CacheMessages), WithCacheTTL("1h"))
+	p := mustNew(t, Conf{Model: api.Model{Name: testModel}}, WithCacheBreakpoints(CacheTools, CacheSystem, CacheMessages), WithCacheTTL("1h"))
 	got := mustEncode(t, p, api.Request{
 		Tools:    []api.Tool{{Name: "a"}, {Name: "b"}},
 		System:   "one\ntwo",
@@ -824,7 +766,7 @@ func TestCacheBreakpoints(t *testing.T) {
 // been modified, so it goes on the last block that this adapter authored.
 func TestCacheMarkerAvoidsReplayedBlocks(t *testing.T) {
 	sealed := json.RawMessage(`{"type":"web_search_tool_result","tool_use_id":"srvtoolu_1","content":[]}`)
-	p := New(Conf{Model: api.Model{Name: testModel}}, WithCacheBreakpoints(CacheMessages))
+	p := mustNew(t, Conf{Model: api.Model{Name: testModel}}, WithCacheBreakpoints(CacheMessages))
 	got := mustEncode(t, p, api.Request{
 		Messages: []api.Message{
 			userText("go"),
@@ -848,35 +790,17 @@ func TestCacheMarkerAvoidsReplayedBlocks(t *testing.T) {
 }
 
 func TestToolSchemaDefaults(t *testing.T) {
-	got := mustEncode(t, New(Conf{Model: api.Model{Name: testModel}}), api.Request{
+	got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{
 		Tools:    []api.Tool{{Name: "noargs"}},
 		Messages: []api.Message{userText("hi")},
 	})
 	if want := `"input_schema":{"type":"object","properties":{}}`; !strings.Contains(string(got["tools"]), want) {
 		t.Fatalf("tools = %s, want to contain %s", got["tools"], want)
 	}
-	mustFail(t, New(Conf{Model: api.Model{Name: testModel}}), api.Request{
+	mustFail(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{
 		Tools:    []api.Tool{{Name: "bad", Schema: []int{1}}},
 		Messages: []api.Message{userText("hi")},
 	}, "not a JSON object")
-}
-
-func TestInjectCacheControlKeepsTheRestVerbatim(t *testing.T) {
-	block := json.RawMessage(`{"type":"text","text":"a \"quoted\" thing"}`)
-	out, err := injectCacheControl(block, cacheControl{Type: "ephemeral"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := `{"cache_control":{"type":"ephemeral"},"type":"text","text":"a \"quoted\" thing"}`
-	if string(out) != want {
-		t.Fatalf("got %s, want %s", out, want)
-	}
-	if !json.Valid(out) {
-		t.Fatalf("result is not valid JSON: %s", out)
-	}
-	if _, err := injectCacheControl(json.RawMessage(`[]`), cacheControl{Type: "ephemeral"}); err == nil {
-		t.Fatalf("marking a non object succeeded")
-	}
 }
 
 func TestRequestOverModelRequestBytes(t *testing.T) {
@@ -884,7 +808,7 @@ func TestRequestOverModelRequestBytes(t *testing.T) {
 		t.Errorf("a body over the model's byte limit reached the API")
 	}))
 	t.Cleanup(srv.Close)
-	over := New(Conf{Model: api.Model{Name: testModel, RequestBytes: 4096}}, WithAPIKey("k"), WithBaseURL(srv.URL))
+	over := mustNew(t, Conf{Model: api.Model{Name: testModel, RequestBytes: 4096}}, WithAPIKey("k"), WithBaseURL(srv.URL))
 	req := api.Request{Messages: []api.Message{userText(strings.Repeat("x", 8192))}}
 	body, err := over.encode(req)
 	if err != nil {
@@ -901,15 +825,15 @@ func TestRequestOverModelRequestBytes(t *testing.T) {
 	if e.Code != api.CodeTooLarge {
 		t.Fatalf("code = %q, want %q (err %v)", e.Code, api.CodeTooLarge, e.Err)
 	}
-	if msg := e.Err.Error(); !strings.Contains(msg, fmt.Sprint(len(body))) || !strings.Contains(msg, "4096") {
-		t.Fatalf("error %q names neither the %d bytes encoded nor the 4096 byte limit", msg, len(body))
+	if msg := e.Err.Error(); !strings.Contains(msg, fmt.Sprint(len(body.Bytes()))) || !strings.Contains(msg, "4096") {
+		t.Fatalf("error %q names neither the %d bytes encoded nor the 4096 byte limit", msg, len(body.Bytes()))
 	}
 
 	sends := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	t.Cleanup(sends.Close)
-	under := New(Conf{Model: api.Model{Name: testModel, RequestBytes: 1 << 20}}, WithAPIKey("k"), WithBaseURL(sends.URL))
+	under := mustNew(t, Conf{Model: api.Model{Name: testModel, RequestBytes: 1 << 20}}, WithAPIKey("k"), WithBaseURL(sends.URL))
 	events = collect(t, under, req)
 	if len(events) != 1 {
 		t.Fatalf("got %d events, want one terminal error: %v", len(events), events)
@@ -929,7 +853,7 @@ func TestProviderRefusesBytesMeasuredAsFitting(t *testing.T) {
 		io.WriteString(w, "<html>413 Request Entity Too Large</html>")
 	}))
 	t.Cleanup(srv.Close)
-	p := New(Conf{Model: api.Model{Name: testModel, RequestBytes: declared}}, WithAPIKey("k"), WithBaseURL(srv.URL))
+	p := mustNew(t, Conf{Model: api.Model{Name: testModel, RequestBytes: declared}}, WithAPIKey("k"), WithBaseURL(srv.URL))
 	events := collect(t, p, api.Request{Messages: []api.Message{userText("hi")}})
 	if len(events) != 1 {
 		t.Fatalf("got %d events, want one terminal error: %v", len(events), events)
@@ -956,7 +880,7 @@ func TestProviderRefusesBytesMeasuredAsFitting(t *testing.T) {
 		t.Fatalf("error %v lost what the API answered", e.Err)
 	}
 
-	small := New(Conf{Model: api.Model{Name: testModel, RequestBytes: 64}}, WithAPIKey("k"), WithBaseURL(srv.URL))
+	small := mustNew(t, Conf{Model: api.Model{Name: testModel, RequestBytes: 64}}, WithAPIKey("k"), WithBaseURL(srv.URL))
 	events = collect(t, small, api.Request{Messages: []api.Message{userText(strings.Repeat("x", 4096))}})
 	refused, ok := events[0].(api.EventErr)
 	if !ok || refused.Code != api.CodeTooLarge {
@@ -974,7 +898,7 @@ func TestInbandRequestTooLargeIsMeasured(t *testing.T) {
 		"error", `{"type":"error","error":{"type":"request_too_large","message":"too big"}}`,
 	)))
 	t.Cleanup(srv.Close)
-	p := New(Conf{Model: api.Model{Name: testModel, RequestBytes: declared}}, WithAPIKey("k"), WithBaseURL(srv.URL))
+	p := mustNew(t, Conf{Model: api.Model{Name: testModel, RequestBytes: declared}}, WithAPIKey("k"), WithBaseURL(srv.URL))
 	events := collect(t, p, api.Request{Messages: []api.Message{userText("hi")}})
 	last, ok := events[len(events)-1].(api.EventErr)
 	if !ok {
@@ -1010,7 +934,7 @@ func TestUnmeasuredRequestTooLargeIsNotMarked(t *testing.T) {
 	t.Cleanup(inband.Close)
 
 	for _, url := range []string{srv.URL, inband.URL} {
-		p := New(Conf{Model: api.Model{Name: testModel}}, WithAPIKey("k"), WithBaseURL(url))
+		p := mustNew(t, Conf{Model: api.Model{Name: testModel}}, WithAPIKey("k"), WithBaseURL(url))
 		events := collect(t, p, api.Request{Messages: []api.Message{userText("hi")}})
 		last, ok := events[len(events)-1].(api.EventErr)
 		if !ok {
@@ -1033,7 +957,7 @@ func TestUnmeasuredRequestTooLargeIsNotMarked(t *testing.T) {
 }
 
 func TestName(t *testing.T) {
-	if got := New(Conf{Model: api.Model{Name: testModel}}).Name(); got != providerName {
+	if got := mustNew(t, Conf{Model: api.Model{Name: testModel}}).Name(); got != providerName {
 		t.Fatalf("Name = %q, want %q", got, providerName)
 	}
 }
@@ -1042,11 +966,11 @@ func TestName(t *testing.T) {
 // literal as written, where zero is unknown rather than a window of zero.
 func TestDeclaredModels(t *testing.T) {
 	for _, m := range []api.Model{Fable51, Opus55, Sonnet55, Haiku55, Sonnet5} {
-		if m.Context != 1_000_000 || m.ImagePixels != 4784*28*28 || m.ImagesPerRequest != 600 {
+		if m.Context != 1_000_000 || m.ImagePixels != 4784*28*28 || m.ImageSide != 2576 || m.ImagesPerRequest != 600 {
 			t.Errorf("%s: %+v, want the 1M window, the high resolution tier and 600 images", m.Name, m)
 		}
 	}
-	if Haiku45.Context != 200_000 || Haiku45.ImagePixels != 1568*28*28 || Haiku45.ImagesPerRequest != 100 {
+	if Haiku45.Context != 200_000 || Haiku45.ImagePixels != 1568*28*28 || Haiku45.ImageSide != 1568 || Haiku45.ImagesPerRequest != 100 {
 		t.Errorf("%s: %+v, want the 200k window, the standard tier and 100 images", Haiku45.Name, Haiku45)
 	}
 	for _, m := range []api.Model{Fable51, Opus55, Sonnet55, Haiku55, Sonnet5, Haiku45} {
@@ -1056,13 +980,206 @@ func TestDeclaredModels(t *testing.T) {
 	}
 }
 
+func TestNewRefusesInvalidSettings(t *testing.T) {
+	model := Conf{Model: api.Model{Name: testModel}}
+	mustRefuse(t, Conf{}, "no name")
+	mustRefuse(t, model, "base URL", WithBaseURL(""))
+	mustRefuse(t, model, "needs a client", WithHTTPClient(nil))
+	mustRefuse(t, model, "negative", WithMaxTokens(-1))
+	mustRefuse(t, model, "needs a version", WithVersion(""))
+	if got := mustNew(t, model, WithMaxTokens(100), WithMaxTokens(0)).maxToken; got != defaultMaxTokens {
+		t.Errorf("WithMaxTokens(0) left %d, want the default %d", got, defaultMaxTokens)
+	}
+
+	haiku := Conf{Model: Haiku45}
+	mustRefuse(t, haiku, "only with enabled", WithThinking(Thinking{Type: ThinkingAdaptive, Budget: 2048}))
+	mustRefuse(t, haiku, "only with enabled", WithThinking(Thinking{Budget: 2048}))
+	mustRefuse(t, haiku, "under the 1024", WithThinking(Thinking{Type: ThinkingEnabled, Budget: 1023}))
+	mustRefuse(t, haiku, "not below max tokens", WithMaxTokens(4096), WithThinking(Thinking{Type: ThinkingEnabled, Budget: 4096}))
+	mustNew(t, haiku, WithMaxTokens(4096), WithThinking(Thinking{Type: ThinkingEnabled, Budget: 4095}))
+	mustNew(t, haiku, WithMaxTokens(4096), WithBeta("interleaved-thinking-2025-05-14"), WithThinking(Thinking{Type: ThinkingEnabled, Budget: 8192}))
+	mustRefuse(t, haiku, "needs thinking that is on", WithThinking(Thinking{Display: DisplaySummarized}))
+	mustRefuse(t, haiku, "needs thinking that is on", WithThinking(Thinking{Type: ThinkingDisabled, Display: DisplayOmitted}))
+
+	enabled := WithThinking(Thinking{Type: ThinkingEnabled, Budget: 2048})
+	disabled := WithThinking(Thinking{Type: ThinkingDisabled})
+	adaptive := WithThinking(Thinking{Type: ThinkingAdaptive})
+	for _, m := range []api.Model{Fable51, Opus55, Sonnet55} {
+		mustRefuse(t, Conf{Model: m}, "refuses enabled thinking", enabled)
+		mustRefuse(t, Conf{Model: m}, "refuses disabled thinking", disabled)
+		mustNew(t, Conf{Model: m}, adaptive, WithEffort(EffortMax), WithMaxTokens(128_000))
+		mustRefuse(t, Conf{Model: m}, "over the 128000", WithMaxTokens(128_001))
+	}
+	for _, m := range []api.Model{Haiku55, Sonnet5} {
+		mustRefuse(t, Conf{Model: m}, "refuses enabled thinking", enabled)
+		mustNew(t, Conf{Model: m}, disabled, WithEffort(EffortHigh))
+	}
+	mustNew(t, Conf{Model: Sonnet5}, disabled, WithEffort(EffortMax))
+	mustNew(t, Conf{Model: Haiku55}, disabled)
+	mustRefuse(t, Conf{Model: Haiku55}, "at effort xhigh", disabled, WithEffort(EffortXHigh))
+	mustRefuse(t, Conf{Model: Haiku55}, "at effort max", disabled, WithEffort(EffortMax))
+	mustNew(t, Conf{Model: Haiku55}, adaptive, WithEffort(EffortMax))
+
+	mustRefuse(t, Conf{Model: Haiku45}, "refuses adaptive thinking", adaptive)
+	mustRefuse(t, Conf{Model: Haiku45}, "takes no effort", WithEffort(EffortLow))
+	mustRefuse(t, Conf{Model: Haiku45}, "over the 64000", WithMaxTokens(64_001))
+	mustNew(t, Conf{Model: Haiku45}, enabled, WithMaxTokens(64_000))
+
+	own := Conf{Model: api.Model{Name: Opus55.Name}}
+	mustRefuse(t, own, "refuses disabled thinking", disabled)
+	mustNew(t, Conf{Model: api.Model{Name: "claude-opus-4-6"}}, disabled, WithEffort(EffortMax), WithMaxTokens(1_000_000))
+	mustNew(t, model, WithThinking(Thinking{Type: ThinkingAdaptive, Budget: 512, Display: DisplaySummarized}))
+	mustNew(t, model, WithMaxTokens(4096), WithThinking(Thinking{Type: ThinkingEnabled, Budget: 8192}))
+	mustNew(t, model, WithThinking(Thinking{Type: ThinkingDisabled, Display: DisplayOmitted}))
+}
+
+func TestDocumentInAssistantMessageIsANote(t *testing.T) {
+	got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{
+		Messages: []api.Message{
+			userText("hi"),
+			{Role: api.RoleAssistant, Content: api.Contents{api.ContentDocument{Data: []byte("%PDF"), Mime: string(api.DocumentPDF)}, api.ContentText{Text: "here"}}},
+		},
+	})
+	msgs := string(got["messages"])
+	if strings.Contains(msgs, `"type":"document"`) {
+		t.Fatalf("a document went out in an assistant message:\n%s", msgs)
+	}
+	if !strings.Contains(msgs, `{"role":"assistant","content":[{"type":"text","text":"[`) {
+		t.Fatalf("no note in place of the document:\n%s", msgs)
+	}
+}
+
 func TestModel(t *testing.T) {
-	var p api.Provider = New(Conf{Model: Haiku45})
+	var p api.Provider = mustNew(t, Conf{Model: Haiku45})
 	if got := p.Model(); got != Haiku45 || got.Context != 200_000 {
 		t.Fatalf("Model = %+v, want %+v", got, Haiku45)
 	}
 	own := api.Model{Name: testModel}
-	if got := New(Conf{Model: own}).Model(); got != own {
+	if got := mustNew(t, Conf{Model: own}).Model(); got != own {
 		t.Fatalf("Model = %+v, want the literal with an unknown window", got)
+	}
+}
+
+func TestThinkingAnotherClaudeModelWroteReplays(t *testing.T) {
+	got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: "claude-opus-5-5"}}), api.Request{
+		Messages: []api.Message{
+			userText("go"),
+			{Role: api.RoleAssistant, Content: api.Contents{
+				api.ContentReasoning{Model: "claude-opus-5", Thoughts: map[int]string{0: "earlier"}, Meta: json.RawMessage(`"sig"`)},
+				api.ContentReasoning{Model: "claude-opus-5", Meta: json.RawMessage(`{"type":"redacted_thinking","data":"EvwBCkYIA"}`)},
+				api.ContentText{Text: "answer"},
+			}},
+		},
+	})
+	want := `{"role":"assistant","content":[` +
+		`{"type":"thinking","thinking":"earlier","signature":"sig"},` +
+		`{"type":"redacted_thinking","data":"EvwBCkYIA"},` +
+		`{"type":"text","text":"answer"}]}`
+	if !strings.Contains(string(got["messages"]), want) {
+		t.Fatalf("messages =\n%s\nwant to contain\n%s", got["messages"], want)
+	}
+}
+
+func TestDocumentsInAMessage(t *testing.T) {
+	user := func(c api.Content) api.Request {
+		return api.Request{Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{c, api.ContentText{Text: "read it"}}}}}
+	}
+	for _, mime := range []api.DocumentMime{
+		api.DocumentText, api.DocumentMarkdown, api.DocumentCSV, api.DocumentHTML,
+		api.DocumentXML, api.DocumentJSON, api.DocumentYAML, api.DocumentRTF,
+	} {
+		got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), user(api.ContentDocument{Data: []byte("# a,b"), Mime: string(mime)}))
+		want := `{"type":"document","source":{"type":"text","media_type":"text/plain","data":"# a,b"}}`
+		if !strings.Contains(string(got["messages"]), want) {
+			t.Fatalf("%s: messages =\n%s\nwant to contain\n%s", mime, got["messages"], want)
+		}
+	}
+	for _, c := range []api.ContentDocument{
+		{Data: []byte("PK"), Mime: string(api.DocumentDOCX)},
+		{Data: []byte("PK"), Mime: string(api.DocumentXLSX)},
+		{Data: []byte("PK"), Mime: string(api.DocumentPPTX)},
+		{Data: []byte("x"), Mime: string(api.DocumentDOC)},
+		{Data: []byte("x"), Mime: string(api.DocumentXLS)},
+		{Data: []byte("PK"), Mime: "application/zip"},
+		{Data: []byte{0xff, 0xfe, 'a'}, Mime: string(api.DocumentMarkdown)},
+	} {
+		p := mustNew(t, Conf{Model: api.Model{Name: testModel}})
+		first := mustEncode(t, p, user(c))
+		second := mustEncode(t, p, user(c))
+		want := `{"role":"user","content":[{"type":"text","text":"[document omitted]"},{"type":"text","text":"read it"}]}`
+		if !strings.Contains(string(first["messages"]), want) {
+			t.Fatalf("%s: messages =\n%s\nwant to contain\n%s", c.Mime, first["messages"], want)
+		}
+		if string(first["messages"]) != string(second["messages"]) {
+			t.Fatalf("%s: a second turn encoded differently:\n%s\n%s", c.Mime, first["messages"], second["messages"])
+		}
+	}
+	got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), user(api.ContentDocument{Data: []byte("%PDF"), Mime: string(api.DocumentPDF)}))
+	if want := `{"type":"document","source":{"type":"base64","media_type":"application/pdf","data":"JVBERg=="}}`; !strings.Contains(string(got["messages"]), want) {
+		t.Fatalf("messages =\n%s\nwant to contain\n%s", got["messages"], want)
+	}
+}
+
+type levelCounter map[slog.Level]int
+
+func (c levelCounter) Enabled(context.Context, slog.Level) bool { return true }
+
+func (c levelCounter) Handle(_ context.Context, r slog.Record) error {
+	c[r.Level]++
+	return nil
+}
+
+func (c levelCounter) WithAttrs([]slog.Attr) slog.Handler { return c }
+
+func (c levelCounter) WithGroup(string) slog.Handler { return c }
+
+func TestEncodeLogsOnlyAnUnknownTypeOnce(t *testing.T) {
+	p := mustNew(t, Conf{Model: api.Model{Name: testModel}}, WithAPIKey("k"))
+	counts := levelCounter{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(counts))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	req := api.Request{Messages: []api.Message{
+		{Role: api.RoleUser, Content: api.Contents{api.ContentImage{Data: []byte{1}, Mime: "image/bmp"}, nil}},
+		{Role: api.RoleAssistant, Content: api.Contents{api.ContentToolUse{ID: "toolu_1", Name: "read", Input: json.RawMessage(`{}`)}}},
+		{Role: api.RoleUser, Content: api.Contents{api.ContentToolResult{ID: "toolu_1"}}},
+	}}
+	for range 2 {
+		got := mustEncode(t, p, req)
+		for _, want := range []string{
+			`{"role":"user","content":[{"type":"text","text":"[image omitted]"},{"type":"text","text":"[content omitted]"}]}`,
+			`"content":[{"type":"text","text":"(the tool returned no output)"}]`,
+		} {
+			if !strings.Contains(string(got["messages"]), want) {
+				t.Fatalf("messages =\n%s\nwant to contain\n%s", got["messages"], want)
+			}
+		}
+	}
+	if counts[slog.LevelWarn] != 0 || counts[slog.LevelError] > 1 {
+		t.Fatalf("two encodes logged %v, want no warnings and at most one error", map[slog.Level]int(counts))
+	}
+}
+
+func TestAPIKeySource(t *testing.T) {
+	counts := levelCounter{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(counts))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	t.Setenv("ANTHROPIC_API_KEY", "env-key")
+	if p := mustNew(t, Conf{Model: api.Model{Name: testModel}}); p.key != "env-key" {
+		t.Fatalf("key %q, want the environment's", p.key)
+	}
+	if p := mustNew(t, Conf{Model: api.Model{Name: testModel}}, WithAPIKey("")); p.key != "" {
+		t.Fatalf("key %q, want the explicit empty one", p.key)
+	}
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	mustNew(t, Conf{Model: api.Model{Name: testModel}}, WithAPIKey(""))
+	if counts[slog.LevelWarn] != 0 {
+		t.Fatalf("an explicit key warned %d times", counts[slog.LevelWarn])
+	}
+	mustNew(t, Conf{Model: api.Model{Name: testModel}})
+	if counts[slog.LevelWarn] != 1 {
+		t.Fatalf("no key at all warned %d times, want 1", counts[slog.LevelWarn])
 	}
 }

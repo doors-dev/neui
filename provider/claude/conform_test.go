@@ -16,6 +16,7 @@ const (
 	docErrors   = "https://platform.claude.com/docs/en/api/errors"
 	docVision   = "https://platform.claude.com/docs/en/build-with-claude/vision"
 	docPDF      = "https://platform.claude.com/docs/en/build-with-claude/pdf-support"
+	docModels   = "https://platform.claude.com/docs/en/about-claude/models/overview"
 )
 
 func TestConform(t *testing.T) {
@@ -31,15 +32,12 @@ func conformAdapter() conform.Adapter {
 	overCeiling := func(model string) func(conform.Params) bool {
 		return func(p conform.Params) bool { return p.MaxTokens == ceiling[model]+1 }
 	}
-	var rules []conform.Rule
-	for _, m := range []string{"fable-5", "opus-5", "sonnet-5", "haiku-5-5"} {
-		rules = append(rules, conform.Rule{
-			Model:  m,
-			When:   conform.Params.Sampling,
-			Want:   conform.RefuseLocal,
-			Source: docThinking + "#limits-and-feature-compatibility",
-		})
-	}
+	rules := []conform.Rule{{
+		Model:  "haiku-4-5",
+		When:   func(p conform.Params) bool { return p.Effort != "" && p.Effort != conform.EffortOff },
+		Want:   conform.RefuseNew,
+		Source: docModels,
+	}}
 	for _, m := range []string{"opus-5-5", "sonnet-5-5", "fable-5-1"} {
 		rules = append(rules,
 			conform.Rule{
@@ -51,7 +49,7 @@ func conformAdapter() conform.Adapter {
 			conform.Rule{
 				Model:  m,
 				When:   func(p conform.Params) bool { return p.Effort == conform.EffortOff },
-				Want:   conform.Remote,
+				Want:   conform.RefuseNew,
 				Source: docThinking + "#configuring-thinking",
 			},
 		)
@@ -60,7 +58,7 @@ func conformAdapter() conform.Adapter {
 		rules = append(rules, conform.Rule{
 			Model:  name,
 			When:   overCeiling(name),
-			Want:   conform.Remote,
+			Want:   conform.RefuseNew,
 			Source: docThinking + "#long-requests",
 		})
 	}
@@ -80,8 +78,8 @@ func conformAdapter() conform.Adapter {
 			Carry:  map[string]any{"/tool_choice": map[string]any{"type": "any"}},
 			Source: "https://platform.claude.com/docs/en/agents-and-tools/tool-use/implement-tool-use#forcing-tool-use",
 		},
-		conform.Rule{Entry: "image-no-mime", Want: conform.RefuseLocal, Source: docVision},
-		conform.Rule{Entry: "document-csv", Want: conform.RefuseLocal, Source: docPDF},
+		conform.Rule{Entry: "image-no-mime", Carry: map[string]any{"/messages/0/content/1/type": "text"}, Source: docVision},
+		conform.Rule{Entry: "document-csv", Carry: map[string]any{"/messages/0/content/1/source": map[string]any{"type": "text", "media_type": "text/plain", "data": "a,b\n1,2\n"}}, Source: docPDF},
 		conform.Rule{Entry: "tool-result-image-bad-mime", Carry: map[string]any{"/messages/2/content/0/content/0/type": "text"}, Source: docVision},
 		conform.Rule{Entry: "image-no-bytes", Carry: map[string]any{"/messages/0/content/1/type": "text"}, Source: docVision},
 		conform.Rule{Entry: "whitespace-text", Carry: map[string]any{"/messages/0/content/1/type": "text"}, Source: docErrors},
@@ -91,7 +89,7 @@ func conformAdapter() conform.Adapter {
 	return conform.Adapter{
 		Name:   providerName,
 		Models: []api.Model{Fable51, Opus55, Sonnet55, Haiku55, Sonnet5, Haiku45},
-		New: func(base string, m api.Model, p conform.Params) api.Provider {
+		New: func(base string, m api.Model, p conform.Params) (api.Provider, error) {
 			key := p.Key
 			if key == "" {
 				key = "test-key"
@@ -104,24 +102,16 @@ func conformAdapter() conform.Adapter {
 			default:
 				opts = append(opts, WithEffort(Effort(p.Effort)))
 			}
-			if p.Temperature != 0 {
-				opts = append(opts, WithTemperature(p.Temperature))
-			}
-			if p.TopP != 0 {
-				opts = append(opts, WithTopP(p.TopP))
-			}
 			if p.MaxTokens != 0 {
 				opts = append(opts, WithMaxTokens(p.MaxTokens))
 			}
 			return New(Conf{Model: m}, opts...)
 		},
 		Wire: map[string]string{
-			"effort":      "/output_config/effort",
-			"off":         "/thinking/type",
-			"choice":      "/tool_choice",
-			"temperature": "/temperature",
-			"top_p":       "/top_p",
-			"max_tokens":  "/max_tokens",
+			"effort":     "/output_config/effort",
+			"off":        "/thinking/type",
+			"choice":     "/tool_choice",
+			"max_tokens": "/max_tokens",
 		},
 		Spec: conform.Spec{
 			File:    "anthropic.json.gz",
@@ -131,11 +121,10 @@ func conformAdapter() conform.Adapter {
 			Error:   "/components/schemas/ErrorResponse",
 			Version: "anthropic-version",
 		},
-		Render:     renderClaude,
-		Errors:     claudeErrors(),
-		Rules:      rules,
-		BindsModel: true,
-		Signed:     true,
+		Render: renderClaude,
+		Errors: claudeErrors(),
+		Rules:  rules,
+		Signed: true,
 		Live: conform.Live{
 			Env:    "ANTHROPIC_API_KEY",
 			Model:  Haiku45,

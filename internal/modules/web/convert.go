@@ -12,9 +12,10 @@ import (
 )
 
 var pruneTag = map[string]bool{
-	"script": true, "style": true, "noscript": true, "iframe": true,
-	"object": true, "embed": true, "svg": true, "meta": true, "link": true,
-	"form": true,
+	"script": true, "style": true, "noscript": true, "template": true,
+	"meta": true, "link": true, "iframe": true, "object": true,
+	"embed": true, "svg": true, "input": true, "textarea": true,
+	"select": true, "button": true, "datalist": true,
 }
 
 var boilerTag = map[string]bool{
@@ -23,18 +24,19 @@ var boilerTag = map[string]bool{
 
 var blockTag = map[string]bool{
 	"address": true, "article": true, "aside": true, "blockquote": true,
-	"body": true, "details": true, "div": true, "dd": true, "dl": true,
-	"dt": true, "fieldset": true, "figcaption": true, "figure": true,
-	"footer": true, "h1": true, "h2": true, "h3": true, "h4": true,
-	"h5": true, "h6": true, "header": true, "hr": true, "li": true,
-	"main": true, "nav": true, "ol": true, "p": true, "pre": true,
-	"section": true, "summary": true, "table": true, "tbody": true,
-	"td": true, "tfoot": true, "th": true, "thead": true, "tr": true,
-	"ul": true,
+	"body": true, "caption": true, "center": true, "details": true,
+	"div": true, "dd": true, "dl": true, "dt": true, "fieldset": true,
+	"figcaption": true, "figure": true, "footer": true, "form": true,
+	"h1": true, "h2": true, "h3": true, "h4": true, "h5": true, "h6": true,
+	"header": true, "hgroup": true, "hr": true, "legend": true, "li": true,
+	"main": true, "menu": true, "nav": true, "ol": true, "p": true,
+	"pre": true, "search": true, "section": true, "summary": true,
+	"table": true, "tbody": true, "td": true, "tfoot": true, "th": true,
+	"thead": true, "tr": true, "ul": true,
 }
 
 func docTitle(n *html.Node) string {
-	if n.Type == html.ElementNode && n.Data == "title" {
+	if n.Type == html.ElementNode && n.Data == "title" && n.Namespace == "" {
 		var b strings.Builder
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
 			if c.Type == html.TextNode {
@@ -51,18 +53,18 @@ func docTitle(n *html.Node) string {
 	return ""
 }
 
-func prune(n *html.Node, full bool) {
+func prune(n *html.Node, boiler bool) {
 	child := n.FirstChild
 	for child != nil {
 		next := child.NextSibling
 		drop := child.Type == html.CommentNode
 		if child.Type == html.ElementNode {
-			drop = pruneTag[child.Data] || (!full && boilerTag[child.Data])
+			drop = pruneTag[child.Data] || (boiler && boilerTag[child.Data])
 		}
 		if drop {
 			n.RemoveChild(child)
 		} else {
-			prune(child, full)
+			prune(child, boiler)
 		}
 		child = next
 	}
@@ -71,16 +73,21 @@ func prune(n *html.Node, full bool) {
 func readable(doc *html.Node, page *url.URL) *html.Node {
 	article, err := readability.FromDocument(doc, page)
 	if err != nil || article.Node == nil {
+		prune(doc, true)
 		return doc
 	}
 	return article.Node
 }
 
-func plain(n *html.Node, b *bytes.Buffer, full bool) {
+func plain(n *html.Node, b *bytes.Buffer, pre bool) {
 	switch n.Type {
 	case html.CommentNode, html.DoctypeNode:
 		return
 	case html.TextNode:
+		if pre {
+			b.WriteString(n.Data)
+			return
+		}
 		words := strings.Fields(n.Data)
 		lead, _ := utf8.DecodeRuneInString(n.Data)
 		if n.Data != "" && (len(words) == 0 || unicode.IsSpace(lead)) && b.Len() > 0 {
@@ -95,7 +102,7 @@ func plain(n *html.Node, b *bytes.Buffer, full bool) {
 		return
 	}
 	if n.Type == html.ElementNode {
-		if pruneTag[n.Data] || (!full && boilerTag[n.Data]) || n.Data == "head" {
+		if n.Data == "head" {
 			return
 		}
 		if n.Data == "br" {
@@ -107,8 +114,9 @@ func plain(n *html.Node, b *bytes.Buffer, full bool) {
 	if block {
 		newline(b)
 	}
+	pre = pre || (n.Type == html.ElementNode && n.Data == "pre")
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		plain(c, b, full)
+		plain(c, b, pre)
 	}
 	if block {
 		newline(b)

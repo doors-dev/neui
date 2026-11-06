@@ -27,7 +27,7 @@ func conformAdapter() conform.Adapter {
 	return conform.Adapter{
 		Name:   Name,
 		Models: []api.Model{Flash, V4Pro},
-		New: func(base string, m api.Model, p conform.Params) api.Provider {
+		New: func(base string, m api.Model, p conform.Params) (api.Provider, error) {
 			key := p.Key
 			if key == "" {
 				key = "test-key"
@@ -36,9 +36,9 @@ func conformAdapter() conform.Adapter {
 			switch p.Effort {
 			case "":
 			case conform.EffortOff:
-				opts = append(opts, WithThinking(false))
+				opts = append(opts, WithEffort(EffortNone))
 			default:
-				opts = append(opts, WithReasoningEffort(Effort(p.Effort)))
+				opts = append(opts, WithEffort(Effort(p.Effort)))
 			}
 			if p.Temperature != 0 {
 				opts = append(opts, WithTemperature(p.Temperature))
@@ -67,19 +67,25 @@ func conformAdapter() conform.Adapter {
 			Private:      []string{"/thinking", "/user_id", "/messages/*/reasoning_content"},
 			EventPrivate: []string{"/choices/*/delta/reasoning_content", "/choices/*/finish_reason", "/usage/prompt_cache_hit_tokens", "/usage/prompt_cache_miss_tokens"},
 			LooseOneOf:   true,
+			Accept: []conform.Accept{{
+				At:     "/components/schemas/ChatCompletionRequestToolMessageContentPart",
+				Also:   map[string]any{"$ref": "#/components/schemas/ChatCompletionRequestMessageContentPartImage"},
+				Source: "https://api-docs.deepseek.com/guides/vision refuses an image only in system and assistant messages, and Flash takes image_url parts in tool messages as in user ones; the spec is OpenAI's, which allows text alone there",
+			}},
 		},
 		Render:   renderDeepSeek,
 		Errors:   deepseekErrors(),
 		Unframed: true,
+		Sampling: true,
 		Rules: []conform.Rule{
 			{When: func(p conform.Params) bool { return p.Thinking() && p.Forced() }, Want: conform.RefuseLocal, Source: docCreate},
 			{When: thinking, Carry: map[string]any{"/thinking": map[string]any{"type": "enabled"}}, Source: docThinking},
 			{When: off, Carry: map[string]any{"/thinking": map[string]any{"type": "disabled"}}, Omit: []string{"/reasoning_effort"}, Source: docThinking},
 			{Omit: []string{"/thinking/reasoning_effort"}, Source: docCreate},
-			{When: func(p conform.Params) bool { return p.Thinking() && p.Temperature != 0 }, Omit: []string{"/temperature"}, Source: docThinking},
-			{Model: "flash", When: func(p conform.Params) bool { return !p.Thinking() && p.TopP != 0 }, Omit: []string{"/top_p"}, Source: docCreate},
-			{Model: "v4-pro", When: func(p conform.Params) bool { return p.Thinking() && p.TopP != 0 }, Omit: []string{"/top_p"}, Source: docCreate},
-			{When: func(p conform.Params) bool { return p.MaxTokens > maxOutputTokens }, Omit: []string{"/max_tokens"}, Source: docCreate},
+			{When: func(p conform.Params) bool { return p.Thinking() && p.Temperature != 0 }, Want: conform.RefuseNew, Source: docThinking},
+			{Model: "flash", When: func(p conform.Params) bool { return !p.Thinking() && p.TopP != 0 }, Want: conform.RefuseNew, Source: docCreate},
+			{Model: "v4-pro", When: func(p conform.Params) bool { return p.Thinking() && p.TopP != 0 }, Want: conform.RefuseNew, Source: docCreate},
+			{When: func(p conform.Params) bool { return p.MaxTokens > maxOutputTokens }, Want: conform.RefuseNew, Source: docCreate},
 			{When: func(p conform.Params) bool { return p.Choice == api.ToolChoiceAny }, Carry: map[string]any{"/tool_choice": "required"}, Source: docCreate},
 			{When: func(p conform.Params) bool { return p.Choice == conform.ChoiceNamed }, Carry: map[string]any{"/tool_choice": map[string]any{"type": "function", "function": map[string]any{"name": "lookup"}}}, Source: docCreate},
 			{Carry: map[string]any{"/stream_options": map[string]any{"include_usage": true}}, Source: docCreate},

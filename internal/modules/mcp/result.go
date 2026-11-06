@@ -1,10 +1,12 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"slices"
 	"strings"
 
@@ -31,8 +33,10 @@ func result(ctx context.Context, res *mcp.CallToolResult, structured bool) any {
 		return res.StructuredContent
 	}
 	var model api.Model
+	documentLimit, found := 0, false
 	if thread, ok := ctx.Value(common.KeyController).(common.Controller); ok {
 		model = thread.Model()
+		documentLimit, found = thread.FilesConfig().DocumentLimit, true
 	}
 	out := make(blocks, 0, len(res.Content))
 	for _, c := range res.Content {
@@ -40,10 +44,12 @@ func result(ctx context.Context, res *mcp.CallToolResult, structured bool) any {
 		case *mcp.TextContent:
 			out = append(out, api.ContentText{Text: c.Text})
 		case *mcp.ImageContent:
-			if mimeType := api.ImageMime(c.MIMEType); mimeType.IsValid() {
-				if shaped, err := media.Shape(c.Data, mimeType, model); err == nil {
-					out = append(out, api.ContentImage{Data: shaped.Data, Mime: string(shaped.Mime)})
-					continue
+			if mimeType := api.ImageMime(http.DetectContentType(c.Data)); mimeType.IsValid() {
+				if mimeType != api.ImageGIF || media.StillGIF(c.Data) == nil {
+					if shaped, err := media.Shape(c.Data, mimeType, model); err == nil {
+						out = append(out, api.ContentImage{Data: shaped.Data, Mime: string(shaped.Mime)})
+						continue
+					}
 				}
 			}
 			out = append(out, api.ContentText{Text: fmt.Sprintf("<omitted type=\"image\" mime=%q size=%d/>", c.MIMEType, len(c.Data))})
@@ -72,7 +78,9 @@ func result(ctx context.Context, res *mcp.CallToolResult, structured bool) any {
 			}
 			if c.Resource.Text != "" {
 				out = append(out, api.ContentText{Text: fmt.Sprintf("<resource uri=%q mime=%q>\n%s\n</resource>", c.Resource.URI, c.Resource.MIMEType, c.Resource.Text)})
-			} else if api.DocumentMime(c.Resource.MIMEType).IsValid() {
+			} else if mimeType := api.DocumentMime(c.Resource.MIMEType); mimeType.IsValid() && found && (documentLimit < 0 || len(c.Resource.Blob) <= documentLimit) &&
+				(mimeType != api.DocumentPDF || bytes.HasPrefix(c.Resource.Blob, []byte("%PDF-"))) &&
+				(mimeType != api.DocumentDOCX && mimeType != api.DocumentXLSX && mimeType != api.DocumentPPTX || bytes.HasPrefix(c.Resource.Blob, []byte("PK"))) {
 				out = append(out, api.ContentDocument{Data: c.Resource.Blob, Mime: c.Resource.MIMEType, Name: c.Resource.URI})
 			} else {
 				out = append(out, api.ContentText{Text: fmt.Sprintf("<resource uri=%q mime=%q size=%d omitted/>", c.Resource.URI, c.Resource.MIMEType, len(c.Resource.Blob))})

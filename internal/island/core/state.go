@@ -21,6 +21,9 @@ import (
 
 type Run interface {
 	Context() context.Context
+	TurnContext() context.Context
+	PauseTurn()
+	ResumeTurn()
 	PageContext() context.Context
 	Library() Library
 	Notify(script uint, data json.RawMessage, idle bool)
@@ -97,8 +100,6 @@ type state struct {
 	stash              *submit
 	handover           bool
 	root               slot
-	ch                 chan string
-	task               common.Task
 	seeded             bool
 	applied            chan struct{}
 }
@@ -164,7 +165,7 @@ func (s *state) RegisterTools(vm *quickjs.VM) error {
 	if err != nil {
 		panic(err)
 	}
-	err = js.RegisterTools(vm, s.run.Context, "__", m.List())
+	err = js.RegisterTools(vm, s.run.TurnContext, "__", m.List())
 	return err
 }
 
@@ -176,7 +177,7 @@ func (s *state) toolRelease(ctx context.Context, id uint) (struct{}, error) {
 	delete(s.widgets, id)
 	w.released = true
 	if w.holders == 0 {
-		s.dropWidget(w)
+		s.dropWidget()
 	}
 	return struct{}{}, nil
 }
@@ -246,7 +247,7 @@ func (s *state) toolReleaseSlot(ctx context.Context, id uint) (struct{}, error) 
 	return struct{}{}, nil
 }
 
-func (s *state) dropWidget(w *placedWidget) {
+func (s *state) dropWidget() {
 	s.items--
 }
 
@@ -261,7 +262,7 @@ func (r *state) dropSlot(s *slot) {
 	for _, w := range s.widgets {
 		w.holders--
 		if w.holders == 0 && w.released {
-			r.dropWidget(w)
+			r.dropWidget()
 		}
 	}
 }
@@ -327,15 +328,18 @@ func (s *state) toolNotify(ctx context.Context, data json.RawMessage) (struct{},
 
 func (s *state) toolDraw(ctx context.Context, ms int) (*Result, error) {
 	if s.applied != nil {
+		s.run.PauseTurn()
 		select {
-		case <-s.run.Context().Done():
+		case <-ctx.Done():
 			return &Result{Interrupt: true}, nil
 		case <-s.applied:
 		}
+		s.run.ResumeTurn()
 	}
 	if err := s.run.GC(); err != nil {
 		return nil, err
 	}
+	s.run.PauseTurn()
 	s.mu.Lock()
 	handover := s.handover
 	s.handover = false
@@ -356,12 +360,18 @@ func (s *state) toolDraw(ctx context.Context, ms int) (*Result, error) {
 		timeout = time.After(time.Duration(ms) * time.Millisecond)
 	}
 	select {
-	case <-s.run.Context().Done():
+	case <-ctx.Done():
+		s.mu.Lock()
+		s.hook = nil
+		s.mu.Unlock()
 		return &Result{Interrupt: true}, nil
 	case <-timeout:
 	case <-ch:
 	}
 	if err := s.run.Rearm(); err != nil {
+		s.mu.Lock()
+		s.hook = nil
+		s.mu.Unlock()
 		return nil, err
 	}
 	return s.collect()
@@ -588,7 +598,7 @@ func (s *state) updateSlot(id uint, content []content) (func(ctx context.Context
 	for _, w := range target.widgets {
 		w.holders--
 		if w.holders == 0 && w.released {
-			s.dropWidget(w)
+			s.dropWidget()
 		}
 	}
 	target.children = children

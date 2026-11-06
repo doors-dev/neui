@@ -21,9 +21,6 @@ var markdown = goldmark.New(
 	),
 )
 
-// fileLinkRenderer replaces the default link and image renderers to let
-// file:/// destinations through goldmark's dangerous-URL filter; everything
-// the filter rejects otherwise (javascript:, data:, vbscript:) stays stripped.
 type fileLinkRenderer struct{}
 
 func (fileLinkRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
@@ -56,16 +53,42 @@ func renderLink(w util.BufWriter, source []byte, node ast.Node, entering bool) (
 	return ast.WalkContinue, nil
 }
 
+func isInlineImage(dest []byte) bool {
+	if isFileURL(dest) {
+		return true
+	}
+	return len(dest) >= 11 && bytes.EqualFold(dest[:11], []byte("data:image/")) && !gmhtml.IsDangerousURL(dest)
+}
+
 func renderImage(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	n := node.(*ast.Image)
+	dest := util.URLEscape(n.Destination, true)
+	if !isInlineImage(dest) {
+		if !entering {
+			w.WriteString("</a>")
+			return ast.WalkContinue, nil
+		}
+		w.WriteString(`<a href="`)
+		if !gmhtml.IsDangerousURL(dest) {
+			w.Write(util.EscapeHTML(dest))
+		}
+		w.WriteByte('"')
+		if n.Title != nil {
+			w.WriteString(` title="`)
+			w.Write(util.EscapeHTML(n.Title))
+			w.WriteByte('"')
+		}
+		w.WriteByte('>')
+		if n.FirstChild() == nil {
+			w.Write(util.EscapeHTML(n.Destination))
+		}
+		return ast.WalkContinue, nil
+	}
 	if !entering {
 		return ast.WalkSkipChildren, nil
 	}
-	n := node.(*ast.Image)
 	w.WriteString(`<img src="`)
-	dest := util.URLEscape(n.Destination, true)
-	if isFileURL(dest) || !gmhtml.IsDangerousURL(dest) {
-		w.Write(util.EscapeHTML(dest))
-	}
+	w.Write(util.EscapeHTML(dest))
 	w.WriteString(`" alt="`)
 	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
 		if t, ok := c.(*ast.Text); ok {

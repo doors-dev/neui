@@ -17,13 +17,12 @@ func (s *indentedState) updateOffset(offset int) {
 func (s *indentedState) paragraphOpen() bool { return false }
 
 func (s indentedState) line(ctrl ctrl) {
-	// blank lines belong to indented code
 	if isBlank(ctrl.line()) {
 		ctrl.write(false)
 		return
 	}
 	column := ctrl.contentColumn(s.offset)
-	if column < 4 { // the block ends, the line is handed back
+	if column < 4 {
 		ctrl.flush()
 		ctrl.update(initalState{})
 		ctrl.dispatch()
@@ -57,18 +56,16 @@ func (s *fencedState) updateOffset(offset int) {
 func (s *fencedState) paragraphOpen() bool { return false }
 
 func (s *fencedState) line(ctrl ctrl) {
-	// every line belongs to the block, closing fence included; unclosed, it runs to the end of its container
 	ctrl.write(false)
 	if isBlank(ctrl.line()) {
 		return
 	}
 	column := ctrl.contentColumn(s.offset)
-	if column >= 4 { // a closing fence may be indented at most 3 spaces
+	if column >= 4 {
 		return
 	}
 	content := ctrl.tail(s.offset, column)
 	content = strings.TrimRight(content, " \t")
-	// a closing fence: the opener's char at least as many times, nothing else
 	if len(strings.Trim(content, s.char)) != 0 || len(content) < s.count {
 		return
 	}
@@ -102,7 +99,6 @@ func (s *tableState) line(ctrl ctrl) {
 	column := ctrl.contentColumn(s.offset)
 	content := ctrl.tail(s.offset, column)
 	_, fence := isFence(content)
-	// the table ends at a blank line or the start of any other block
 	if column >= 4 || isATXHeading(content) || fence || isThematicBreak(content) || isQuote(content) || isList(content) || htmlBlockStart(content) != 0 {
 		ctrl.flush()
 		ctrl.update(initalState{})
@@ -131,7 +127,6 @@ func (s *htmlState) paragraphOpen() bool {
 
 func (s *htmlState) line(ctrl ctrl) {
 	if s.kind >= 6 {
-		// kinds 6 and 7 run until a blank line, which is handed back
 		if isBlank(ctrl.line()) {
 			ctrl.flush()
 			ctrl.update(initalState{})
@@ -141,7 +136,7 @@ func (s *htmlState) line(ctrl ctrl) {
 		ctrl.write(false)
 		return
 	}
-	ctrl.write(false) // kinds 1-5 run through blank lines and end on the line with the end marker
+	ctrl.write(false)
 	column := ctrl.contentColumn(s.offset)
 	if htmlBlockEnd(s.kind, ctrl.tail(s.offset, column)) {
 		ctrl.flush()
@@ -152,18 +147,18 @@ func (s *htmlState) line(ctrl ctrl) {
 type referenceStatus int
 
 const (
-	referenceContinue referenceStatus = iota // line consumed, definition still open
-	referenceDone                            // line consumed, definition complete
-	referenceEnded                           // line not consumed, definition was complete before it
-	referenceInvalid                         // line not consumed, lines so far are paragraph text
+	referenceContinue referenceStatus = iota
+	referenceDone
+	referenceEnded
+	referenceInvalid
 )
 
 type referenceStage int
 
 const (
-	referenceDestinationStage referenceStage = iota // waiting for the destination
-	referenceTitleStage                             // destination seen, a title may follow
-	referenceInTitleStage                           // inside a multi-line title
+	referenceDestinationStage referenceStage = iota
+	referenceTitleStage
+	referenceInTitleStage
 )
 
 type referenceState struct {
@@ -184,24 +179,22 @@ func (s *referenceState) paragraphOpen() bool {
 	return false
 }
 
-// consume feeds the text after the container prefix (and, for the first line,
-// after the label colon).
 func (s *referenceState) consume(text string) referenceStatus {
 	switch s.stage {
 	case referenceDestinationStage:
 		rest, ok := referenceDestination(text)
 		if !ok {
 			if isBlank(text) {
-				return referenceContinue // destination may be on the next line
+				return referenceContinue
 			}
 			return referenceInvalid
 		}
-		if isBlank(rest) { // the destination alone is a definition, a title may still follow on the next line
+		if isBlank(rest) {
 			s.stage = referenceTitleStage
 			return referenceContinue
 		}
 		if rest[0] != ' ' && rest[0] != '\t' {
-			return referenceInvalid // title must be separated from the destination
+			return referenceInvalid
 		}
 		closing, rest, ok := referenceTitleStart(rest)
 		if !ok {
@@ -216,7 +209,7 @@ func (s *referenceState) consume(text string) referenceStatus {
 		if isBlank(rest) {
 			return referenceDone
 		}
-		return referenceInvalid // trailing text after the title: the lines are paragraph text
+		return referenceInvalid
 	case referenceTitleStage:
 		closing, rest, ok := referenceTitleStart(text)
 		if !ok {
@@ -231,7 +224,7 @@ func (s *referenceState) consume(text string) referenceStatus {
 		if isBlank(rest) {
 			return referenceDone
 		}
-		return referenceEnded // trailing text after the title: the definition stands without it, the line is handed back
+		return referenceEnded
 	}
 	rest, ok := referenceTitleEnd(text, s.closing)
 	if !ok {
@@ -244,7 +237,6 @@ func (s *referenceState) consume(text string) referenceStatus {
 }
 
 func (s *referenceState) line(ctrl ctrl) {
-	// a definition can't span a blank line
 	if isBlank(ctrl.line()) {
 		ctrl.flush()
 		ctrl.update(initalState{})
@@ -263,7 +255,7 @@ func (s *referenceState) line(ctrl ctrl) {
 		ctrl.flush()
 		ctrl.update(initalState{})
 		ctrl.dispatch()
-	case referenceInvalid: // no flush: the lines so far and this one are one paragraph
+	case referenceInvalid:
 		ctrl.update(initalState{})
 		ctrl.dispatch()
 	}

@@ -13,7 +13,6 @@ import (
 
 	"neui.dev/api"
 	"neui.dev/internal/testkit/conform"
-	"neui.dev/provider/lib"
 )
 
 // DeepSeek publishes no raw SSE transcript anywhere, only SDK snippets, so
@@ -64,7 +63,16 @@ func serveModel(t *testing.T, model string, h http.HandlerFunc, opts ...Option) 
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
 	base := []Option{WithAPIKey("test-key"), WithBaseURL(srv.URL), WithHTTPClient(srv.Client())}
-	return New(Conf{Model: api.Model{Name: model}}, append(base, opts...)...)
+	return mustNew(t, Conf{Model: api.Model{Name: model}}, append(base, opts...)...)
+}
+
+func mustNew(t *testing.T, conf Conf, opts ...Option) *Provider {
+	t.Helper()
+	p, err := New(conf, opts...)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	return p
 }
 
 // stringHandler writes the frames in order, flushing each so the client sees
@@ -227,11 +235,11 @@ func wantTrace(t *testing.T, events []api.Event, want ...string) {
 // a listed model carries its window, a caller's own literal reads back as
 // written, and an unstated window reads as unknown rather than as no window.
 func TestModel(t *testing.T) {
-	if got := New(Conf{Model: V4Pro}).Model(); got != V4Pro || got.Context == 0 {
+	if got := mustNew(t, Conf{Model: V4Pro}, WithAPIKey("k")).Model(); got != V4Pro || got.Context == 0 {
 		t.Fatalf("Model %+v, want %+v", got, V4Pro)
 	}
 	own := api.Model{Name: "deepseek-v4-pro"}
-	if got := New(Conf{Model: own}).Model(); got != own {
+	if got := mustNew(t, Conf{Model: own}, WithAPIKey("k")).Model(); got != own {
 		t.Fatalf("Model %+v, want the caller's literal with an unknown window", got)
 	}
 }
@@ -239,7 +247,7 @@ func TestModel(t *testing.T) {
 func TestProviderRefusesBytesMeasuredAsFitting(t *testing.T) {
 	const declared = 1 << 20
 	var sent int
-	p := New(
+	p := mustNew(t,
 		Conf{Model: api.Model{Name: "deepseek-v4-pro", RequestBytes: declared}},
 		WithAPIKey("test-key"),
 		WithBaseURL(serverURL(t, func(w http.ResponseWriter, r *http.Request) {
@@ -309,32 +317,31 @@ func TestUnmeasuredRequestTooLargeIsNotMarked(t *testing.T) {
 	}
 }
 
-// An over-length conversation is a 400 here with nothing machine-readable in it,
-// so the message is the only discriminator there is, and leaving it unread costs
-// the compaction the harness exists to run: the body below is the one the owner
-// was answered with, and it was classified CodeInvalid and compacted nothing.
-//
-// The rows that must stay CodeInvalid are the point of the matcher's shape. Both
-// halves of DeepSeek's sentence are required, so a refusal that merely says the
-// word context, or merely says what was requested, is not mistaken for one.
-func TestContextOverflowIsTheOne400ThatSaysSo(t *testing.T) {
-	const overflow = "This model's maximum context length is 1048576 tokens. However, you requested " +
-		"1210970 tokens (1210970 in the messages, 0 in the completion). Please reduce the length of the messages or completion."
+func TestContextOverflow(t *testing.T) {
+	const overflow = "This model's maximum context length is 131072 tokens. However, you requested 131329 tokens " +
+		"(123137 in the messages, 8192 in the completion). Please reduce the length of the messages or completion."
 	tests := []struct {
-		name string
-		body string
-		want api.ErrCode
+		name   string
+		status int
+		body   string
+		want   api.ErrCode
 	}{
-		{"the overflow, as the server wrote it", `{"error":{"message":"` + overflow + `","type":"invalid_request_error","code":"invalid_request_error"}}`, api.CodeContextLength},
-		{"the same sentence in a body that is not json", overflow, api.CodeContextLength},
-		{"an ordinary bad request", `{"error":{"message":"Invalid request body format.","type":"invalid_request_error","code":"invalid_request_error"}}`, api.CodeInvalid},
-		{"a refusal that only names the context", `{"error":{"message":"Context caching is not supported for this model.","type":"invalid_request_error"}}`, api.CodeInvalid},
-		{"a refusal that only says what was requested", `{"error":{"message":"You requested a tool that does not exist.","type":"invalid_request_error"}}`, api.CodeInvalid},
+		{"the overflow, as the server wrote it", 400, `{"error":{"message":"` + overflow + `","type":"invalid_request_error","param":null,"code":"invalid_request_error"}}`, api.CodeContextLength},
+		{"the same sentence in upper case", 400, `{"error":{"message":"` + strings.ToUpper(overflow) + `","type":"invalid_request_error"}}`, api.CodeContextLength},
+		{"the same sentence in a body that is not json", 400, overflow, api.CodeContextLength},
+		{"without the requested clause", 400, `{"error":{"message":"Input exceeds the maximum context length of this model."}}`, api.CodeContextLength},
+		{"a context_length_exceeded code", 400, `{"error":{"message":"too long","code":"context_length_exceeded"}}`, api.CodeContextLength},
+		{"a context_length_exceeded type", 400, `{"error":{"message":"too long","type":"context_length_exceeded"}}`, api.CodeContextLength},
+		{"on a 413", 413, `{"error":{"message":"` + overflow + `"}}`, api.CodeContextLength},
+		{"on a 422", 422, `{"error":{"message":"` + overflow + `"}}`, api.CodeContextLength},
+		{"not on a 404", 404, `{"error":{"message":"` + overflow + `"}}`, api.CodeInvalid},
+		{"an ordinary bad request", 400, `{"error":{"message":"Invalid request body format.","type":"invalid_request_error","code":"invalid_request_error"}}`, api.CodeInvalid},
+		{"a refusal that only names the context", 400, `{"error":{"message":"Context caching is not supported for this model.","type":"invalid_request_error"}}`, api.CodeInvalid},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			p := serve(t, func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(http.StatusBadRequest)
+				w.WriteHeader(tc.status)
 				io.WriteString(w, tc.body)
 			})
 			events := collect(t, p, turn("hi"))
@@ -344,24 +351,18 @@ func TestContextOverflowIsTheOne400ThatSaysSo(t *testing.T) {
 	}
 }
 
-// A turn whose finish reason arrived and whose socket then died is a turn that
-// finished. [DONE] is what this adapter ends a turn on, so Convert never saw the
-// ending and End has to deliver it: swallowing the EOF discards a complete reply
-// and reads to the caller as a reply that was cut off, which is a retry of a
-// turn that already succeeded and was already paid for.
-//
-// A reason that ends the turn in failure travels the same way. Reporting nothing
-// there turns a capped or filtered turn into silence, which the caller reads as
-// cut off and retries unchanged.
-func TestStreamDisconnectCarriesTheFinishReason(t *testing.T) {
+// A turn whose finish reason arrived and whose socket then died before [DONE]
+// lost its usage frame and its sentinel. Only a reply that arrived whole is
+// kept, so it fails as a network failure whatever the reason said.
+func TestStreamDisconnectAfterTheFinishReasonFails(t *testing.T) {
 	for _, tc := range []struct {
 		finish string
 		want   string
 	}{
-		{"stop", "ok turn"},
-		{"tool_calls", "ok turn"},
-		{"length", "err capped"},
-		{"content_filter", "err refused"},
+		{"stop", "err network"},
+		{"tool_calls", "err network"},
+		{"length", "err network"},
+		{"content_filter", "err network"},
 	} {
 		t.Run(tc.finish, func(t *testing.T) {
 			p := serve(t, func(w http.ResponseWriter, r *http.Request) {
@@ -384,33 +385,88 @@ func TestStreamDisconnectCarriesTheFinishReason(t *testing.T) {
 	}
 }
 
-// The declared model values and the encoder have to agree, because nothing
-// downstream can see the disagreement: the image caps drive shaping and the
-// replay budget, and an adapter that drops every image while declaring them is
-// a harness spending work and tokens shaping attachments that never go out.
-func TestModelDeclarationsMatchTheWire(t *testing.T) {
+func TestModelDeclarations(t *testing.T) {
 	for _, m := range []api.Model{Flash, V4Pro} {
-		if m.Context != 1_048_576 {
-			t.Errorf("%s declares a %d token window; the server's own overflow names 1048576", m.Name, m.Context)
-		}
-		if m.ImagePixels != 0 || m.ImageBytes != 0 || m.ImagesPerRequest != 0 {
-			t.Errorf("%s declares image capacity (%d px, %d bytes, %d per request) that encode.go has no path for",
-				m.Name, m.ImagePixels, m.ImageBytes, m.ImagesPerRequest)
+		if m.Context != 1_048_576 || m.RequestBytes != 48*1024*1024 {
+			t.Errorf("%s declares context %d and request bytes %d", m.Name, m.Context, m.RequestBytes)
 		}
 	}
-	p := New(Conf{Model: Flash}, WithAPIKey("k"))
-	body, err := p.encode(api.Request{Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{
-		api.ContentImage{Data: []byte("\x89PNG"), Mime: "image/png"},
-	}}}})
-	if err != nil {
-		t.Fatalf("encode: %v", err)
+	if Flash.ImagePixels != 1300*1300 || Flash.ImageSide != 8192 || Flash.ImageBytes != 24*1024*1024 || Flash.ImagesPerRequest != 600 {
+		t.Errorf("Flash image fields %+v", Flash)
 	}
-	raw, err := lib.MarshalRaw(body)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
+	if V4Pro.ImagePixels != 0 || V4Pro.ImageSide != 0 || V4Pro.ImageBytes != 0 || V4Pro.ImagesPerRequest != 0 {
+		t.Errorf("V4Pro declares image capacity it has no path for: %+v", V4Pro)
 	}
-	if !strings.Contains(string(raw), "[image omitted]") {
-		t.Fatalf("an image went out as something other than a note: %s", raw)
+}
+
+func TestFamily(t *testing.T) {
+	for name, want := range map[string]family{
+		"deepseek-flash":               familyFlash,
+		"deepseek-v4-flash":            familyFlash,
+		"deepseek-v4-flash-vision-exp": familyFlash,
+		"deepseek-v4-pro":              familyPro,
+		"my-flash-proxy":               familyUnknown,
+	} {
+		if got := mustNew(t, Conf{Model: api.Model{Name: name}}, WithAPIKey("k")).family; got != want {
+			t.Errorf("%s: family %d, want %d", name, got, want)
+		}
+	}
+}
+
+func TestNewRefuses(t *testing.T) {
+	flash := Conf{Model: Flash}
+	pro := Conf{Model: V4Pro}
+	key := WithAPIKey("k")
+	tests := []struct {
+		name string
+		conf Conf
+		opts []Option
+		want string
+	}{
+		{"no model", Conf{}, []Option{key}, "no model"},
+		{"no key", pro, []Option{WithAPIKey("")}, "no API key"},
+		{"unknown effort", pro, []Option{key, WithEffort("medium")}, `effort "medium"`},
+		{"temperature with thinking on by default", pro, []Option{key, WithTemperature(0.2)}, "EffortNone"},
+		{"temperature with an effort", flash, []Option{key, WithEffort(EffortHigh), WithTemperature(0.2)}, "EffortNone"},
+		{"temperature below range", pro, []Option{key, WithEffort(EffortNone), WithTemperature(-0.1)}, "range"},
+		{"temperature above range", pro, []Option{key, WithEffort(EffortNone), WithTemperature(2.1)}, "range"},
+		{"top_p on pro with thinking on", pro, []Option{key, WithTopP(0.9)}, "ignores top_p"},
+		{"top_p on pro with an effort", pro, []Option{key, WithEffort(EffortLow), WithTopP(0.9)}, "ignores top_p"},
+		{"top_p on flash with thinking off", flash, []Option{key, WithEffort(EffortNone), WithTopP(0.97)}, "fixes top_p"},
+		{"top_p of zero", flash, []Option{key, WithTopP(0)}, "range"},
+		{"top_p above one", flash, []Option{key, WithTopP(1.1)}, "range"},
+		{"negative max tokens", pro, []Option{key, WithMaxTokens(-1)}, "negative"},
+		{"max tokens over the ceiling", pro, []Option{key, WithMaxTokens(maxOutputTokens + 1)}, "ceiling"},
+		{"a user id over the limit", pro, []Option{key, WithUserID(strings.Repeat("a", maxUserIDBytes+1))}, "512"},
+		{"an empty base URL", pro, []Option{key, WithBaseURL("")}, "base URL"},
+		{"a nil client", pro, []Option{key, WithHTTPClient(nil)}, "client"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p, err := New(tc.conf, tc.opts...)
+			if err == nil || p != nil {
+				t.Fatalf("New returned %v, %v; want an error", p, err)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error %q does not mention %q", err, tc.want)
+			}
+		})
+	}
+	for _, opts := range [][]Option{
+		{key, WithEffort(EffortNone), WithTemperature(0), WithTopP(1)},
+		{key, WithEffort(EffortNone), WithTemperature(2)},
+		{key, WithMaxTokens(0)},
+		{key, WithMaxTokens(maxOutputTokens)},
+		{key, WithUserID(strings.Repeat("a", maxUserIDBytes))},
+	} {
+		mustNew(t, pro, opts...)
+	}
+	mustNew(t, flash, key, WithTopP(0.97))
+	mustNew(t, flash, key, nil)
+	mustNew(t, flash, key, WithEffort(EffortMax), WithTopP(0.97))
+	own := mustNew(t, Conf{Model: api.Model{Name: "my-flash-proxy"}}, key, WithEffort("medium"), WithTemperature(0.2), WithTopP(0.9), WithMaxTokens(maxOutputTokens+1))
+	if own.effort != "medium" || own.temperature == nil || own.topP == nil || own.maxTokens != maxOutputTokens+1 {
+		t.Errorf("an unknown model lost an option: %+v", own)
 	}
 }
 
@@ -421,5 +477,16 @@ func TestNilHTTPClientIsRefused(t *testing.T) {
 	}
 	if p.client != http.DefaultClient {
 		t.Fatalf("a refused nil client replaced the one already set")
+	}
+}
+
+func TestUnparseableErrorBodyIsCut(t *testing.T) {
+	body := strings.Repeat("é", 2000)
+	e := apiError(502, nil, []byte(body))
+	if e.Body != body {
+		t.Fatal("the raw body was not kept")
+	}
+	if n := len([]rune(e.Error())); n > maxErrorMessage+100 {
+		t.Fatalf("Error has %d runes", n)
 	}
 }

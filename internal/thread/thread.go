@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/doors-dev/doors"
-	"log/slog"
 	"maps"
 	"sync"
 
@@ -18,6 +17,8 @@ import (
 )
 
 var registry sync.Map
+
+var ErrLinked = errors.New("thread: already linked to this page")
 
 func getThread(id api.ThreadID) *thread {
 	if entry, ok := registry.Load(id); ok {
@@ -42,7 +43,7 @@ repeat:
 	select {
 	case <-thread.close:
 		goto repeat
-	case thread.ch <- commandLink{backend, page, false, nil, response}:
+	case thread.ch <- commandLink{backend, page, false, nil, nil, response}:
 	}
 	link, err := response.Receive()
 	if err != nil {
@@ -51,14 +52,14 @@ repeat:
 	return link
 }
 
-func OpenLink(id api.ThreadID, backend *common.Backend, page page.Page, meta any) (Link, error) {
+func OpenLink(id api.ThreadID, backend *common.Backend, page page.Page, meta any, op Operation) (Link, error) {
 	response := NewResultResponse[Link]()
 repeat:
 	thread := getThread(id)
 	select {
 	case <-thread.close:
 		goto repeat
-	case thread.ch <- commandLink{backend, page, true, meta, response}:
+	case thread.ch <- commandLink{backend, page, true, meta, op, response}:
 	}
 	return response.Receive()
 }
@@ -139,15 +140,15 @@ func (t *thread) getState() api.ChatState {
 	s.Usage = t.replay.Usage()
 	s.Name = t.replay.Name()
 	s.Compaction = t.compaction.isActive()
+	s.CanCompact = t.canCompact()
 	t.state.dump(&s)
 	return s
 }
 
-func (t *thread) taskResult(id uint, output any, err error) error {
-	task, removeErr := t.link.taskRemove(id)
-	if removeErr != nil {
-		slog.Error("thread: stray task result", "id", id, "err", removeErr)
-		return nil
+func (t *thread) taskResult(id uint, output any, err error) (bool, error) {
+	task, ok := t.link.taskRemove(id)
+	if !ok {
+		return false, nil
 	}
 	attrs := maps.Clone(task.attrs)
 	if attrs == nil {
@@ -170,10 +171,10 @@ func (t *thread) taskResult(id uint, output any, err error) error {
 		attrs,
 		output,
 	); err != nil {
-		return err
+		return true, err
 	}
 	t.link.send(newMessageEvent(nil, api.ChatEventTasks{Tasks: t.link.taskList()}))
-	return nil
+	return true, nil
 }
 
 func (t *thread) taskNotify(task linkTask, data json.RawMessage, meta map[string]any) error {
@@ -344,7 +345,7 @@ func (t *thread) on(cmd any) {
 		if t.link == nil || t.link.linkTasks != cmd.linkTasks {
 			return
 		}
-		if err := t.taskResult(cmd.id, cmd.output, cmd.err); err != nil {
+		if _, err := t.taskResult(cmd.id, cmd.output, cmd.err); err != nil {
 			t.criticalErr(nil, err)
 			return
 		}
@@ -373,18 +374,12 @@ func (t *thread) on(cmd any) {
 			cmd.Err(api.ErrUnlinked)
 			return
 		}
-		model := t.link.backend.Provider().Model()
-		if model.Context != 0 && float32(t.replay.Usage().Total()) < t.link.backend.Config().CompactionAllowed*float32(model.Context) {
+		if !t.canCompact() {
 			cmd.Err(api.ErrWrongState)
 			return
 		}
-		started, err := t.compact()
-		if err != nil {
+		if _, err := t.compact(); err != nil {
 			cmd.Err(err)
-			return
-		}
-		if !started {
-			cmd.Err(api.ErrWrongState)
 			return
 		}
 		cmd.NoMessage()
@@ -406,16 +401,14 @@ func (t *thread) disconnect() {
 }
 
 func (t *thread) connect(backend *common.Backend, page page.Page, load bool, meta any) (Link, error) {
+	t.pending = false
 	t.compaction.stop()
 	if t.link != nil {
 		t.link.dispose()
 		t.link = nil
 		t.replay = nil
 	}
-	link, err := newLink(t, backend, page, meta)
-	if err != nil {
-		return Link{}, err
-	}
+	link := newLink(t, backend, page, meta)
 	replay := replay.NewReplay(backend.Context(), t.id, backend.Storage(), backend.Config(), backend.Provider().Model())
 	if load {
 		if err := replay.Load(); err != nil {
@@ -453,8 +446,10 @@ func (t *thread) switchStateRound() (api.Round, error) {
 	if err != nil {
 		return api.Round{}, err
 	}
-	if err := t.sweepDrafts(); err != nil {
-		doors.Logger(t.link.backend.Context()).Error("thread: draft sweep failed", "thread", t.id, "err", err)
+	if input.Len() != 0 {
+		if err := t.sweepDrafts(); err != nil {
+			doors.Logger(t.link.backend.Context()).Error("thread: draft sweep failed", "thread", t.id, "err", err)
+		}
 	}
 	t.switchStateRoundReplay(round, replay)
 	return round, nil
@@ -511,20 +506,19 @@ func (t *thread) applyCompaction(cmd commandApplyCompaction) bool {
 	if !ok {
 		return false
 	}
-	if code, isErr := cmd.resp.Err(); isErr {
-		t.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}}))
-		slog.Error("thread: compaction failed", "thread", t.id, "code", code)
-		return false
-	}
-	if code, _ := cmd.resp.Ok(); code != api.CodeTurn {
-		t.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}}))
-		slog.Error("thread: compaction skipped", "thread", t.id, "code", code)
+	if code, isErr := cmd.resp.Err(); isErr && code != api.CodeCapped {
+		t.replay.CompactionFailed()
+		t.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}, Final: false, CanCompact: t.canCompact()}))
+		switch code {
+		case api.CodeAccess, api.CodeBusy, api.CodeNetwork, api.CodeUnknown, api.CodeInvalid:
+			doors.Logger(t.link.backend.Context()).Error("thread: compaction failed", "thread", t.id, "code", code, "err", cmd.resp.Cause)
+		}
 		return false
 	}
 	err := t.replay.ApplyCompaction(compaction, cmd.resp.Content, cmd.resp.Usage)
 	if errors.Is(err, replay.ErrEmptySummary) {
-		t.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}}))
-		slog.Error("thread: compaction skipped", "thread", t.id, "err", err)
+		t.replay.CompactionFailed()
+		t.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}, Final: false, CanCompact: t.canCompact()}))
 		return false
 	}
 	if err != nil {
@@ -532,7 +526,7 @@ func (t *thread) applyCompaction(cmd commandApplyCompaction) bool {
 		return false
 	}
 	usage := t.replay.Usage()
-	t.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: usage}))
+	t.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: usage, Final: false, CanCompact: t.canCompact()}))
 	return true
 }
 
@@ -543,6 +537,10 @@ func (t *thread) applyHeldCompaction() {
 	}
 	t.compaction.held = nil
 	t.applyCompaction(*held)
+}
+
+func (t *thread) canCompact() bool {
+	return !t.compaction.isActive() && t.replay.CanCompact()
 }
 
 func (t *thread) compact() (bool, error) {
@@ -557,7 +555,7 @@ func (t *thread) compact() (bool, error) {
 		return false, nil
 	}
 	ctx, seq := t.compaction.start(t.link.backend.Context(), c)
-	t.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: true, Usage: api.EventUsage{}}))
+	t.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: true, Usage: api.EventUsage{}, Final: false, CanCompact: t.canCompact()}))
 	events := t.link.backend.Provider().Stream(ctx, api.Request{
 		System:   t.link.system(),
 		Messages: m,
@@ -567,6 +565,9 @@ func (t *thread) compact() (bool, error) {
 		b := response.NewBulder()
 		for e := range events {
 			b.On(e)
+		}
+		if ctx.Err() != nil {
+			return
 		}
 		r := b.Flush()
 		select {

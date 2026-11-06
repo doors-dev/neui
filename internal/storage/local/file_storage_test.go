@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,7 +15,7 @@ import (
 
 func newFileStore(t *testing.T) *FileStorage {
 	t.Helper()
-	s, err := NewFileStorage()
+	s, err := NewFileStorage("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,6 +82,85 @@ func TestFilePutDuplicate(t *testing.T) {
 	if body := readAll(t, rc); body != "original" {
 		t.Fatalf("body = %q, want original untouched", body)
 	}
+}
+
+type gateReader struct {
+	started chan struct{}
+	release chan struct{}
+	body    io.Reader
+}
+
+func (g *gateReader) Read(p []byte) (int, error) {
+	if g.started != nil {
+		close(g.started)
+		g.started = nil
+		<-g.release
+	}
+	return g.body.Read(p)
+}
+
+type failReader struct{}
+
+func (failReader) Read(p []byte) (int, error) {
+	return 0, errors.New("broken body")
+}
+
+type touchReader struct {
+	read bool
+}
+
+func (r *touchReader) Read(p []byte) (int, error) {
+	r.read = true
+	return 0, io.EOF
+}
+
+func TestFilePutReservesName(t *testing.T) {
+	s := newFileStore(t)
+	ctx := context.Background()
+	started, release := make(chan struct{}), make(chan struct{})
+	gate := &gateReader{started: started, release: release, body: strings.NewReader("first")}
+	done := make(chan error, 1)
+	go func() {
+		_, err := s.FilePut(ctx, "t1", api.OriginUser, "f.txt", "text/plain", gate, false)
+		done <- err
+	}()
+	<-started
+	second := &touchReader{}
+	if _, err := s.FilePut(ctx, "t1", api.OriginUser, "f.txt", "text/plain", second, false); !errors.Is(err, api.ErrExists) {
+		t.Fatalf("concurrent put = %v, want ErrExists", err)
+	}
+	if second.read {
+		t.Fatal("concurrent put read its body before refusing")
+	}
+	if _, err := s.FileStat(ctx, "t1", api.OriginUser, "f.txt"); !errors.Is(err, api.ErrNotFound) {
+		t.Fatalf("FileStat mid-put = %v, want ErrNotFound", err)
+	}
+	if files, errs := collect(t, s, "t1", api.OriginUser); len(files) != 0 || len(errs) != 0 {
+		t.Fatalf("mid-put list = %+v, %v", files, errs)
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	rc, err := s.FileRead(ctx, "t1", api.OriginUser, "f.txt", 0, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if body := readAll(t, rc); body != "first" {
+		t.Fatalf("body = %q", body)
+	}
+}
+
+func TestFilePutFailureFreesName(t *testing.T) {
+	s := newFileStore(t)
+	ctx := context.Background()
+	if _, err := s.FilePut(ctx, "t1", api.OriginUser, "f.txt", "", failReader{}, false); err == nil {
+		t.Fatal("put with broken body succeeded")
+	}
+	if _, err := os.Stat(filepath.Join(s.base, "files", "t1", "user", "f.txt")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("reserved dir survived: %v", err)
+	}
+	putText(t, s, "t1", "f.txt", "retry")
 }
 
 func TestFileOriginsSeparate(t *testing.T) {
@@ -285,12 +365,22 @@ func TestFileListCorruptMeta(t *testing.T) {
 		t.Fatal(err)
 	}
 	files, errs := collect(t, s, "t1", api.OriginUser)
-	if len(errs) != 1 {
-		t.Fatalf("errs = %v, want exactly one", errs)
+	if len(errs) != 0 {
+		t.Fatalf("errs = %v, want none", errs)
 	}
 	if len(files) != 2 || files[0].Name != "good1" || files[1].Name != "good2" {
 		t.Fatalf("files = %+v, want good1, good2", files)
 	}
+}
+
+func TestFilePutRefusesNamesTheDiskCannotHold(t *testing.T) {
+	s := newFileStore(t)
+	for _, name := range []string{strings.Repeat("a", 256), strings.Repeat("界", 86), "a\x00b"} {
+		if _, err := s.FilePut(context.Background(), "t1", api.OriginUser, name, "", strings.NewReader("x"), false); !errors.Is(err, api.ErrInvalidName) {
+			t.Errorf("FilePut %q = %v, want ErrInvalidName", name, err)
+		}
+	}
+	putText(t, s, "t1", strings.Repeat("a", 255), "x")
 }
 
 func TestFileMetalessDirInvisible(t *testing.T) {
@@ -382,4 +472,81 @@ func must[T any](v T, err error) T {
 		panic(err)
 	}
 	return v
+}
+
+func TestFileThreadScopedMethodsRejectInvalidIDs(t *testing.T) {
+	s := newFileStore(t)
+	ctx := context.Background()
+	putText(t, s, "t1", "f1.txt", "hello")
+	if _, err := s.WorkspaceOpen("t1"); err != nil {
+		t.Fatal(err)
+	}
+	for _, thread := range []api.ThreadID{"", ".", "..", "a/b", "../escape"} {
+		if _, err := s.WorkspaceOpen(thread); !errors.Is(err, api.ErrInvalidName) {
+			t.Fatalf("WorkspaceOpen(%q) = %v, want ErrInvalidName", thread, err)
+		}
+		if err := s.WorkspaceDelete(thread); !errors.Is(err, api.ErrInvalidName) {
+			t.Fatalf("WorkspaceDelete(%q) = %v, want ErrInvalidName", thread, err)
+		}
+		for _, err := range s.FileList(ctx, thread, api.OriginUser) {
+			if !errors.Is(err, api.ErrInvalidName) {
+				t.Fatalf("FileList(%q) = %v, want ErrInvalidName", thread, err)
+			}
+		}
+	}
+	listed := false
+	for _, err := range s.FileList(ctx, "t1", api.Origin("..")) {
+		if err == nil {
+			t.Fatal("FileList with an unknown origin yielded a file")
+		}
+		listed = true
+	}
+	if !listed {
+		t.Fatal("FileList with an unknown origin yielded no error")
+	}
+	if _, err := os.Stat(filepath.Join(s.base, workspacesDirName, "t1")); err != nil {
+		t.Fatalf("workspace of t1 gone: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(s.base), "escape")); err == nil {
+		t.Fatal("workspace created outside the base")
+	}
+}
+
+func TestFileDiscardDraftsKeepsCommitted(t *testing.T) {
+	s := newFileStore(t)
+	ctx := context.Background()
+	for _, name := range []string{"a", "b"} {
+		if _, err := s.FilePut(ctx, "t1", api.OriginUser, name, "text/plain", strings.NewReader(name), true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.FileCommit(ctx, "t1", api.OriginUser, "a"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.FileDiscardDrafts(ctx, "t1", api.OriginUser, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.FileStat(ctx, "t1", api.OriginUser, "a"); err != nil {
+		t.Fatalf("committed file: %v", err)
+	}
+	if _, err := s.FileStat(ctx, "t1", api.OriginUser, "b"); !errors.Is(err, api.ErrNotFound) {
+		t.Fatalf("draft: %v, want ErrNotFound", err)
+	}
+}
+
+func TestFileStorageClosedAfterRemove(t *testing.T) {
+	s := newFileStore(t)
+	ctx := context.Background()
+	if err := s.Remove(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.FilePut(ctx, "t1", api.OriginUser, "f", "text/plain", strings.NewReader("x"), true); !errors.Is(err, os.ErrClosed) {
+		t.Fatalf("FilePut after Remove = %v, want ErrClosed", err)
+	}
+	if _, err := s.WorkspaceOpen("t1"); !errors.Is(err, os.ErrClosed) {
+		t.Fatalf("WorkspaceOpen after Remove = %v, want ErrClosed", err)
+	}
+	if _, err := os.Stat(s.base); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("base recreated after Remove: %v", err)
+	}
 }

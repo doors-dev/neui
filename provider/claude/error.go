@@ -25,9 +25,9 @@ type APIError struct {
 	// "invalid_request_error".
 	Type string
 	// Message is the API's explanation; for a body that was not the
-	// documented JSON it is the trimmed raw body. A response that leaves it
-	// empty gets "unparseable <status> response". It can be empty for an
-	// in-stream error.
+	// documented JSON it is the trimmed raw body, cut to 512 characters. A
+	// response that leaves it empty gets "unparseable <status> response". It
+	// can be empty for an in-stream error.
 	Message string
 	// ErrorCode is the error's details.error_code, such as
 	// "enforced_spend_limit_reached"; empty when the error carries none.

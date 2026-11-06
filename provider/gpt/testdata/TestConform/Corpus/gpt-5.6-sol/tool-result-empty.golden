@@ -55,7 +55,12 @@
     {
       "type": "function_call_output",
       "call_id": "call_1",
-      "output": []
+      "output": [
+        {
+          "type": "input_text",
+          "text": "(the tool returned no output)"
+        }
+      ]
     }
   ]
 }

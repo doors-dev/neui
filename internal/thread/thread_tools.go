@@ -2,6 +2,7 @@ package thread
 
 import (
 	"context"
+	"errors"
 	"github.com/doors-dev/doors"
 	"maps"
 
@@ -72,6 +73,12 @@ func (s *threadTools) on(cmd any) {
 			cmd.Ok(link)
 			return
 		}
+		if s.thread.link.page == cmd.page && s.thread.link.linkCtx.Err() == nil {
+			s.thread.link.meta = cmd.meta
+			s.thread.link.send(NewMessageReload(cmd.op))
+			cmd.Err(ErrLinked)
+			return
+		}
 		s.thread.pending = false
 		s.thread.link = s.thread.link.inherit(cmd.page, cmd.meta)
 		cmd.Ok(s.thread.link.link())
@@ -110,6 +117,11 @@ func (s *threadTools) on(cmd any) {
 			cmd.Err(api.ErrInputTooLarge)
 			return
 		}
+		round, replay, removed, err := s.thread.replay.Rewind(cmd.round, cmd.input)
+		if errors.Is(err, api.ErrWrongState) {
+			cmd.Err(err)
+			return
+		}
 		wasPending := s.thread.pending
 		s.thread.pending = false
 		s.cancel(api.ErrCanceledByUser)
@@ -118,12 +130,14 @@ func (s *threadTools) on(cmd any) {
 			s.ask = nil
 		}
 		if s.thread.compaction.cut(cmd.round) {
-			s.thread.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}}))
+			s.thread.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}, Final: false, CanCompact: s.thread.canCompact()}))
 		}
-		round, replay, removed, err := s.thread.replay.Rewind(cmd.round, cmd.input)
 		if err != nil {
 			s.thread.criticalErr(cmd.intoMessage(), err)
 			return
+		}
+		if s.thread.link.taskCut(cmd.round) {
+			s.thread.link.send(newMessageEvent(nil, api.ChatEventTasks{Tasks: s.thread.link.taskList()}))
 		}
 		s.thread.rewindAttachments(removed, cmd.input)
 		if err := s.thread.sweepDrafts(); err != nil {
@@ -133,10 +147,14 @@ func (s *threadTools) on(cmd any) {
 		if wasPending {
 			s.thread.link.send(newMessageEvent(nil, api.ChatEventInputPending{Pending: false}))
 		}
-		s.thread.link.send(newMessageEvent(cmd.intoMessage(), api.ChatEventRoundStart{Round: round, Truncate: cmd.round}))
+		s.thread.link.send(newMessageEvent(cmd.intoMessage(), api.ChatEventRoundStart{Round: round, Truncate: cmd.round, Usage: s.thread.replay.Usage(), CanCompact: s.thread.canCompact()}))
 	case commandTask:
 		if s.thread.link == nil || s.thread.link.linkTasks != cmd.linkTasks {
 			cmd.Err(context.Canceled)
+			return
+		}
+		if cmd.origin != s.round.ID {
+			cmd.Err(errors.New("task can be issued only during the tool calls round of its tool"))
 			return
 		}
 		cmd.Ok(s.thread.link.taskAdd(cmd.origin, cmd.module, cmd.name, cmd.comment, cmd.attrs, cmd.cancel))
@@ -188,5 +206,5 @@ func (s *threadTools) finalize() {
 		s.thread.criticalErr(nil, err)
 		return
 	}
-	s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundStart{Round: round, Truncate: api.NoRoundID}))
+	s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundStart{Round: round, Truncate: api.NoRoundID, Usage: s.thread.replay.Usage(), CanCompact: s.thread.canCompact()}))
 }

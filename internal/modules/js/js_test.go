@@ -10,8 +10,12 @@ import (
 	"testing"
 	"time"
 
+	"modernc.org/quickjs"
 	"neui.dev/api"
+	"neui.dev/internal/common"
+	"neui.dev/internal/modules/js/task"
 	"neui.dev/internal/testkit"
+	"neui.dev/internal/tools"
 )
 
 func write(t *testing.T, fs api.FS, name, content string) {
@@ -78,7 +82,7 @@ func TestRunThrow(t *testing.T) {
 	ctx, fs := c.Ctx(), c.FS()
 	write(t, fs, "bad.js", `throw new Error("boom");`)
 	m := &module{runtime: getRuntime(context.Background())}
-	if _, err := m.run(ctx, RunArg{File: "bad.js"}); !errors.Is(err, errScript) {
+	if _, err := m.run(ctx, RunArg{File: "bad.js"}); !errors.Is(err, errScript) || !strings.Contains(err.Error(), `log file "bad.js.log"`) {
 		t.Fatalf("err = %v", err)
 	}
 	if log := read(t, fs, "bad.js.log"); !strings.Contains(log, "boom") {
@@ -91,8 +95,33 @@ func TestRunTimeout(t *testing.T) {
 	ctx, fs := c.Ctx(), c.FS()
 	write(t, fs, "spin.js", "while (true) {}")
 	m := &module{runtime: getRuntime(context.Background())}
-	if _, err := m.run(ctx, RunArg{File: "spin.js", Timeout: 200}); !errors.Is(err, errScript) {
+	if _, err := m.run(ctx, RunArg{File: "spin.js", Timeout: 200}); !errors.Is(err, task.ErrTimeout) {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestRunTimeoutCancelsTool(t *testing.T) {
+	seen := make(chan error, 1)
+	wait := tools.NewModule("wait", "")
+	if _, err := wait.Add("block", "", func(ctx context.Context, _ struct{}) (struct{}, error) {
+		<-ctx.Done()
+		seen <- context.Cause(ctx)
+		return struct{}{}, context.Cause(ctx)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ctx := testkit.NewController(t, testkit.Setup{Modules: []common.Module{wait}}).Ctx()
+	m := &module{runtime: getRuntime(context.Background())}
+	start := time.Now()
+	_, err := m.run(ctx, RunArg{Code: "try { wait__block({}); } catch (e) {}\nwhile (true) {}", Timeout: 200})
+	if !errors.Is(err, task.ErrTimeout) {
+		t.Fatalf("err = %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("timed out run took %v", elapsed)
+	}
+	if cause := <-seen; !errors.Is(cause, task.ErrTimeout) {
+		t.Fatalf("tool ctx cause = %v", cause)
 	}
 }
 
@@ -310,5 +339,133 @@ func TestRunArgProtoKey(t *testing.T) {
 	}
 	if string(res.Output) != `["__proto__","y"]` {
 		t.Fatalf("output = %s", res.Output)
+	}
+}
+
+func TestConfigNonPositiveTakesDefaults(t *testing.T) {
+	got := Config{-1, -1, -1, -1, -1, -1, -1, -1}
+	got.initDefaults()
+	want := Config{}
+	want.initDefaults()
+	if got != want {
+		t.Fatalf("config = %+v, want %+v", got, want)
+	}
+}
+
+func TestRunHugeLimitsApplyTheLimit(t *testing.T) {
+	ctx := testkit.NewController(t, testkit.Setup{}).Ctx()
+	m := &module{runtime: getRuntime(context.Background())}
+	res, err := m.run(ctx, RunArg{
+		Code:    "const end = Date.now() + 50;\nwhile (Date.now() < end) {}\nreturn 1;",
+		Timeout: 18446744073710,
+		Memory:  17592186044417,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(res.Output) != "1" {
+		t.Fatalf("res = %+v", res)
+	}
+}
+
+func TestExecuteSetupTimeout(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cancel(task.ErrTimeout)
+	rt := getRuntime(context.Background())
+	vm, err := quickjs.NewVM()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer vm.Close()
+	_, err = rt.execute(vm, task.Input{
+		Params:  task.Params{Name: "../escape", Script: "return 1;", Controller: c},
+		Context: ctx,
+	})
+	if !errors.Is(err, task.ErrTimeout) || errors.Is(err, errRuntime) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestTaskNameAfterCancel(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	done := make(chan struct{})
+	w, _, cancel := task.NewTask(task.Params{Name: "a.js", Controller: c}, func() { close(done) }, time.Hour)
+	cancel(errStopped)
+	for {
+		if w.Name() != "a.js" {
+			t.Fatalf("name = %q", w.Name())
+		}
+		select {
+		case <-done:
+			return
+		default:
+		}
+	}
+}
+
+func TestConsoleLogsUnserializableValues(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	ctx, fs := c.Ctx(), c.FS()
+	m := &module{runtime: getRuntime(context.Background())}
+	if _, err := m.run(ctx, RunArg{Code: "console.log(undefined, Symbol('s'), 1); return null;"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := read(t, fs, "inline.log"); !strings.Contains(got, "INFO undefined Symbol(s) 1\n") {
+		t.Fatalf("log = %q", got)
+	}
+}
+
+func TestRunRefusesAnOversizedScript(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	ctx, fs := c.Ctx(), c.FS()
+	write(t, fs, "big.js", "return 1;\n//"+strings.Repeat("x", scriptLimit))
+	m := &module{runtime: getRuntime(context.Background())}
+	if _, err := m.run(ctx, RunArg{File: "big.js"}); err == nil || !strings.Contains(err.Error(), "4 MiB script size limit") {
+		t.Fatalf("err = %v", err)
+	}
+	write(t, fs, "ok.js", "return 1;\n//"+strings.Repeat("x", scriptLimit-100))
+	if _, err := m.run(ctx, RunArg{File: "ok.js"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRunRefusesWhileRunningBeforeReading(t *testing.T) {
+	ctx := testkit.NewController(t, testkit.Setup{}).Ctx()
+	m := &module{runtime: getRuntime(context.Background()), running: &running{name: "other.js"}}
+	if _, err := m.run(ctx, RunArg{File: "missing.js"}); err == nil || !strings.Contains(err.Error(), "already running") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestLogKeepsTheNewestMegabyte(t *testing.T) {
+	fs := testkit.NewController(t, testkit.Setup{}).FS()
+	entry := strings.Repeat("x", 100<<10)
+	for i := range 25 {
+		if err := Log(fs, "a.log", "INFO", entry+string(rune('a'+i))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := read(t, fs, "a.log")
+	if len(got) > logCap {
+		t.Fatalf("log is %d bytes", len(got))
+	}
+	first, _, _ := strings.Cut(got, "\n")
+	if !strings.HasSuffix(first, "INFO earlier output dropped") {
+		t.Fatalf("first line %q", first)
+	}
+	if !strings.HasSuffix(got, "xy\n") || strings.Count(got, "\n") < 6 {
+		t.Fatalf("tail lost: %d lines", strings.Count(got, "\n"))
+	}
+}
+
+func TestClearLogQuotaIsNotARuntimeFailure(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{Files: api.FilesConfig{MaxFiles: 1}})
+	ctx, fs := c.Ctx(), c.FS()
+	write(t, fs, "a.js", "return 1;")
+	m := &module{runtime: getRuntime(context.Background())}
+	_, err := m.run(ctx, RunArg{File: "a.js"})
+	if !errors.Is(err, api.ErrQuota) || errors.Is(err, errRuntime) {
+		t.Fatalf("err = %v", err)
 	}
 }

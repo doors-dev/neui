@@ -27,7 +27,6 @@ func openErr(e api.IndexedEvent) error {
 }
 
 type block interface {
-	isClosed() bool
 	append(e api.IndexedEvent) error
 	assemble(final bool) api.Content
 }
@@ -69,8 +68,6 @@ type textBlock struct {
 	text   strings.Builder
 }
 
-func (t *textBlock) isClosed() bool { return t.closed }
-
 func (t *textBlock) assemble(final bool) api.Content {
 	return api.ContentText{
 		Text: t.text.String(),
@@ -106,8 +103,6 @@ type toolBlock struct {
 	name   strings.Builder
 	args   bytes.Buffer
 }
-
-func (t *toolBlock) isClosed() bool { return t.closed }
 
 func (t *toolBlock) assemble(final bool) api.Content {
 	input := json.RawMessage(t.args.Bytes())
@@ -162,8 +157,6 @@ type reasoningBlock struct {
 	summaries map[int]*strings.Builder
 }
 
-func (r *reasoningBlock) isClosed() bool { return r.closed }
-
 func (r *reasoningBlock) assemble(final bool) api.Content {
 	return api.ContentReasoning{
 		Model:    r.model,
@@ -211,8 +204,6 @@ type opaqueBlock struct {
 	data   json.RawMessage
 	deltas []string
 }
-
-func (o *opaqueBlock) isClosed() bool { return o.closed }
 
 func (o *opaqueBlock) assemble(final bool) api.Content {
 	return api.ContentOpaque{

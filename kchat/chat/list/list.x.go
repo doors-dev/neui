@@ -24,13 +24,14 @@ const seamGap = 4 * time.Hour
 
 type List = *list
 
-func NewList(params params.Params, inst api.Instance, thread api.ChatThread, rewinder round.Rewinder, id api.ThreadID, active *api.Round, anchor api.RoundID) List {
+func NewList(params params.Params, inst api.Instance, thread api.ChatThread, rewinder round.Rewinder, id api.ThreadID, active *api.Round, anchor api.RoundID, fail func(context.Context, error)) List {
 	l := &list{
 		params: params,
 		id: id,
 		rewinder: rewinder,
 		thread: thread,
 		inst: inst,
+		fail: fail,
 		lastRound: doors.NewSource(api.NoRoundID),
 	}
 	l.lastSection.entry.id = api.NoRoundID
@@ -46,6 +47,7 @@ type list struct {
 	rewinder round.Rewinder
 	thread api.ChatThread
 	inst api.Instance
+	fail func(context.Context, error)
 	id api.ThreadID
 	history deque.Deque[entry]
 	lastSection struct {
@@ -76,24 +78,28 @@ func (l List) Main() gox.Elem {
 	return l.once
 }
 
-//line list.gox:76
+//line list.gox:78
 func (l List) main(active *api.Round, anchor api.RoundID) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line list.gox:78
+//line list.gox:80
 		seed, err := l.seed(ctx, active, anchor)
 
-//line list.gox:80
+//line list.gox:82
 		if err == nil {
-//line list.gox:81
+//line list.gox:83
 			__e = __c.Any(seed); if __e != nil { return }
 		} else  {
-//line list.gox:84
+//line list.gox:86
 			doors.Logger(ctx).Error("list", "err", err)
 
+//line list.gox:88
+			__e = __c.Any(doors.Go(func(ctx context.Context) {
+			l.fail(ctx, err)
+		})); if __e != nil { return }
 		}
 	return })
-//line list.gox:88
+//line list.gox:92
 }
 
 func (l List) seed(ctx context.Context, active *api.Round, anchor api.RoundID) (gox.Comp, error) {
@@ -104,8 +110,6 @@ func (l List) seed(ctx context.Context, active *api.Round, anchor api.RoundID) (
 	if active != nil {
 		cursor = active.ID
 	}
-	// the live round is its own section once it has input, otherwise the
-	// newest stored section is the tail the live round appends to
 	var tail []api.Round
 	if active == nil || active.Input.Len() == 0 {
 		loaded, _, err := l.loadBefore(ctx, cursor, 1)
@@ -124,14 +128,12 @@ func (l List) seed(ctx context.Context, active *api.Round, anchor api.RoundID) (
 	var sections [][]api.Round
 	topEnded, bottomEnded := false, true
 	if anchor != api.NoRoundID {
-		// the backward walk ends at the anchor, so its own section comes back
-		// last, truncated: its head is where the log opens
 		above, aboveEnded, err := l.loadBefore(ctx, anchor + 1, margin + 1)
-		if err != nil || len(above) == 0 || above[len(above) - 1][0].Input.Len() == 0 {
+		if err != nil {
 			doors.Logger(ctx).Error("list: anchor resolve", "round", anchor, "err", err)
-		} else {
+		} else if len(above) != 0 {
 			at := above[len(above) - 1][0].ID
-			below, belowEnded, err := l.loadAfter(ctx, at - 1, margin + 1, stop)
+			below, belowEnded, err := l.loadAfter(ctx, at - 1, margin + 1, stop, false)
 			if err != nil {
 				doors.Logger(ctx).Error("list: anchor load", "round", at, "err", err)
 			} else {
@@ -214,15 +216,22 @@ func (l List) ToolsDone() {
 }
 
 func (l List) IndexedEvent(e api.IndexedEvent) {
-	l.lastSection.live.On(e)
+	live := l.lastSection.live
+	if live == nil {
+		return
+	}
+	live.On(e)
 }
 
-func (l List) RoundDone(ctx context.Context, state api.RoundState, err string) {
+func (l List) RoundDone(ctx context.Context, state api.RoundState) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if l.sectionAppender == nil {
+		return
+	}
 	live := l.lastSection.live
 	l.lastSection.live = nil
-	live.Done(ctx, state, err)
+	live.Done(ctx, state)
 	if live.Tools().IsEmpty() {
 		l.lastSection.tools = nil
 		return
@@ -244,6 +253,9 @@ func (l List) RoundDone(ctx context.Context, state api.RoundState, err string) {
 func (l List) RoundStart(ctx context.Context, r api.Round, truncate api.RoundID) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if l.sectionAppender == nil {
+		return
+	}
 	l.lastRound.Update(ctx, r.ID)
 	l.lastSection.live = round.NewLiveRound(
 		l.params,
@@ -253,10 +265,12 @@ func (l List) RoundStart(ctx context.Context, r api.Round, truncate api.RoundID)
 		r,
 		true,
 	)
+	reset := false
 	if truncate != api.NoRoundID && l.lastSection.entry.door != nil && truncate > l.lastSection.entry.id {
 		sections, _, err := l.loadBefore(ctx, r.ID, 1)
 		if err != nil {
 			doors.Logger(ctx).Error("list: tail reload", "err", err)
+			reset = true
 		} else {
 			var tail []api.Round
 			if len(sections) != 0 {
@@ -266,9 +280,9 @@ func (l List) RoundStart(ctx context.Context, r api.Round, truncate api.RoundID)
 			return
 		}
 	}
-	if r.Input.Len() != 0 || l.lastSection.roundAppender == nil {
+	if reset || r.Input.Len() != 0 || l.lastSection.roundAppender == nil {
 		l.seq++
-		atBottom := l.scrollState.bottomReached && (l.scrollState.last == api.NoRoundID || l.scrollState.last == l.lastSection.entry.id)
+		atBottom := !reset && l.scrollState.bottomReached && (l.scrollState.last == api.NoRoundID || l.scrollState.last == l.lastSection.entry.id)
 		if truncate != api.NoRoundID {
 			if l.lastSection.entry.door != nil && l.lastSection.entry.id >= truncate {
 				l.lastSection.entry.remove(ctx)
@@ -410,21 +424,20 @@ func (e entry) remove(ctx context.Context) {
 	e.door.Static(ctx, nil)
 }
 
-//line list.gox:404
+//line list.gox:416
 func (e entry) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line list.gox:405
+//line list.gox:417
 		__e = __c.Any(e.door); if __e != nil { return }
 	return })
-//line list.gox:406
+//line list.gox:418
 }
 
-func (l List) loadAfter(ctx context.Context, cursor api.RoundID, num int, stop api.RoundID) ([][]api.Round, bool, error) {
+func (l List) loadAfter(ctx context.Context, cursor api.RoundID, num int, stop api.RoundID, strip bool) ([][]api.Round, bool, error) {
 	sections := make([][]api.Round, 0, num)
 	var buffer []api.Round
 	var ended bool
-	strip := true
 	page := max(num, margin)
 	outer: for {
 		rounds, err := l.thread.RoundAfter(ctx, cursor, page)
@@ -575,11 +588,11 @@ type section struct {
 	after any
 }
 
-//line list.gox:563
+//line list.gox:574
 func (s *section) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line list.gox:565
+//line list.gox:576
 		var batch any
 	if s.batch != 0 {
 		batch = s.batch
@@ -587,53 +600,53 @@ func (s *section) Main() gox.Elem {
 
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line list.gox:570
+//line list.gox:581
 			__e = __c.Set("class", "kchat-section"); if __e != nil { return }
-//line list.gox:570
+//line list.gox:581
 			__e = __c.Set("data-id", int(s.id)); if __e != nil { return }
-//line list.gox:570
+//line list.gox:581
 			__e = __c.Set("data-batch", batch); if __e != nil { return }
-//line list.gox:570
+//line list.gox:581
 			__e = __c.Set("data-pending", s.batch != 0); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line list.gox:571
+//line list.gox:582
 			for _, r := range s.rounds {
-//line list.gox:572
+//line list.gox:583
 				__e = __c.Any(r); if __e != nil { return }
 			}
-//line list.gox:574
+//line list.gox:585
 			if s.seam != "" {
-//line list.gox:575
+//line list.gox:586
 				__e = __c.Any(seam(s.seam)); if __e != nil { return }
 			}
-//line list.gox:577
+//line list.gox:588
 			__e = __c.Any(s.after); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line list.gox:579
+//line list.gox:590
 }
 
-//line list.gox:581
+//line list.gox:592
 func seam(label string) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line list.gox:582
+//line list.gox:593
 			__e = __c.Set("class", "kchat-seam"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Init("span"); if __e != nil { return }
 			{
 				__e = __c.Submit(); if __e != nil { return }
-//line list.gox:582
+//line list.gox:593
 				__e = __c.Any(label); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line list.gox:583
+//line list.gox:594
 }
 
 type liveSection struct {
@@ -645,11 +658,11 @@ type liveSection struct {
 	hidden bool
 }
 
-//line list.gox:594
+//line list.gox:605
 func (s *liveSection) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line list.gox:596
+//line list.gox:607
 		var setter gox.Modify = gox.ModifyFunc(func(ctx context.Context, tag string, attrs gox.Attrs) error {
 		return nil
 	})
@@ -659,31 +672,31 @@ func (s *liveSection) Main() gox.Elem {
 
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line list.gox:603
+//line list.gox:614
 			__e = __c.Set("class", "kchat-section"); if __e != nil { return }
-//line list.gox:603
+//line list.gox:614
 			__e = __c.Modify(setter); if __e != nil { return }
-//line list.gox:603
+//line list.gox:614
 			__e = __c.Set("data-id", int(s.id)); if __e != nil { return }
-//line list.gox:603
+//line list.gox:614
 			__e = __c.Set("hidden", s.hidden); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line list.gox:604
+//line list.gox:615
 			for _, r := range s.rounds {
-//line list.gox:605
+//line list.gox:616
 				__e = __c.Any(r); if __e != nil { return }
 			}
-//line list.gox:607
+//line list.gox:618
 			if s.live != nil {
-//line list.gox:608
+//line list.gox:619
 				__e = __c.Any(s.live); if __e != nil { return }
 			}
-//line list.gox:610
+//line list.gox:621
 			__e = __c.Any(s.appender); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line list.gox:612
+//line list.gox:623
 }
 
 type seed struct {
@@ -694,23 +707,23 @@ type seed struct {
 	last gox.Comp
 }
 
-//line list.gox:622
+//line list.gox:633
 func (s *seed) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line list.gox:623
+//line list.gox:634
 		__e = __c.Any(s.prepender); if __e != nil { return }
-//line list.gox:624
+//line list.gox:635
 		for _, d := range s.history {
-//line list.gox:625
+//line list.gox:636
 			__e = __c.Any(d); if __e != nil { return }
 		}
-//line list.gox:627
+//line list.gox:638
 		__e = __c.Any(s.historyAppender); if __e != nil { return }
-//line list.gox:628
+//line list.gox:639
 		__e = __c.Any(s.last); if __e != nil { return }
-//line list.gox:629
+//line list.gox:640
 		__e = __c.Any(s.appender); if __e != nil { return }
 	return })
-//line list.gox:630
+//line list.gox:641
 }

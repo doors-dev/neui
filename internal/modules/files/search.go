@@ -6,8 +6,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"path"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"neui.dev/api"
 	"neui.dev/internal/common"
@@ -27,7 +29,7 @@ const globDesc = `Find files by path pattern.`
 type grepArg struct {
 	Pattern string `json:"pattern" required:"true" description:"RE2 regular expression matched against single lines"`
 	Path    string `json:"path" description:"file or directory to search, empty string is everything"`
-	Glob    string `json:"glob" description:"only search files with matching paths, e.g. **/*.go"`
+	Glob    string `json:"glob" description:"only search files whose path relative to path matches, e.g. **/*.go"`
 	Limit   uint   `json:"limit" description:"max matches, default 100"`
 }
 
@@ -43,7 +45,7 @@ type grepResult struct {
 }
 
 type globArg struct {
-	Pattern string `json:"pattern" required:"true" description:"path pattern, * stays within a path segment, ** crosses directories, e.g. **/*.csv"`
+	Pattern string `json:"pattern" required:"true" description:"path pattern matched against paths relative to path, * stays within a path segment, ** crosses directories, e.g. **/*.csv"`
 	Path    string `json:"path" description:"directory to search under, empty string is everything"`
 }
 
@@ -69,8 +71,8 @@ func grepTool(ctx context.Context, arg grepArg) (grepResult, error) {
 		limit = grepDefaultLimit
 	}
 	res := grepResult{Matches: []grepMatch{}}
-	scan := func(name string) (bool, error) {
-		if globRe != nil && !globRe.MatchString(name) {
+	scan := func(name, rel string) (bool, error) {
+		if globRe != nil && !globRe.MatchString(rel) {
 			return true, nil
 		}
 		if err := grepFile(ctx, fs, name, re, limit, &res); err != nil {
@@ -84,12 +86,16 @@ func grepTool(ctx context.Context, arg grepArg) (grepResult, error) {
 			return grepResult{}, err
 		}
 		if !e.Dir {
-			_, err := scan(e.Name)
+			_, err := scan(e.Name, path.Base(e.Name))
 			return res, err
 		}
 	}
-	if err := walkFiles(ctx, fs, arg.Path, false, func(e api.FSEntry) (bool, error) {
-		return scan(e.Name)
+	skip := 0
+	if root := path.Clean(arg.Path); root != "." {
+		skip = len(root) + 1
+	}
+	if _, err := walkFiles(ctx, fs, arg.Path, false, func(e api.FSEntry) (bool, error) {
+		return scan(e.Name, e.Name[skip:])
 	}); err != nil {
 		return grepResult{}, err
 	}
@@ -102,10 +108,13 @@ func grepFile(ctx context.Context, fs api.FS, name string, re *regexp.Regexp, li
 		return err
 	}
 	defer rc.Close()
-	br := bufio.NewReaderSize(rc, 64<<10)
+	br := bufio.NewReaderSize(ctxReader{ctx, rc}, 64<<10)
 	head, _ := br.Peek(4096)
 	if bytes.IndexByte(head, 0) >= 0 {
 		return nil
+	}
+	if bytes.HasPrefix(head, []byte("\ufeff")) {
+		br.Discard(3)
 	}
 	var line uint
 	for {
@@ -126,7 +135,11 @@ func grepFile(ctx context.Context, fs api.FS, name string, re *regexp.Regexp, li
 			return nil
 		}
 		if len(text) > grepLineMax {
-			text = text[:grepLineMax] + "... (line truncated)"
+			n := grepLineMax
+			for n > 0 && !utf8.RuneStart(text[n]) {
+				n--
+			}
+			text = text[:n] + "... (line truncated)"
 		}
 		res.Matches = append(res.Matches, grepMatch{Path: name, Line: line, Text: text})
 	}
@@ -138,9 +151,13 @@ func globTool(ctx context.Context, arg globArg) (globResult, error) {
 	if err != nil {
 		return globResult{}, err
 	}
+	skip := 0
+	if root := path.Clean(arg.Path); root != "." {
+		skip = len(root) + 1
+	}
 	res := globResult{Paths: []string{}}
-	err = walkFiles(ctx, fs, arg.Path, true, func(e api.FSEntry) (bool, error) {
-		if !re.MatchString(e.Name) {
+	_, err = walkFiles(ctx, fs, arg.Path, true, func(e api.FSEntry) (bool, error) {
+		if !re.MatchString(e.Name[skip:]) {
 			return true, nil
 		}
 		if len(res.Paths) == globCap {
@@ -156,27 +173,31 @@ func globTool(ctx context.Context, arg globArg) (globResult, error) {
 	return res, nil
 }
 
-func walkFiles(ctx context.Context, fs api.FS, root string, virtual bool, fn func(e api.FSEntry) (bool, error)) error {
+func walkFiles(ctx context.Context, fs api.FS, root string, virtual bool, fn func(e api.FSEntry) (bool, error)) (bool, error) {
 	entries, err := fs.ReadDir(ctx, root)
 	if err != nil {
-		return err
+		return false, err
 	}
 	for _, e := range entries {
+		if err := context.Cause(ctx); err != nil {
+			return false, err
+		}
 		if e.Dir {
 			if !virtual && e.Virtual {
 				continue
 			}
-			if err := walkFiles(ctx, fs, e.Name, virtual, fn); err != nil {
-				return err
+			cont, err := walkFiles(ctx, fs, e.Name, virtual, fn)
+			if err != nil || !cont {
+				return false, err
 			}
 			continue
 		}
 		cont, err := fn(e)
 		if err != nil || !cont {
-			return err
+			return false, err
 		}
 	}
-	return nil
+	return true, nil
 }
 
 func globRegexp(pattern string) (*regexp.Regexp, error) {

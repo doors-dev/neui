@@ -3,6 +3,8 @@ package mcp
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"sync"
@@ -71,6 +73,8 @@ type module struct {
 	inflight         int
 	desc             atomic.Pointer[string]
 	connErrored      bool
+	connectedAt      time.Time
+	backoff          backoff
 	waiters          []getSessionCommand
 	once             sync.Once
 }
@@ -104,7 +108,6 @@ func (m *module) Desc() string {
 }
 
 func (m *module) Get(name string) (common.Tool, bool) {
-	m.waitInit()
 	type tool struct {
 		tool  common.Tool
 		found bool
@@ -142,7 +145,7 @@ func (m *module) List() []common.Tool {
 var _ common.Module = (*module)(nil)
 
 func (m *module) run() {
-	m.connect()
+	m.connect(false)
 	defer m.closeConnection()
 	for {
 		var idle <-chan time.Time
@@ -175,6 +178,7 @@ func (m *module) on(cmd command) {
 		m.closeInit()
 		m.cancelConnection = nil
 		m.connErrored = false
+		m.connectedAt = time.Now()
 		m.client = cmd.client
 		m.desc.Store(&cmd.desc)
 		m.module = m.buildModule(cmd.tools)
@@ -201,6 +205,7 @@ func (m *module) on(cmd command) {
 			w.reply(nil)
 		}
 		m.waiters = nil
+		m.touch()
 	case toolsCommand:
 		if m.seq != cmd.seq {
 			return
@@ -211,8 +216,7 @@ func (m *module) on(cmd command) {
 				"module", m.conf.Name,
 				"err", cmd.err,
 			)
-			m.closeConnection()
-			m.connect()
+			m.reconnect()
 			return
 		}
 		m.module = m.buildModule(cmd.tools)
@@ -233,7 +237,7 @@ func (m *module) on(cmd command) {
 			m.waiters = append(m.waiters, cmd)
 		default:
 			m.waiters = append(m.waiters, cmd)
-			m.connect()
+			m.connect(false)
 		}
 	case apiCommand:
 		cmd.f(m)
@@ -245,21 +249,20 @@ func (m *module) on(cmd command) {
 			"mcp: connection lost, reconnecting",
 			"module", m.conf.Name,
 		)
-		m.closeConnection()
-		m.connect()
+		m.reconnect()
 	}
 }
 
 func (m *module) touch() {
+	d := m.conf.IdleTimeout
+	if m.toolCalls == 0 {
+		d = min(1*time.Minute, d)
+	}
 	if m.idle == nil {
-		if m.toolCalls == 0 {
-			m.idle = time.NewTimer(min(1*time.Minute, m.conf.IdleTimeout))
-		} else {
-			m.idle = time.NewTimer(m.conf.IdleTimeout)
-		}
+		m.idle = time.NewTimer(d)
 		return
 	}
-	m.idle.Reset(m.conf.IdleTimeout)
+	m.idle.Reset(d)
 }
 
 func (m *module) buildModule(list []*mcp.Tool) tools.Module {
@@ -268,7 +271,20 @@ func (m *module) buildModule(list []*mcp.Tool) tools.Module {
 		desc = *d
 	}
 	module := tools.NewModule(m.conf.Name, desc)
+	counts := make(map[string]int, len(list))
 	for _, tool := range list {
+		counts[utils.SanitizeName(tool.Name)] += 1
+	}
+	for _, tool := range list {
+		name := utils.SanitizeName(tool.Name)
+		if name == "" || counts[name] > 1 {
+			sum := sha256.Sum256([]byte(tool.Name))
+			if name == "" {
+				name = "t" + hex.EncodeToString(sum[:4])
+			} else {
+				name = name + "_" + hex.EncodeToString(sum[:4])
+			}
+		}
 		inputSchema, err := schema.NewRawSchema(tool.InputSchema)
 		if err != nil {
 			doors.Logger(m.ctx).Error(
@@ -291,7 +307,7 @@ func (m *module) buildModule(list []*mcp.Tool) tools.Module {
 			}
 		}
 		module.AddRaw(
-			tool.Name,
+			name,
 			tool.Description,
 			inputSchema,
 			outputSchema,
@@ -313,7 +329,7 @@ func (m *module) buildModule(list []*mcp.Tool) tools.Module {
 				case client = <-ch:
 				}
 				if client == nil {
-					return nil, errors.New("MCP connection lost, please retry again later")
+					return nil, errors.New("the MCP server is unreachable right now; calls fail until it reconnects. Do not retry now; tell the user.")
 				}
 				defer m.send(callDoneCommand{})
 				res, err := client.CallTool(
@@ -343,28 +359,40 @@ func (m *module) isConnecting() bool {
 	return m.cancelConnection != nil && m.client == nil
 }
 
-func (m *module) connect() {
+func (m *module) reconnect() {
+	healthy := time.Since(m.connectedAt) >= 30*time.Second
+	m.closeConnection()
+	if healthy {
+		m.backoff.reset()
+	}
+	m.connect(!healthy)
+}
+
+func (m *module) connect(delayed bool) {
 	if m.ctx.Err() != nil {
 		return
 	}
 	m.seq += 1
-	m.connErrored = false
+	m.connErrored = delayed
 	seq := m.seq
 	ctx, cancel := context.WithCancel(context.Background())
 	m.cancelConnection = cancel
 	go func() {
+		if delayed && !m.backoff.wait(ctx) {
+			return
+		}
 		reported := false
-		backoff := newBackoff(ctx, time.Second, 30*time.Second)
 		var s *mcp.ClientSession
 		var list []*mcp.Tool
 		var err error
 	retry:
 		attemptCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		s, err = connect(attemptCtx, m.conf.URL, m.conf.Headers, m.conf.Ping, func(session *mcp.ClientSession) {
-			go func() {
-				list, err := getTools(ctx, m.conf.Enable, session)
-				m.send(toolsCommand{list, err, seq})
-			}()
+		changed := make(chan struct{}, 1)
+		s, err = connect(attemptCtx, m.conf.URL, m.conf.Headers, m.conf.Ping, func() {
+			select {
+			case changed <- struct{}{}:
+			default:
+			}
 		})
 		if err == nil {
 			if list, err = getTools(attemptCtx, m.conf.Enable, s); err != nil {
@@ -379,7 +407,7 @@ func (m *module) connect() {
 					return
 				}
 			}
-			if !backoff.wait() {
+			if !m.backoff.wait(ctx) {
 				return
 			}
 			goto retry
@@ -388,7 +416,20 @@ func (m *module) connect() {
 			s.Close()
 			return
 		}
+		closed := make(chan struct{})
+		go func() {
+			for {
+				select {
+				case <-closed:
+					return
+				case <-changed:
+					list, err := getTools(ctx, m.conf.Enable, s)
+					m.send(toolsCommand{list, err, seq})
+				}
+			}
+		}()
 		s.Wait()
+		close(closed)
 		m.send(disconnectCommand{seq})
 	}()
 }

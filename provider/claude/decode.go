@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strconv"
 	"strings"
 
 	"neui.dev/api"
@@ -60,12 +59,14 @@ type converter struct {
 	blocks     map[int]*block
 	next       int
 	model      string
-	msgID      string
 	usage      usage
 	stop       string
 	sent       int
 	declared   int
 	summarized bool
+	head       frameHead
+	ev         sseMessage
+	events     []api.Event
 }
 
 func newConverter(model string, summarized bool, sent int, declared int) *converter {
@@ -76,35 +77,69 @@ func newConverter(model string, summarized bool, sent int, declared int) *conver
 // turn, and nothing follows either of them on this wire. Blocks still open when
 // the error arrives are incomplete, so nothing is closed first.
 //
+// The type is read first and the rest of the frame only for a type this adapter
+// knows, so a new event name produces nothing whatever shape its fields take.
 // ping is the only keepalive this API has, and reading it already held the idle
-// deadline open, which is the whole of its meaning. New event names are promised
-// by the versioning policy. Neither is an edit to the content block list, so
-// neither produces anything.
+// deadline open, which is the whole of its meaning. A frame with no type, or a
+// known frame that breaks the flow it belongs to, fails the turn: only a reply
+// that arrived whole is kept.
 func (c *converter) Convert(f lib.Frame) ([]api.Event, bool) {
-	var ev sseMessage
-	if err := json.Unmarshal(f.Data, &ev); err != nil {
-		return []api.Event{api.EventErr{
+	c.head = frameHead{}
+	c.events = c.events[:0]
+	if err := json.Unmarshal(f.Data, &c.head); err != nil {
+		return append(c.events, api.EventErr{
 			Code: api.CodeNetwork,
 			Err:  fmt.Errorf("claude: malformed %q frame: %w", f.Event, err),
-		}}, false
+		}), false
 	}
-	kind := ev.Type
-	if kind == "" {
-		kind = f.Event
+	kind := c.head.Type
+	switch kind {
+	case "":
+		return append(c.events, api.EventErr{
+			Code: api.CodeNetwork,
+			Err:  fmt.Errorf("claude: %q frame without a type", f.Event),
+		}), false
+	case "message_start", "content_block_start", "content_block_delta", "content_block_stop", "message_delta", "error":
+		c.ev = sseMessage{}
+		if err := json.Unmarshal(f.Data, &c.ev); err != nil {
+			return append(c.events, api.EventErr{
+				Code: api.CodeNetwork,
+				Err:  fmt.Errorf("claude: malformed %q frame: %w", kind, err),
+			}), false
+		}
 	}
+	ev := &c.ev
+	var events []api.Event
+	ok := true
 	switch kind {
 	case "message_start":
-		return c.onStart(&ev), true
+		events, ok = c.onStart(ev)
 	case "content_block_start":
-		return c.onBlockStart(&ev)
+		events, ok = c.onBlockStart(ev)
 	case "content_block_delta":
-		return c.onBlockDelta(&ev)
+		events, ok = c.onBlockDelta(ev)
 	case "content_block_stop":
-		return c.onBlockStop(&ev), true
+		events, ok = c.onBlockStop(ev)
 	case "message_delta":
-		return c.onMessageDelta(&ev), true
+		events = c.onMessageDelta(ev)
 	case "message_stop":
-		return []api.Event{stopEvent(c.stop)}, false
+		ok = false
+		stop := stopEvent(c.stop)
+		_, green := stop.(api.EventOk)
+		switch {
+		case c.stop == "":
+			events = append(c.events, api.EventErr{
+				Code: api.CodeNetwork,
+				Err:  errors.New("claude: message_stop without a stop_reason"),
+			})
+		case green && len(c.blocks) > 0:
+			events = append(c.events, api.EventErr{
+				Code: api.CodeNetwork,
+				Err:  fmt.Errorf("claude: message_stop with %d blocks still open", len(c.blocks)),
+			})
+		default:
+			events = append(c.events, stop)
+		}
 	case "error":
 		var kind, msg, errorCode string
 		if ev.Error != nil {
@@ -121,9 +156,12 @@ func (c *converter) Convert(f lib.Frame) ([]api.Event, bool) {
 		if code == api.CodeTooLarge {
 			err = measuredTooLarge(c.model, c.sent, c.declared, err)
 		}
-		return []api.Event{api.EventErr{Code: code, Err: err}}, false
+		events, ok = append(c.events, api.EventErr{Code: code, Err: err}), false
 	}
-	return nil, true
+	if cap(events) > cap(c.events) {
+		c.events = events[:0]
+	}
+	return events, ok
 }
 
 // End is every ending message_stop did not announce.
@@ -164,15 +202,15 @@ func (c *converter) End(err error) []api.Event {
 	return []api.Event{api.EventErr{Code: api.CodeNetwork, Err: err}}
 }
 
-func (c *converter) onStart(ev *sseMessage) []api.Event {
+func (c *converter) onStart(ev *sseMessage) ([]api.Event, bool) {
 	if ev.Message == nil {
-		return nil
+		return append(c.events, api.EventErr{
+			Code: api.CodeNetwork,
+			Err:  errors.New("claude: message_start without a message"),
+		}), false
 	}
-	c.msgID = ev.Message.ID
-	return append(
-		[]api.Event{api.EventStart{ID: ev.Message.ID, Model: c.model}},
-		c.onUsage(ev.Message.Usage)...,
-	)
+	c.events = append(c.events, api.EventStart{ID: ev.Message.ID, Model: c.model})
+	return c.onUsage(ev.Message.Usage), true
 }
 
 // onBlockStart opens a wire block and decides which kind of protocol block it
@@ -187,10 +225,8 @@ func (c *converter) onStart(ev *sseMessage) []api.Event {
 // readable form, never fragmented, required back unchanged. It is still
 // thinking, so it is reasoning carrying only the provider's own encoding of it.
 //
-// A block that names no type is nothing: the field is absent, or null, which
-// reads the same. No block is kept for it, so it claims no index, its deltas
-// find nothing to fill and its stop finds nothing to close. Claiming one would
-// put a payload with no kind in the message.
+// A start with no index, no content_block or no type, for an index already
+// open, or a tool_use with no id, is a broken frame and fails the turn.
 //
 // Everything else is opaque — server_tool_use, the several tool result kinds,
 // container_upload, connector_text, fallback, and whatever ships next. The
@@ -199,20 +235,42 @@ func (c *converter) onStart(ev *sseMessage) []api.Event {
 // boundary, so the payload goes out as it opened and the fragments of it that
 // stream follow separately.
 func (c *converter) onBlockStart(ev *sseMessage) ([]api.Event, bool) {
+	if ev.Index == nil {
+		return append(c.events, api.EventErr{
+			Code: api.CodeNetwork,
+			Err:  errors.New("claude: content_block_start without an index"),
+		}), false
+	}
+	wire := *ev.Index
+	if c.blocks[wire] != nil {
+		return append(c.events, api.EventErr{
+			Code: api.CodeNetwork,
+			Err:  fmt.Errorf("claude: content_block_start for open index %d", wire),
+		}), false
+	}
 	var bs blockStart
 	if len(ev.ContentBlock) > 0 {
 		if err := json.Unmarshal(ev.ContentBlock, &bs); err != nil {
-			return []api.Event{api.EventErr{
+			return append(c.events, api.EventErr{
 				Code: api.CodeNetwork,
 				Err:  fmt.Errorf("claude: malformed content_block: %w", err),
-			}}, false
+			}), false
 		}
 	}
 	if bs.Type == "" {
-		return nil, true
+		return append(c.events, api.EventErr{
+			Code: api.CodeNetwork,
+			Err:  fmt.Errorf("claude: content_block_start %d without a block type", wire),
+		}), false
+	}
+	if bs.Type == "tool_use" && bs.ID == "" {
+		return append(c.events, api.EventErr{
+			Code: api.CodeNetwork,
+			Err:  fmt.Errorf("claude: tool_use block %d without an id", wire),
+		}), false
 	}
 	b := &block{}
-	c.blocks[ev.Index] = b
+	c.blocks[wire] = b
 	switch bs.Type {
 	case "text":
 		b.kind = kindText
@@ -221,30 +279,18 @@ func (c *converter) onBlockStart(ev *sseMessage) ([]api.Event, bool) {
 	case "redacted_thinking":
 		b.kind = kindReasoning
 		idx := c.claim(b)
-		return []api.Event{
+		return append(c.events,
 			api.EventThinking{Index: idx},
 			api.EventMeta{Index: idx, Data: ev.ContentBlock},
-		}, true
+		), true
 	case "tool_use":
 		b.kind = kindTool
-		return []api.Event{api.EventTool{Index: c.claim(b), ID: c.toolID(bs.ID, ev.Index), Name: bs.Name}}, true
+		return append(c.events, api.EventTool{Index: c.claim(b), ID: bs.ID, Name: bs.Name}), true
 	default:
 		b.kind = kindOpaque
-		return []api.Event{api.EventOpaque{Index: c.claim(b), Kind: bs.Type, Data: ev.ContentBlock}}, true
+		return append(c.events, api.EventOpaque{Index: c.claim(b), Kind: bs.Type, Data: ev.ContentBlock}), true
 	}
 	return nil, true
-}
-
-// toolID falls back to a minted id, because an empty one is worse than a
-// synthetic one: it is what a tool result is matched by later.
-func (c *converter) toolID(id string, wire int) string {
-	if id != "" {
-		return id
-	}
-	if c.msgID != "" {
-		return c.msgID + "_" + strconv.Itoa(wire)
-	}
-	return "claude_tool_" + strconv.Itoa(wire)
 }
 
 // onBlockDelta fills a block from one delta.
@@ -260,55 +306,84 @@ func (c *converter) toolID(id string, wire int) string {
 // citations_delta annotates a text block rather than adding to it and there is
 // nowhere for a citation to go. Unknown delta types are features this adapter
 // has no type for. Both are dropped without opening a block.
+//
+// A delta with no index, for no open block, or with a null, absent or untyped
+// delta, or a known delta on a text, tool or reasoning block of another kind, is
+// a broken frame and fails the turn. An
+// opaque block takes no known delta but input_json_delta, and the rest are
+// dropped as they always were: what it carries is the provider's own content.
 func (c *converter) onBlockDelta(ev *sseMessage) ([]api.Event, bool) {
-	b := c.blocks[ev.Index]
+	if ev.Index == nil {
+		return append(c.events, api.EventErr{
+			Code: api.CodeNetwork,
+			Err:  errors.New("claude: content_block_delta without an index"),
+		}), false
+	}
+	b := c.blocks[*ev.Index]
 	if b == nil {
+		return append(c.events, api.EventErr{
+			Code: api.CodeNetwork,
+			Err:  fmt.Errorf("claude: content_block_delta for no open block at %d", *ev.Index),
+		}), false
+	}
+	d := &ev.Delta
+	var want blockKind
+	switch d.Type {
+	case "":
+		return append(c.events, api.EventErr{
+			Code: api.CodeNetwork,
+			Err:  fmt.Errorf("claude: content_block_delta %d without a delta type", *ev.Index),
+		}), false
+	case "text_delta":
+		want = kindText
+	case "input_json_delta":
+		want = kindTool
+	case "thinking_delta", "signature_delta":
+		want = kindReasoning
+	default:
 		return nil, true
 	}
-	var d blockDelta
-	if len(ev.Delta) > 0 {
-		if err := json.Unmarshal(ev.Delta, &d); err != nil {
-			return []api.Event{api.EventErr{
-				Code: api.CodeNetwork,
-				Err:  fmt.Errorf("claude: malformed content_block_delta: %w", err),
-			}}, false
+	if b.kind == kindOpaque {
+		if d.Type == "input_json_delta" && d.PartialJSON != "" {
+			return append(c.events, api.EventOpaque{Index: c.claim(b), Delta: d.PartialJSON}), true
 		}
+		return nil, true
+	}
+	if b.kind != want {
+		return append(c.events, api.EventErr{
+			Code: api.CodeNetwork,
+			Err:  fmt.Errorf("claude: %s on the wrong block kind at %d", d.Type, *ev.Index),
+		}), false
 	}
 	switch d.Type {
 	case "text_delta":
-		if b.kind == kindText && d.Text != "" {
-			return []api.Event{api.EventText{Index: c.claim(b), Text: d.Text}}, true
+		if d.Text != "" {
+			return append(c.events, api.EventText{Index: c.claim(b), Text: d.Text}), true
 		}
 	case "input_json_delta":
-		if d.PartialJSON == "" {
-			return nil, true
-		}
-		switch b.kind {
-		case kindTool:
+		if d.PartialJSON != "" {
 			b.fragged = true
-			return []api.Event{api.EventTool{Index: c.claim(b), Args: d.PartialJSON}}, true
-		case kindOpaque:
-			return []api.Event{api.EventOpaque{Index: c.claim(b), Delta: d.PartialJSON}}, true
+			return append(c.events, api.EventTool{Index: c.claim(b), Args: d.PartialJSON}), true
 		}
 	case "thinking_delta":
-		if b.kind == kindReasoning && d.Thinking != "" {
+		if d.Thinking != "" {
 			if c.summarized {
-				return []api.Event{api.EventSummary{Index: c.claim(b), Text: d.Thinking}}, true
+				return append(c.events, api.EventSummary{Index: c.claim(b), Text: d.Thinking}), true
 			}
-			return []api.Event{api.EventThinking{Index: c.claim(b), Text: d.Thinking}}, true
+			return append(c.events, api.EventThinking{Index: c.claim(b), Text: d.Thinking}), true
 		}
 	case "signature_delta":
-		if b.kind == kindReasoning && d.Signature != "" {
+		if d.Signature != "" {
 			opened := b.open
 			idx := c.claim(b)
 			meta := api.EventMeta{Index: idx, Data: sealSignature(d.Signature)}
 			if opened {
-				return []api.Event{meta}, true
+				return append(c.events, meta), true
 			}
 			if c.summarized {
-				return []api.Event{api.EventSummary{Index: idx}, meta}, true
+				return append(c.events, api.EventSummary{Index: idx}, meta), true
 			}
-			return []api.Event{api.EventThinking{Index: idx}, meta}, true
+			return append(c.events, api.EventThinking{Index: idx}, meta), true
 		}
 	}
 	return nil, true
@@ -337,40 +412,39 @@ func sealSignature(signature string) json.RawMessage {
 // tells a zero argument call apart from one whose arguments were unusable.
 //
 // A block that produced nothing claimed no index and has nothing to close.
-// Claiming one anyway would put an empty block in the message.
-func (c *converter) onBlockStop(ev *sseMessage) []api.Event {
-	b := c.blocks[ev.Index]
-	if b == nil {
-		return nil
+// Claiming one anyway would put an empty block in the message. A stop with no
+// index or for no open block is a broken frame and fails the turn.
+func (c *converter) onBlockStop(ev *sseMessage) ([]api.Event, bool) {
+	if ev.Index == nil {
+		return append(c.events, api.EventErr{
+			Code: api.CodeNetwork,
+			Err:  errors.New("claude: content_block_stop without an index"),
+		}), false
 	}
-	delete(c.blocks, ev.Index)
-	var events []api.Event
+	b := c.blocks[*ev.Index]
+	if b == nil {
+		return append(c.events, api.EventErr{
+			Code: api.CodeNetwork,
+			Err:  fmt.Errorf("claude: content_block_stop for no open block at %d", *ev.Index),
+		}), false
+	}
+	delete(c.blocks, *ev.Index)
 	if b.kind == kindTool && !b.fragged {
-		events = append(events, api.EventTool{Index: b.index, Args: "{}"})
+		c.events = append(c.events, api.EventTool{Index: b.index, Args: "{}"})
 	}
 	if !b.open {
-		return events
+		return c.events, true
 	}
-	return append(events, api.EventClose{Index: b.index})
+	return append(c.events, api.EventClose{Index: b.index}), true
 }
 
 // onMessageDelta takes the stop reason and the usage the frame carries. The stop
 // is held rather than emitted: the flow allows more than one of these and the
 // final usage rides on the last, so it only goes out once nothing else can
 // follow it.
-//
-// The unmarshal error is discarded on purpose. The frame was parsed before this
-// ran, so delta is already known to be valid JSON, and the only way reading two
-// documented fields out of it fails is this API changing the type of one of them
-// inside a version. Branching on that is a guard against something nothing has
-// been shown to do, and the usage riding on the same frame is worth having
-// either way.
 func (c *converter) onMessageDelta(ev *sseMessage) []api.Event {
-	if len(ev.Delta) > 0 {
-		var d messageDelta
-		if err := json.Unmarshal(ev.Delta, &d); err == nil && d.StopReason != nil {
-			c.stop = *d.StopReason
-		}
+	if ev.Delta.StopReason != nil {
+		c.stop = *ev.Delta.StopReason
 	}
 	return c.onUsage(ev.Usage)
 }
@@ -389,10 +463,10 @@ func (c *converter) claim(b *block) int {
 
 func (c *converter) onUsage(u *wireUsage) []api.Event {
 	if u == nil {
-		return nil
+		return c.events
 	}
 	c.usage.merge(u)
-	return []api.Event{c.usage.event()}
+	return append(c.events, c.usage.event())
 }
 
 // usage keeps the last value seen for every counter. message_delta reports only
@@ -454,17 +528,16 @@ func setIf(dst *int, v *int) {
 // end_turn, stop_sequence and tool_use all mean the model finished. tool_use is
 // not told apart, because a turn that wants results says so by carrying the
 // calls: the reason repeats what the content already says, and a caller
-// dispatches from the calls it has rather than from a claim about them. An
-// absent or empty value is this API ending a message without naming why, which
-// is an ordinary completion and not a value nobody recognized — only a named one
-// can be that.
+// dispatches from the calls it has rather than from a claim about them. A
+// message_stop that no stop_reason preceded never reaches this switch: it fails
+// the turn in Convert.
 //
 // pause_turn is a finished turn here, which is a decision rather than an
 // equality: it says the API stopped a server-tool loop it would take the turn
 // back to continue, and abandoning one is documented as legal and costs an
 // incomplete answer, where EventErr would discard content that is real and
-// already streamed. NOTES.md carries the restore condition and what a
-// continuation needs.
+// already streamed. Once continuations are implemented, pause_turn must stop
+// counting as a finished turn.
 //
 // max_tokens and model_context_window_exceeded no longer share a code. Both cut
 // the output, and telling them apart used to mean comparing this API's own
@@ -484,7 +557,7 @@ func setIf(dst *int, v *int) {
 func stopEvent(native string) api.Event {
 	var code api.ErrCode
 	switch native {
-	case "", "end_turn", "stop_sequence", "tool_use":
+	case "end_turn", "stop_sequence", "tool_use":
 		return api.EventOk{Code: api.CodeTurn}
 	case "pause_turn":
 		return api.EventOk{Code: api.CodeTurn}
@@ -500,6 +573,10 @@ func stopEvent(native string) api.Event {
 	return api.EventErr{Code: code, Err: fmt.Errorf("claude: stop_reason %q", native)}
 }
 
+// maxErrorMessage bounds how much of an unparseable error body is kept. At
+// gateways it is frequently a whole HTML page.
+const maxErrorMessage = 512
+
 // readAPIError decodes a refused request, tolerating a body that is not JSON: a
 // 413 is returned by the edge before the request reaches the API and need not
 // use the documented envelope at all. The whole error is returned rather than
@@ -512,6 +589,9 @@ func readAPIError(h *lib.HTTPError) *APIError {
 	}
 	e := newAPIError(h.Status, h.Header, nil)
 	if text := strings.TrimSpace(string(h.Body)); text != "" {
+		if r := []rune(text); len(r) > maxErrorMessage {
+			text = string(r[:maxErrorMessage]) + "…"
+		}
 		e.Message = text
 	}
 	return e

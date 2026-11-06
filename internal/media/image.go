@@ -15,10 +15,10 @@ import (
 )
 
 const (
-	maxImageDim     = 2000
-	fallbackByteCap = 4 << 20
-	retryArea       = 0.75
-	MaxDecodePixels = 50_000_000
+	fallbackImageSide = 2000
+	fallbackByteCap   = 4 << 20
+	retryArea         = 0.75
+	MaxDecodePixels   = 50_000_000
 )
 
 func Shape(data []byte, mimeType api.ImageMime, model api.Model) (api.Image, error) {
@@ -30,11 +30,18 @@ func Shape(data []byte, mimeType api.ImageMime, model api.Model) (api.Image, err
 	if byteCap <= 0 {
 		byteCap = fallbackByteCap
 	}
+	side := model.ImageSide
+	if side <= 0 {
+		side = fallbackImageSide
+	}
 	w, h := cfg.Width, cfg.Height
-	if w <= 0 || h <= 0 || int64(w)*int64(h) > MaxDecodePixels {
+	if w <= 0 || h <= 0 {
+		return api.Image{}, fmt.Errorf("image has no pixels (%dx%d)", w, h)
+	}
+	if int64(w)*int64(h) > MaxDecodePixels {
 		return api.Image{}, fmt.Errorf("image is %dx%d, over the %d pixels that can be decoded", w, h, MaxDecodePixels)
 	}
-	fits := w <= maxImageDim && h <= maxImageDim
+	fits := w <= side && h <= side
 	if model.ImagePixels > 0 {
 		fits = fits && w*h <= model.ImagePixels
 	}
@@ -46,7 +53,7 @@ func Shape(data []byte, mimeType api.ImageMime, model api.Model) (api.Image, err
 		return api.Image{}, err
 	}
 	w, h = fitSidesToArea(w, h, model.ImagePixels)
-	w, h = fitSidesToLongest(w, h, maxImageDim)
+	w, h = fitSidesToLongest(w, h, side)
 	w, h = max(w, 1), max(h, 1)
 	w, h = clampSidesToArea(w, h, model.ImagePixels)
 	dst := image.NewRGBA(image.Rect(0, 0, w, h))
@@ -62,12 +69,18 @@ func Shape(data []byte, mimeType api.ImageMime, model api.Model) (api.Image, err
 	}
 	size := 0
 	for round := range 2 {
-		if round > 0 {
+		var flat *image.RGBA
+		if round == 0 {
+			flat = image.NewRGBA(dst.Bounds())
+			draw.Draw(flat, flat.Bounds(), image.White, image.Point{}, draw.Src)
+			draw.Draw(flat, flat.Bounds(), dst, image.Point{}, draw.Over)
+		} else {
 			w, h = scaleSidesByArea(w, h, retryArea)
-			shrunk := image.NewRGBA(image.Rect(0, 0, max(w, 1), max(h, 1)))
-			draw.BiLinear.Scale(shrunk, shrunk.Bounds(), src, src.Bounds(), draw.Src, nil)
-			dst = shrunk
+			flat = image.NewRGBA(image.Rect(0, 0, max(w, 1), max(h, 1)))
+			draw.Draw(flat, flat.Bounds(), image.White, image.Point{}, draw.Src)
+			draw.BiLinear.Scale(flat, flat.Bounds(), src, src.Bounds(), draw.Over, nil)
 		}
+		dst = flat
 		for _, quality := range [3]int{85, 70, 55} {
 			buf.Reset()
 			if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: quality}); err != nil {

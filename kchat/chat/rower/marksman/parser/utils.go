@@ -5,7 +5,6 @@ import (
 	"strings"
 )
 
-// offset is the absolute column of the last prefix character of the enclosing container (-1 at root); the result is relative to offset+1.
 func contentColumn(line string, offset int) (column int) {
 	col := 0
 	i := 0
@@ -69,12 +68,12 @@ func childOffset(line string, markerColumn int) int {
 type listKind int
 
 const (
-	listNone  listKind = iota
-	listDash           // -
-	listPlus           // +
-	listStar           // *
-	listDot            // 1.
-	listParen          // 1)
+	listNone listKind = iota
+	listDash
+	listPlus
+	listStar
+	listDot
+	listParen
 )
 
 func isList(content string) bool {
@@ -199,8 +198,6 @@ func isBlank(line string) bool {
 	return true
 }
 
-// A list item may interrupt a paragraph only if it is not empty and,
-// when ordered, its start number is 1.
 func listInterruptsParagraph(content string) bool {
 	kind, contentColumn := listMarker(content, -1)
 	if kind == listNone || isBlank(tail(content, -1, contentColumn)) {
@@ -213,8 +210,6 @@ func listInterruptsParagraph(content string) bool {
 	return true
 }
 
-// Line cannot start a new block, so it may lazily continue an open paragraph.
-// column is relative to the last matched container's content base.
 func isParagraphContinuation(column int, content string) bool {
 	if column >= 4 {
 		return true
@@ -231,8 +226,6 @@ func isParagraphContinuation(column int, content string) bool {
 	return !listInterruptsParagraph(content)
 }
 
-// splitTableRow splits a row on unescaped pipes; a leading and a trailing
-// pipe are optional. pipes reports whether the row had any unescaped pipe.
 func splitTableRow(content string) (cells []string, pipes bool) {
 	content = strings.TrimRight(content, " \t")
 	start := 0
@@ -257,8 +250,6 @@ func splitTableRow(content string) (cells []string, pipes bool) {
 	return cells, pipes
 }
 
-// tableCells counts the cells of a possible header row; 0 when the line has
-// no unescaped pipe and so cannot start a table.
 func tableCells(content string) int {
 	cells, pipes := splitTableRow(content)
 	if !pipes {
@@ -267,8 +258,6 @@ func tableCells(content string) int {
 	return max(len(cells), 1)
 }
 
-// isTableDelimiter reports the cell count of a delimiter row: every cell is
-// dashes with an optional colon on either side.
 func isTableDelimiter(content string) (int, bool) {
 	cells, _ := splitTableRow(content)
 	for _, cell := range cells {
@@ -290,9 +279,6 @@ var htmlRawStart = regexp.MustCompile(`(?i)^<(script|pre|style|textarea)(\s|>|$)
 var htmlRawEnd = regexp.MustCompile(`(?i)</(script|pre|style|textarea)>`)
 var htmlBlockStart6 = regexp.MustCompile(`(?i)^</?(address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(\s|/?>|$)`)
 
-// htmlBlockStart reports which of the seven HTML block start conditions the
-// content meets, 0 if none. Kind 7 (a complete open or closing tag alone on
-// the line) cannot interrupt a paragraph.
 func htmlBlockStart(content string) int {
 	switch {
 	case htmlRawStart.MatchString(content):
@@ -317,8 +303,6 @@ func isASCIILetter(c byte) bool {
 	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
 }
 
-// htmlBlockEnd reports whether the line ends an HTML block of kinds 1-5
-// (kinds 6 and 7 end at a blank line instead).
 func htmlBlockEnd(kind int, content string) bool {
 	switch kind {
 	case 1:
@@ -335,9 +319,6 @@ func htmlBlockEnd(kind int, content string) bool {
 	return false
 }
 
-// referenceLabel returns the text after "[label]:" when content starts with a
-// link reference label: one line, no unescaped brackets, at least one
-// non-space character, at most 999 characters.
 func referenceLabel(content string) (rest string, ok bool) {
 	if len(content) == 0 || content[0] != '[' {
 		return "", false
@@ -363,9 +344,6 @@ func referenceLabel(content string) (rest string, ok bool) {
 	return "", false
 }
 
-// referenceDestination consumes leading whitespace and a link destination
-// (<...> without line breaks or unescaped angle brackets, or a run of
-// non-space characters); ok is false when there is none.
 func referenceDestination(text string) (rest string, ok bool) {
 	text = strings.TrimLeft(text, " \t")
 	if len(text) == 0 {
@@ -391,8 +369,6 @@ func referenceDestination(text string) (rest string, ok bool) {
 	return text[i:], true
 }
 
-// referenceTitleStart consumes leading whitespace and a title opener,
-// returning the matching closer.
 func referenceTitleStart(text string) (closing byte, rest string, ok bool) {
 	text = strings.TrimLeft(text, " \t")
 	if len(text) == 0 {
@@ -407,7 +383,6 @@ func referenceTitleStart(text string) (closing byte, rest string, ok bool) {
 	return 0, text, false
 }
 
-// referenceTitleEnd scans for the unescaped closer, returning what follows it.
 func referenceTitleEnd(text string, closing byte) (rest string, ok bool) {
 	for i := 0; i < len(text); i++ {
 		switch text[i] {

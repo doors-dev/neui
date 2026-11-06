@@ -19,10 +19,12 @@ import (
 // so a converter may keep whatever state its wire format forces on it — an
 // index remapping, a tool call being assembled — without a lock.
 type Converter interface {
-	// Convert turns one frame into the events it carries. Returning false says
-	// the turn is over and nothing further will be read, which is what bounds a
-	// peer that keeps writing after saying how the reply ended. End is not
-	// called after it: the converter has already said how the turn ended.
+	// Convert turns one frame into the events it carries. The frame's Data is
+	// reused once Convert returns, so neither the converter nor the events
+	// may keep any of it but copies. Returning false says the turn is over
+	// and nothing further will be read, which is what bounds a peer that
+	// keeps writing after saying how the reply ended. End is not called after
+	// it: the converter has already said how the turn ended.
 	Convert(Frame) ([]api.Event, bool)
 
 	// End is every other ending, never called with nil: io.EOF for a body that
@@ -106,7 +108,10 @@ func Drain(events ...api.Event) <-chan api.Event {
 // Convert returns false or End has run, once their events are delivered.
 // Cancelling parentCtx ends the turn, and the channel closes without waiting
 // for queued events to be read; otherwise the caller must read the channel
-// until it closes, or the streaming goroutine leaks.
+// until it closes, or the streaming goroutine leaks. A req built by
+// Body.Request gives its Body back to the pool once the response is closed and
+// the transport has closed every reader it opened on it, unless the buffer grew
+// past 4 MiB.
 func Stream(parentCtx context.Context, client *http.Client, req *http.Request, conv Converter, opt Options) <-chan api.Event {
 	ctx, cancel := context.WithCancelCause(parentCtx)
 	if opt.Idle <= 0 {
@@ -141,13 +146,13 @@ type streamer struct {
 }
 
 func (s *streamer) resetTimer() {
-	if s.ctx.Err() != nil {
-		return
-	}
 	if s.timer == nil {
 		s.timer = time.AfterFunc(s.opt.Idle, func() {
 			s.cancel(ErrIdle)
 		})
+		return
+	}
+	if s.ctx.Err() != nil {
 		return
 	}
 	if !s.timer.Stop() {
@@ -161,6 +166,9 @@ func (s *streamer) run(req *http.Request) {
 	defer s.drain()
 	defer s.timer.Stop()
 	defer s.cancel(nil)
+	if body, ok := req.Body.(*bodyReader); ok {
+		defer body.body.release()
+	}
 	resp, err := s.client.Do(req.WithContext(s.ctx))
 	if err != nil {
 		if context.Cause(s.ctx) == ErrIdle {
@@ -181,7 +189,8 @@ func (s *streamer) run(req *http.Request) {
 }
 
 func (s *streamer) read(body io.Reader) {
-	read := read(s.ctx, body, s.opt.Max)
+	free := make(chan []byte, 2)
+	read := read(s.ctx, body, s.opt.Max, free)
 	for {
 		var ch chan api.Event
 		var event api.Event
@@ -207,6 +216,10 @@ func (s *streamer) read(body io.Reader) {
 				continue
 			}
 			frames, ok := s.conv.Convert(fr.frame)
+			select {
+			case free <- fr.frame.Data:
+			default:
+			}
 			s.append(frames)
 			if !ok {
 				return

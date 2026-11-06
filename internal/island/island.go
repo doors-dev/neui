@@ -37,10 +37,11 @@ func NewIsland(
 		template:    template,
 		success:     success,
 		failure:     failure,
-		place:       new(doors.Door),
+		screen:      new(doors.Door),
+		status:      new(doors.Door),
 		lib:         lib,
 	}
-	island.place.Outer(context.Background(), screen{status: noAppStatus, content: placeholder})
+	island.updateStatusScreen(context.Background(), noAppStatus, placeholder)
 	return island
 }
 
@@ -52,7 +53,8 @@ type island struct {
 	failure     func(close func(ctx context.Context), err error) gox.Elem
 	lib         Library
 	unmounted   bool
-	place       *doors.Door
+	screen      *doors.Door
+	status      *doors.Door
 	run         *run
 	seq         uint
 }
@@ -100,22 +102,53 @@ func (i *island) StartCode(ctx context.Context, space string, comment string, co
 		return 0, 0, errUnmounted
 	}
 	overtake := i.run != nil
+	i.seq++
+	seq := i.seq
 	if overtake {
-		i.run.overtake()
+		old := i.run
+		ch := old.overtake()
+		i.mu.Unlock()
+		select {
+		case <-ch:
+		case <-ctx.Done():
+			go func() {
+				select {
+				case <-ch:
+				case <-old.pageContext.Done():
+					return
+				}
+				i.mu.Lock()
+				defer i.mu.Unlock()
+				if i.seq != seq {
+					return
+				}
+				i.run = nil
+				i.updateStatusScreen(old.pageContext, noAppStatus, i.placeholder)
+			}()
+			i.mu.Lock()
+			return 0, 0, context.Cause(ctx)
+		}
+		i.mu.Lock()
+		if seq != i.seq {
+			if i.unmounted {
+				return 0, 0, errUnmounted
+			}
+			return 0, 0, errOvertaken
+		}
 		i.run = nil
 	}
-	i.seq++
 	run, err := newRun(ctx, i, i.seq, space, comment)
 	if err != nil {
-		i.place.Outer(ctx, screen{status: noAppStatus, content: i.placeholder})
+		i.updateStatusScreen(ctx, noAppStatus, i.placeholder)
 		return 0, 0, err
 	}
 	script, err := run.eval(code, false)
 	if err != nil {
-		i.place.Outer(ctx, screen{status: noAppStatus, content: i.placeholder})
+		i.updateStatusScreen(ctx, noAppStatus, i.placeholder)
 		return 0, 0, err
 	}
 	i.run = run
+	i.updateStatus(ctx, runningStatus(run.task.ID()))
 	return i.run.task.ID(), script, nil
 }
 
@@ -164,18 +197,31 @@ func (i *island) ended(ctx context.Context, seq uint, task uint, err error) {
 			return
 		}
 		i.seq++
-		i.place.Outer(ctx, screen{status: noAppStatus, content: i.placeholder})
+		i.updateStatusScreen(ctx, noAppStatus, i.placeholder)
 	}
 	switch {
 	case errors.Is(err, api.ErrCanceledByUser):
-		i.place.Outer(ctx, screen{status: noAppStatus, content: i.placeholder})
+		i.updateStatusScreen(ctx, noAppStatus, i.placeholder)
 	case err == nil && i.success != nil:
-		i.place.Outer(ctx, screen{status: endedStatus(task), content: i.success(close)})
+		i.updateStatusScreen(ctx, endedStatus(task), i.success(close))
 	case err != nil && i.failure != nil:
-		i.place.Outer(ctx, screen{status: failedStatus(task, err), content: i.failure(close, err)})
+		i.updateStatusScreen(ctx, failedStatus(task, err), i.failure(close, err))
 	default:
-		i.place.Outer(ctx, screen{status: noAppStatus, content: i.placeholder})
+		i.updateStatusScreen(ctx, noAppStatus, i.placeholder)
 	}
+}
+
+func (i *island) updateStatus(ctx context.Context, s string) {
+	i.status.Outer(ctx, status(s))
+}
+
+func (i *island) updateScreen(ctx context.Context, s screen) {
+	i.screen.Outer(ctx, s)
+}
+
+func (i *island) updateStatusScreen(ctx context.Context, s string, content gox.Elem) {
+	i.updateStatus(ctx, s)
+	i.updateScreen(ctx, screen{content: content})
 }
 
 func readFile(ctx context.Context, file string) (string, error) {
@@ -191,32 +237,41 @@ func readFile(ctx context.Context, file string) (string, error) {
 	return string(code), nil
 }
 
-func (i *island) Done(ctx context.Context, code string, contunue bool) error {
+func (i *island) Done(ctx context.Context) error {
 	i.mu.Lock()
-	defer i.mu.Unlock()
 	if i.run == nil {
+		i.mu.Unlock()
 		return errNothingToStop
 	}
-	i.run.done()
-	i.run = nil
+	ch := i.run.done()
+	i.mu.Unlock()
+	select {
+	case <-ctx.Done():
+	case <-ch:
+	}
 	return nil
 }
 
+type status string
+
+func (s status) Main() gox.Elem {
+	return func(cur gox.Cursor) error {
+		ctx := cur.Context()
+		return getSpace(ctx).AddData(ctx, "status", string(s))
+	}
+}
+
 type screen struct {
-	status  string
 	content gox.Elem
 	store   doors.Store
 }
 
 func (s screen) Main() gox.Elem {
 	return func(cur gox.Cursor) error {
-		ctx := cur.Context()
-		if err := getSpace(ctx).AddData(ctx, "status", s.status); err != nil {
-			return err
-		}
 		if s.store == nil {
-			return cur.Any(s.content)
+			return cur.Comp(s.content)
 		}
+		ctx := cur.Context()
 		return doors.Ctx(context.WithValue(ctx, common.KeyIslandStore, s.store)).Proxy(cur, s.content)
 	}
 }
@@ -227,7 +282,12 @@ func (i *island) Main() gox.Elem {
 		if err != nil {
 			return err
 		}
-		return doors.Ctx(ctx).Proxy(cur, i.place.Main())
+		return doors.Ctx(ctx).Proxy(cur, func(cur gox.Cursor) error {
+			if err := cur.Comp(i.status); err != nil {
+				return err
+			}
+			return cur.Comp(i.screen)
+		})
 	}
 }
 

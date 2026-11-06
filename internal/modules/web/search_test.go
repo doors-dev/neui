@@ -73,36 +73,60 @@ func TestSearchDefaultsAndFilters(t *testing.T) {
 	}
 }
 
-func TestSearchBudgetAndEmptiness(t *testing.T) {
+func TestSearchCapsEachResultAndTrimsToNum(t *testing.T) {
 	backend := &fakeBackend{results: []Result{
 		{Title: "first", URL: "https://example.com/1", Content: strings.Repeat("a", 90)},
-		{Title: "second", URL: "https://example.com/2", Content: strings.Repeat("b", 40)},
+		{Title: "second", URL: "https://example.com/2", Content: strings.Repeat("b", 50)},
 		{Title: "third", URL: "https://example.com/3", Content: strings.Repeat("c", 40), Snippet: "kept"},
+		{Title: "fourth", URL: "https://example.com/4", Snippet: "only a snippet"},
+		{Title: "fifth", URL: "https://example.com/5", Content: strings.Repeat("漢", 80)},
 	}}
-	search, _ := searchTool(t, Config{Search: backend, SearchChars: 100})
+	search, _ := searchTool(t, Config{Search: backend, SearchChars: 50})
 	results, err := search(`{"query":"widgets"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(results) != 3 {
+	if len(results) != 5 {
 		t.Fatalf("got %d results", len(results))
 	}
-	if results[0].Content != strings.Repeat("a", 90) {
-		t.Errorf("first result should be admitted whole: %q", results[0].Content)
+	if results[0].Content != strings.Repeat("a", 50)+"… (content truncated)" {
+		t.Errorf("a long result must be cut at the per-result cap: %q", results[0].Content)
 	}
-	if results[1].Content != strings.Repeat("b", 10)+"… (content truncated)" {
-		t.Errorf("straddling result wrong: %q", results[1].Content)
+	if results[1].Content != strings.Repeat("b", 50) {
+		t.Errorf("a result exactly at the cap must stay whole and unmarked: %q", results[1].Content)
 	}
-	if results[2].Content != "" || results[2].Snippet != "kept" {
-		t.Errorf("third result should keep only its snippet: %+v", results[2])
+	if results[2].Content != strings.Repeat("c", 40) || results[2].Snippet != "kept" {
+		t.Errorf("a later result must keep its content, earlier ones spend no shared budget: %+v", results[2])
+	}
+	if results[3].Content != "" || results[3].Snippet != "only a snippet" {
+		t.Errorf("a snippet-only result changed: %+v", results[3])
+	}
+	if results[4].Content != strings.Repeat("漢", 50)+"… (content truncated)" {
+		t.Errorf("the cap must count characters, not bytes: %q", results[4].Content)
+	}
+	trimmed, err := search(`{"query":"widgets","num":2}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(trimmed) != 2 || trimmed[1].Title != "second" {
+		t.Errorf("a backend returning more than num must be trimmed to num, best first: %+v", trimmed)
 	}
 	backend.results = nil
-	if _, err := search(`{"query":"widgets"}`); err == nil || err.Error() != "No search results found. Please try a different query." {
-		t.Errorf("empty backend: %v", err)
+	empty, err := search(`{"query":"widgets"}`)
+	if err != nil || empty == nil || len(empty) != 0 {
+		t.Errorf("an empty backend result must be [] with no error: %v %v", empty, err)
 	}
 	backend.err = errors.New("429 sign in")
 	if _, err := search(`{"query":"widgets"}`); err == nil || !strings.HasPrefix(err.Error(), "the search backend is unavailable: 429 sign in. Use web__fetch") {
 		t.Errorf("backend failure: %v", err)
+	}
+}
+
+func TestSearchCharsDefault(t *testing.T) {
+	c := Config{}
+	c.initDefaults()
+	if c.SearchChars != 2000 {
+		t.Errorf("SearchChars defaults to %d, want 2000 per result", c.SearchChars)
 	}
 }
 

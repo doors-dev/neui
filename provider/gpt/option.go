@@ -24,8 +24,9 @@ const (
 type ReplayMode int
 
 const (
-	// ReplayToolTurns replays a reasoning item only when a tool call followed
-	// it, the case the service requires. Default.
+	// ReplayToolTurns replays a reasoning item when a tool call follows it in
+	// the same message, with any preamble or commentary messages in between;
+	// the case the service requires. Default.
 	ReplayToolTurns ReplayMode = iota
 	// ReplayAlways replays every reasoning item that has an item after it in
 	// the same message, including one before a text answer. If the service
@@ -45,7 +46,6 @@ type settings struct {
 	maxTokens         int
 	temperature       *float64
 	topP              *float64
-	forceSampling     bool
 	effort            string
 	summary           string
 	reasoningMode     string
@@ -79,20 +79,24 @@ func defaultSettings() settings {
 // Option configures a Provider in New. Every option has a working default.
 type Option func(*Provider) error
 
-// Conf holds what every Provider needs. Without Model.Name every turn fails
-// with CodeInvalid. Use one of the models in this package, such as GPT56Luna,
+// Conf holds what every Provider needs. Without Model.Name New returns an
+// error. Use one of the models in this package, such as GPT56Luna,
 // or an api.Model of your own for a gateway or a newer id.
 type Conf struct {
 	Model api.Model // the one model this provider streams with, spelled as it goes on the wire
 }
 
-// New builds a Provider. It never fails: a nil option is skipped, an option
-// with an invalid value is logged and has no effect, and an empty
-// Conf.Model.Name fails each turn with CodeInvalid. Without WithAPIKey, New
-// reads the key from OPENAI_API_KEY once. If that is empty, it logs a warning
-// and requests carry no Authorization header, which api.openai.com refuses
-// with CodeAccess.
-func New(conf Conf, opts ...Option) *Provider {
+// New builds a Provider. A nil option is skipped; an option with an invalid
+// value, or one the declared model does not take, makes New return its error,
+// as does an empty Conf.Model.Name. So do WithTemperature or WithTopP on a
+// known reasoning model, one whose Name is exactly that of a model declared in
+// this package, unless the reasoning effort is EffortNone. Any other id is
+// unknown: New checks no combination for it and every option is sent as
+// configured, so what the model refuses fails the turn.
+// Without WithAPIKey, New reads the key from OPENAI_API_KEY once. If that is
+// empty, it logs a warning and requests carry no Authorization header, which
+// api.openai.com refuses with CodeAccess.
+func New(conf Conf, opts ...Option) (*Provider, error) {
 	p := &Provider{
 		baseURL: defaultBaseURL,
 		client:  &http.Client{},
@@ -104,8 +108,14 @@ func New(conf Conf, opts ...Option) *Provider {
 			continue
 		}
 		if err := o(p); err != nil {
-			slog.Error("gpt: option rejected", "err", err)
+			return nil, err
 		}
+	}
+	if p.model.Name == "" {
+		return nil, errors.New("gpt: no model, set Conf.Model")
+	}
+	if classify(p.model.Name) == reasoningModel && (p.set.temperature != nil || p.set.topP != nil) && p.set.effort != string(EffortNone) {
+		return nil, fmt.Errorf("gpt: %s is a reasoning model and takes temperature and top_p only with reasoning effort none", p.model.Name)
 	}
 	if !p.keyExplicit {
 		p.apiKey = os.Getenv(apiKeyEnv)
@@ -113,7 +123,7 @@ func New(conf Conf, opts ...Option) *Provider {
 			slog.Warn("gpt: no API key: set " + apiKeyEnv + " or pass WithAPIKey")
 		}
 	}
-	return p
+	return p, nil
 }
 
 // WithAPIKey sets the key, and OPENAI_API_KEY is then not read. An empty key
@@ -194,9 +204,9 @@ const maxOutputTokensFloor = 16
 
 // WithMaxTokens caps the response, reasoning included, so on a reasoning model
 // a small cap can leave no room for the answer. Zero, the default, sends no cap.
-// Values from 1 to 15 are below the API minimum and are rejected, and so is a
-// value over 128,000 when Conf.Model is one of the models declared in this
-// package, which take no more.
+// A negative value and values from 1 to 15, below the API minimum, are
+// rejected, and so is a value over 128,000 when Conf.Model is one of the
+// models declared in this package, which take no more.
 func WithMaxTokens(n int) Option {
 	return func(p *Provider) error {
 		if n < 0 {
@@ -205,8 +215,8 @@ func WithMaxTokens(n int) Option {
 		if n > 0 && n < maxOutputTokensFloor {
 			return fmt.Errorf("gpt: WithMaxTokens is %d or more, the schema minimum, or zero for no cap", maxOutputTokensFloor)
 		}
-		switch baseModel(p.model.Name) {
-		case GPT56Sol.Name, GPT56Luna.Name, GPT6Astra.Name, GPT6Sol.Name, GPT6Luna.Name:
+		switch p.model.Name {
+		case GPT56Sol.Name, GPT56Luna.Name, GPT6Astra.Name, GPT6Sol.Name, GPT6Luna.Name, GPT61Sol.Name, GPT61Terra.Name:
 			if n > maxOutputTokensCeiling {
 				return fmt.Errorf("gpt: WithMaxTokens is %d, over the %d output tokens %s takes", n, maxOutputTokensCeiling, p.model.Name)
 			}
@@ -216,10 +226,8 @@ func WithMaxTokens(n int) Option {
 	}
 }
 
-// WithTemperature sets the sampling temperature, 0 to 2. It is not sent to
-// a model this provider classifies as reasoning (an id in the gpt-5, gpt-6,
-// o1, o3, o4 or codex families, other than *-chat-latest), unless the
-// reasoning effort is EffortNone or WithForcedSampling is set.
+// WithTemperature sets the sampling temperature, 0 to 2. New refuses it on a
+// known reasoning model (see New) unless the reasoning effort is EffortNone.
 func WithTemperature(v float64) Option {
 	return func(p *Provider) error {
 		if v < 0 || v > 2 {
@@ -230,24 +238,14 @@ func WithTemperature(v float64) Option {
 	}
 }
 
-// WithTopP sets nucleus sampling, 0 to 1. Like WithTemperature it is not
-// sent to models classified as reasoning unless the reasoning effort is
-// EffortNone or WithForcedSampling is set.
+// WithTopP sets nucleus sampling, 0 to 1. Like WithTemperature, New refuses
+// it on a known reasoning model unless the reasoning effort is EffortNone.
 func WithTopP(v float64) Option {
 	return func(p *Provider) error {
 		if v < 0 || v > 1 {
 			return errors.New("gpt: top_p is 0 to 1")
 		}
 		p.set.topP = &v
-		return nil
-	}
-}
-
-// WithForcedSampling sends WithTemperature and WithTopP to every model, for a
-// model this provider wrongly classifies as reasoning.
-func WithForcedSampling() Option {
-	return func(p *Provider) error {
-		p.set.forceSampling = true
 		return nil
 	}
 }
@@ -270,14 +268,13 @@ const (
 // WithReasoningEffort sets reasoning.effort. Accepted values differ per model.
 // When Conf.Model is one of the models declared in this package, the values
 // its docs leave out are rejected: EffortMinimal on all of them, and EffortNone
-// on gpt-6-astra. For any other model nothing is checked, and an unsupported
-// value fails the turn with a 400. It is sent only to models this provider
-// classifies as reasoning (see WithTemperature).
+// on gpt-6-astra and gpt-6.1-sol. For any other model nothing is checked, and
+// an unsupported value fails the turn with a 400.
 func WithReasoningEffort(effort Effort) Option {
 	return func(p *Provider) error {
-		switch m := baseModel(p.model.Name); m {
-		case GPT56Sol.Name, GPT56Luna.Name, GPT6Astra.Name, GPT6Sol.Name, GPT6Luna.Name:
-			if effort == EffortMinimal || effort == EffortNone && m == GPT6Astra.Name {
+		switch m := p.model.Name; m {
+		case GPT56Sol.Name, GPT56Luna.Name, GPT6Astra.Name, GPT6Sol.Name, GPT6Luna.Name, GPT61Sol.Name, GPT61Terra.Name:
+			if effort == EffortMinimal || effort == EffortNone && (m == GPT6Astra.Name || m == GPT61Sol.Name) {
 				return fmt.Errorf("gpt: %s does not take reasoning effort %q", p.model.Name, effort)
 			}
 		}
@@ -300,8 +297,7 @@ const (
 // WithReasoningSummary asks for readable reasoning summaries, which arrive
 // as EventSummary and fill ContentReasoning.Summary. Off by default, so
 // Summary stays empty. Recent models require a verified organization and
-// answer 400 otherwise. Like WithReasoningEffort, it is sent only to models
-// classified as reasoning.
+// answer 400 otherwise.
 func WithReasoningSummary(summary Summary) Option {
 	return func(p *Provider) error {
 		p.set.summary = string(summary)
@@ -320,8 +316,7 @@ const (
 )
 
 // WithReasoningMode sets reasoning.mode, standard or pro, for the gpt-5.6 and
-// gpt-6 families. Like WithReasoningEffort, it is sent only to models
-// classified as reasoning.
+// gpt-6 families.
 func WithReasoningMode(mode ReasoningMode) Option {
 	return func(p *Provider) error {
 		p.set.reasoningMode = string(mode)
@@ -345,8 +340,7 @@ const (
 
 // WithReasoningContext sets reasoning.context: auto, current_turn or all_turns.
 // all_turns only does anything if the earlier reasoning items are actually in
-// the request, which here means WithReasoningReplay is not ReplayNever. Like
-// WithReasoningEffort, it is sent only to models classified as reasoning.
+// the request, which here means WithReasoningReplay is not ReplayNever.
 func WithReasoningContext(context ReasoningContext) Option {
 	return func(p *Provider) error {
 		p.set.reasoningContext = string(context)
@@ -408,7 +402,8 @@ func WithStrictTools(strict bool) Option {
 
 // WithStore sets whether the service retains responses server-side. Off by
 // default; this provider resends the whole thread each turn and needs nothing
-// stored.
+// stored. With it on, reasoning items without encrypted content replay by id
+// for as long as the service keeps the response.
 func WithStore(store bool) Option {
 	return func(p *Provider) error {
 		p.set.store = store
@@ -417,9 +412,10 @@ func WithStore(store bool) Option {
 }
 
 // WithInclude replaces the include list. Without it, or with a nil list as
-// WithInclude() gives, models classified as reasoning are sent
+// WithInclude() gives, known reasoning models (see New) are sent
 // "reasoning.encrypted_content", which older models need for reasoning
-// replay; keep it in a list of your own.
+// replay; keep it in a list of your own, and pass it for any other model that
+// reasons. Leaving it out while store is off drops reasoning from replay.
 func WithInclude(values ...string) Option {
 	return func(p *Provider) error {
 		p.set.include = values
@@ -427,9 +423,10 @@ func WithInclude(values ...string) Option {
 	}
 }
 
-// WithPromptCacheKey steers cache routing for requests sharing a long prefix,
-// and is required on gpt-5.6 and later to get reliable matching at all. Keep
-// traffic under roughly fifteen requests a minute per key.
+// WithPromptCacheKey steers cache routing for requests sharing a long prefix.
+// OpenAI's prompt-caching guide asks for about fifteen requests a minute per
+// key across all prefixes; above that, requests overflow to other machines
+// and miss the cache.
 func WithPromptCacheKey(key string) Option {
 	return func(p *Provider) error {
 		p.set.promptCacheKey = key

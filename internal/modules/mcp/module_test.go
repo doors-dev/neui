@@ -3,12 +3,16 @@ package mcp
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -195,6 +199,37 @@ func TestNoInputSchemaBecomesObject(t *testing.T) {
 	}
 	if !bytes.Equal(tool.Params(), schema.ObjectRawSchema.Raw()) {
 		t.Fatalf("got %s, want %s", tool.Params(), schema.ObjectRawSchema.Raw())
+	}
+}
+
+func TestCollidingAndEmptyNamesHashed(t *testing.T) {
+	m := &module{ctx: context.Background(), conf: Config{Name: "srv"}}
+	module := m.buildModule([]*mcp.Tool{
+		{Name: "get.item", Description: "dot"},
+		{Name: "get-item", Description: "dash"},
+		{Name: "???", Description: "empty"},
+		{Name: "plain", Description: "plain"},
+	})
+	hash := func(s string) string {
+		sum := sha256.Sum256([]byte(s))
+		return hex.EncodeToString(sum[:4])
+	}
+	for name, desc := range map[string]string{
+		"get_item_" + hash("get.item"): "dot",
+		"get_item_" + hash("get-item"): "dash",
+		"t" + hash("???"):              "empty",
+		"plain":                        "plain",
+	} {
+		tool, ok := module.Get(name)
+		if !ok {
+			t.Fatalf("%s not registered", name)
+		}
+		if !strings.HasPrefix(tool.Desc(), desc) {
+			t.Fatalf("%s: got %q, want prefix %q", name, tool.Desc(), desc)
+		}
+	}
+	if _, ok := module.Get("get_item"); ok {
+		t.Fatal("colliding bare name registered")
 	}
 }
 
@@ -441,6 +476,12 @@ func TestParkedWaiterHoldsAttempt(t *testing.T) {
 	if session == nil {
 		t.Fatal("first call left no session to close")
 	}
+	aged := make(chan struct{})
+	mod.send(apiCommand{func(m *module) {
+		m.connectedAt = m.connectedAt.Add(-time.Minute)
+		close(aged)
+	}})
+	<-aged
 	hold.Store(true)
 	session.Close()
 	select {
@@ -498,23 +539,80 @@ func TestConnectClearsStaleDesc(t *testing.T) {
 	}
 }
 
-func TestGetWaitsForInit(t *testing.T) {
-	srv := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1"}, nil)
-	srv.AddTool(&mcp.Tool{
-		Name:        "early",
-		Description: "early",
-		InputSchema: map[string]any{"type": "object"},
-	}, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return &mcp.CallToolResult{}, nil
-	})
-	ts := serve(t, srv)
-	m, _ := startModule(t, srv, Config{
-		Name:        "early",
-		URL:         ts.URL,
-		IdleTimeout: 5 * time.Second,
-		Ping:        2 * time.Second,
-	})
-	if _, ok := m.Get("early"); !ok {
-		t.Fatal("first Get missed a tool of a connecting server")
+func TestHeadersNotSentAcrossRedirect(t *testing.T) {
+	var leaked, reached atomic.Int64
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reached.Add(1)
+		if r.Header.Get("Authorization") != "" || r.Header.Get("X-Secret") != "" {
+			leaked.Add(1)
+		}
+		http.Error(w, "no", http.StatusNotFound)
+	}))
+	t.Cleanup(other.Close)
+	var authed atomic.Int64
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "Bearer secret" {
+			authed.Add(1)
+		}
+		http.Redirect(w, r, other.URL+r.URL.Path, http.StatusTemporaryRedirect)
+	}))
+	t.Cleanup(origin.Close)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	s, err := connect(ctx, origin.URL, map[string]string{"Authorization": "Bearer secret", "X-Secret": "x"}, time.Minute, func() {})
+	if err == nil {
+		s.Close()
 	}
+	if authed.Load() == 0 {
+		t.Fatal("configured headers never reached the configured server")
+	}
+	if reached.Load() == 0 {
+		t.Fatal("redirect target never reached")
+	}
+	if leaked.Load() != 0 {
+		t.Fatal("configured headers sent to the redirect target")
+	}
+}
+
+func TestFailingConnectionStopsRetryingWhenIdle(t *testing.T) {
+	var attempts atomic.Int64
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts.Add(1)
+		http.Error(w, "down", http.StatusInternalServerError)
+	}))
+	t.Cleanup(ts.Close)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	Module(Config{Name: "down", URL: ts.URL, IdleTimeout: 200 * time.Millisecond, Ping: time.Second})(ctx)
+	if !waitFor(5*time.Second, func() bool { return attempts.Load() > 0 }) {
+		t.Fatal("never connected")
+	}
+	time.Sleep(500 * time.Millisecond)
+	seen := attempts.Load()
+	time.Sleep(3 * time.Second)
+	if got := attempts.Load(); got != seen {
+		t.Fatalf("retried after idle: %d requests, then %d", seen, got)
+	}
+}
+
+func TestIdleBeforeAnyCallStaysShortOnReset(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		m := &module{conf: Config{IdleTimeout: 10 * time.Minute}}
+		m.idle = time.NewTimer(time.Hour)
+		m.touch()
+		time.Sleep(time.Minute + time.Second)
+		select {
+		case <-m.idle.C:
+		default:
+			t.Fatal("idle reset to the full timeout before any call")
+		}
+		m.toolCalls = 1
+		m.touch()
+		time.Sleep(time.Minute + time.Second)
+		select {
+		case <-m.idle.C:
+			t.Fatal("idle shorter than IdleTimeout after a call")
+		default:
+		}
+	})
 }

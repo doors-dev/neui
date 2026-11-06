@@ -4,10 +4,14 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"strings"
+	"unicode/utf8"
 
+	"neui.dev/api"
 	"neui.dev/internal/common"
 )
 
@@ -17,7 +21,7 @@ const (
 	bytesCap     = 8 << 20
 )
 
-const readDesc = `Read a text file as numbered lines; everything after "N: " is file content. Output stops at the line limit or at the configured byte limit, whichever comes first, and the last line of the result says where to continue from. Binary files are refused, use readBytes.`
+const readDesc = `Read a text file as numbered lines; everything after "N: " is file content. Output stops at the line limit or at the configured byte limit, whichever comes first, and the last line of the result says where to continue from. Line breaks show as \n whatever the file uses; edit, replace, insert, write and append keep the file's own CRLF or LF endings. Binary files are refused, use readBytes.`
 const readBytesDesc = `Read raw bytes of a file, base64 in the result. Reads over 8MB must be ranged.`
 const writeBytesDesc = `Write raw bytes to a file, replacing existing content, creating parent directories. Plain text goes through write.`
 
@@ -45,10 +49,13 @@ func readTool(ctx context.Context, arg readArg) (string, error) {
 		return "", err
 	}
 	defer rc.Close()
-	br := bufio.NewReaderSize(rc, 64<<10)
+	br := bufio.NewReaderSize(ctxReader{ctx, rc}, 64<<10)
 	head, _ := br.Peek(4096)
 	if bytes.IndexByte(head, 0) >= 0 {
 		return "", fmt.Errorf("%q is a binary file, use readBytes", arg.Path)
+	}
+	if bytes.HasPrefix(head, []byte("\ufeff")) {
+		br.Discard(3)
 	}
 	offset := max(arg.Offset, 1)
 	limit := arg.Limit
@@ -112,7 +119,13 @@ func readLine(br *bufio.Reader, keep int) ([]byte, bool, error) {
 			return nil, false, err
 		}
 		started = true
+		if cut {
+			chunk = nil
+		}
 		if room := keep - len(line); len(chunk) > room {
+			for room > 0 && !utf8.RuneStart(chunk[room]) {
+				room--
+			}
 			chunk = chunk[:room]
 			cut = true
 		}
@@ -149,7 +162,14 @@ func readBytesTool(ctx context.Context, arg readBytesArg) ([]byte, error) {
 
 func writeBytesTool(ctx context.Context, arg writeBytesArg) (Entry, error) {
 	fs := common.GetController(ctx).FS()
-	w, err := fs.Create(arg.Path)
+	tmp := fmt.Sprintf("%s.tmp-%016x~", arg.Path, rand.Uint64())
+	w, err := fs.Create(tmp)
+	if errors.Is(err, api.ErrReadOnly) {
+		return Entry{}, fmt.Errorf("%q: %w", arg.Path, api.ErrReadOnly)
+	}
+	if errors.Is(err, api.ErrQuota) {
+		return Entry{}, fmt.Errorf("%q: %w", arg.Path, api.ErrQuota)
+	}
 	if err != nil {
 		return Entry{}, err
 	}
@@ -157,8 +177,11 @@ func writeBytesTool(ctx context.Context, arg writeBytesArg) (Entry, error) {
 	if cerr := w.Close(); err == nil {
 		err = cerr
 	}
+	if err == nil {
+		err = fs.Rename(tmp, arg.Path)
+	}
 	if err != nil {
-		return Entry{}, err
+		return Entry{}, errors.Join(err, fs.Remove(context.WithoutCancel(ctx), tmp))
 	}
 	e, err := fs.Stat(ctx, arg.Path)
 	if err != nil {

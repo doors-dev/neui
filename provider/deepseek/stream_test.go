@@ -123,8 +123,8 @@ func TestStreamToolCallFragmentsInterleave(t *testing.T) {
 	)
 }
 
-// A whole call in one fragment, with the index left off. Absent reads as the
-// first call, which is what it is.
+// A whole call in one fragment, with the index left off. Fragments are
+// correlated by the index, so one without it fails the turn.
 func TestStreamToolCallWithoutIndex(t *testing.T) {
 	p := serve(t, stringHandler(
 		chunkFrame(openingFrame, ""),
@@ -136,7 +136,24 @@ func TestStreamToolCallWithoutIndex(t *testing.T) {
 	conform.CheckUnframed(t, events)
 	wantTrace(t, events,
 		"start chatcmpl-1 deepseek-v4-pro",
-		`tool 0 id="call_x" name="ping" args="{}"`,
+		"err network",
+	)
+}
+
+// Only the choice at index 0 is this turn. Another choice in the same frame,
+// its finish reason included, is ignored rather than folded in.
+func TestStreamReadsOnlyChoiceZero(t *testing.T) {
+	p := serve(t, stringHandler(
+		chunkFrame(openingFrame, ""),
+		frame(`{"id":"chatcmpl-1","choices":[{"index":1,"delta":{"content":"other"},"finish_reason":"length"},{"index":0,"delta":{"content":"mine"},"finish_reason":null}],"usage":null}`),
+		chunkFrame(`{}`, "stop"),
+		doneFrame,
+	))
+	events := collect(t, p, turn("hi"))
+	conform.CheckUnframed(t, events)
+	wantTrace(t, events,
+		"start chatcmpl-1 deepseek-v4-pro",
+		`text 0 "mine"`,
 		"ok turn",
 	)
 }
@@ -196,6 +213,56 @@ func TestStreamReasoningTextAndToolCallEachTakeABlock(t *testing.T) {
 }
 
 // A fragment carrying only an id has no function object at all, which is why
+func TestStreamToolCallChangingIDFails(t *testing.T) {
+	for name, frames := range map[string][]string{
+		"real then another": {
+			`{"tool_calls":[{"index":0,"id":"call_a","type":"function","function":{"name":"ping","arguments":"{"}}]}`,
+			`{"tool_calls":[{"index":0,"id":"call_b","function":{"arguments":"}"}}]}`,
+		},
+		"late real then another": {
+			`{"tool_calls":[{"index":0,"function":{"arguments":"{"}}]}`,
+			`{"tool_calls":[{"index":0,"id":"call_a","type":"function","function":{"name":"ping"}}]}`,
+			`{"tool_calls":[{"index":0,"id":"call_b","function":{"arguments":"}"}}]}`,
+		},
+		"duplicate first then another": {
+			`{"tool_calls":[{"index":0,"id":"call_a","type":"function","function":{"name":"ping","arguments":"{}"}}]}`,
+			`{"tool_calls":[{"index":1,"id":"call_a","type":"function","function":{"name":"ping","arguments":"{"}}]}`,
+			`{"tool_calls":[{"index":1,"id":"call_b","function":{"arguments":"}"}}]}`,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			bodies := []string{chunkFrame(openingFrame, "")}
+			for _, f := range frames {
+				bodies = append(bodies, chunkFrame(f, ""))
+			}
+			events := collect(t, serve(t, stringHandler(append(bodies, chunkFrame(`{}`, "tool_calls"), doneFrame)...)), turn("ping"))
+			conform.CheckUnframed(t, events)
+			last, ok := events[len(events)-1].(api.EventErr)
+			if !ok || last.Code != api.CodeNetwork {
+				t.Fatalf("ended with %#v, want err network", events[len(events)-1])
+			}
+		})
+	}
+}
+
+func TestStreamToolCallRepeatingItsIDPasses(t *testing.T) {
+	p := serve(t, stringHandler(
+		chunkFrame(openingFrame, ""),
+		chunkFrame(`{"tool_calls":[{"index":0,"id":"call_a","type":"function","function":{"name":"ping","arguments":"{"}}]}`, ""),
+		chunkFrame(`{"tool_calls":[{"index":0,"id":"call_a","function":{"arguments":"}"}}]}`, ""),
+		chunkFrame(`{}`, "tool_calls"),
+		doneFrame,
+	))
+	events := collect(t, p, turn("ping"))
+	conform.CheckUnframed(t, events)
+	wantTrace(t, events,
+		"start chatcmpl-1 deepseek-v4-pro",
+		`tool 0 id="call_a" name="ping" args="{"`,
+		`tool 0 id="" name="" args="}"`,
+		"ok turn",
+	)
+}
+
 // toolDelta.Function is a pointer, so a call's name can start arriving after
 // its id and nothing says it arrives whole — and the pieces can land the other
 // way round too. Every piece goes out as it lands: api.EventTool appends
@@ -297,7 +364,7 @@ func TestReplayReproducesTheTurnByteForByte(t *testing.T) {
 	events := collect(t, p, turn("9.11 or 9.8?"))
 	conform.CheckUnframed(t, events)
 
-	body := encodeBody(t, New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), api.Request{
+	body := encodeBody(t, mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), api.Request{
 		Tools: []api.Tool{{Name: "note"}},
 		Messages: []api.Message{
 			{Role: api.RoleUser, Content: text("9.11 or 9.8?")},
@@ -305,8 +372,8 @@ func TestReplayReproducesTheTurnByteForByte(t *testing.T) {
 		},
 	})
 	m := body.Messages[1]
-	if *m.Content != "9.11 wins" {
-		t.Fatalf("the model said %q and is replayed %q", "9.11 wins", *m.Content)
+	if m.Content.(string) != "9.11 wins" {
+		t.Fatalf("the model said %q and is replayed %q", "9.11 wins", m.Content.(string))
 	}
 	if want := "Let me compare the decimals actually, hold on"; m.ReasoningContent != want {
 		t.Fatalf("reasoning_content %q, want %q", m.ReasoningContent, want)
@@ -360,7 +427,7 @@ func TestStreamToolArgumentsThatNeverParse(t *testing.T) {
 	// The discarded call goes back to the model on the next turn: the arguments
 	// field is not optional, so it becomes the empty object, and the paired
 	// tool message carries the error, since there is no error flag on the wire.
-	body, err := New(Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")).encode(api.Request{
+	body, err := mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")).encode(api.Request{
 		Messages: []api.Message{
 			{Role: api.RoleUser, Content: api.Contents{api.ContentText{Text: "search"}}},
 			{Role: api.RoleAssistant, Content: api.Contents{call}},
@@ -380,11 +447,11 @@ func TestStreamToolArgumentsThatNeverParse(t *testing.T) {
 	if result.Role != "tool" {
 		t.Fatalf("result replayed with role %q", result.Role)
 	}
-	if !strings.HasPrefix(*result.Content, "Error: tool call arguments were not valid JSON") {
-		t.Fatalf("result content %q does not report the discard", *result.Content)
+	if !strings.HasPrefix(result.Content.(string), "Error: tool call arguments were not valid JSON") {
+		t.Fatalf("result content %q does not report the discard", result.Content.(string))
 	}
-	if !strings.Contains(*result.Content, `{"query": "San Franc`) {
-		t.Fatalf("result content %q does not show the model what it botched", *result.Content)
+	if !strings.Contains(result.Content.(string), `{"query": "San Franc`) {
+		t.Fatalf("result content %q does not show the model what it botched", result.Content.(string))
 	}
 }
 
@@ -723,16 +790,6 @@ func TestRetryAfter(t *testing.T) {
 	}
 }
 
-func TestMissingKey(t *testing.T) {
-	p := serve(t, stringHandler(doneFrame), WithAPIKey(""))
-	events := collect(t, p, turn("hi"))
-	conform.CheckUnframed(t, events)
-	wantTrace(t, events, "err access")
-	if !errors.Is(events[0].(api.EventErr).Err, errNoKey) {
-		t.Fatalf("err %v", events[0].(api.EventErr).Err)
-	}
-}
-
 // DeepSeek documents no in band error frame at all, and the two shapes that
 // circulate for OpenAI compatible hosts are unconfirmed for it. Neither is
 // asserted to be what DeepSeek sends; what is asserted is that a frame carrying
@@ -846,16 +903,11 @@ func TestStreamDisconnectBeforeFinishReason(t *testing.T) {
 }
 
 // The mirror image — a socket that dies after the finish reason — is
-// TestStreamDisconnectCarriesTheFinishReason, with the rest of the End
+// TestStreamDisconnectAfterTheFinishReasonFails, with the rest of the End
 // behaviour.
 
 // The sentinel with no finish_reason before it: the server said the stream was
-// over but never said why. Absent is not the same as unrecognized, and only a
-// named value nobody knows is an unknown, so nothing was cut and this is an
-// ordinary completion rather than a failure invented from a silence.
-//
-// The text block gets no close, as no block here ever does, and the terminal event
-// is what completes it.
+// over but never said why. The flow requires a reason, so the turn fails.
 func TestStreamDoneWithoutFinishReason(t *testing.T) {
 	p := serve(t, stringHandler(
 		chunkFrame(openingFrame, ""),
@@ -867,7 +919,7 @@ func TestStreamDoneWithoutFinishReason(t *testing.T) {
 	wantTrace(t, events,
 		"start chatcmpl-1 deepseek-v4-pro",
 		`text 0 "hello"`,
-		"ok turn",
+		"err network",
 	)
 }
 

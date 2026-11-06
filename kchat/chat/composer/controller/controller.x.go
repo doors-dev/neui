@@ -6,6 +6,7 @@ package controller
 import (
 	"context"
 	"slices"
+	"unicode/utf8"
 	
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
@@ -20,19 +21,21 @@ type InputState struct {
 	Ask *api.ChatAsk
 }
 
-// should come from conf in constructor
 const inputLimit = 256 * 1024
 
-func NewComposerController(thread api.ChatThread, input api.ChatInput, active bool, settled api.EventUsage, tasks []api.Task, compaction bool, ask *api.ChatAsk) ComposerController {
-	limit := inputLimit
+func NewComposerController(thread api.ChatThread, input api.ChatInput, active bool, settled api.EventUsage, tasks []api.Task, compaction bool, canCompact bool, ask *api.ChatAsk) ComposerController {
+	limit := min(thread.Config().InputBytes, inputLimit)
 	origin := doors.NewSourceEqual(state{
 		input: input.Input,
+		textBytes: len(input.Input.Text),
+		attachBytes: attachBytes(input.Input.Attachments),
 		pending: input.Pending,
 		rewind: invalidRewind,
 		active: active,
 		settled: settled,
 		tasks: tasks,
 		compaction: compaction,
+		canCompact: canCompact,
 		ask: ask,
 	}, func(old, new state) bool {
 		if old.inputSeq != new.inputSeq {
@@ -47,13 +50,13 @@ func NewComposerController(thread api.ChatThread, input api.ChatInput, active bo
 		if old.uploading != new.uploading {
 			return false
 		}
-		if old.inputBytes != new.inputBytes {
+		if old.textBytes != new.textBytes || old.attachBytes != new.attachBytes {
 			return false
 		}
 		if old.settled != new.settled || old.unsettled != new.unsettled {
 			return false
 		}
-		if old.compaction != new.compaction {
+		if old.compaction != new.compaction || old.canCompact != new.canCompact {
 			return false
 		}
 		if !sameTasks(old.tasks, new.tasks) {
@@ -83,7 +86,7 @@ func NewComposerController(thread api.ChatThread, input api.ChatInput, active bo
 		return d.pending
 	})
 	enabled := doors.DeriveBeam(origin, func(d state) bool {
-		if d.inputBytes > limit {
+		if d.textBytes + d.attachBytes > limit {
 			return false
 		}
 		if d.rewind.isValid() {
@@ -101,7 +104,7 @@ func NewComposerController(thread api.ChatThread, input api.ChatInput, active bo
 		return d.settled.Total() != 0
 	})
 	usage := doors.DeriveBeam(origin, func(d state) Context {
-		return Context{d.settled, d.compaction}
+		return Context{d.settled, d.compaction, d.canCompact}
 	})
 	hasTasks := doors.DeriveBeam(origin, func(d state) bool {
 		return len(d.tasks) != 0
@@ -134,7 +137,7 @@ func NewComposerController(thread api.ChatThread, input api.ChatInput, active bo
 		return old.Seq == new.Seq
 	})
 	excessBytes := doors.DeriveBeam(origin, func(d state) int {
-		return max(d.inputBytes - limit, 0)
+		return max(d.textBytes + d.attachBytes - limit, 0)
 	})
 	return ComposerController{
 		thread: thread,
@@ -154,6 +157,16 @@ func NewComposerController(thread api.ChatThread, input api.ChatInput, active bo
 		excessBytes: excessBytes,
 		inputLimit: limit,
 	}
+}
+
+func attachBytes(files []string) int {
+	n := 0
+	for _, c := range (api.Input{Attachments: files}).Content() {
+		if t, ok := c.(api.ContentText); ok {
+			n += len(t.Text)
+		}
+	}
+	return n
 }
 
 func sameTasks(a, b []api.Task) bool {
@@ -181,13 +194,15 @@ type state struct {
 	pending bool
 	active bool
 	inputSeq int
-	inputBytes int
+	textBytes int
+	attachBytes int
 	uploading int
 	settled api.EventUsage
 	unsettled int
 	reported int
 	tasks []api.Task
 	compaction bool
+	canCompact bool
 	ask *api.ChatAsk
 }
 
@@ -201,6 +216,7 @@ type Bar struct {
 type Context struct {
 	Usage api.EventUsage
 	Compaction bool
+	CanCompact bool
 }
 
 type ComposerController struct {
@@ -233,6 +249,8 @@ func (s ComposerController) FlushInput(ctx context.Context) {
 		d.inputSeq += 1
 		d.uploading = 0
 		d.input = api.Input{}
+		d.textBytes = 0
+		d.attachBytes = 0
 		return d
 	})
 }
@@ -245,6 +263,8 @@ func (s ComposerController) CancelRewind(ctx context.Context) {
 		s.rewind = invalidRewind
 		s.inputSeq += 1
 		s.uploading = 0
+		s.textBytes = len(s.input.Text)
+		s.attachBytes = attachBytes(s.input.Attachments)
 		return s
 	})
 }
@@ -257,6 +277,8 @@ func (s ComposerController) InitRewind(ctx context.Context, round api.RoundID, i
 		}
 		s.inputSeq += 1
 		s.uploading = 0
+		s.textBytes = len(input.Text)
+		s.attachBytes = attachBytes(input.Attachments)
 		return s
 	})
 }
@@ -285,9 +307,10 @@ func (s ComposerController) UpdatePending(ctx context.Context, value bool) {
 	})
 }
 
-func (s ComposerController) UpdateCompaction(ctx context.Context, active bool, usage api.EventUsage) {
+func (s ComposerController) UpdateCompaction(ctx context.Context, active bool, usage api.EventUsage, canCompact bool) {
 	s.origin.Mutate(ctx, func(d state) state {
 		d.compaction = active
+		d.canCompact = canCompact
 		if usage.Total() != 0 {
 			d.settled = usage
 		}
@@ -306,6 +329,15 @@ func (s ComposerController) UpdateActive(ctx context.Context, value bool) {
 	})
 }
 
+func (s ComposerController) RoundStart(ctx context.Context, usage api.EventUsage, canCompact bool) {
+	s.origin.Mutate(ctx, func(d state) state {
+		d.active = true
+		d.settled = usage
+		d.canCompact = canCompact
+		return d
+	})
+}
+
 func (s ComposerController) UpdateUsage(ctx context.Context, usage api.EventUsage) {
 	s.origin.Mutate(ctx, func(d state) state {
 		if !d.active {
@@ -318,9 +350,10 @@ func (s ComposerController) UpdateUsage(ctx context.Context, usage api.EventUsag
 	})
 }
 
-func (s ComposerController) RoundDone(ctx context.Context, roundState api.RoundState, usage api.EventUsage) {
+func (s ComposerController) RoundDone(ctx context.Context, roundState api.RoundState, usage api.EventUsage, canCompact bool) {
 	s.origin.Mutate(ctx, func(d state) state {
 		d.reported = 0
+		d.canCompact = canCompact
 		if roundState == api.RoundOk {
 			d.settled = usage
 		}
@@ -386,13 +419,13 @@ func (s ComposerController) Send(ctx context.Context) {
 		if state.rewind.input.Len() == 0 {
 			return
 		}
-		if state.inputBytes > s.inputLimit {
+		if state.textBytes + state.attachBytes > s.inputLimit {
 			return
 		}
 		s.thread.Rewind(ctx, state.rewind.round, state.rewind.input)
 		return
 	}
-	if state.input.Len() == 0 || state.pending || state.inputBytes > s.inputLimit {
+	if state.input.Len() == 0 || state.pending || state.textBytes + state.attachBytes > s.inputLimit {
 		return
 	}
 	s.thread.Send(ctx, state.input)
@@ -436,17 +469,8 @@ func (s ComposerController) UpdateAttachments(ctx context.Context, seq int, file
 		} else {
 			d.input.Attachments = files
 		}
-		text := d.input.Text
-		if d.rewind.isValid() {
-			text = d.rewind.input.Text
-		}
-		d.inputBytes = 0
-		for _, c := range (api.Input{Text: text, Attachments: files}).Content() {
-			if t, ok := c.(api.ContentText); ok {
-				d.inputBytes += len(t.Text)
-			}
-		}
-		if d.rewind.isValid() || d.inputBytes > s.inputLimit {
+		d.attachBytes = attachBytes(files)
+		if d.rewind.isValid() || d.textBytes + d.attachBytes > s.inputLimit {
 			return d
 		}
 		input = d.input
@@ -463,24 +487,23 @@ func (s ComposerController) UpdateInputText(ctx context.Context, text string) {
 	send := false
 	var input api.Input
 	s.origin.Mutate(ctx, func(d state) state {
-		attachments := d.input.Attachments
-		if d.rewind.isValid() {
-			attachments = d.rewind.input.Attachments
-		}
-		d.inputBytes = 0
-		for _, c := range (api.Input{Text: text, Attachments: attachments}).Content() {
-			if t, ok := c.(api.ContentText); ok {
-				d.inputBytes += len(t.Text)
+		d.textBytes = len(text)
+		cut := text
+		if len(cut) > s.inputLimit {
+			n := s.inputLimit
+			for n > 0 && !utf8.RuneStart(cut[n]) {
+				n--
 			}
-		}
-		if d.inputBytes > s.inputLimit {
-			return d
+			cut = cut[:n]
 		}
 		if d.rewind.isValid() {
-			d.rewind.input.Text = text
+			d.rewind.input.Text = cut
 			return d
 		}
-		d.input.Text = text
+		d.input.Text = cut
+		if d.textBytes + d.attachBytes > s.inputLimit {
+			return d
+		}
 		input = d.input
 		send = true
 		return d
@@ -533,12 +556,6 @@ func (s ComposerController) Model() api.Model {
 
 func (s ComposerController) Config() api.ThreadConfig {
 	return s.thread.Config()
-}
-
-func (s ComposerController) BindAttach(el func(enabled bool) gox.Elem) gox.Elem {
-	return s.pending.Bind(func(b bool) gox.Elem {
-		return el(!b)
-	})
 }
 
 func (s ComposerController) BindSend(el func(enabled bool) gox.Elem) gox.Elem {

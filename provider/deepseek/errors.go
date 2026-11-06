@@ -12,17 +12,14 @@ import (
 	"neui.dev/api"
 )
 
-// errNoKey is a configuration failure rather than a rejected credential, but it
-// lands in the same bucket: there is nothing to retry and the fix is a key.
 var errNoKey = errors.New("deepseek: no API key, set DEEPSEEK_API_KEY or pass WithAPIKey")
 
 var errTooLarge = errors.New("deepseek: request too large")
 
 // RequestError is a turn this adapter refused to send because DeepSeek would
-// reject it or it cannot be encoded faithfully: no model in Conf, a tool name
-// that is empty, over 128 characters, has characters other than letters,
-// digits, _ and - or is declared twice, a forced tool choice while thinking is
-// on, an unknown message role, or a replayed tool call with no name or whose
+// reject it or it cannot be encoded faithfully: a tool name that is empty, over
+// 128 characters, has characters other than letters, digits, _ and - or is
+// declared twice, a forced tool choice while thinking is on, an unknown message role, or a replayed tool call with no name or whose
 // arguments were discarded with no failed result answering it. It arrives as
 // the Err of an api.EventErr with api.CodeInvalid, before anything is sent.
 type RequestError struct {
@@ -56,7 +53,7 @@ func (e *FinishError) Error() string {
 
 // APIError is a non 200 response. It arrives as the Err of an api.EventErr;
 // read it with errors.As. Branch on the event's Code, which follows the
-// status except that a 400 reporting the context limit is
+// status except that a 400, 413 or 422 reporting the context limit is
 // api.CodeContextLength; DeepSeek does not reliably answer failures with
 // JSON, so the other fields are best effort and meant for logs.
 type APIError struct {
@@ -76,12 +73,15 @@ type APIError struct {
 }
 
 // Error returns "deepseek: http <status> (<code>): <message>", without the code
-// when there is none, and with the body or the status text when there is no
-// message.
+// when there is none, and with the body, cut to 512 characters, or the status
+// text when there is no message.
 func (e *APIError) Error() string {
 	msg := e.Message
 	if msg == "" {
 		msg = strings.TrimSpace(e.Body)
+		if r := []rune(msg); len(r) > maxErrorMessage {
+			msg = string(r[:maxErrorMessage]) + "…"
+		}
 	}
 	if msg == "" {
 		msg = http.StatusText(e.Status)
@@ -91,6 +91,10 @@ func (e *APIError) Error() string {
 	}
 	return fmt.Sprintf("deepseek: http %d: %s", e.Status, msg)
 }
+
+// maxErrorMessage bounds how much of an unparseable error body Error shows. At
+// gateways it is frequently a whole HTML page.
+const maxErrorMessage = 512
 
 // apiError builds the failure for a non 200. The body is parsed on a best
 // effort basis into OpenAI's error envelope; whatever comes out is a hint, not
@@ -130,38 +134,20 @@ func measuredTooLarge(model string, sent int, declared int, err error) error {
 	return fmt.Errorf("%w: sent %d bytes, measured against the %d declared for %s: %w", api.ErrMeasuredTooLarge, sent, declared, model, err)
 }
 
-// contextOverflow recognizes the one 400 that is a conversation too long for the
-// model rather than a request written wrongly. There is nothing
-// machine-readable to read it by: the envelope carries invalid_request_error,
-// which every other rejected body carries too, so the message is the only
-// discriminator the server offers and leaving it unread is what kept
-// CodeContextLength unreachable on this path. The cost of that was measured on
-// real traffic — a request of 1,210,970 tokens came back a 400, classified as a
-// request to rewrite, and the compaction that was the whole fix never ran.
-//
-// DeepSeek words it the way OpenAI does: "This model's maximum context length
-// is 1048576 tokens. However, you requested 1210970 tokens (1210970 in the
-// messages, 0 in the completion). Please reduce the length of the messages or
-// completion." Both halves of that are required here, because either on its own
-// is a phrase an unrelated refusal could carry, while together they are a
-// sentence about this condition and nothing else: no refusal about a malformed
-// body, an unknown model, a bad tool schema or an image this model cannot read
-// says what the limit is and what was asked for, since those name the field they
-// refused. A false positive costs one summarization and then fails identically,
-// which is why the match is this narrow rather than a search for the word
-// context.
-//
-// The body is not reliably JSON on failure, so the raw body is matched when no
-// message parsed out of it.
 func contextOverflow(e *APIError) bool {
-	if e.Status != http.StatusBadRequest {
+	switch e.Status {
+	case http.StatusBadRequest, http.StatusRequestEntityTooLarge, http.StatusUnprocessableEntity:
+	default:
 		return false
+	}
+	if e.Code == "context_length_exceeded" || e.Type == "context_length_exceeded" {
+		return true
 	}
 	msg := e.Message
 	if msg == "" {
 		msg = e.Body
 	}
-	return strings.Contains(msg, "maximum context length") && strings.Contains(msg, "you requested")
+	return strings.Contains(strings.ToLower(msg), "maximum context length")
 }
 
 // codeString flattens the code field, which OpenAI compatible hosts send as
@@ -208,10 +194,9 @@ func codeString(v any) string {
 // know rather than from DeepSeek, and calling it a bad request would tell a
 // caller to go and fix a body that may be perfect.
 //
-// 400 is api.CodeInvalid here, and the one 400 that is not is told apart by
-// its message: see contextOverflow, which the caller of this function consults.
-// Nothing else in a refused body separates a conversation that does not fit from
-// a request that is simply wrong.
+// A 400, 413 or 422 that reports the context limit is api.CodeContextLength
+// instead: see contextOverflow, which the caller of this function consults
+// first.
 func statusCode(status int) api.ErrCode {
 	switch status {
 	case http.StatusUnauthorized, http.StatusPaymentRequired, http.StatusForbidden:

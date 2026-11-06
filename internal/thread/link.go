@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/doors-dev/doors"
+
 	"neui.dev/api"
 	"neui.dev/internal/common"
 	"neui.dev/internal/filesystem"
@@ -16,12 +18,8 @@ import (
 	"neui.dev/internal/thread/toolkit"
 )
 
-func newLink(thread *thread, backend *common.Backend, page page.Page, meta any) (*link, error) {
-	ws, err := backend.WorkspaceStorage().WorkspaceOpen(thread.id)
-	if err != nil {
-		return nil, err
-	}
-	fs := filesystem.New(thread.id, ws, backend.FileStorage(), backend.FilesConfig())
+func newLink(thread *thread, backend *common.Backend, page page.Page, meta any) *link {
+	fs := filesystem.Open(thread.id, backend.WorkspaceStorage(), backend.FileStorage(), backend.FilesConfig())
 	ctx, cancel := context.WithCancel(backend.Context())
 	toolkit := toolkit.NewToolkit(ctx, backend.Modules()...)
 	linkCtx, linkCancel := context.WithCancel(ctx)
@@ -29,7 +27,6 @@ func newLink(thread *thread, backend *common.Backend, page page.Page, meta any) 
 	return &link{
 		thread:      thread,
 		backend:     backend,
-		ws:          ws,
 		fs:          fs,
 		ctx:         ctx,
 		cancel:      cancel,
@@ -41,13 +38,12 @@ func newLink(thread *thread, backend *common.Backend, page page.Page, meta any) 
 		page:        page,
 		linkTasks:   &linkTasks{thread: thread},
 		meta:        meta,
-	}, nil
+	}
 }
 
 type link struct {
 	thread      *thread
 	backend     *common.Backend
-	ws          api.Workspace
 	fs          filesystem.FS
 	ctx         context.Context
 	cancel      context.CancelFunc
@@ -85,7 +81,7 @@ func (l *link) tools() []api.Tool {
 
 func (l *link) useTools(roundID api.RoundID, tools []api.ContentToolUse) (<-chan api.ContentToolResult, context.CancelCauseFunc) {
 	ch := make(chan api.ContentToolResult, len(tools))
-	stop, stopCancel := context.WithCancelCause(context.Background())
+	stop, stopCancel := context.WithCancelCause(l.ctx)
 	var mu sync.Mutex
 	var running context.CancelCauseFunc
 	limit := l.backend.Config().ToolCallLimit
@@ -146,8 +142,9 @@ func (l *link) useTools(roundID api.RoundID, tools []api.ContentToolUse) (<-chan
 func (l *link) dispose() {
 	l.once.Do(func() {
 		l.cancel()
-		l.ws.Close()
-		l.backend.WorkspaceStorage().WorkspaceDelete(l.thread.id)
+		if err := l.fs.Dispose(); err != nil {
+			doors.Logger(l.backend.Context()).Error("thread: workspace dispose failed", "thread", l.thread.id, "err", err)
+		}
 	})
 }
 
@@ -158,7 +155,6 @@ func (l *link) inherit(page page.Page, meta any) *link {
 	return &link{
 		thread:      l.thread,
 		backend:     l.backend,
-		ws:          l.ws,
 		fs:          l.fs,
 		ctx:         l.ctx,
 		cancel:      l.cancel,

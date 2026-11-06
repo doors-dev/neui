@@ -3,6 +3,7 @@ package task
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"neui.dev/internal/common"
@@ -25,14 +26,17 @@ type Input struct {
 
 const interruptTickDuration = 10 * time.Millisecond
 
+var ErrTimeout = errors.New("the script ran past its time limit and was stopped; tool calls in flight were cancelled; pass a larger timeoutMs or split the work")
+
 func NewTask(params Params, done func(), asyncAfter time.Duration) (WaitingTask, <-chan Result, context.CancelCauseFunc) {
 	ctx, cancel := context.WithCancelCause(params.Controller.Context())
 	task := &task{
 		task: Input{
-			Params:  params,
-			Context: ctx,
+			Params: params,
 		},
+		name:       params.Name,
 		memory:     params.Memory,
+		timeout:    params.Timeout,
 		ctx:        ctx,
 		cancel:     cancel,
 		asyncAfter: asyncAfter,
@@ -52,9 +56,13 @@ type Result struct {
 
 type task struct {
 	task       Input
+	name       string
 	memory     int
+	timeout    time.Duration
 	ctx        context.Context
 	cancel     context.CancelCauseFunc
+	exec       context.Context
+	cancelExec context.CancelFunc
 	asyncAfter time.Duration
 	interrupt  chan func()
 	res        chan string
@@ -77,17 +85,19 @@ type ExecutingTask interface {
 }
 
 func (t *task) Execute(interrupt func()) (ExecutingTask, bool) {
+	t.exec, t.cancelExec = context.WithTimeoutCause(t.ctx, t.timeout, ErrTimeout)
 	select {
 	case t.interrupt <- interrupt:
 		close(t.interrupt)
 		return t, true
 	case <-t.ctx.Done():
+		t.cancelExec()
 		return nil, false
 	}
 }
 
 func (t *task) Name() string {
-	return t.task.Name
+	return t.name
 }
 
 func (t *task) Memory() int {
@@ -108,7 +118,9 @@ func (t *task) Reject(err error) {
 }
 
 func (t *task) Input() Input {
-	return t.task
+	input := t.task
+	input.Context = t.exec
+	return input
 }
 
 func (t *task) Err(err error) {
@@ -131,6 +143,7 @@ func (t *task) start() <-chan Result {
 }
 
 func (t *task) waitSync(ch chan<- Result) {
+	defer t.cancel(nil)
 	asyncAfter := time.After(t.asyncAfter)
 	select {
 	case <-t.ctx.Done():
@@ -170,9 +183,9 @@ func (t *task) waitAsync(task common.Task) {
 }
 
 func (t *task) executeSync(ch chan<- Result, asyncAfter <-chan time.Time, interrupt func()) {
-	done := t.ctx.Done()
+	defer t.cancelExec()
+	done := t.exec.Done()
 	var handle common.Task
-	canceled := false
 	var interruptTick <-chan time.Time
 repeat:
 	select {
@@ -181,7 +194,6 @@ repeat:
 		asyncAfter = nil
 		interrupt()
 		interruptTick = time.Tick(interruptTickDuration)
-		canceled = true
 		goto repeat
 	case <-interruptTick:
 		interrupt()
@@ -210,7 +222,7 @@ repeat:
 		}
 	case err := <-t.rej:
 		t.done()
-		if canceled {
+		if t.ctx.Err() != nil {
 			err = context.Cause(t.ctx)
 		}
 		if ch != nil {
@@ -224,8 +236,8 @@ repeat:
 }
 
 func (t *task) executeAsync(interrupt func(), task common.Task) {
-	done := t.ctx.Done()
-	canceled := false
+	defer t.cancelExec()
+	done := t.exec.Done()
 	var interruptTick <-chan time.Time
 repeat:
 	select {
@@ -233,7 +245,6 @@ repeat:
 		done = nil
 		interrupt()
 		interruptTick = time.Tick(interruptTickDuration)
-		canceled = true
 		goto repeat
 	case <-interruptTick:
 		interrupt()
@@ -243,7 +254,7 @@ repeat:
 		task.Ok(json.RawMessage(output))
 	case err := <-t.rej:
 		t.done()
-		if canceled {
+		if t.ctx.Err() != nil {
 			err = context.Cause(t.ctx)
 		}
 		task.Err(err)

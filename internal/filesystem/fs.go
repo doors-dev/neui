@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"neui.dev/api"
 )
@@ -22,23 +23,57 @@ const tempDirPrefix = ".tmp-"
 
 type FS = *workFS
 
-func New(threadID api.ThreadID, workspace api.Workspace, files api.FileStorage, config api.FilesConfig) FS {
+func Open(threadID api.ThreadID, storage api.WorkspaceStorage, files api.FileStorage, config api.FilesConfig) FS {
 	return &workFS{
-		threadID:  threadID,
-		workspace: workspace,
-		files:     files,
-		temp:      tempDirPrefix + string(threadID),
-		quota:     &quota{config: config},
+		threadID: threadID,
+		storage:  storage,
+		files:    files,
+		temp:     tempDirPrefix + string(threadID),
+		quota:    &quota{config: config},
 	}
 }
 
 type workFS struct {
 	threadID  api.ThreadID
+	storage   api.WorkspaceStorage
 	workspace api.Workspace
+	wsMu      sync.Mutex
+	opened    bool
+	closed    bool
 	files     api.FileStorage
 	temp      string
 	quota     *quota
 	mu        sync.Mutex
+}
+
+func (w *workFS) root() (api.Workspace, error) {
+	w.wsMu.Lock()
+	defer w.wsMu.Unlock()
+	if w.closed {
+		return api.Workspace{}, os.ErrClosed
+	}
+	if w.opened {
+		return w.workspace, nil
+	}
+	workspace, err := w.storage.WorkspaceOpen(w.threadID)
+	if err != nil {
+		return api.Workspace{}, err
+	}
+	w.workspace, w.opened = workspace, true
+	return workspace, nil
+}
+
+func (w *workFS) Dispose() error {
+	w.wsMu.Lock()
+	defer w.wsMu.Unlock()
+	if w.closed {
+		return nil
+	}
+	w.closed = true
+	if !w.opened {
+		return nil
+	}
+	return errors.Join(w.workspace.Close(), w.storage.WorkspaceDelete(w.threadID))
 }
 
 func (w *workFS) Append(name string) (io.WriteCloser, error) {
@@ -79,7 +114,11 @@ func (w *workFS) Copy(ctx context.Context, src string, dst string) error {
 		if srcInfo.IsDir() {
 			return fmt.Errorf("%q: is a directory", src)
 		}
-		if dstInfo, err := w.workspace.Root.Stat(dst); err == nil && os.SameFile(srcInfo, dstInfo) {
+		workspace, err := w.root()
+		if err != nil {
+			return err
+		}
+		if dstInfo, err := workspace.Root.Stat(dst); err == nil && os.SameFile(srcInfo, dstInfo) {
 			return nil
 		}
 	}
@@ -140,20 +179,33 @@ func (w *workFS) LocalPath(ctx context.Context, name string) (string, error) {
 	if dir != nil {
 		return "", fmt.Errorf("%q: %w", name, api.ErrVirtual)
 	}
-	if _, err := w.workspace.Root.Stat(name); err != nil {
+	workspace, err := w.root()
+	if err != nil {
+		return "", err
+	}
+	if _, err := workspace.Root.Stat(name); err != nil {
 		return "", notFound(name, err)
 	}
-	return filepath.Join(w.workspace.Dir, name), nil
+	return filepath.Join(workspace.Dir, name), nil
 }
 
 func (w *workFS) TempDir() (string, error) {
-	if err := w.workspace.Root.MkdirAll(w.temp, 0o755); err != nil {
+	workspace, err := w.root()
+	if err != nil {
 		return "", err
 	}
-	return filepath.Join(w.workspace.Dir, w.temp), nil
+	if err := workspace.Root.MkdirAll(w.temp, 0o755); err != nil {
+		return "", err
+	}
+	return filepath.Join(workspace.Dir, w.temp), nil
 }
 
 func (w *workFS) TempWipe() error {
+	w.wsMu.Lock()
+	defer w.wsMu.Unlock()
+	if !w.opened || w.closed {
+		return nil
+	}
 	return w.workspace.Root.RemoveAll(w.temp)
 }
 
@@ -183,7 +235,11 @@ func (w *workFS) ReadDir(ctx context.Context, name string) ([]api.FSEntry, error
 	if dir != nil {
 		return w.readUploadsDir(ctx, dir)
 	}
-	f, err := w.workspace.Root.Open(name)
+	workspace, err := w.root()
+	if err != nil {
+		return nil, err
+	}
+	f, err := workspace.Root.Open(name)
 	if err != nil {
 		return nil, notFound(name, err)
 	}
@@ -203,6 +259,9 @@ func (w *workFS) ReadDir(ctx context.Context, name string) ([]api.FSEntry, error
 			continue
 		}
 		info, err := de.Info()
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -234,7 +293,11 @@ func (w *workFS) ReadRange(ctx context.Context, name string, off int64, n int64)
 	if dir != nil {
 		return w.readUpload(ctx, dir, fileName, off, n)
 	}
-	f, err := w.workspace.Root.Open(name)
+	workspace, err := w.root()
+	if err != nil {
+		return nil, err
+	}
+	f, err := workspace.Root.Open(name)
 	if err != nil {
 		return nil, notFound(name, err)
 	}
@@ -288,24 +351,28 @@ func (w *workFS) Rename(oldname string, newname string) error {
 		}
 		*name = clean
 	}
+	workspace, err := w.root()
+	if err != nil {
+		return err
+	}
 	overwritten, overwrittenSize := false, int64(0)
 	if w.quota.active() {
 		w.mu.Lock()
 		defer w.mu.Unlock()
-		if info, err := w.workspace.Root.Stat(newname); err == nil && !info.IsDir() {
-			if old, err := w.workspace.Root.Stat(oldname); err != nil || !os.SameFile(old, info) {
+		if info, err := workspace.Root.Stat(newname); err == nil && !info.IsDir() {
+			if old, err := workspace.Root.Stat(oldname); err != nil || !os.SameFile(old, info) {
 				overwritten, overwrittenSize = true, info.Size()
 			}
 		}
 	}
-	err := w.workspace.Root.Rename(oldname, newname)
+	err = workspace.Root.Rename(oldname, newname)
 	if err == nil {
 		if overwritten {
 			w.quota.release(1, overwrittenSize)
 		}
 		return nil
 	}
-	if _, serr := w.workspace.Root.Stat(oldname); serr != nil {
+	if _, serr := workspace.Root.Stat(oldname); serr != nil {
 		return notFound(oldname, serr)
 	}
 	return notFound(newname, err)
@@ -326,7 +393,11 @@ func (w *workFS) Stat(ctx context.Context, name string) (api.FSEntry, error) {
 		}
 		return dir.entry(file), nil
 	}
-	info, err := w.workspace.Root.Stat(name)
+	workspace, err := w.root()
+	if err != nil {
+		return api.FSEntry{}, err
+	}
+	info, err := workspace.Root.Stat(name)
 	if err != nil {
 		return api.FSEntry{}, notFound(name, err)
 	}
@@ -352,9 +423,19 @@ func (w *workFS) UserUpload(ctx context.Context, name string, r io.Reader) (api.
 	ext := path.Ext(display)
 	base := strings.TrimSuffix(display, ext)
 	mime := sniffMIME(head[:n])
-	body := io.MultiReader(bytes.NewReader(head[:n]), r)
-	fileName := display
-	for i := 1; ; i++ {
+	rest := &countingReader{r: r}
+	for i := 0; ; i++ {
+		suffix := ""
+		if i > 0 {
+			suffix = fmt.Sprintf("(%d)", i)
+		}
+		stem := base
+		for stem != "" && len(stem)+len(suffix)+len(ext) > 255 {
+			_, size := utf8.DecodeLastRuneInString(stem)
+			stem = stem[:len(stem)-size]
+		}
+		fileName := stem + suffix + ext
+		body := io.MultiReader(bytes.NewReader(head[:n]), rest)
 		file, err := w.files.FilePut(ctx, w.threadID, userUploads.origin, fileName, mime, body, true)
 		if err == nil {
 			return userUploads.entry(file), nil
@@ -362,8 +443,21 @@ func (w *workFS) UserUpload(ctx context.Context, name string, r io.Reader) (api.
 		if !errors.Is(err, api.ErrExists) {
 			return api.FSEntry{}, err
 		}
-		fileName = fmt.Sprintf("%s(%d)%s", base, i, ext)
+		if rest.n > 0 {
+			return api.FSEntry{}, fmt.Errorf("%q: another file with the same name was uploaded at the same time; upload it again: %w", display, api.ErrExists)
+		}
 	}
+}
+
+type countingReader struct {
+	r io.Reader
+	n int64
+}
+
+func (c *countingReader) Read(p []byte) (int, error) {
+	k, err := c.r.Read(p)
+	c.n += int64(k)
+	return k, err
 }
 
 func (w *workFS) openWrite(name string, flag int) (io.WriteCloser, error) {
@@ -374,28 +468,32 @@ func (w *workFS) openWrite(name string, flag int) (io.WriteCloser, error) {
 	if dir != nil {
 		return nil, fmt.Errorf("%q: %w", name, api.ErrReadOnly)
 	}
+	workspace, err := w.root()
+	if err != nil {
+		return nil, err
+	}
 	if dir := path.Dir(name); dir != "." {
-		if err := w.workspace.Root.MkdirAll(dir, 0o755); err != nil {
+		if err := workspace.Root.MkdirAll(dir, 0o755); err != nil {
 			return nil, err
 		}
 	}
 	if !w.quota.active() {
-		return w.workspace.Root.OpenFile(name, flag, 0o644)
+		return workspace.Root.OpenFile(name, flag, 0o644)
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if err := w.quota.ensure(w.workspace.Root.FS(), w.temp); err != nil {
+	if err := w.quota.ensure(workspace.Root.FS(), w.temp); err != nil {
 		return nil, err
 	}
 	var oldSize int64
 	existed := false
-	if info, err := w.workspace.Root.Stat(name); err == nil && !info.IsDir() {
+	if info, err := workspace.Root.Stat(name); err == nil && !info.IsDir() {
 		existed, oldSize = true, info.Size()
 	}
 	if err := w.quota.admit(!existed); err != nil {
 		return nil, fmt.Errorf("%q: %w", name, err)
 	}
-	f, err := w.workspace.Root.OpenFile(name, flag, 0o644)
+	f, err := workspace.Root.OpenFile(name, flag, 0o644)
 	if err != nil {
 		if !existed {
 			w.quota.release(1, 0)
@@ -409,15 +507,19 @@ func (w *workFS) openWrite(name string, flag int) (io.WriteCloser, error) {
 }
 
 func (w *workFS) removeLocal(name string) error {
+	workspace, err := w.root()
+	if err != nil {
+		return err
+	}
 	if !w.quota.active() {
-		return w.workspace.Root.RemoveAll(name)
+		return workspace.Root.RemoveAll(name)
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if _, err := w.workspace.Root.Stat(name); err != nil {
-		return w.workspace.Root.RemoveAll(name)
+	if _, err := workspace.Root.Stat(name); err != nil {
+		return workspace.Root.RemoveAll(name)
 	}
-	if err := w.workspace.Root.RemoveAll(name); err != nil {
+	if err := workspace.Root.RemoveAll(name); err != nil {
 		return err
 	}
 	w.quota.invalidate()
@@ -435,7 +537,11 @@ func (w *workFS) openRead(ctx context.Context, name string) (io.ReadCloser, erro
 	if dir != nil {
 		return w.readUpload(ctx, dir, fileName, 0, -1)
 	}
-	return w.workspace.Root.Open(name)
+	workspace, err := w.root()
+	if err != nil {
+		return nil, err
+	}
+	return workspace.Root.Open(name)
 }
 
 func notFound(name string, err error) error {
@@ -454,4 +560,4 @@ func (r *rangeReadCloser) Close() error {
 	return r.file.Close()
 }
 
-var _ FS = (FS)(nil)
+var _ api.FS = (FS)(nil)

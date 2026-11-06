@@ -1,4 +1,4 @@
-package layouts
+package ui
 
 import (
 	_ "embed"
@@ -7,9 +7,12 @@ import (
 	"github.com/doors-dev/gox"
 )
 
-//go:embed output.css
+//go:embed css/output.css
 var style []byte
 
+// Style is the stylesheet of the layouts and widgets, for Library.Head.
+// Spacing and grid cell widths read --kisland-gap-sm, -md, -lg and
+// --kisland-item-sm, -md, -lg, so a host can override them in CSS.
 func Style() gox.Elem {
 	return func(cur gox.Cursor) error {
 		if err := cur.InitVoid("link"); err != nil {

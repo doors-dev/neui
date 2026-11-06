@@ -3,6 +3,7 @@ package instance
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 
 	"neui.dev/api"
 	"neui.dev/internal/common"
@@ -30,6 +31,7 @@ type link struct {
 	cancel      context.CancelFunc
 	ch          chan thread.Message
 	once        sync.Once
+	dead        atomic.Bool
 }
 
 func (l Link) Stop(ctx context.Context) error {
@@ -89,14 +91,14 @@ func (l Link) Config() api.ThreadConfig {
 }
 
 func (l Link) RoundBefore(ctx context.Context, start api.RoundID, limit int) ([]api.Round, error) {
-	if l.backend == nil || l.ctx.Err() != nil {
+	if l.backend == nil || l.dead.Load() || l.ctx.Err() != nil {
 		return nil, api.ErrUnlinked
 	}
 	return l.backend.Storage().RoundBefore(ctx, l.thread, start, limit)
 }
 
 func (l Link) RoundAfter(ctx context.Context, start api.RoundID, limit int) ([]api.Round, error) {
-	if l.backend == nil || l.ctx.Err() != nil {
+	if l.backend == nil || l.dead.Load() || l.ctx.Err() != nil {
 		return nil, api.ErrUnlinked
 	}
 	return l.backend.Storage().RoundAfter(ctx, l.thread, start, limit)
@@ -131,27 +133,13 @@ func (l Link) Ch() <-chan thread.Message {
 }
 
 func (l *link) prepeare(m thread.Message) (thread.Message, bool) {
-	_, isInit := m.(thread.MessageInit)
-	if l.initialized {
-		if isInit {
-			return nil, false
-		}
+	switch m.(type) {
+	case thread.MessageInit:
+		return m, !l.initialized
+	case thread.MessageReload:
 		return m, true
 	}
-	if isInit {
-		return m, true
-	}
-	if _, isReload := m.(thread.MessageReload); isReload {
-		return m, true
-	}
-	em, ok := m.(thread.MessageEvent)
-	if !ok {
-		return nil, false
-	}
-	if _, ok := em.Event.(api.ChatEventCriticalError); !ok {
-		return nil, false
-	}
-	return em.IntoInit(api.ChatState{}, nil), true
+	return m, l.initialized
 }
 
 func (l *link) send(m thread.Message) {

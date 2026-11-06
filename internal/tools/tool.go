@@ -46,7 +46,7 @@ func NewTool[I any, O any](name string, desc string, f func(ctx context.Context,
 	b.WriteString("\nOutput schema: ")
 	b.Write(output)
 	if hint != "" {
-		b.WriteString("\nIn direct tools calls send as ")
+		b.WriteString("\nOn a direct tool call the result arrives as ")
 		b.WriteString(hint)
 	}
 	rawCall := func(ctx context.Context, input json.RawMessage) (any, error) {

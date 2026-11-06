@@ -40,15 +40,31 @@ type thinking struct {
 // endpoint takes a union and the fields that do not apply to a role are simply
 // absent from it.
 //
-// Content is a pointer with no omitempty: the assistant form is documented as
-// string or null and a turn that only called tools has to send an explicit
-// null, while system, user and tool all require the key present.
+// Content has no omitempty: it is a string, nil, or a []any of textPart and
+// imagePart. The assistant form is documented as string or null and a turn
+// that only called tools has to send an explicit null, while system, user and
+// tool all require the key present. User and tool content is a part list only
+// when it carries an image.
 type message struct {
 	Role             string     `json:"role"`
-	Content          *string    `json:"content"`
+	Content          any        `json:"content"`
 	ReasoningContent string     `json:"reasoning_content,omitempty"`
 	ToolCalls        []toolCall `json:"tool_calls,omitempty"`
 	ToolCallID       string     `json:"tool_call_id,omitempty"`
+}
+
+type textPart struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
+type imagePart struct {
+	Type     string   `json:"type"`
+	ImageURL imageURL `json:"image_url"`
+}
+
+type imageURL struct {
+	URL string `json:"url"`
 }
 
 type toolCall struct {
@@ -90,7 +106,8 @@ type namedToolFunction struct {
 
 // chunk is one streamed frame. Every field DeepSeek sends that this protocol
 // has no home for is left out of the struct rather than decoded and dropped:
-// object, created, system_fingerprint, logprobs and choices[].index.
+// object, created, system_fingerprint and logprobs. choices[].index is read
+// because only the choice at index 0 is this turn's.
 //
 // Error, ErrorType and ErrorMsg are defensive. DeepSeek documents no in band
 // error frame on this endpoint at all, but the two shapes that circulate for
@@ -107,6 +124,7 @@ type chunk struct {
 }
 
 type chunkChoice struct {
+	Index        int     `json:"index"`
 	Delta        delta   `json:"delta"`
 	FinishReason *string `json:"finish_reason"`
 }
@@ -122,11 +140,12 @@ type delta struct {
 }
 
 // toolDelta is one fragment of one tool call. Index is the position among the
-// calls of this turn and is what fragments are correlated by. Function is a
+// calls of this turn and is what fragments are correlated by; it is a pointer
+// because every fragment carries it and absent must not read as call 0. Function is a
 // pointer because a fragment that carries only an id has no function object at
 // all, which is how a call's name can start arriving after its id.
 type toolDelta struct {
-	Index    int                `json:"index"`
+	Index    *int               `json:"index"`
 	ID       string             `json:"id"`
 	Function *toolDeltaFunction `json:"function"`
 }

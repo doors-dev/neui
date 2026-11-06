@@ -33,9 +33,9 @@ var pins = []pin{
 	{
 		File:       "anthropic.json.gz",
 		Source:     "https://raw.githubusercontent.com/anthropics/anthropic-sdk-go/%s/scripts/mock-spec.json.gz",
-		Commit:     "697438c4bbab8f36cf009a97febec4ac4c3e40ab",
+		Commit:     "b98ff3342a95f1197d9b2ba2c1820311bec698d7",
 		Gzipped:    true,
-		APIVersion: "2023-06-01",
+		APIVersion: "2026-10-21",
 		Roots: []string{
 			"/components/schemas/CreateMessageParams",
 			"/components/schemas/CountMessageTokensParams",
@@ -59,7 +59,7 @@ var pins = []pin{
 	},
 }
 
-const update = "Regenerate with: go run ./internal/testkit/conform/fetchspec. To move a pin, change its commit in fetchspec/main.go and commit the new specs and SPECS together. The Anthropic pin must describe the anthropic-version the claude adapter sends (its defaultVersion); anthropic-sdk-go 697438c is the last commit before the SDK moved to 2026-10-21. A pin is never replaced silently: the suite checks sha256 of the decompressed spec against this file."
+const update = "Regenerate with: go run ./internal/testkit/conform/fetchspec. To move a pin, change its commit in fetchspec/main.go and commit the new specs and SPECS together. The Anthropic pin must describe the anthropic-version the claude adapter sends (its defaultVersion); anthropic-sdk-go b98ff33 is release 2.7.0, which sends 2026-10-21. A pin is never replaced silently: the suite checks sha256 of the decompressed spec against this file."
 
 func main() {
 	dir := flag.String("dir", "internal/testkit/conform/testdata/specs", "where the pinned specs and SPECS go")

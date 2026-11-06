@@ -56,8 +56,8 @@ func loadPins() (map[string]pinned, error) {
 	return pins, nil
 }
 
-func loadSpec(file string, loose bool) (*schemas, error) {
-	key := fmt.Sprint(file, loose)
+func loadSpec(file string, loose bool, accept []Accept) (*schemas, error) {
+	key := fmt.Sprint(file, loose, accept)
 	if s, ok := specCache.Load(key); ok {
 		return s.(*schemas), nil
 	}
@@ -87,6 +87,26 @@ func loadSpec(file string, loose bool) (*schemas, error) {
 	}
 	if loose {
 		loosen(doc)
+	}
+	for _, a := range accept {
+		segs := splitPointer(a.At)
+		if len(segs) == 0 {
+			return nil, fmt.Errorf("accept at %q: not a schema inside the spec", a.At)
+		}
+		parent := doc
+		for _, s := range segs[:len(segs)-1] {
+			m, ok := parent.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("accept at %q: %s is not an object", a.At, s)
+			}
+			parent = m[s]
+		}
+		m, ok := parent.(map[string]any)
+		last := segs[len(segs)-1]
+		if !ok || m[last] == nil {
+			return nil, fmt.Errorf("accept at %q: no schema there", a.At)
+		}
+		m[last] = map[string]any{"anyOf": []any{m[last], a.Also}}
 	}
 	c := jsonschema.NewCompiler()
 	c.DefaultDraft(jsonschema.Draft2020)

@@ -3,6 +3,7 @@ module neui.dev
 go 1.27.1
 
 require (
+	code.dny.dev/ssrf v0.3.0
 	codeberg.org/readeck/go-readability/v2 v2.1.2
 	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.2
 	github.com/doors-dev/doors v0.18.1

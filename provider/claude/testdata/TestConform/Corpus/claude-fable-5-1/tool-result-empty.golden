@@ -59,7 +59,7 @@
           "content": [
             {
               "type": "text",
-              "text": "[content omitted]"
+              "text": "(the tool returned no output)"
             }
           ],
           "is_error": false

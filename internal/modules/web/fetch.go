@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -38,11 +39,11 @@ const fetchDesc = `Fetch one http or https URL with a GET and return its content
 
 type FetchArg struct {
 	URL     string `json:"url" required:"true" description:"absolute http or https URL, credentials not allowed in it"`
-	Format  string `json:"format" enum:"markdown,text,html" description:"markdown (default) converts the document, text strips it to prose, html returns the parsed page re-serialised, with scripts, styles, embeds, forms, meta, links and comments removed, and navigation, headers, footers and sidebars too unless full is set"`
+	Format  string `json:"format" enum:"markdown,text,html" description:"markdown (default) converts the document, text strips it to prose, html returns the markup re-serialised, with scripts, styles, embeds, form controls, meta, link tags and comments removed; unless full is set it is the same main content the other formats pick, without navigation, headers, footers and sidebars"`
 	Full    bool   `json:"full" description:"the page as a whole, including navigation, sidebars and comments; use it when the default came back missing something you saw referenced"`
 	Offset  uint   `json:"offset" description:"1-based line of the converted content to start from, for continuing a long page"`
 	Limit   uint   `json:"limit" description:"max lines to return, default 2000"`
-	Timeout uint   `json:"timeoutMs" description:"how long to wait for the whole exchange, default 30000, at most 120000"`
+	Timeout uint   `json:"timeoutMs" description:"how long to wait for the whole exchange, in milliseconds; omitted, the host default applies, and the host caps how long it may be"`
 	SaveAs  string `json:"saveAs" description:"workspace path to stream the raw body to instead of converting it; the only way to fetch a binary, and no format applies"`
 }
 
@@ -87,13 +88,14 @@ func (m *module) fetch(ctx context.Context, arg FetchArg) (string, error) {
 		}
 		m.mu.Unlock()
 		if ok {
-			return page(cached, arg.Offset, arg.Limit)
+			return page(cached, arg.Offset, arg.Limit, true)
 		}
 	}
 	timeout := m.conf.Timeout
 	if arg.Timeout != 0 {
-		timeout = min(max(time.Duration(arg.Timeout)*time.Millisecond, time.Second), m.conf.MaxTimeout)
+		timeout = min(max(time.Duration(min(arg.Timeout, uint(m.conf.MaxTimeout/time.Millisecond)+1))*time.Millisecond, time.Second), m.conf.MaxTimeout)
 	}
+	parent := ctx
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	var resp *http.Response
@@ -124,7 +126,29 @@ func (m *module) fetch(ctx context.Context, arg FetchArg) (string, error) {
 				}
 				return "", fmt.Errorf("%s resolves to %s, an address web__fetch does not connect to", failed, refused.addr)
 			}
+			var port badPorted
+			if errors.As(err, &port) {
+				failed := u.Host
+				if wrapped != nil {
+					if at, perr := url.Parse(wrapped.URL); perr == nil && at.Host != "" {
+						failed = at.Host
+					}
+				}
+				return "", fmt.Errorf("%s uses port %d, which web__fetch does not connect to", failed, port.port)
+			}
+			if errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil {
+				failed := u.Host
+				if wrapped != nil {
+					if at, perr := url.Parse(wrapped.URL); perr == nil && at.Host != "" {
+						failed = at.Host
+					}
+				}
+				return "", fmt.Errorf("connecting to %s timed out before the host answered", failed)
+			}
 			if errors.Is(err, context.DeadlineExceeded) {
+				if parent.Err() != nil {
+					return "", context.Cause(parent)
+				}
 				return "", fmt.Errorf("fetching %s timed out after %s", u, timeout)
 			}
 			if errors.Is(err, context.Canceled) && ctx.Err() != nil {
@@ -164,9 +188,16 @@ func (m *module) fetch(ctx context.Context, arg FetchArg) (string, error) {
 		partial := path.Join(path.Dir(arg.SaveAs), "."+path.Base(arg.SaveAs)+"."+rand.Text()+".part")
 		w, err := fs.Create(partial)
 		if err != nil {
-			return "", err
+			return "", errors.New(strings.ReplaceAll(err.Error(), partial, arg.SaveAs))
 		}
 		n, err := io.Copy(w, io.LimitReader(resp.Body, m.conf.MaxBytes+1))
+		if errors.Is(err, context.DeadlineExceeded) && parent.Err() != nil {
+			err = context.Cause(parent)
+		} else if errors.Is(err, context.DeadlineExceeded) {
+			err = fmt.Errorf("fetching %s timed out after %s", u, timeout)
+		} else if errors.Is(err, context.Canceled) && ctx.Err() != nil {
+			err = context.Cause(ctx)
+		}
 		if cerr := w.Close(); err == nil {
 			err = cerr
 		}
@@ -178,6 +209,9 @@ func (m *module) fetch(ctx context.Context, arg FetchArg) (string, error) {
 		}
 		if err != nil {
 			fs.Remove(context.WithoutCancel(ctx), partial)
+			if strings.Contains(err.Error(), partial) {
+				err = errors.New(strings.ReplaceAll(err.Error(), partial, arg.SaveAs))
+			}
 			return "", err
 		}
 		el := gox.Elem(func(cur gox.Cursor) error {
@@ -207,12 +241,12 @@ func (m *module) fetch(ctx context.Context, arg FetchArg) (string, error) {
 		media == "application/json" || media == "application/xml" ||
 		media == "application/javascript" || media == "application/x-javascript" ||
 		strings.HasSuffix(media, "+json") || strings.HasSuffix(media, "+xml")
-	if !markup && !textual && media != "" {
-		return "", fmt.Errorf("%s is %s, which web__fetch does not convert; pass saveAs to keep the bytes in the workspace and read them with the files tools", final, media)
-	}
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, m.conf.MaxBytes+1))
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
+			if parent.Err() != nil {
+				return "", context.Cause(parent)
+			}
 			return "", fmt.Errorf("fetching %s timed out after %s", u, timeout)
 		}
 		if errors.Is(err, context.Canceled) && ctx.Err() != nil {
@@ -222,6 +256,9 @@ func (m *module) fetch(ctx context.Context, arg FetchArg) (string, error) {
 	}
 	if int64(len(raw)) > m.conf.MaxBytes {
 		return "", fmt.Errorf("%s is over the %d-byte cap", final, m.conf.MaxBytes)
+	}
+	if !markup && !textual && media != "" && (bytes.IndexByte(raw, 0) >= 0 || !utf8.Valid(raw)) {
+		return "", fmt.Errorf("%s is %s, which web__fetch does not convert; pass saveAs to keep the bytes in the workspace and read them with the files tools", final, media)
 	}
 	if media == "" {
 		probe := raw
@@ -240,6 +277,12 @@ func (m *module) fetch(ctx context.Context, arg FetchArg) (string, error) {
 	}
 	if !markup {
 		e.text = string(decoded)
+		if media == "application/json" || strings.HasSuffix(media, "+json") {
+			var b bytes.Buffer
+			if json.Indent(&b, decoded, "", "  ") == nil {
+				e.text = b.String()
+			}
+		}
 	} else {
 		doc, err := html.Parse(bytes.NewReader(decoded))
 		if err != nil {
@@ -249,27 +292,23 @@ func (m *module) fetch(ctx context.Context, arg FetchArg) (string, error) {
 		if runes := []rune(e.title); len(runes) > fetchAttrMax {
 			e.title = string(runes[:fetchAttrMax])
 		}
-		prune(doc, arg.Full)
+		prune(doc, false)
+		node := doc
+		if !arg.Full {
+			node = readable(doc, resp.Request.URL)
+		}
 		switch format {
 		case "html":
 			b := strings.Builder{}
-			if err := html.Render(&b, doc); err != nil {
+			if err := html.Render(&b, node); err != nil {
 				return "", err
 			}
 			e.text = b.String()
 		case "text":
-			node := doc
-			if !arg.Full {
-				node = readable(doc, resp.Request.URL)
-			}
 			b := bytes.Buffer{}
-			plain(node, &b, arg.Full)
+			plain(node, &b, false)
 			e.text = strings.TrimSpace(b.String())
 		default:
-			node := doc
-			if !arg.Full {
-				node = readable(doc, resp.Request.URL)
-			}
 			out, cerr := m.conv.ConvertNode(node, converter.WithDomain(final), converter.WithContext(ctx))
 			if cerr != nil {
 				return "", cerr
@@ -320,10 +359,10 @@ func (m *module) fetch(ctx context.Context, arg FetchArg) (string, error) {
 		m.held += size
 		m.mu.Unlock()
 	}
-	return page(e, arg.Offset, arg.Limit)
+	return page(e, arg.Offset, arg.Limit, size <= m.conf.CacheBytes)
 }
 
-func page(e *entry, offset uint, limit uint) (string, error) {
+func page(e *entry, offset uint, limit uint, kept bool) (string, error) {
 	start := max(offset, 1)
 	if limit == 0 {
 		limit = fetchMaxLines
@@ -369,12 +408,14 @@ func page(e *entry, offset uint, limit uint) (string, error) {
 		return "", fmt.Errorf("offset %d is beyond the end of the page, %d lines", start, total)
 	default:
 		if cut {
-			fmt.Fprintf(&b, "(lines longer than %d characters were cut; what was cut cannot be reached with offset)\n", fetchLineMax)
+			fmt.Fprintf(&b, "(lines longer than %d characters were cut; what was cut cannot be reached with offset; fetch again with saveAs to read it whole with the files tools)\n", fetchLineMax)
 		}
 		if last == total {
 			fmt.Fprintf(&b, "(end of page, %d lines)", total)
-		} else {
+		} else if kept {
 			fmt.Fprintf(&b, "(showing lines %d-%d of %d, continue with offset=%d)", start, last, total, last+1)
+		} else {
+			fmt.Fprintf(&b, "(showing lines %d-%d of %d, continue with offset=%d; this page is too large to keep, so continuing fetches it again and its lines may have moved)", start, last, total, last+1)
 		}
 	}
 	el := gox.Elem(func(cur gox.Cursor) error {

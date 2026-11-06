@@ -2,6 +2,7 @@ package neui
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"sync"
 	"time"
@@ -77,13 +78,19 @@ type Task = common.Task
 // and stored with its result; attrs become the task's meta, nil meaning none.
 // cancel is what a chat UI calls through api.Task.Cancel to stop the task
 // (kchat passes api.ErrCanceledByUser), and the cause it receives is what the
-// task should report with Err; the runtime does not call it, so the work must
-// also stop when ToolThreadContext ends. Run the work on ToolThreadContext,
-// not the call's ctx, which ends with the call. Call it before the tool
-// returns: it fails with context.Canceled when the thread is closed and with
-// an error when the thread is not running tool calls. It panics when ctx comes
-// from neither a tool call nor ToolThreadContext.
+// task should report with Err; the runtime calls it with ErrCanceledByUser
+// when the round that started the task is rewound, and the work must also stop
+// when ToolThreadContext ends; cancel must not be nil. Run the work on
+// ToolThreadContext, not the call's ctx, which ends with the call. Call it
+// before the tool returns: it fails with context.Canceled when the thread is
+// closed, with an error when cancel is nil or the thread is not running tool
+// calls, and with an error when the tool was called from a script
+// (ToolFromJS), since scripts cannot start background tasks. It panics when ctx comes from neither a tool call nor
+// ToolThreadContext.
 func ToolTask(ctx context.Context, comment string, attrs map[string]any, cancel context.CancelCauseFunc) (Task, error) {
+	if tools.FromJS(ctx) {
+		return nil, errors.New("a background task cannot be started from a script")
+	}
 	return ctx.Value(common.KeyController).(common.Controller).Task(comment, attrs, cancel)
 }
 
@@ -122,9 +129,10 @@ func OptionModules(m ...ModuleFactory) Option {
 
 // NewModule returns an empty module to fill with Add, Tool and Ask. Its tools
 // reach the agent as name__tool, and desc is added to the system prompt as
-// the module's guidance; leave it empty to add nothing. Runs of characters
-// other than ASCII letters and digits in name become a single underscore,
-// and leading or trailing ones are dropped.
+// the module's guidance; leave it empty to add nothing. Names are reduced to
+// ASCII letters, digits and _ (runs of other characters become one _);
+// names that reduce to the same value replace each other, and a name with
+// no letter or digit becomes empty. Leading and trailing runs are dropped.
 // Register it with a factory that returns the same value for every thread:
 //
 //	m := neui.NewModule("crm", "Customer records of the signed-in user.")
@@ -141,26 +149,84 @@ func NewModule(name string, desc string) Module {
 // JSConfig.
 var ModuleJS ModuleFactory = js.Module
 
-// JSConfig tunes the js runtime; a zero field takes its default.
-type JSConfig = js.Config
+// JSConfig tunes the js runtime; a zero or negative field takes its default.
+// The limits are shared by every session of an app that sets WithJSConfig,
+// and by every app in the process that does not: a script waits to start
+// until a worker and enough of TotalMemory are free.
+type JSConfig struct {
+	// TotalMemory is the sum in bytes of the memory budgets of all scripts
+	// executing at once across the app. Default 512 MiB; a value below
+	// WorkerMemory is raised to it.
+	TotalMemory int
+	// WorkerMemory is the largest memory budget in bytes one script may
+	// take. Default 128 MiB; a value below DefaultMemory is raised to it.
+	WorkerMemory int
+	// DefaultMemory is the memory budget in bytes of a script that asks for
+	// less or none. Default 16 MiB, at least 4 MiB.
+	DefaultMemory int
+	// MaxWorkers is how many scripts may execute at once across the app.
+	// Default 16.
+	MaxWorkers int
+	// JobTimeout caps how long one script may execute, its tool calls
+	// included: tool calls in flight are cancelled at the limit. A script may
+	// ask for less. Default 30s.
+	JobTimeout time.Duration
+	// AsyncAfter is how long a run keeps the tool call waiting before it
+	// detaches and delivers its result later as a background task. Default
+	// 10s.
+	AsyncAfter time.Duration
+	// MaxQueue is how many scripts may wait to start across the app; one
+	// submitted past it is rejected. Default 100.
+	MaxQueue int
+	// MaxCallDepth is how many nested JS calls a script may make before an
+	// error is thrown. Default 1000.
+	MaxCallDepth int
+}
 
 // WithJSConfig tunes the js runtime of ModuleJS, as an app option for
 // doors.NewApp: the app then schedules scripts against its own memory and
 // worker limits. Without it, the app runs on defaults and shares one set of
-// limits with every other app in the process that does not set it.
+// limits with every other app in the process that does not set it. The
+// runtime and its scheduling goroutine live for the rest of the process, even
+// after the app is dropped, so build each app once per process.
 func WithJSConfig(c JSConfig) doors.With {
+	config := js.Config{
+		TotalMemory:   c.TotalMemory,
+		WorkerMemory:  c.WorkerMemory,
+		DefaultMemory: c.DefaultMemory,
+		MaxWorkers:    c.MaxWorkers,
+		JobTimeout:    c.JobTimeout,
+		AsyncAfter:    c.AsyncAfter,
+		MaxQueue:      c.MaxQueue,
+		MaxCallDepth:  c.MaxCallDepth,
+	}
 	return doors.WithFunc(func() doors.With {
-		return doors.WithValue(js.ConfigKey{}, js.NewSeed(c))
+		return doors.WithValue(js.ConfigKey{}, js.NewSeed(config))
 	})
 }
 
 // XLSConfig tunes the xls module; a zero field takes its default.
-type XLSConfig = xls.Config
+type XLSConfig struct {
+	// MaxFileSize is the largest workbook file on disk, in bytes, the module
+	// opens; a larger one is refused. Default 50 MiB.
+	MaxFileSize int64
+	// MaxUnzipSize caps the uncompressed contents of a workbook in bytes; a
+	// workbook that expands past it, or holds a part over 1 MiB compressed
+	// more than 100x, is refused. Default 1 GiB.
+	MaxUnzipSize int64
+	// MaxReadRows caps the rows returned, or matches collected, by one call;
+	// it also caps the rows profile reads to guess column types. Default 200.
+	MaxReadRows uint
+}
 
 // ModuleXLS is the xls module: Excel workbooks read and written through the
 // workspace. The zero XLSConfig takes every default.
 func ModuleXLS(c XLSConfig) ModuleFactory {
-	return xls.Module(c)
+	return xls.Module(xls.Config{
+		MaxFileSize:  c.MaxFileSize,
+		MaxUnzipSize: c.MaxUnzipSize,
+		MaxReadRows:  c.MaxReadRows,
+	})
 }
 
 // ModuleWeb is the web module: web__fetch for one URL over HTTP and, when
@@ -189,9 +255,9 @@ func ModuleWeb(c WebConfig) ModuleFactory {
 // name__tool, and follow the server's list-changed notifications. Each thread
 // gets its own connection, opened when the thread opens and retried with
 // backoff while it fails; a call made while it is failing fails at once. The
-// connection closes after IdleTimeout without a call, or after at most a
-// minute when no call has been made yet; the next call reconnects and waits
-// for it.
+// connection, live or still retrying, closes after IdleTimeout without a call,
+// or after at most a minute when no call has been made yet, which also stops
+// the retries; the next call reconnects and waits for it.
 func ModuleMCP(c MCPConfig) ModuleFactory {
 	return mcp.Module(mcp.Config(c))
 }
@@ -217,15 +283,18 @@ type MCPConfig struct {
 
 // WebConfig tunes the web module; a zero field takes its default.
 type WebConfig struct {
-	// HTTPClient is the client every fetch uses. Supplying one replaces the
-	// module's own client and with it the whole redirect and address
-	// policy: the dialer hook that refuses loopback, private, link-local,
-	// multicast, unspecified and reserved addresses, the explicit 10-hop cap, the
-	// per-hop http/https allowlist, and the stripping of credentials on a
-	// redirect all live on the default client only, so Go's own defaults
-	// apply instead. A host that passes its own client owns that policy and
-	// exposes whatever its network can reach to the model. Leave Timeout
-	// at zero: the module bounds each fetch with a context deadline.
+	// HTTPClient is the client every fetch uses. The default client refuses,
+	// at connect time and on every redirect hop, any address IANA marks not
+	// globally reachable (loopback, private, link-local including cloud
+	// metadata, CGNAT, documentation, benchmarking, multicast, reserved,
+	// IPv6 outside 2000::/3, 6to4, Teredo), judges NAT64 64:ff9b::/96 by the
+	// IPv4 address inside it, refuses the ports the WHATWG Fetch standard
+	// bars, ignores HTTP_PROXY/HTTPS_PROXY because a proxy hides the real
+	// destination, caps redirects at 10, allows only http/https per hop and
+	// strips credentials. Passing a client replaces all of it; behind a
+	// mandatory proxy, pass a client that uses it and let that proxy enforce
+	// destination policy. Leave Timeout at zero: the module bounds each fetch
+	// with a context deadline.
 	HTTPClient *http.Client
 	// Search is the search backend behind web__search. Nil registers no
 	// search tool.
@@ -237,17 +306,20 @@ type WebConfig struct {
 	// MaxBytes caps one response body, aborted mid-stream. Default 5<<20.
 	MaxBytes int64
 	// Timeout bounds a fetch that passes no timeoutMs, and every search.
-	// Default 30s.
+	// Default 30s; a value above MaxTimeout is lowered to it.
 	Timeout time.Duration
-	// MaxTimeout clamps timeoutMs. Default 120s.
+	// MaxTimeout clamps timeoutMs and Timeout. Default 120s.
 	MaxTimeout time.Duration
 	// CacheTTL is how long a converted page stays pageable without a second
 	// request. Default 15m.
 	CacheTTL time.Duration
-	// CacheBytes caps the converted text held per thread. Default 8<<20.
+	// CacheBytes caps the converted text held per thread. Default 8<<20; a
+	// value below twice MaxBytes is raised to it, so with the default MaxBytes
+	// the cap is 10<<20.
 	CacheBytes int64
-	// SearchChars caps the total page content returned across one search's
-	// results. Default 10000.
+	// SearchChars caps the page content of each search result on its own,
+	// in characters; a result cut there ends with "… (content truncated)".
+	// Default 2000.
 	SearchChars int
 }
 
@@ -284,7 +356,7 @@ type SearchResult struct {
 	// it returns Content instead.
 	Snippet string
 	// Content is passages from the page when the backend returns them; the
-	// module shares WebConfig.SearchChars across all results and truncates.
+	// module caps each result's Content at WebConfig.SearchChars.
 	Content string
 	// Published is the publication date the backend reports, as text; empty
 	// when it reports none.

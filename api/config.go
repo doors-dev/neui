@@ -63,6 +63,11 @@ const ReplayHeadroom = 1 << 20
 // an archive may unpack. A zero field takes its default and a negative field
 // turns that limit off.
 type FilesConfig struct {
+	// TempDir is where each session creates its own temporary directory,
+	// which holds the thread workspaces and, unless the session has its own
+	// file storage, the uploads. It is read when Enable first runs for the
+	// session. Default os.TempDir().
+	TempDir string
 	// MaxFiles is how many files the workspace may hold; the write that would
 	// add one past it is refused with ErrQuota. Uploads live in file storage
 	// and are not counted. Default 10000.

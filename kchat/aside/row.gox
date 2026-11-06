@@ -2,13 +2,14 @@ package aside
 
 import (
 	"context"
-	"strings"
 	
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
 	"neui.dev/api"
+	chatmod "neui.dev/internal/modules/chat"
 	"neui.dev/kchat/icons"
 	"neui.dev/kchat/params"
+	"neui.dev/kchat/notify"
 )
 
 type renameForm struct {
@@ -49,10 +50,15 @@ elem (r *row) open() {
 		~>doors.AClick{
 			Scope: new(doors.ScopeBlocking),
 			On: func(ctx context.Context, rp doors.RequestPointer) bool {
-				r.aside.Instance.ThreadOpen(ctx, r.thread.ID, nil)
+				if err := r.aside.Instance.ThreadOpen(ctx, r.thread.ID, nil); err != nil {
+					doors.Logger(ctx).Error("aside: open", "thread", r.thread.ID, "err", err)
+					notify.Error(ctx, err)
+					return false
+				}
 				rp.After(doors.ActionEmit[any]{Name: "opened"})
 				return false
 			},
+			OnError: notify.OnError,
 		} <button class="kchat-thread">
 			~(if r.instance == "" {
 				<span class="kchat-dot kchat-dot_off" aria-hidden="true"></span>
@@ -82,6 +88,7 @@ elem (r *row) kebab(toggle func(ctx context.Context)) {
 			toggle(ctx)
 			return false
 		},
+		OnError: notify.OnError,
 	} <button class="kchat-iconbtn" aria-label="Chat actions">
 		~>(doors.Class("kchat-ic")) ~(icons.DotsThreeVertical())
 	</button>
@@ -96,10 +103,14 @@ elem (r *row) actions(hide func(ctx context.Context)) {
 			id, err := r.aside.Instance.ThreadClone(ctx, r.thread.ID)
 			if err != nil {
 				doors.Logger(ctx).Error("aside: clone", "thread", r.thread.ID, "err", err)
+				notify.Error(ctx, err)
 				hide(ctx)
 				return
 			}
-			r.aside.Instance.ThreadOpen(ctx, id, nil)
+			if err := r.aside.Instance.ThreadOpen(ctx, id, nil); err != nil {
+				doors.Logger(ctx).Error("aside: open", "thread", id, "err", err)
+				notify.Error(ctx, err)
+			}
 			hide(ctx)
 		}))
 		~(r.action(icons.Trash(), "Delete chat", func(ctx context.Context) {
@@ -115,6 +126,7 @@ elem (r *row) action(icon gox.Elem, label string, on func(ctx context.Context)) 
 			on(ctx)
 			return false
 		},
+		OnError: notify.OnError,
 	} <button class="kchat-act" role="menuitem">
 		~>(doors.Class("kchat-ic")) ~(icon)
 		<span>~(label)</span>
@@ -125,10 +137,11 @@ elem (r *row) rename(hide func(ctx context.Context)) {
 	~>doors.ASubmit[renameForm]{
 		Scope: new(doors.ScopeBlocking),
 		On: func(ctx context.Context, rf doors.RequestForm[renameForm]) bool {
-			n := strings.TrimSpace(rf.Data().Name)
-			if n != r.thread.Name {
+			n, err := chatmod.CheckName(rf.Data().Name)
+			if err == nil && n != r.thread.Name {
 				if err := r.aside.Instance.ThreadRename(ctx, r.thread.ID, n); err != nil {
 					doors.Logger(ctx).Error("aside: rename", "thread", r.thread.ID, "err", err)
+					notify.Error(ctx, err)
 				} else {
 					r.day.Reload(ctx)
 				}
@@ -136,6 +149,7 @@ elem (r *row) rename(hide func(ctx context.Context)) {
 			hide(ctx)
 			return false
 		},
+		OnError: notify.OnError,
 	} <form class="kchat-form" aria-label="Rename chat">
 		<div class="kchat-form-field">
 			~>doors.AKeyDown{
@@ -145,10 +159,12 @@ elem (r *row) rename(hide func(ctx context.Context)) {
 					hide(ctx)
 					return false
 				},
+				OnError: notify.OnError,
 			} <input
 				class="kchat-text"
 				name="name"
 				value=(r.thread.Name)
+				maxlength="80"
 				autofocus
 				autocomplete="off"
 				aria-label="Chat name"/>
@@ -165,6 +181,7 @@ elem (r *row) rename(hide func(ctx context.Context)) {
 					hide(ctx)
 					return false
 				},
+				OnError: notify.OnError,
 			} <button type="button" class="kchat-btn kchat-btn_2nd">Cancel</button>
 			<button type="submit" class="kchat-btn">Save</button>
 		</div>
@@ -187,18 +204,21 @@ elem (r *row) confirm(hide func(ctx context.Context)) {
 					hide(ctx)
 					return false
 				},
+				OnError: notify.OnError,
 			} <button type="button" class="kchat-btn kchat-btn_2nd">Cancel</button>
 			~>doors.AClick{
 				Scope: new(doors.ScopeBlocking),
 				On: func(ctx context.Context, rp doors.RequestPointer) bool {
 					if err := r.aside.Instance.ThreadDelete(ctx, r.thread.ID); err != nil {
 						doors.Logger(ctx).Error("aside: delete", "thread", r.thread.ID, "err", err)
+						notify.Error(ctx, err)
 					} else {
 						r.day.Reload(ctx)
 					}
 					hide(ctx)
 					return false
 				},
+				OnError: notify.OnError,
 			} <button type="button" class="kchat-btn kchat-btn_del">Delete</button>
 		</div>
 	</div>

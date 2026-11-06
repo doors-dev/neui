@@ -19,7 +19,7 @@ import (
 )
 
 func Run(t *testing.T, a Adapter) {
-	sch, err := loadSpec(a.Spec.File, a.Spec.LooseOneOf)
+	sch, err := loadSpec(a.Spec.File, a.Spec.LooseOneOf, a.Spec.Accept)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +82,7 @@ func checkSpec(t *testing.T, a Adapter, sch *schemas, srv *server, _ limitsFile)
 	}
 	m := a.Models[0]
 	srv.reset(reply{body: mustRender(t, a, m, scriptText)})
-	collect(t, a.New(srv.srv.URL, m, Params{}), Corpus(m.Name)[0].Request)
+	collect(t, a.build(t, srv.srv.URL, m, Params{}), Corpus(m.Name)[0].Request)
 	_, h := srv.last()
 	if h == nil {
 		t.Fatal("no request reached the server")
@@ -103,6 +103,11 @@ func checkSources(t *testing.T, a Adapter, _ *schemas, _ *server, _ limitsFile) 
 			t.Errorf("error case %s has no doc URL as its source: %q", e.Name, e.Source)
 		}
 	}
+	for _, x := range a.Spec.Accept {
+		if x.Source == "" {
+			t.Errorf("the spec deviation at %s gives no source for what the API accepts", x.At)
+		}
+	}
 }
 
 func mustRender(t *testing.T, a Adapter, m api.Model, s Script) string {
@@ -119,19 +124,38 @@ func checkEncode(t *testing.T, a Adapter, sch *schemas, srv *server, limits limi
 		probe := entry(t, m.Name, ProbeEntry)
 		ok := mustRender(t, a, m, scriptText)
 		t.Run(m.Name, func(t *testing.T) {
-			for _, p := range Matrix(limits.Models[m.Name].MaxOutput) {
+			for _, p := range Matrix(limits.Models[m.Name].MaxOutput, a.Sampling) {
 				t.Run(p.String(), func(t *testing.T) {
 					ex := a.expect(m.Name, ProbeEntry, p)
 					if ex.bug != "" {
 						t.Skip("bug: " + ex.bug)
 					}
 					srv.reset(reply{body: ok})
-					events := collect(t, a.New(srv.srv.URL, m, p), p.request(probe))
+					provider, err := a.New(srv.srv.URL, m, p)
+					if ex.want == RefuseNew {
+						if err == nil {
+							t.Fatalf("New accepted the settings, want it refused (%s)", strings.Join(ex.source, ", "))
+						}
+						return
+					}
+					if err != nil {
+						t.Fatalf("New refused the settings and no rule says it does: %v", err)
+					}
+					events := collect(t, provider, p.request(probe))
 					checkOutcome(t, a, sch, srv, ex, events, &p)
 				})
 			}
 		})
 	}
+}
+
+func (a Adapter) build(t *testing.T, base string, m api.Model, p Params) api.Provider {
+	t.Helper()
+	provider, err := a.New(base, m, p)
+	if err != nil {
+		t.Fatalf("New for %s with %s: %v", m.Name, p, err)
+	}
+	return provider
 }
 
 func entry(t *testing.T, model, name string) api.Request {
@@ -220,7 +244,7 @@ func checkCorpus(t *testing.T, a Adapter, sch *schemas, srv *server, _ limitsFil
 						t.Skip("bug: " + ex.bug)
 					}
 					srv.reset(reply{body: ok})
-					events := collect(t, a.New(srv.srv.URL, m, Params{}), e.Request)
+					events := collect(t, a.build(t, srv.srv.URL, m, Params{}), e.Request)
 					body := checkOutcome(t, a, sch, srv, ex, events, nil)
 					if i != 0 || body == nil {
 						return
@@ -242,7 +266,7 @@ func checkRequestBytes(t *testing.T, a Adapter, _ *schemas, srv *server, _ limit
 	req := entry(t, m.Name, ProbeEntry)
 	ok := mustRender(t, a, m, scriptText)
 	srv.reset(reply{body: ok})
-	collect(t, a.New(srv.srv.URL, m, Params{}), req)
+	collect(t, a.build(t, srv.srv.URL, m, Params{}), req)
 	body, _ := srv.last()
 	if body == nil {
 		t.Fatal("probe was not sent")
@@ -251,14 +275,14 @@ func checkRequestBytes(t *testing.T, a Adapter, _ *schemas, srv *server, _ limit
 	at := m
 	at.RequestBytes = n
 	srv.reset(reply{body: ok})
-	events := collect(t, a.New(srv.srv.URL, at, Params{}), req)
+	events := collect(t, a.build(t, srv.srv.URL, at, Params{}), req)
 	if srv.hits() != 1 {
 		t.Fatalf("a %d byte body against RequestBytes %d was not sent: %v", n, n, DescribeAll(events))
 	}
 	under := m
 	under.RequestBytes = n - 1
 	srv.reset(reply{body: ok})
-	events = collect(t, a.New(srv.srv.URL, under, Params{}), req)
+	events = collect(t, a.build(t, srv.srv.URL, under, Params{}), req)
 	if srv.hits() != 0 {
 		t.Fatalf("a %d byte body against RequestBytes %d was sent", n, n-1)
 	}
@@ -269,7 +293,7 @@ func checkRequestBytes(t *testing.T, a Adapter, _ *schemas, srv *server, _ limit
 		t.Fatalf("got %s, want EventErr %s", Describe(events[0]), api.CodeTooLarge)
 	}
 	srv.reset(reply{status: http.StatusRequestEntityTooLarge, body: "payload too large"})
-	events = collect(t, a.New(srv.srv.URL, at, Params{}), req)
+	events = collect(t, a.build(t, srv.srv.URL, at, Params{}), req)
 	CheckGrammar(t, events)
 	e, is := events[len(events)-1].(api.EventErr)
 	if !is || e.Code != api.CodeTooLarge || !errors.Is(e.Err, api.ErrMeasuredTooLarge) {
@@ -295,7 +319,7 @@ func checkDecode(t *testing.T, a Adapter, sch *schemas, srv *server, _ limitsFil
 			}
 			testkit.Golden(t, []byte(sse))
 			srv.reset(reply{body: sse})
-			events := collect(t, a.New(srv.srv.URL, m, Params{}), entry(t, m.Name, "text"))
+			events := collect(t, a.build(t, srv.srv.URL, m, Params{}), entry(t, m.Name, "text"))
 			content := checkScript(t, a, s, events)
 			if len(content) != len(s.Blocks) {
 				t.Fatalf("assembled %d blocks, script has %d: %v", len(content), len(s.Blocks), DescribeAll(events))
@@ -380,7 +404,7 @@ func checkRoundTrip(t *testing.T, a Adapter, sch *schemas, srv *server, _ limits
 				t.Skipf("the %s wire has no way to say this", a.Name)
 			}
 			srv.reset(reply{body: sse})
-			events := collect(t, a.New(srv.srv.URL, m, Params{}), entry(t, m.Name, "text"))
+			events := collect(t, a.build(t, srv.srv.URL, m, Params{}), entry(t, m.Name, "text"))
 			content := checkScript(t, a, s, events)
 			replyText := mustRender(t, a, m, scriptText)
 			send := func(content []api.Content) []byte {
@@ -397,7 +421,7 @@ func checkRoundTrip(t *testing.T, a Adapter, sch *schemas, srv *server, _ limits
 				}
 				req.Messages = append(req.Messages, api.Message{Role: api.RoleUser, Content: results})
 				srv.reset(reply{body: replyText})
-				events := collect(t, a.New(srv.srv.URL, m, Params{}), req)
+				events := collect(t, a.build(t, srv.srv.URL, m, Params{}), req)
 				body, _ := srv.last()
 				if body == nil {
 					t.Fatalf("replay was not sent: %v", DescribeAll(events))
@@ -412,30 +436,6 @@ func checkRoundTrip(t *testing.T, a Adapter, sch *schemas, srv *server, _ limits
 				for _, want := range replayed(c, s.Blocks[i]) {
 					if !bytes.Contains(body, want) {
 						t.Fatalf("block %d did not replay byte for byte: %s is not in\n%s", i, want, clip(body))
-					}
-				}
-			}
-			if !a.BindsModel {
-				return
-			}
-			foreign := make([]api.Content, len(content))
-			for i, c := range content {
-				switch c := c.(type) {
-				case api.ContentReasoning:
-					c.Model = "foreign-model"
-					foreign[i] = c
-				case api.ContentOpaque:
-					c.Model = "foreign-model"
-					foreign[i] = c
-				default:
-					foreign[i] = c
-				}
-			}
-			body = send(foreign)
-			for i, c := range content {
-				for _, want := range replayed(c, s.Blocks[i]) {
-					if bytes.Contains(body, want) {
-						t.Fatalf("block %d from another model replayed %s", i, want)
 					}
 				}
 			}
@@ -471,7 +471,7 @@ func checkErrors(t *testing.T, a Adapter, sch *schemas, srv *server, _ limitsFil
 				rep = reply{header: e.Header, body: e.Stream}
 			}
 			srv.reset(rep)
-			events := collect(t, a.New(srv.srv.URL, m, Params{}), entry(t, m.Name, "text"))
+			events := collect(t, a.build(t, srv.srv.URL, m, Params{}), entry(t, m.Name, "text"))
 			CheckGrammar(t, events)
 			if len(events) == 0 {
 				t.Fatal("no events")
@@ -505,7 +505,7 @@ func checkStreams(t *testing.T, a Adapter, sch *schemas, srv *server, _ limitsFi
 				}
 			}
 			srv.reset(reply{body: string(data)})
-			events := collect(t, a.New(srv.srv.URL, m, Params{}), entry(t, m.Name, "text"))
+			events := collect(t, a.build(t, srv.srv.URL, m, Params{}), entry(t, m.Name, "text"))
 			if a.Unframed {
 				CheckUnframed(t, events)
 			} else {

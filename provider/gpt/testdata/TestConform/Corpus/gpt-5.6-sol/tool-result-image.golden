@@ -63,7 +63,7 @@
         {
           "type": "input_image",
           "image_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==",
-          "detail": "auto"
+          "detail": "high"
         }
       ]
     }

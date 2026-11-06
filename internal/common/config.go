@@ -2,6 +2,7 @@ package common
 
 import (
 	"context"
+	"os"
 	"time"
 
 	"neui.dev/api"
@@ -64,6 +65,9 @@ func ConfigDefaults(c api.ThreadConfig) api.ThreadConfig {
 }
 
 func FilesConfigDefaults(c api.FilesConfig) api.FilesConfig {
+	if c.TempDir == "" {
+		c.TempDir = os.TempDir()
+	}
 	if c.MaxFiles == 0 {
 		c.MaxFiles = 10000
 	}

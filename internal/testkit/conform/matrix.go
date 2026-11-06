@@ -7,10 +7,13 @@ import (
 	"neui.dev/api"
 )
 
-func Matrix(ceiling int) []Params {
+func Matrix(ceiling int, withSampling bool) []Params {
 	efforts := []string{"", EffortOff, EffortLow, EffortHigh, EffortMax}
 	choices := []api.ToolChoice{"", api.ToolChoiceAuto, api.ToolChoiceNone, api.ToolChoiceAny, ChoiceNamed}
-	sampling := [][2]float64{{0, 0}, {0.5, 0}, {0, 0.9}, {0.5, 0.9}}
+	sampling := [][2]float64{{0, 0}}
+	if withSampling {
+		sampling = append(sampling, [2]float64{0.5, 0}, [2]float64{0, 0.9}, [2]float64{0.5, 0.9})
+	}
 	tokens := []int{0, 1}
 	if ceiling > 0 {
 		tokens = append(tokens, ceiling, ceiling+1)
@@ -48,7 +51,8 @@ func (a Adapter) expect(model, entry string, p Params) expect {
 		if r.When != nil && !r.When(p) {
 			continue
 		}
-		if e.want != RefuseLocal && r.Want != Send {
+		switch {
+		case r.Want == RefuseNew, r.Want == RefuseLocal && e.want != RefuseNew, r.Want == Remote && e.want == Send:
 			e.want = r.Want
 		}
 		for k, v := range r.Carry {

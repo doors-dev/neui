@@ -33,7 +33,6 @@ func newRun(ctx context.Context, island *island, seq uint, space string, comment
 	}
 	vm.SetMemoryLimit(uintptr(config.Memory))
 	vm.SetMaxStackSize(uintptr(config.MaxCallDepth))
-	vm.SetEvalTimeout(config.TurnTime)
 	if err := js.RegisterSerializers(vm); err != nil {
 		vm.Close()
 		return nil, err
@@ -47,11 +46,6 @@ func newRun(ctx context.Context, island *island, seq uint, space string, comment
 		return nil, err
 	}
 	ctx, cancel := context.WithCancelCause(ctrl.Context())
-	if err := js.RegisterModules(vm, ctx, ctrl.Modules()); err != nil {
-		cancel(err)
-		vm.Close()
-		return nil, err
-	}
 	r := &run{
 		island:           island,
 		seq:              seq,
@@ -62,6 +56,7 @@ func newRun(ctx context.Context, island *island, seq uint, space string, comment
 		log:              log,
 		pageContext:      ctrl.PageContext(),
 		ctx:              ctx,
+		exec:             ctx,
 		cancel:           cancel,
 		end:              make(chan struct{}),
 		store:            doors.NewStore(),
@@ -71,7 +66,13 @@ func newRun(ctx context.Context, island *island, seq uint, space string, comment
 	r.runner = newRunner(r)
 	r.store.Save(runnerKey{}, r.runner)
 	r.state = core.NewState(r)
-	if err := island.lib.RegisterApp(func() context.Context { return ctx }, vm); err != nil {
+	for m := range ctrl.Modules() {
+		if err := js.RegisterTools(vm, r.TurnContext, m.Name()+"__", m.List()); err != nil {
+			r.clean(false)
+			return nil, err
+		}
+	}
+	if err := island.lib.RegisterApp(r.TurnContext, vm); err != nil {
 		r.clean(false)
 		return nil, err
 	}
@@ -117,6 +118,8 @@ type run struct {
 	current          uint
 	pageContext      context.Context
 	ctx              context.Context
+	exec             context.Context
+	turn             *time.Timer
 	cancel           context.CancelCauseFunc
 	state            core.State
 	end              chan struct{}
@@ -140,8 +143,20 @@ func (r *run) Context() context.Context {
 	return r.ctx
 }
 
+func (r *run) TurnContext() context.Context {
+	return r.exec
+}
+
+func (r *run) PauseTurn() {
+	r.turn.Stop()
+}
+
+func (r *run) ResumeTurn() {
+	r.turn.Reset(r.config.TurnTime)
+}
+
 func (r *run) Seed(ctx context.Context, root gox.Comp) {
-	r.island.place.Outer(ctx, screen{status: runningStatus(r.task.ID()), content: r.island.template(root), store: r.store})
+	r.island.updateScreen(ctx, screen{content: r.island.template(root), store: r.store})
 }
 
 func (r *run) eval(code string, interrupt bool) (uint, error) {
@@ -182,14 +197,14 @@ func (r *run) resetHandover() {
 	r.state.ResetHandover()
 }
 
-func (r *run) done() {
+func (r *run) done() <-chan struct{} {
 	r.cancel(errStopped)
-	<-r.end
+	return r.end
 }
 
-func (r *run) overtake() {
+func (r *run) overtake() <-chan struct{} {
 	r.cancel(errOvertaken)
-	<-r.end
+	return r.end
 }
 
 func (r *run) unmount() {
@@ -238,9 +253,14 @@ func (r *run) run() {
 			r.current = eval.script
 			r.runner.reset()
 			r.mu.Unlock()
+			exec, cancelExec := context.WithCancelCause(r.ctx)
+			r.exec = exec
+			r.turn = time.AfterFunc(r.config.TurnTime, func() {
+				cancelExec(fmt.Errorf("%s: %w", r.config.TurnTime, errTurnTime))
+			})
 			done := make(chan struct{})
 			exited := make(chan struct{})
-			stop := context.AfterFunc(r.ctx, func() {
+			stop := context.AfterFunc(exec, func() {
 				defer close(exited)
 				for {
 					r.interrupt()
@@ -252,10 +272,17 @@ func (r *run) run() {
 				}
 			})
 			err := r.execute(eval.code)
+			r.turn.Stop()
 			close(done)
-			switch {
-			case !stop():
+			if !stop() {
 				<-exited
+			}
+			if err != nil && errors.Is(context.Cause(exec), errTurnTime) {
+				err = context.Cause(exec)
+			}
+			cancelExec(nil)
+			switch {
+			case r.ctx.Err() != nil:
 			case err != nil && !r.isAlive():
 				if logErr := js.Log(r.fs, r.log, "ERROR", err.Error()); logErr != nil {
 					slog.Error("island: script log write failed", "log", r.log, "err", logErr)
@@ -301,9 +328,6 @@ func (r *run) execute(code string) error {
 		return nil
 	}
 	var qe *quickjs.Error
-	if errors.As(err, &qe) && qe.Name == "InternalError" && qe.Message == "interrupted" {
-		return fmt.Errorf("%s: %w", r.config.TurnTime, errTurnTime)
-	}
 	if errors.As(err, &qe) && qe.Stack != "" {
 		return fmt.Errorf("%w\n%s", err, strings.TrimRight(qe.Stack, "\n"))
 	}
@@ -311,6 +335,7 @@ func (r *run) execute(code string) error {
 }
 
 func (r *run) Rearm() error {
+	r.ResumeTurn()
 	_, err := r.vm.ExecutePendingJobs()
 	return err
 }

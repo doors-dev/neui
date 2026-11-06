@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unsafe"
 
 	"neui.dev/api"
 	"neui.dev/provider/lib"
@@ -48,20 +49,11 @@ type inputItem struct {
 
 // encodeRequest builds the body of one turn.
 //
-// A reasoning model is asked for reasoning.encrypted_content unless the caller
+// A known reasoning model is asked for reasoning.encrypted_content unless the caller
 // replaced the include list. Stateless mode populates it on its own now, and the
 // include value is still accepted, still documented and still what older models
 // need. Sending it costs a string.
-//
-// Sampling is dropped on reasoning models rather than forwarded, unless the
-// effort is none. At any other effort they answer 400 to the parameter whatever
-// its value, including the default, so there is nothing to send that would
-// work; at none the docs keep it.
 func encodeRequest(model string, set settings, req api.Request) (*requestBody, error) {
-	if model == "" {
-		return nil, errors.New("gpt: provider has no model, set Conf.Model")
-	}
-	reasoner := isReasoningModel(model)
 	b := &requestBody{
 		Model:         model,
 		Stream:        true,
@@ -73,7 +65,7 @@ func encodeRequest(model string, set settings, req api.Request) (*requestBody, e
 	switch {
 	case set.include != nil:
 		b.Include = set.include
-	case reasoner:
+	case classify(model) == reasoningModel:
 		b.Include = []string{"reasoning.encrypted_content"}
 	}
 	b.MaxOutputTokens = set.maxTokens
@@ -87,23 +79,19 @@ func encodeRequest(model string, set settings, req api.Request) (*requestBody, e
 	b.Tools = tools
 	b.ToolChoice = encodeToolChoice(req.ToolChoice)
 	b.ParallelToolCalls = set.parallelToolCalls
-	if reasoner {
-		if r := (reasoningConfig{
-			Effort:  set.effort,
-			Summary: set.summary,
-			Mode:    set.reasoningMode,
-			Context: set.reasoningContext,
-		}); r != (reasoningConfig{}) {
-			b.Reasoning = &r
-		}
+	if r := (reasoningConfig{
+		Effort:  set.effort,
+		Summary: set.summary,
+		Mode:    set.reasoningMode,
+		Context: set.reasoningContext,
+	}); r != (reasoningConfig{}) {
+		b.Reasoning = &r
 	}
 	if set.verbosity != "" {
 		b.Text = &textConfig{Verbosity: set.verbosity}
 	}
-	if !reasoner || set.forceSampling || set.effort == string(EffortNone) {
-		b.Temperature = set.temperature
-		b.TopP = set.topP
-	}
+	b.Temperature = set.temperature
+	b.TopP = set.topP
 	b.PromptCacheKey = set.promptCacheKey
 	if set.cacheMode != "" || set.cacheTTL != "" {
 		b.PromptCacheOpts = &promptCacheConfig{Mode: set.cacheMode, TTL: set.cacheTTL}
@@ -200,12 +188,13 @@ func (b *inputBuilder) finish() []any {
 // A block this role has nowhere to put becomes the note omitted returns, in the
 // place it held. Reasoning and an opaque payload both belong to an assistant
 // turn on this wire, and a type this version has no case for was written by a
-// later one.
+// later one and becomes the note unknown returns.
 //
-// An attachment with no bytes in it goes the same way, for the thread's sake
-// rather than the wire's: the service refuses a part carrying an empty data URL,
-// and a user message is stored and replayed, so one sent as a part would be
-// refused again on every later turn rather than on this one alone.
+// An attachment the service refuses goes the same way, for the thread's sake
+// rather than the wire's: one with no bytes in it, an image of a type the
+// service does not take and a file with no media type. A user message is
+// stored and replayed, so one sent as a part would be refused again on every
+// later turn rather than on this one alone.
 func (b *inputBuilder) user(m api.Message, at int) error {
 	var blocks []any
 	flush := func() {
@@ -221,24 +210,24 @@ func (b *inputBuilder) user(m api.Message, at int) error {
 			blocks = append(blocks, inputText{Type: "input_text", Text: c.Text})
 		case api.ContentImage:
 			if len(c.Data) == 0 {
-				blocks = append(blocks, omitted(c, at, "an image part with no bytes in it is refused by the service, and the block is stored, so it would be refused again on every later turn of the thread"))
+				blocks = append(blocks, omitted(c, "an image part with no bytes in it is refused by the service, and the block is stored, so it would be refused again on every later turn of the thread"))
 				continue
 			}
-			img, err := imageBlock(c)
-			if err != nil {
-				return err
+			if !imageMediaTypes[strings.ToLower(strings.TrimSpace(c.Mime))] {
+				blocks = append(blocks, omitted(c, fmt.Sprintf("an image of type %q is refused by the service, which takes PNG, JPEG, WEBP and GIF, and the block is stored, so it would be refused again on every later turn of the thread", c.Mime)))
+				continue
 			}
-			blocks = append(blocks, img)
+			blocks = append(blocks, imageBlock(c))
 		case api.ContentDocument:
 			if len(c.Data) == 0 {
-				blocks = append(blocks, omitted(c, at, "a file part with no bytes in it is refused by the service, and the block is stored, so it would be refused again on every later turn of the thread"))
+				blocks = append(blocks, omitted(c, "a file part with no bytes in it is refused by the service, and the block is stored, so it would be refused again on every later turn of the thread"))
 				continue
 			}
-			f, err := documentBlock(c)
-			if err != nil {
-				return err
+			if strings.TrimSpace(c.Mime) == "" {
+				blocks = append(blocks, omitted(c, "a file part with no media type is refused by the service, and the block is stored, so it would be refused again on every later turn of the thread"))
+				continue
 			}
-			blocks = append(blocks, f)
+			blocks = append(blocks, documentBlock(c))
 		case api.ContentToolUse:
 			flush()
 			call, err := callItem(c, b.results[c.ID])
@@ -248,28 +237,29 @@ func (b *inputBuilder) user(m api.Message, at int) error {
 			b.items = append(b.items, call)
 		case api.ContentToolResult:
 			flush()
-			r, err := resultItem(c, at)
-			if err != nil {
-				return err
-			}
-			b.items = append(b.items, r)
+			b.items = append(b.items, resultItem(c, at))
 		case api.ContentReasoning:
-			blocks = append(blocks, omitted(c, at, "a reasoning item is an item of its own and belongs to the assistant turn that produced it"))
+			blocks = append(blocks, omitted(c, "a reasoning item is an item of its own and belongs to the assistant turn that produced it"))
 		case api.ContentOpaque:
-			blocks = append(blocks, omitted(c, at, "an item the service ran itself belongs to the assistant turn that produced it"))
+			blocks = append(blocks, omitted(c, "an item the service ran itself belongs to the assistant turn that produced it"))
 		default:
-			blocks = append(blocks, omitted(c, at, "this version of the adapter has no input part for it"))
+			blocks = append(blocks, unknown(c, at))
 		}
 	}
 	flush()
 	return nil
 }
 
-// omitted is the note that stands in for content this adapter cannot send.
-// input_text is the one part both roles take, so the note lands where the block
+// omitted is the note that stands in for content this adapter cannot send. It is
+// built as input_text and the assistant flush turns it into output_text, the
+// only text part an assistant message takes, so the note lands where the block
 // was whichever message it came from.
-func omitted(c api.Content, at int, why string) inputText {
-	return inputText{Type: "input_text", Text: lib.Omitted("gpt", at, c, why)}
+func omitted(c api.Content, why string) inputText {
+	return inputText{Type: "input_text", Text: lib.Omitted(c, why)}
+}
+
+func unknown(c api.Content, at int) inputText {
+	return inputText{Type: "input_text", Text: lib.Unknown("gpt", at, c)}
 }
 
 // assistant turns one assistant message into items, then applies the reasoning
@@ -294,19 +284,19 @@ func omitted(c api.Content, at int, why string) inputText {
 // already whole, and they are only what it looked like on the way there.
 //
 // A stored reasoning block becomes an item when it has the service's own
-// encoding to send, and the note omitted returns when it has not, in the place
-// it held: what is readable on it is a summary the service wrote, and replaying
-// that as the model's own words is the fabrication reasoningReplay refuses.
-// Nothing else in the run depends on the block, so a block with nothing to send
-// leaves nothing behind an item would have to stand for.
+// encoding to send, or an id the service kept, and the note omitted returns
+// when it has neither, in the place it held: what is readable on it is a
+// summary the service wrote, and replaying that as the model's own words is the
+// fabrication reasoningReplay refuses. Nothing else in the run depends on the
+// block, so a block with nothing to send leaves nothing behind an item would
+// have to stand for.
 //
-// Nothing compares models. A reasoning item has an id, a type, a summary,
-// content, an encrypted payload and a status, and no field naming a model at
-// all; the payload is sealed against the organization and against the item's own
-// id, so the service either reads these bytes or refuses them for a reason no
-// comparison here could predict. OpenAI's own SDKs replay the output array
-// verbatim, and the one capability refusal there is — reasoning sent to a model
-// that does not reason — is what WithReasoningReplay(ReplayNever) is for.
+// Models are not compared; OpenAI omits reasoning from another family itself.
+// Payloads another provider issued are dropped: ownItem accepts a reasoning
+// block's meta or an opaque payload only when it is an output item of this
+// API's own shape, and anything else leaves the note in its place. The one
+// capability refusal left — reasoning sent to a model that does not reason — is
+// what WithReasoningReplay(ReplayNever) is for.
 //
 // A tool result belongs to a user turn, but a Responses item has no role and the
 // model reads it the same either way, so it is carried rather than refused.
@@ -316,6 +306,12 @@ func (b *inputBuilder) assistant(m api.Message, at int) error {
 	var phase string
 	flush := func() {
 		if len(parts) > 0 {
+			for i, p := range parts {
+				if t, ok := p.(inputText); ok {
+					t.Type = "output_text"
+					parts[i] = t
+				}
+			}
 			b.items = append(b.items, inputItem{kind: kindMessage, v: inputMessage{
 				Role:    "assistant",
 				Content: parts,
@@ -334,12 +330,20 @@ func (b *inputBuilder) assistant(m api.Message, at int) error {
 			}
 			parts = append(parts, inputText{Type: "input_text", Text: c.Text})
 		case api.ContentOpaque:
+			if !ownItem(c.Data, c.Kind) {
+				parts = append(parts, omitted(c, "the payload was issued by another provider"))
+				continue
+			}
 			flush()
 			b.items = append(b.items, inputItem{kind: kindOpaque, v: c.Data})
 		case api.ContentReasoning:
-			item := reasoningReplay(c)
+			if len(c.Meta) > 0 && !ownItem(c.Meta, "reasoning") {
+				parts = append(parts, omitted(c, "the payload was issued by another provider"))
+				continue
+			}
+			item := reasoningReplay(c, b.set.store)
 			if item == nil {
-				parts = append(parts, omitted(c, at, "the block carries no encoding of its own, and the service never signed what is readable on it"))
+				parts = append(parts, omitted(c, "the block carries neither the service's encoding nor, with store off, an id the service kept"))
 				continue
 			}
 			flush()
@@ -353,15 +357,11 @@ func (b *inputBuilder) assistant(m api.Message, at int) error {
 			b.items = append(b.items, call)
 		case api.ContentToolResult:
 			flush()
-			r, err := resultItem(c, at)
-			if err != nil {
-				return err
-			}
-			b.items = append(b.items, r)
+			b.items = append(b.items, resultItem(c, at))
 		case api.ContentImage, api.ContentDocument:
-			parts = append(parts, omitted(c, at, "the Responses API has no attachment part for the assistant role"))
+			parts = append(parts, omitted(c, "the Responses API has no attachment part for the assistant role"))
 		default:
-			parts = append(parts, omitted(c, at, "this version of the adapter has no input part for it"))
+			parts = append(parts, unknown(c, at))
 		}
 	}
 	flush()
@@ -372,8 +372,7 @@ func (b *inputBuilder) assistant(m api.Message, at int) error {
 // phaseOf reads the phase a stored text block was labelled with, and nothing
 // when the label was written for another model: phase labels an assistant
 // message one particular model produced, and an empty claim is no claim rather
-// than a wildcard. The comparison is on the normalized name, so a gateway prefix
-// or a case difference does not silently drop one.
+// than a wildcard. The comparison is on the name exactly as configured.
 //
 // A block carrying meta this adapter did not write leaves both fields empty and
 // so claims nothing, which is what a block with no meta at all claims.
@@ -383,7 +382,7 @@ func (b *inputBuilder) assistant(m api.Message, at int) error {
 func (b *inputBuilder) phaseOf(meta json.RawMessage) string {
 	var m messageMeta
 	_ = json.Unmarshal(meta, &m)
-	if m.Model == "" || baseModel(m.Model) != baseModel(b.model) {
+	if m.Model == "" || m.Model != b.model {
 		return ""
 	}
 	return m.Phase
@@ -392,7 +391,9 @@ func (b *inputBuilder) phaseOf(meta json.RawMessage) string {
 // reasoningReplay is the input item for a stored reasoning block: the service's
 // own encoding of it, which is the whole reasoning item as it arrived, because
 // the seal covers those bytes and re-encoding a value is not the same as keeping
-// one.
+// one. An item without encrypted_content goes back only when store is on, where
+// its id names a response the service kept; with store off that id names
+// nothing and the service refuses it.
 //
 // A block without one is not sent. What is readable on it is a summary the
 // service wrote, not the thinking it summarizes, and the service never signed
@@ -400,11 +401,55 @@ func (b *inputBuilder) phaseOf(meta json.RawMessage) string {
 // reasoning with nothing to prove it. Sending it back is at best ignored and at
 // worst a rejection that costs the whole request, where dropping it costs that
 // one item and nothing else in the turn.
-func reasoningReplay(c api.ContentReasoning) any {
+func reasoningReplay(c api.ContentReasoning, store bool) any {
 	if len(c.Meta) == 0 {
 		return nil
 	}
+	var item outputItem
+	_ = json.Unmarshal(c.Meta, &item)
+	if item.EncryptedContent == "" && !store {
+		return nil
+	}
 	return c.Meta
+}
+
+func ownItem(raw json.RawMessage, kind string) bool {
+	var item outputItem
+	if json.Unmarshal(raw, &item) != nil || item.Type != kind || item.ID == "" {
+		return false
+	}
+	if kind == "reasoning" {
+		return strings.HasPrefix(item.ID, "rs_")
+	}
+	return opaqueItemTypes[kind]
+}
+
+var opaqueItemTypes = map[string]bool{
+	"file_search_call":        true,
+	"function_call_output":    true,
+	"web_search_call":         true,
+	"computer_call":           true,
+	"computer_call_output":    true,
+	"program":                 true,
+	"program_output":          true,
+	"tool_search_call":        true,
+	"tool_search_output":      true,
+	"additional_tools":        true,
+	"compaction":              true,
+	"image_generation_call":   true,
+	"code_interpreter_call":   true,
+	"local_shell_call":        true,
+	"local_shell_call_output": true,
+	"shell_call":              true,
+	"shell_call_output":       true,
+	"apply_patch_call":        true,
+	"apply_patch_call_output": true,
+	"mcp_call":                true,
+	"mcp_list_tools":          true,
+	"mcp_approval_request":    true,
+	"mcp_approval_response":   true,
+	"custom_tool_call":        true,
+	"custom_tool_call_output": true,
 }
 
 // applyReplayPolicy decides which reasoning items in the run starting at start
@@ -427,7 +472,10 @@ func reasoningReplay(c api.ContentReasoning) any {
 //
 // The follower is a call the caller answers or a tool the service ran itself.
 // Both are items the thinking produced and the check reads the position rather
-// than the kind, so both pair the same way.
+// than the kind, so both pair the same way. Preamble or commentary messages
+// between a reasoning item and its call do not break the pairing: under
+// ReplayToolTurns a reasoning item goes back when a follower comes later in the
+// run before the next reasoning item.
 func (b *inputBuilder) applyReplayPolicy(start int) {
 	run := b.items[start:]
 	keep := make([]bool, len(run))
@@ -444,7 +492,16 @@ func (b *inputBuilder) applyReplayPolicy(start int) {
 		case ReplayAlways:
 			keep[i] = i+1 < len(run)
 		default:
-			keep[i] = i+1 < len(run) && run[i+1].kind.follows()
+			keep[i] = false
+			for _, next := range run[i+1:] {
+				if next.kind == kindReasoning {
+					break
+				}
+				if next.kind.follows() {
+					keep[i] = true
+					break
+				}
+			}
 		}
 	}
 	out := b.items[:start]
@@ -484,16 +541,12 @@ func callItem(c api.ContentToolUse, failure api.ToolError) (inputItem, error) {
 	}}, nil
 }
 
-func resultItem(c api.ContentToolResult, at int) (inputItem, error) {
-	out, err := resultOutput(c, at)
-	if err != nil {
-		return inputItem{}, err
-	}
+func resultItem(c api.ContentToolResult, at int) inputItem {
 	return inputItem{kind: kindFunctionOutput, v: functionCallOutput{
 		Type:   "function_call_output",
 		CallID: c.ID,
-		Output: out,
-	}}, nil
+		Output: resultOutput(c, at),
+	}}
 }
 
 // resultOutput builds the output of a function_call_output. The output is
@@ -510,14 +563,16 @@ func resultItem(c api.ContentToolResult, at int) (inputItem, error) {
 // out: the classification is for whoever routes the result, and what the model
 // needs to read about it is already in the blocks.
 //
+// A result with no blocks gets the text lib.EmptyResult names, because the
+// documentation asks for text saying a call that returns nothing succeeded.
+//
 // A block with no part to put it in becomes the note omitted returns, in the
 // place it held, the same as a block of a message does, and so does an
-// attachment that arrived with no bytes in it, for the reason inputBuilder.user
-// gives. The subset a result may carry is what every wire takes something of and
+// attachment the service refuses, for the reason inputBuilder.user gives. The subset a result may carry is what every wire takes something of and
 // not what each one takes all of, so a later version of this protocol widening it
 // lands here, and a request refused over one block answers nothing the model is
 // waiting on.
-func resultOutput(c api.ContentToolResult, at int) (any, error) {
+func resultOutput(c api.ContentToolResult, at int) any {
 	blocks := make([]any, 0, len(c.Content)+1)
 	if c.Error != api.ToolOk {
 		blocks = append(blocks, inputText{Type: "input_text", Text: "Error:"})
@@ -528,42 +583,37 @@ func resultOutput(c api.ContentToolResult, at int) (any, error) {
 			blocks = append(blocks, inputText{Type: "input_text", Text: rc.Text})
 		case api.ContentImage:
 			if len(rc.Data) == 0 {
-				blocks = append(blocks, omitted(rc, at, "an image part with no bytes in it is refused by the service, and the result is stored, so it would be refused again on every later turn of the thread"))
+				blocks = append(blocks, omitted(rc, "an image part with no bytes in it is refused by the service, and the result is stored, so it would be refused again on every later turn of the thread"))
 				continue
 			}
 			if !imageMediaTypes[strings.ToLower(strings.TrimSpace(rc.Mime))] {
-				blocks = append(blocks, omitted(rc, at, fmt.Sprintf("an image of type %q is refused by the service, which takes PNG, JPEG, WEBP and GIF, and the result is stored, so it would be refused again on every later turn of the thread", rc.Mime)))
+				blocks = append(blocks, omitted(rc, fmt.Sprintf("an image of type %q is refused by the service, which takes PNG, JPEG, WEBP and GIF, and the result is stored, so it would be refused again on every later turn of the thread", rc.Mime)))
 				continue
 			}
-			img, err := imageBlock(rc)
-			if err != nil {
-				return nil, err
-			}
-			blocks = append(blocks, img)
+			blocks = append(blocks, imageBlock(rc))
 		case api.ContentDocument:
 			if len(rc.Data) == 0 {
-				blocks = append(blocks, omitted(rc, at, "a file part with no bytes in it is refused by the service, and the result is stored, so it would be refused again on every later turn of the thread"))
+				blocks = append(blocks, omitted(rc, "a file part with no bytes in it is refused by the service, and the result is stored, so it would be refused again on every later turn of the thread"))
 				continue
 			}
 			if strings.TrimSpace(rc.Mime) == "" {
-				blocks = append(blocks, omitted(rc, at, "a file part with no media type is refused by the service, and the result is stored, so it would be refused again on every later turn of the thread"))
+				blocks = append(blocks, omitted(rc, "a file part with no media type is refused by the service, and the result is stored, so it would be refused again on every later turn of the thread"))
 				continue
 			}
-			f, err := documentBlock(rc)
-			if err != nil {
-				return nil, err
-			}
-			blocks = append(blocks, f)
+			blocks = append(blocks, documentBlock(rc))
 		default:
-			blocks = append(blocks, omitted(rc, at, "this version of the adapter has no output part for it"))
+			blocks = append(blocks, unknown(rc, at))
 		}
 	}
-	return blocks, nil
+	if len(blocks) == 0 {
+		blocks = append(blocks, inputText{Type: "input_text", Text: lib.EmptyResult})
+	}
+	return blocks
 }
 
-// imageMediaTypes is what the vision models take. Anything else is refused
-// here, with the media type named, rather than forwarded to be refused there
-// with a message about a data URL.
+// imageMediaTypes is what the vision models take. Anything else becomes the
+// note omitted returns, with the media type named, rather than forwarded to be
+// refused there with a message about a data URL.
 var imageMediaTypes = map[string]bool{
 	"image/png":  true,
 	"image/jpeg": true,
@@ -572,12 +622,8 @@ var imageMediaTypes = map[string]bool{
 	"image/gif":  true,
 }
 
-func imageBlock(c api.ContentImage) (inputImage, error) {
-	mime := strings.ToLower(strings.TrimSpace(c.Mime))
-	if !imageMediaTypes[mime] {
-		return inputImage{}, fmt.Errorf("gpt: image media type %q is not accepted: PNG, JPEG, WEBP and non animated GIF only", c.Mime)
-	}
-	return inputImage{Type: "input_image", ImageURL: dataURL(mime, c.Data), Detail: "auto"}, nil
+func imageBlock(c api.ContentImage) inputImage {
+	return inputImage{Type: "input_image", ImageURL: dataURL(strings.ToLower(strings.TrimSpace(c.Mime)), c.Data), Detail: "high"}
 }
 
 // documentExtensions maps the media types worth guessing a filename for. The
@@ -604,26 +650,22 @@ var documentExtensions = map[string]string{
 	"application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
 }
 
-func documentBlock(c api.ContentDocument) (inputFile, error) {
+func documentBlock(c api.ContentDocument) inputFile {
 	mime := strings.ToLower(strings.TrimSpace(c.Mime))
-	if mime == "" {
-		return inputFile{}, errors.New("gpt: document has no media type")
-	}
 	name := c.Name
 	if name == "" {
 		name = "document" + documentExtensions[mime]
 	}
-	return inputFile{Type: "input_file", Filename: name, FileData: dataURL(mime, c.Data)}, nil
+	return inputFile{Type: "input_file", Filename: name, FileData: dataURL(mime, c.Data)}
 }
 
 // dataURL is the form every current example uses for both image_url and
 // file_data, and the only one that carries the media type alongside the bytes.
 func dataURL(mime string, data []byte) string {
-	var sb strings.Builder
-	sb.Grow(len(mime) + base64.StdEncoding.EncodedLen(len(data)) + 16)
-	sb.WriteString("data:")
-	sb.WriteString(mime)
-	sb.WriteString(";base64,")
-	sb.WriteString(base64.StdEncoding.EncodeToString(data))
-	return sb.String()
+	buf := make([]byte, len("data:")+len(mime)+len(";base64,")+base64.StdEncoding.EncodedLen(len(data)))
+	n := copy(buf, "data:")
+	n += copy(buf[n:], mime)
+	n += copy(buf[n:], ";base64,")
+	base64.StdEncoding.Encode(buf[n:], data)
+	return unsafe.String(&buf[0], len(buf))
 }

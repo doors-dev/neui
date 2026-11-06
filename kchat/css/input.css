@@ -22,6 +22,22 @@
 	100% { opacity: 0 }
 }
 
+@keyframes kchat-auto-fill {
+	0% { width: 0 }
+	100% { width: 100% }
+}
+
+@keyframes kchat-toast {
+	0% { opacity: 0; transform: translateY(-4px) }
+	3%, 94% { opacity: 1; transform: none }
+	100% { opacity: 0; transform: translateY(-4px) }
+}
+
+@keyframes kchat-toast-hold {
+	0% { visibility: visible }
+	100% { visibility: hidden }
+}
+
 @layer kchat {
 	.kchat-widget {
 		--app-bg: var(--kchat-dark-app-bg, --theme(--color-zinc-950 inline));
@@ -149,16 +165,159 @@
 
 	.kchat-pane {
 		@apply
+		relative
 		flex
 		flex-col
 		flex-1
 		min-w-0
 	}
 
-	.kchat-pane > .kchat-log {
+	.kchat-pane .kchat-log {
 		@apply
 		flex-1
 		min-h-0
+	}
+
+	.kchat-closed-area {
+		@apply
+		flex
+		flex-1
+		min-h-0
+		items-center
+		justify-center
+		pt-4
+		px-3
+		pb-12
+	}
+
+	.kchat-closed-card {
+		@apply
+		flex
+		flex-col
+		items-center
+		gap-1.5
+		p-4
+		text-center
+	}
+
+	.kchat-closed-card > .kchat-closed-ic {
+		@apply
+		flex-none
+		w-5
+		h-5
+		text-(--danger-ink)
+	}
+
+	.kchat-closed-title {
+		@apply
+		mt-1
+		mb-0
+		mx-0
+		text-[0.9375rem]
+		font-semibold
+		text-(--app-ink)
+		text-balance
+	}
+
+	.kchat-closed-text {
+		@apply
+		m-0
+		min-w-0
+		max-w-[30ch]
+		text-sm
+		leading-normal
+		text-(--app-ink-quiet)
+		text-balance
+	}
+
+	.kchat-closed-acts {
+		@apply
+		flex
+		flex-none
+		items-center
+		gap-2
+		mt-2
+	}
+
+	.kchat-toasts {
+		@apply
+		absolute
+		top-11
+		inset-x-3
+		z-15
+		flex
+		flex-col
+		items-center
+		gap-1.5
+		pointer-events-none
+	}
+
+	@container (width < 36rem) {
+		.kchat-toasts {
+			@apply
+			items-stretch
+		}
+	}
+
+	.kchat-toast {
+		@apply
+		relative
+		isolate
+		overflow-hidden
+		pointer-events-auto
+		flex
+		items-center
+		gap-2
+		box-border
+		max-w-full
+		min-h-7
+		py-1
+		ps-2.5
+		pe-3
+		border
+		border-(--danger-ink)
+		rounded-(--_kchat-radius-control)
+		bg-(--app-bg)
+		text-(--app-ink)
+		text-sm
+		leading-tight
+		shadow-[0_4px_14px_color-mix(in_srgb,var(--app-ink)_10%,transparent)]
+		animate-[kchat-toast_4.25s_ease-out_forwards]
+	}
+
+	.kchat-toast-lead {
+		@apply
+		flex
+		flex-none
+		text-(--danger-ink)
+	}
+
+	.kchat-toast-text {
+		@apply
+		flex-1
+		min-w-0
+		overflow-hidden
+		text-ellipsis
+		whitespace-nowrap
+		py-0.5
+	}
+
+	.kchat-toast > .kchat-file-fill {
+		@apply
+		w-0
+		animate-[kchat-auto-fill_4s_linear_forwards]
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.kchat-toast {
+			@apply
+			animate-[kchat-toast-hold_4s_steps(1,end)_forwards]
+		}
+
+		.kchat-toast > .kchat-file-fill {
+			@apply
+			hidden
+		}
 	}
 
 	.kchat-widget_off .kchat-composer {
@@ -210,12 +369,6 @@
 		text-center
 		truncate
 		px-1
-	}
-
-	.kchat-top-title_quiet {
-		@apply
-		font-normal
-		text-(--app-ink-quiet)
 	}
 
 	.kchat-ic {
@@ -396,6 +549,33 @@
 	.kchat-btn_2nd:focus-visible {
 		@apply
 		border-(--panel-border-focus)
+	}
+
+	.kchat-btn_auto {
+		@apply
+		relative
+		isolate
+		overflow-hidden
+		min-w-18
+		border-(--secondary-bg)
+	}
+
+	.kchat-btn_auto > .kchat-file-fill {
+		@apply
+		w-0
+		animate-[kchat-auto-fill_10s_linear_forwards]
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.kchat-btn_auto {
+			@apply
+			border-(--button-border)
+		}
+
+		.kchat-btn_auto > .kchat-file-fill {
+			@apply
+			hidden
+		}
 	}
 
 	.kchat-btn:disabled, .kchat-iconbtn:disabled {
@@ -639,6 +819,19 @@
 	}
 
 	.kchat-side-empty-hint { @apply text-xs text-(--app-ink-quiet) }
+
+	.kchat-side-retry {
+		@apply
+		flex
+		items-center
+		justify-between
+		gap-2
+		flex-none
+		min-h-7
+		mt-3
+		ps-2
+		text-(--app-ink-quiet)
+	}
 
 	.kchat-row {
 		@apply

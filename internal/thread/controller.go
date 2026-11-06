@@ -2,6 +2,7 @@ package thread
 
 import (
 	"context"
+	"errors"
 	"iter"
 
 	"neui.dev/api"
@@ -45,6 +46,9 @@ func (c controller) Ask(ask api.ChatAsk) (func(ctx context.Context), error) {
 }
 
 func (c controller) Task(comment string, attrs map[string]any, cancel context.CancelCauseFunc) (common.Task, error) {
+	if cancel == nil {
+		return nil, errors.New("a background task needs a cancel func")
+	}
 	if attrs == nil {
 		attrs = make(map[string]any)
 	}

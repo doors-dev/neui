@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
-	"fmt"
 	"slices"
 	"sync"
 
@@ -102,18 +101,35 @@ func (m *linkTasks) taskAdd(origin api.RoundID, module string, name string, comm
 	}
 }
 
-func (m *linkTasks) taskRemove(id uint) (linkTask, error) {
+func (m *linkTasks) taskRemove(id uint) (linkTask, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	i, ok := slices.BinarySearchFunc(m.tasks, id, func(e linkTask, id uint) int {
 		return cmp.Compare(e.id, id)
 	})
 	if !ok {
-		return linkTask{}, fmt.Errorf("task %d not found", id)
+		return linkTask{}, false
 	}
 	task := m.tasks[i]
 	m.tasks = slices.Delete(m.tasks, i, i+1)
-	return task, nil
+	return task, true
+}
+
+func (m *linkTasks) taskCut(round api.RoundID) bool {
+	m.mu.Lock()
+	var cut []linkTask
+	m.tasks = slices.DeleteFunc(m.tasks, func(e linkTask) bool {
+		if e.origin < round {
+			return false
+		}
+		cut = append(cut, e)
+		return true
+	})
+	m.mu.Unlock()
+	for _, e := range cut {
+		e.cancel(api.ErrCanceledByUser)
+	}
+	return len(cut) != 0
 }
 
 func (m *linkTasks) taskGet(id uint) (linkTask, bool) {

@@ -2,18 +2,18 @@
   "specs": [
     {
       "file": "anthropic.json.gz",
-      "source": "https://raw.githubusercontent.com/anthropics/anthropic-sdk-go/697438c4bbab8f36cf009a97febec4ac4c3e40ab/scripts/mock-spec.json.gz",
-      "commit": "697438c4bbab8f36cf009a97febec4ac4c3e40ab",
-      "apiVersion": "2023-06-01",
+      "source": "https://raw.githubusercontent.com/anthropics/anthropic-sdk-go/b98ff3342a95f1197d9b2ba2c1820311bec698d7/scripts/mock-spec.json.gz",
+      "commit": "b98ff3342a95f1197d9b2ba2c1820311bec698d7",
+      "apiVersion": "2026-10-21",
       "roots": [
         "/components/schemas/CreateMessageParams",
         "/components/schemas/CountMessageTokensParams",
         "/components/schemas/MessageStreamEvent",
         "/components/schemas/ErrorResponse"
       ],
-      "upstreamSha256": "c97bf0fed08d870696726a077a32ce8a0972edf678ed2f373e916baf4db70157",
-      "sha256": "18c25482a6a8b8724b0078bcb9547b53b626d77e99eb6e6703a0a3ee15c782a5",
-      "fetched": "2026-11-04"
+      "upstreamSha256": "d5be78f1f9a83da862453b00114b189e797b5787c20babaabbdb667160e1adf5",
+      "sha256": "67669a47a3d19fc12cb4cc23ab282f6a15af74209586d51d51205f038ac6433c",
+      "fetched": "2026-11-06"
     },
     {
       "file": "openai.json.gz",
@@ -30,8 +30,8 @@
       ],
       "upstreamSha256": "067ff996bab83b5945551b0c14ce3a3e567781182a1e6b176115eaea3657ff86",
       "sha256": "bd18eaaab478888ee1bc1124131e7bec457f4bee52e56306836ec0382fa07d1f",
-      "fetched": "2026-11-04"
+      "fetched": "2026-11-06"
     }
   ],
-  "update": "Regenerate with: go run ./internal/testkit/conform/fetchspec. To move a pin, change its commit in fetchspec/main.go and commit the new specs and SPECS together. The Anthropic pin must describe the anthropic-version the claude adapter sends (its defaultVersion); anthropic-sdk-go 697438c is the last commit before the SDK moved to 2026-10-21. A pin is never replaced silently: the suite checks sha256 of the decompressed spec against this file."
+  "update": "Regenerate with: go run ./internal/testkit/conform/fetchspec. To move a pin, change its commit in fetchspec/main.go and commit the new specs and SPECS together. The Anthropic pin must describe the anthropic-version the claude adapter sends (its defaultVersion); anthropic-sdk-go b98ff33 is release 2.7.0, which sends 2026-10-21. A pin is never replaced silently: the suite checks sha256 of the decompressed spec against this file."
 }

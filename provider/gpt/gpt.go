@@ -1,7 +1,10 @@
 // Package gpt is the OpenAI provider for neui. Build one with New and hand it
 // to neui.WithProvider or neui.OptionProvider:
 //
-//	p := gpt.New(gpt.Conf{Model: gpt.GPT56Luna}, gpt.WithReasoningEffort(gpt.EffortHigh))
+//	p, err := gpt.New(gpt.Conf{Model: gpt.GPT56Luna}, gpt.WithReasoningEffort(gpt.EffortHigh))
+//	if err != nil {
+//		return err
+//	}
 //	neui.Enable(ctx, neui.OptionProvider(p))
 //
 // The key is read from OPENAI_API_KEY unless WithAPIKey sets one. Model and
@@ -44,8 +47,8 @@ func (p *Provider) Model() api.Model {
 
 // Stream sends one turn and streams its events as api.Provider describes;
 // read until the channel closes or cancel ctx. A request that cannot be built,
-// such as one with no model, ends at once with CodeInvalid, and one larger
-// than a nonzero Model.RequestBytes with CodeTooLarge. A failure the service
+// such as one with a tool that has no name, ends at once with CodeInvalid, and
+// one larger than a nonzero Model.RequestBytes with CodeTooLarge. A failure the service
 // reports arrives as an EventErr whose Err is or wraps an *APIError.
 func (p *Provider) Stream(ctx context.Context, req api.Request) <-chan api.Event {
 	httpReq, sent, err := p.request(ctx, req)

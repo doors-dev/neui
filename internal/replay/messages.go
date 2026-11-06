@@ -23,6 +23,7 @@ type round struct {
 	agent  []api.Content
 	usage  api.EventUsage
 	weight int64
+	images int
 }
 
 type messages struct {
@@ -98,6 +99,7 @@ func (s *messages) replay(input api.Input) ([]api.Message, error) {
 			s.weight -= s.rounds[i].weight - weights[i]
 			s.rounds[i].user = user
 			s.rounds[i].weight = weights[i]
+			s.rounds[i].images = countImages(user...)
 		}
 	}
 	if !shed && s.model.ImagesPerRequest > 0 && countImages(content...) > s.model.ImagesPerRequest {
@@ -111,7 +113,7 @@ func (s *messages) replay(input api.Input) ([]api.Message, error) {
 		pendingImages := countImages(content...)
 		images := pendingImages
 		for _, r := range s.rounds {
-			images += countImages(r.user...)
+			images += r.images
 		}
 		if images > s.model.ImagesPerRequest && pendingImages <= s.model.ImagesPerRequest {
 			target := evictionTarget(s.model.ImagesPerRequest)
@@ -123,7 +125,7 @@ func (s *messages) replay(input api.Input) ([]api.Message, error) {
 				}
 				users[i] = omitAllMedia(s.rounds[i].user, evictedMedia)
 				weights[i] = weigh(users[i]...) + weigh(s.rounds[i].agent...)
-				images -= countImages(s.rounds[i].user...)
+				images -= s.rounds[i].images
 			}
 			if images <= s.model.ImagesPerRequest {
 				for i, user := range users {
@@ -133,6 +135,7 @@ func (s *messages) replay(input api.Input) ([]api.Message, error) {
 					s.weight -= s.rounds[i].weight - weights[i]
 					s.rounds[i].user = user
 					s.rounds[i].weight = weights[i]
+					s.rounds[i].images = countImages(user...)
 				}
 			}
 		}
@@ -205,6 +208,7 @@ func (s *messages) appendRound(r api.Round) {
 		agent:  response,
 		usage:  r.Usage,
 		weight: weight,
+		images: countImages(user...),
 	})
 	s.weight += weight
 }
@@ -230,6 +234,7 @@ func (s *messages) applyCompaction(c Compaction, record api.Compaction) {
 	}
 	target.user = slices.Concat([]api.Content{noteContent("summary", record.Text)}, target.user[body:])
 	target.weight = weigh(target.user...) + weigh(target.agent...)
+	target.images = countImages(target.user...)
 	s.rounds = slices.Concat([]round{target}, s.rounds[c.index+1:])
 	s.weight = 0
 	for _, r := range s.rounds {

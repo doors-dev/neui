@@ -63,12 +63,6 @@ func (l *library) RegisterApp(ctx func() context.Context, vm *quickjs.VM) error 
 	return err
 }
 
-/*
-func (l *library) newState(ctx context.Context, vm *quickjs.VM) *state {
-	s := newState(ctx, l, vm)
-	return s
-} */
-
 func (l Library) widgetNames() []string {
 	return slices.AppendSeq(make([]string, 0, len(l.widgets)), maps.Keys(l.widgets))
 }

@@ -1,6 +1,10 @@
 package claude
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"encoding/json/jsontext"
+	"unicode/utf8"
+)
 
 // request is the body of POST /v1/messages, and the types under it are the rest
 // of that API's wire shapes. Only the fields this adapter reads or writes are
@@ -8,19 +12,16 @@ import "encoding/json"
 // every release, so decoding ignores what it does not know rather than failing
 // on it.
 type request struct {
-	Model         string            `json:"model"`
-	MaxTokens     int               `json:"max_tokens"`
-	Stream        bool              `json:"stream"`
-	Tools         []tool            `json:"tools,omitempty"`
-	ToolChoice    *toolChoice       `json:"tool_choice,omitempty"`
-	System        []json.RawMessage `json:"system,omitempty"`
-	Messages      []message         `json:"messages"`
-	Temperature   *float64          `json:"temperature,omitempty"`
-	TopP          *float64          `json:"top_p,omitempty"`
-	TopK          *int              `json:"top_k,omitempty"`
-	StopSequences []string          `json:"stop_sequences,omitempty"`
-	Thinking      *thinkingWire     `json:"thinking,omitempty"`
-	OutputConfig  *outputConfig     `json:"output_config,omitempty"`
+	Model         string        `json:"model"`
+	MaxTokens     int           `json:"max_tokens"`
+	Stream        bool          `json:"stream"`
+	Tools         []tool        `json:"tools,omitempty"`
+	ToolChoice    *toolChoice   `json:"tool_choice,omitempty"`
+	System        []textBlock   `json:"system,omitempty"`
+	Messages      []message     `json:"messages"`
+	StopSequences []string      `json:"stop_sequences,omitempty"`
+	Thinking      *thinkingWire `json:"thinking,omitempty"`
+	OutputConfig  *outputConfig `json:"output_config,omitempty"`
 }
 
 type tool struct {
@@ -50,48 +51,63 @@ type cacheControl struct {
 	TTL  string `json:"ttl,omitempty"`
 }
 
-// message content is raw because a replayed thinking or redacted_thinking block
-// has to go back out exactly as it came in. Everything else is marshalled from
-// a typed block and lands here as bytes too, so one slice covers both.
+// message content holds typed blocks, encoded once with the request, and the
+// raw bytes of a replayed redacted_thinking or opaque block, which has to go
+// back out exactly as it came in.
 type message struct {
-	Role    string            `json:"role"`
-	Content []json.RawMessage `json:"content"`
+	Role    string `json:"role"`
+	Content []any  `json:"content"`
+}
+
+type cached struct {
+	CacheControl *cacheControl `json:"cache_control,omitempty"`
 }
 
 type textBlock struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
+	cached
+	Type string   `json:"type"`
+	Text htmlText `json:"text"`
 }
 
-type mediaSource struct {
+type base64Source struct {
 	Type      string `json:"type"`
 	MediaType string `json:"media_type"`
-	Data      string `json:"data"`
+	Data      []byte `json:"data"`
+}
+
+type textSource struct {
+	Type      string   `json:"type"`
+	MediaType string   `json:"media_type"`
+	Data      htmlText `json:"data"`
 }
 
 type imageBlock struct {
-	Type   string      `json:"type"`
-	Source mediaSource `json:"source"`
+	cached
+	Type   string       `json:"type"`
+	Source base64Source `json:"source"`
 }
 
 type documentBlock struct {
-	Type   string      `json:"type"`
-	Source mediaSource `json:"source"`
-	Title  string      `json:"title,omitempty"`
+	cached
+	Type   string   `json:"type"`
+	Source any      `json:"source"`
+	Title  htmlText `json:"title,omitempty"`
 }
 
 type toolUseBlock struct {
+	cached
 	Type  string          `json:"type"`
-	ID    string          `json:"id"`
-	Name  string          `json:"name"`
+	ID    htmlText        `json:"id"`
+	Name  htmlText        `json:"name"`
 	Input json.RawMessage `json:"input"`
 }
 
 type toolResultBlock struct {
-	Type      string            `json:"type"`
-	ToolUseID string            `json:"tool_use_id"`
-	Content   []json.RawMessage `json:"content"`
-	IsError   bool              `json:"is_error"`
+	cached
+	Type      string   `json:"type"`
+	ToolUseID htmlText `json:"tool_use_id"`
+	Content   []any    `json:"content"`
+	IsError   bool     `json:"is_error"`
 }
 
 type thinkingBlock struct {
@@ -100,15 +116,79 @@ type thinkingBlock struct {
 	Signature string `json:"signature"`
 }
 
+type htmlText string
+
+func (s htmlText) MarshalJSONTo(enc *jsontext.Encoder) error {
+	return enc.WriteValue(appendHTMLText(enc.AvailableBuffer(), string(s)))
+}
+
+func appendHTMLText(dst []byte, s string) []byte {
+	const hex = "0123456789abcdef"
+	dst = append(dst, '"')
+	start := 0
+	for i := 0; i < len(s); {
+		if b := s[i]; b < utf8.RuneSelf {
+			if b >= ' ' && b != '"' && b != '\\' && b != '<' && b != '>' && b != '&' {
+				i++
+				continue
+			}
+			dst = append(dst, s[start:i]...)
+			switch b {
+			case '"', '\\':
+				dst = append(dst, '\\', b)
+			case '\b':
+				dst = append(dst, '\\', 'b')
+			case '\f':
+				dst = append(dst, '\\', 'f')
+			case '\n':
+				dst = append(dst, '\\', 'n')
+			case '\r':
+				dst = append(dst, '\\', 'r')
+			case '\t':
+				dst = append(dst, '\\', 't')
+			default:
+				dst = append(dst, '\\', 'u', '0', '0', hex[b>>4], hex[b&0xf])
+			}
+			i++
+			start = i
+			continue
+		}
+		r, size := utf8.DecodeRuneInString(s[i:])
+		switch {
+		case r == utf8.RuneError && size == 1:
+			dst = append(dst, s[start:i]...)
+			dst = utf8.AppendRune(dst, utf8.RuneError)
+		case r == 0x2028 || r == 0x2029:
+			dst = append(dst, s[start:i]...)
+			dst = append(dst, '\\', 'u', '2', '0', '2', hex[r&0xf])
+		default:
+			i += size
+			continue
+		}
+		i += size
+		start = i
+	}
+	dst = append(dst, s[start:]...)
+	return append(dst, '"')
+}
+
+// frameHead is read before anything else in a frame, so a frame type this
+// adapter does not know is never decoded further.
+type frameHead struct {
+	Type string `json:"type"`
+}
+
 // Streaming events. Every frame repeats its SSE name in this type field, and
 // message_delta and content_block_delta both call their payload "delta", which
-// is why Delta stays raw until the frame type says how to read it.
+// is why Delta holds the fields of both and the frame type says which to read.
+// Index is a pointer because the block frames require it and absent must not
+// read as 0.
 type sseMessage struct {
 	Type         string          `json:"type"`
-	Index        int             `json:"index"`
+	Index        *int            `json:"index"`
 	Message      *startMessage   `json:"message"`
 	ContentBlock json.RawMessage `json:"content_block"`
-	Delta        json.RawMessage `json:"delta"`
+	Delta        delta           `json:"delta"`
 	Usage        *wireUsage      `json:"usage"`
 	Error        *wireError      `json:"error"`
 }
@@ -157,14 +237,11 @@ type blockStart struct {
 	Name string `json:"name"`
 }
 
-type blockDelta struct {
-	Type        string `json:"type"`
-	Text        string `json:"text"`
-	PartialJSON string `json:"partial_json"`
-	Thinking    string `json:"thinking"`
-	Signature   string `json:"signature"`
-}
-
-type messageDelta struct {
-	StopReason *string `json:"stop_reason"`
+type delta struct {
+	Type        string  `json:"type"`
+	Text        string  `json:"text"`
+	PartialJSON string  `json:"partial_json"`
+	Thinking    string  `json:"thinking"`
+	Signature   string  `json:"signature"`
+	StopReason  *string `json:"stop_reason"`
 }

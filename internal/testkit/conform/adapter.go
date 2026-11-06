@@ -67,6 +67,7 @@ const (
 	Send Outcome = iota
 	RefuseLocal
 	Remote
+	RefuseNew
 )
 
 func (o Outcome) String() string {
@@ -75,6 +76,8 @@ func (o Outcome) String() string {
 		return "refused before sending"
 	case Remote:
 		return "sent, and documented to be refused by the API"
+	case RefuseNew:
+		return "refused by New"
 	}
 	return "sent"
 }
@@ -101,6 +104,13 @@ type Spec struct {
 	EventPrivate []string
 	Defaults     map[string]any
 	LooseOneOf   bool
+	Accept       []Accept
+}
+
+type Accept struct {
+	At     string
+	Also   any
+	Source string
 }
 
 type Block struct {
@@ -148,16 +158,16 @@ type Live struct {
 }
 
 type Adapter struct {
-	Name       string
-	Models     []api.Model
-	New        func(base string, m api.Model, p Params) api.Provider
-	Wire       map[string]string
-	Spec       Spec
-	Render     func(m api.Model, s Script) (string, bool)
-	Errors     []ErrorCase
-	Rules      []Rule
-	BindsModel bool
-	Signed     bool
-	Unframed   bool
-	Live       Live
+	Name     string
+	Models   []api.Model
+	New      func(base string, m api.Model, p Params) (api.Provider, error)
+	Wire     map[string]string
+	Spec     Spec
+	Render   func(m api.Model, s Script) (string, bool)
+	Errors   []ErrorCase
+	Rules    []Rule
+	Sampling bool
+	Signed   bool
+	Unframed bool
+	Live     Live
 }

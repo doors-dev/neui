@@ -15,17 +15,16 @@ import (
 
 func newQuotaFS(t *testing.T, config api.FilesConfig) (*workFS, *local.FileStorage) {
 	t.Helper()
-	store, err := local.NewFileStorage()
+	store, err := local.NewFileStorage("")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { store.Remove() })
-	ws, err := store.WorkspaceOpen(testThread)
-	if err != nil {
+	w := Open(testThread, store, store, config)
+	t.Cleanup(func() { w.Dispose() })
+	if _, err := w.root(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { ws.Close() })
-	w := New(testThread, ws, store, config)
 	return w, store
 }
 

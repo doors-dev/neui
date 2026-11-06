@@ -48,7 +48,18 @@
     },
     {
       "role": "tool",
-      "content": "a picture\n\n[image omitted]",
+      "content": [
+        {
+          "type": "text",
+          "text": "a picture"
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg=="
+          }
+        }
+      ],
       "tool_call_id": "call_1"
     }
   ],

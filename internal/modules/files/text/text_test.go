@@ -2,6 +2,7 @@ package text
 
 import (
 	"context"
+	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -201,5 +202,303 @@ func TestInsert(t *testing.T) {
 	}
 	if got := content(t, fs, "e.txt"); got != "first\n" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+func raw(t *testing.T, fs api.FS, name, s string) {
+	t.Helper()
+	w, err := fs.Create(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.WriteString(w, s); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestEditKeepsCRLF(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
+	ctx := c.Ctx()
+	raw(t, fs, "a.txt", "one\r\ntwo\r\nthree\r\n")
+	if _, err := editTool(ctx, editArg{Path: "a.txt", Old: "one\ntwo\n", New: "1\n2\n2.5\n"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := content(t, fs, "a.txt"); got != "1\r\n2\r\n2.5\r\nthree\r\n" {
+		t.Fatalf("got %q", got)
+	}
+	if _, err := editTool(ctx, editArg{Path: "a.txt", Old: "1\r\n2", New: "x\r\ny"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := content(t, fs, "a.txt"); got != "x\r\ny\r\n2.5\r\nthree\r\n" {
+		t.Fatalf("CRLF in old/new: got %q", got)
+	}
+	if _, err := editTool(ctx, editArg{Path: "a.txt", Old: "\nthree", New: " three"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := content(t, fs, "a.txt"); got != "x\r\ny\r\n2.5 three\r\n" {
+		t.Fatalf("old starting with a line break: got %q", got)
+	}
+	if _, err := editTool(ctx, editArg{Path: "a.txt", Old: "y", New: "y\rz"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := content(t, fs, "a.txt"); got != "x\r\ny\rz\r\n2.5 three\r\n" {
+		t.Fatalf("lone CR in new: got %q", got)
+	}
+}
+
+func TestEditMixedFileTakesItsDominantEnding(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
+	ctx := c.Ctx()
+	raw(t, fs, "c.txt", "a\r\nb\r\nc\nd\r\n")
+	if _, err := editTool(ctx, editArg{Path: "c.txt", Old: "b", New: "B"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := content(t, fs, "c.txt"); got != "a\r\nB\r\nc\r\nd\r\n" {
+		t.Fatalf("CRLF majority: got %q", got)
+	}
+	raw(t, fs, "l.txt", "a\nb\r\nc\n")
+	if _, err := editTool(ctx, editArg{Path: "l.txt", Old: "a", New: "A"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := content(t, fs, "l.txt"); got != "A\nb\nc\n" {
+		t.Fatalf("LF majority: got %q", got)
+	}
+	raw(t, fs, "t.txt", "a\r\nb\n")
+	if _, err := editTool(ctx, editArg{Path: "t.txt", Old: "a", New: "A"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := content(t, fs, "t.txt"); got != "A\nb\n" {
+		t.Fatalf("tie: got %q", got)
+	}
+}
+
+func TestReplaceOnCRLF(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
+	ctx := c.Ctx()
+	raw(t, fs, "r.txt", "foo\r\nbar foo\r\nbaz\r\n")
+	res, err := replaceTool(ctx, replaceArg{Path: "r.txt", Pattern: `(?m)foo$`, Replacement: "end", All: true})
+	if err != nil || res.Replacements != 2 {
+		t.Fatalf("%+v, %v", res, err)
+	}
+	if got := content(t, fs, "r.txt"); got != "end\r\nbar end\r\nbaz\r\n" {
+		t.Fatalf("got %q", got)
+	}
+	if _, err := replaceTool(ctx, replaceArg{Path: "r.txt", Pattern: `end\nbar`, Replacement: "x\ny\nz"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := content(t, fs, "r.txt"); got != "x\r\ny\r\nz end\r\nbaz\r\n" {
+		t.Fatalf("multi-line: got %q", got)
+	}
+}
+
+func TestInsertOnCRLF(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
+	ctx := c.Ctx()
+	raw(t, fs, "i.txt", "\ufeffone\r\ntwo\r\n")
+	for _, step := range []struct {
+		line uint
+		text string
+		want string
+	}{
+		{1, "mid\n", "\ufeffone\r\nmid\r\ntwo\r\n"},
+		{3, "end", "\ufeffone\r\nmid\r\ntwo\r\nend\r\n"},
+		{0, "top\n", "\ufefftop\r\none\r\nmid\r\ntwo\r\nend\r\n"},
+	} {
+		if _, err := insertTool(ctx, insertArg{Path: "i.txt", Line: step.line, Text: step.text}); err != nil {
+			t.Fatal(err)
+		}
+		if got := content(t, fs, "i.txt"); got != step.want {
+			t.Fatalf("line %d: got %q, want %q", step.line, got, step.want)
+		}
+	}
+	raw(t, fs, "n.txt", "a\r\nb")
+	if _, err := insertTool(ctx, insertArg{Path: "n.txt", Line: 2, Text: "c"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := content(t, fs, "n.txt"); got != "a\r\nb\r\nc" {
+		t.Fatalf("no final newline: got %q", got)
+	}
+}
+
+func TestWriteKeepsTheFileEnding(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
+	ctx := c.Ctx()
+	raw(t, fs, "w.txt", "\ufeffold\r\nlines\r\n")
+	if _, err := writeTool(ctx, writeArg{Path: "w.txt", Content: "new\ntext\n"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := content(t, fs, "w.txt"); got != "\ufeffnew\r\ntext\r\n" {
+		t.Fatalf("got %q", got)
+	}
+	if _, err := writeTool(ctx, writeArg{Path: "w.txt", Content: "as\r\nis\n"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := content(t, fs, "w.txt"); got != "\ufeffas\r\nis\n" {
+		t.Fatalf("content with CR: got %q", got)
+	}
+	if _, err := writeTool(ctx, writeArg{Path: "fresh.txt", Content: "a\nb\n"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := content(t, fs, "fresh.txt"); got != "a\nb\n" {
+		t.Fatalf("new file: got %q", got)
+	}
+	raw(t, fs, "empty.txt", "")
+	if _, err := writeTool(ctx, writeArg{Path: "empty.txt", Content: "a\nb\n"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := content(t, fs, "empty.txt"); got != "a\nb\n" {
+		t.Fatalf("empty file: got %q", got)
+	}
+}
+
+func TestAppendKeepsTheFileEnding(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
+	ctx := c.Ctx()
+	raw(t, fs, "a.txt", "\ufeffone\r\n")
+	if _, err := appendTool(ctx, writeArg{Path: "a.txt", Content: "two\nthree\r\nfour"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := content(t, fs, "a.txt"); got != "\ufeffone\r\ntwo\r\nthree\r\nfour" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestLoneCRSurvives(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
+	ctx := c.Ctx()
+	raw(t, fs, "cr.txt", "a\rb\r\nc\r\n")
+	if _, err := editTool(ctx, editArg{Path: "cr.txt", Old: "c", New: "C"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := replaceTool(ctx, replaceArg{Path: "cr.txt", Pattern: "C", Replacement: "D"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := insertTool(ctx, insertArg{Path: "cr.txt", Line: 2, Text: "e\n"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := appendTool(ctx, writeArg{Path: "cr.txt", Content: "f\n"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := content(t, fs, "cr.txt"); got != "a\rb\r\nD\r\ne\r\nf\r\n" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestStyleComesFromTheHead(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
+	ctx := c.Ctx()
+	head := strings.Repeat("crlf line\r\n", 70<<10/11)
+	raw(t, fs, "log.txt", head+strings.Repeat("lf\n", 100<<10))
+	if _, err := appendTool(ctx, writeArg{Path: "log.txt", Content: "x\ny\n"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := content(t, fs, "log.txt"); !strings.HasSuffix(got, "lf\nx\r\ny\r\n") {
+		t.Fatalf("tail %q", got[len(got)-20:])
+	}
+}
+
+func TestWriteToAnUploadIsReadOnly(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	store := c.Store()
+	if _, err := store.FilePut(context.Background(), "thread", api.OriginUser, "up.txt", "text/plain", strings.NewReader("a\r\n"), false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writeTool(c.Ctx(), writeArg{Path: "user_uploads/up.txt", Content: "b\n"}); !errors.Is(err, api.ErrReadOnly) {
+		t.Fatalf("write: %v", err)
+	}
+	if _, err := appendTool(c.Ctx(), writeArg{Path: "user_uploads/up.txt", Content: "b\n"}); !errors.Is(err, api.ErrReadOnly) {
+		t.Fatalf("append: %v", err)
+	}
+}
+
+func TestRewriteErrorsNameThePath(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{Files: api.FilesConfig{MaxFiles: 1}})
+	fs := c.FS()
+	ctx := c.Ctx()
+	if _, err := writeTool(ctx, writeArg{Path: "agent_uploads/r.md", Content: "b\n"}); !errors.Is(err, api.ErrReadOnly) || !strings.HasPrefix(err.Error(), `"agent_uploads/r.md": `) {
+		t.Fatalf("upload: %v", err)
+	}
+	raw(t, fs, "a.txt", "0123456789\n")
+	if _, err := writeTool(ctx, writeArg{Path: "a.txt", Content: "y\n"}); !errors.Is(err, api.ErrQuota) || !strings.HasPrefix(err.Error(), `"a.txt": `) || strings.Contains(err.Error(), ".tmp-") {
+		t.Fatalf("quota: %v", err)
+	}
+}
+
+func TestFailedRewriteKeepsTheOriginal(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{Files: api.FilesConfig{MaxBytes: 30}})
+	fs := c.FS()
+	ctx := c.Ctx()
+	raw(t, fs, "a.txt", "0123456789\n")
+	if _, err := editTool(ctx, editArg{Path: "a.txt", Old: "0123456789", New: strings.Repeat("x", 25)}); !errors.Is(err, api.ErrQuota) {
+		t.Fatalf("edit: %v", err)
+	}
+	if _, err := writeTool(ctx, writeArg{Path: "a.txt", Content: strings.Repeat("y", 25)}); !errors.Is(err, api.ErrQuota) {
+		t.Fatalf("write: %v", err)
+	}
+	if got := content(t, fs, "a.txt"); got != "0123456789\n" {
+		t.Fatalf("got %q", got)
+	}
+	entries, err := fs.ReadDir(ctx, ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if !e.Dir && e.Name != "a.txt" {
+			t.Fatalf("left behind %q", e.Name)
+		}
+	}
+	if _, err := editTool(ctx, editArg{Path: "a.txt", Old: "0123", New: "abcd"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := content(t, fs, "a.txt"); got != "abcd456789\n" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestConcurrentEditsOnOnePathSerialize(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
+	ctx := c.Ctx()
+	raw(t, fs, "a.txt", "end\n")
+	const n = 20
+	errs := make(chan error, n)
+	for range n {
+		go func() {
+			_, err := insertTool(ctx, insertArg{Path: "a.txt", Line: 0, Text: "line\n"})
+			errs <- err
+		}()
+	}
+	for range n {
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := strings.Count(content(t, fs, "a.txt"), "line\n"); got != n {
+		t.Fatalf("got %d lines, want %d", got, n)
+	}
+}
+
+func TestEditOfAnUploadIsReadOnlyBeforeReading(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{Files: api.FilesConfig{EditLimit: 4}})
+	store, ctx := c.Store(), c.Ctx()
+	if _, err := store.FilePut(context.Background(), "thread", api.OriginUser, "up.txt", "text/plain", strings.NewReader("a long upload\n"), false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := editTool(ctx, editArg{Path: "user_uploads/up.txt", Old: "long", New: "short"}); !errors.Is(err, api.ErrReadOnly) {
+		t.Fatalf("edit: %v", err)
+	}
+	if _, err := insertTool(ctx, insertArg{Path: "user_uploads/up.txt", Text: "x\n"}); !errors.Is(err, api.ErrReadOnly) {
+		t.Fatalf("insert: %v", err)
 	}
 }

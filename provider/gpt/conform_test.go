@@ -25,11 +25,10 @@ func TestConform(t *testing.T) {
 }
 
 func conformAdapter() conform.Adapter {
-	sampling := []string{"/temperature", "/top_p"}
 	return conform.Adapter{
 		Name:   "gpt",
-		Models: []api.Model{GPT56Sol, GPT56Luna, GPT6Astra, GPT6Sol, GPT6Luna},
-		New: func(base string, m api.Model, p conform.Params) api.Provider {
+		Models: []api.Model{GPT56Sol, GPT56Luna, GPT6Astra, GPT6Sol, GPT6Luna, GPT61Sol, GPT61Terra},
+		New: func(base string, m api.Model, p conform.Params) (api.Provider, error) {
 			key := p.Key
 			if key == "" {
 				key = "test-key"
@@ -71,30 +70,59 @@ func conformAdapter() conform.Adapter {
 			Defaults: map[string]any{
 				"/tools/*/strict": nil,
 			},
+			Accept: []conform.Accept{{
+				At: "/components/schemas/EasyInputMessage",
+				Also: map[string]any{
+					"type":     "object",
+					"required": []any{"role", "content"},
+					"properties": map[string]any{
+						"role":  map[string]any{"enum": []any{"assistant"}},
+						"phase": map[string]any{"enum": []any{"commentary", "final_answer", nil}},
+						"type":  map[string]any{"enum": []any{"message"}},
+						"content": map[string]any{"type": "array", "items": map[string]any{
+							"type":                 "object",
+							"required":             []any{"type", "text"},
+							"additionalProperties": false,
+							"properties": map[string]any{
+								"type": map[string]any{"enum": []any{"output_text"}},
+								"text": map[string]any{"type": "string"},
+							},
+						}},
+					},
+				},
+				Source: "live probe of /v1/responses/input_tokens on gpt-5.6-sol, 2026-11-06: an assistant message refuses input_text and takes output_text, with phase and with type message; the spec lists only input content there",
+			}},
 		},
-		Render: renderGPT,
-		Signed: true,
-		Errors: gptErrors(),
+		Render:   renderGPT,
+		Signed:   true,
+		Sampling: true,
+		Errors:   gptErrors(),
 		Rules: []conform.Rule{
 			{
 				When:   func(p conform.Params) bool { return p.Sampling() && p.Effort != conform.EffortOff },
-				Omit:   sampling,
+				Want:   conform.RefuseNew,
 				Source: docLatest,
 			},
 			{
 				Model:  "gpt-6-astra",
 				When:   func(p conform.Params) bool { return p.Effort == conform.EffortOff },
-				Omit:   append([]string{"/reasoning/effort"}, sampling...),
+				Want:   conform.RefuseNew,
+				Source: docReasoning,
+			},
+			{
+				Model:  "gpt-6.1-sol",
+				When:   func(p conform.Params) bool { return p.Effort == conform.EffortOff },
+				Want:   conform.RefuseNew,
 				Source: docReasoning,
 			},
 			{
 				When:   func(p conform.Params) bool { return p.MaxTokens > 0 && p.MaxTokens < 16 },
-				Omit:   []string{"/max_output_tokens"},
+				Want:   conform.RefuseNew,
 				Source: docCreate,
 			},
 			{
 				When:   func(p conform.Params) bool { return p.MaxTokens > maxOutputTokensCeiling },
-				Omit:   []string{"/max_output_tokens"},
+				Want:   conform.RefuseNew,
 				Source: docModels,
 			},
 			{
@@ -111,12 +139,8 @@ func conformAdapter() conform.Adapter {
 				Carry:  map[string]any{"/store": false, "/include": []string{"reasoning.encrypted_content"}},
 				Source: docReasoning,
 			},
-			{Entry: "image-no-mime", Want: conform.RefuseLocal, Source: docVision},
-			{
-				Entry:  "tool-result-image-bad-mime",
-				Bug:    "a tool result image with an unsupported mime fails the request with CodeInvalid before sending; the result is stored, so every later turn of the thread fails the same way, where claude leaves its omitted note (audit Claude #9)",
-				Source: docVision,
-			},
+			{Entry: "image-no-mime", Carry: map[string]any{"/input/0/content/1/type": "input_text"}, Source: docVision},
+			{Entry: "tool-result-image-bad-mime", Carry: map[string]any{"/input/2/output/0/type": "input_text"}, Source: docVision},
 			{Entry: "tool-error", Carry: map[string]any{"/input/2/output/0/text": "Error:"}, Source: docCreate},
 			{Entry: "tool-discarded-arguments", Carry: map[string]any{"/input/1/arguments": "{}"}, Source: docCreate},
 		},

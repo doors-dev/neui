@@ -3,10 +3,10 @@ package parser
 type listItem int
 
 const (
-	itemEmpty     listItem = iota // marker line had no content, nothing since
-	itemClosed                    // empty item followed by a blank line
-	itemBlock                     // has content, no paragraph open
-	itemParagraph                 // paragraph open
+	itemEmpty listItem = iota
+	itemClosed
+	itemBlock
+	itemParagraph
 )
 
 type listState struct {
@@ -38,7 +38,7 @@ func (s *listState) line(c ctrl) {
 	startColumn := c.contentColumn(s.offset)
 	content := c.tail(s.offset, startColumn)
 	if startColumn >= 4 || isThematicBreak(content) {
-		kind = listNone // indented too far or "- - -": not a marker at this level
+		kind = listNone
 	}
 	first := s.kind == listNone
 	if first {
@@ -48,20 +48,17 @@ func (s *listState) line(c ctrl) {
 		s.kind = kind
 	}
 	blank := isBlank(c.line())
-	// a marker of another kind before the item's content column starts a new list
 	if kind != listNone && kind != s.kind && startColumn < s.contentColumn {
 		c.flush()
 		c.update(initalState{})
 		c.dispatch()
 		return
 	}
-	// inside the item an open child block decides
 	if s.inner != nil && (blank || startColumn >= s.contentColumn) {
 		s.inner.line(listCtrl{c, s})
 		return
 	}
 	if kind != listNone && (first || startColumn < s.contentColumn) {
-		// sibling marker: new item
 		s.inner = nil
 		s.item = itemBlock
 		s.contentColumn = itemContentColumn
@@ -75,7 +72,6 @@ func (s *listState) line(c ctrl) {
 		}
 		return
 	} else if startColumn < s.contentColumn {
-		// lazy continuation of an open paragraph, otherwise the list ends
 		if s.paragraphOpen() && isParagraphContinuation(startColumn, content) {
 			s.cells = tableCells(content)
 			c.write(s.cells != 0)
@@ -86,13 +82,12 @@ func (s *listState) line(c ctrl) {
 		c.dispatch()
 		return
 	}
-	if s.item == itemClosed { // only a sibling marker keeps a closed item's list open
+	if s.item == itemClosed {
 		c.flush()
 		c.update(initalState{})
 		c.dispatch()
 		return
 	}
-	// the line opens a new block of the item
 	itemOffset := s.offset + s.contentColumn
 	column := c.contentColumn(itemOffset)
 	content = c.tail(itemOffset, column)
@@ -103,7 +98,7 @@ func (s *listState) line(c ctrl) {
 	}
 	if column >= 4 {
 		if s.item == itemParagraph {
-			s.cells = tableCells(content) // indented code can't interrupt a paragraph
+			s.cells = tableCells(content)
 			c.write(s.cells != 0)
 			return
 		}

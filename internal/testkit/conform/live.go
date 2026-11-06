@@ -32,7 +32,7 @@ func RunLive(t *testing.T, a Adapter) {
 	if key == "" {
 		t.Skipf("%s is not set", a.Live.Env)
 	}
-	sch, err := loadSpec(a.Spec.File, a.Spec.LooseOneOf)
+	sch, err := loadSpec(a.Spec.File, a.Spec.LooseOneOf, a.Spec.Accept)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,12 +49,12 @@ func liveCount(t *testing.T, a Adapter, sch *schemas, key string) {
 	ok := mustRender(t, a, m, scriptText)
 	probe := entry(t, m.Name, ProbeEntry)
 	seen := map[[32]byte]bool{}
-	for _, p := range Matrix(0) {
+	for _, p := range Matrix(0, a.Sampling) {
 		if ex := a.expect(m.Name, ProbeEntry, p); ex.want != Send || ex.bug != "" {
 			continue
 		}
 		srv.reset(reply{body: ok})
-		collect(t, a.New(srv.srv.URL, m, p), p.request(probe))
+		collect(t, a.build(t, srv.srv.URL, m, p), p.request(probe))
 		body, _ := srv.last()
 		if body == nil {
 			continue
@@ -127,7 +127,7 @@ func liveGenerate(t *testing.T, a Adapter, key string) {
 	turn := func(t *testing.T, m api.Model, p Params, req api.Request) ([]api.Event, []api.Content) {
 		t.Helper()
 		name = strings.NewReplacer("/", "-", " ", "-").Replace(t.Name())
-		events := collect(t, a.New(base, m, p), req)
+		events := collect(t, a.build(t, base, m, p), req)
 		if a.Unframed {
 			CheckUnframed(t, events)
 		} else {

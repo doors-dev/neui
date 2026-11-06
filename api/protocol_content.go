@@ -203,10 +203,11 @@ func (e DiscardedArgumentsError) Error() string {
 //
 // Not every provider accepts the whole subset everywhere: some take only text
 // in a tool result, and one takes a document in a message but not in a result.
-// An adapter leaves a note in place of a block it cannot carry and logs the
-// drop, so a result always answers the call it is matched to. A block it does
-// carry but with a value its API rejects, such as an unsupported document
-// type, fails the request instead.
+// An adapter leaves a note in place of a block it cannot carry, including one
+// whose media type its API does not accept, and logs nothing, so a result
+// always answers the call it is matched to and the request still goes out. The
+// one refusal left is a discarded call whose result lacks ToolErrJSON; see
+// ContentToolUse.
 type UserContent interface {
 	Content
 	userContent()
@@ -316,12 +317,13 @@ func (ContentToolResult) contentType() string {
 // Where a provider signs or seals reasoning, Meta is what is replayed, byte for
 // byte, and the text never is; such a block without Meta is not replayed.
 // Whether a stored block is replayed at all is the adapter's decision. A sealed
-// payload fails at any other provider, and nothing here records the issuer, so
-// whoever stores a thread hands an adapter only blocks its provider issued or
-// strips them.
+// payload fails at any other provider and nothing here records the issuer, so
+// each adapter replays only blocks its provider issued, judged by their shape,
+// and drops the rest; nothing upstream strips them.
 type ContentReasoning struct {
 	// Model is the model the provider was configured with, as EventStart.Model
-	// reports, so it compares with == to the model of a later request.
+	// reports. It is informational: adapters judge a stored block by its shape,
+	// not by comparing this with the model of a later request.
 	Model    string          `json:"model"`
 	Summary  Indexed[string] `json:"summary"`        // paraphrase written by the service
 	Thoughts Indexed[string] `json:"thoughts"`       // thinking as the model generated it
@@ -343,10 +345,11 @@ func (ContentReasoning) contentType() string {
 
 // ContentOpaque carries a payload this protocol has no type for, such as the
 // output of a tool the provider ran itself. It is meant for the adapter that
-// issued it, but no field records the provider and adapters do not check
-// Kind, so whoever stores a thread hands an adapter only opaque blocks its
-// provider issued. Folding a stream, a non-empty Kind or Data replaces the one
-// before it and each Delta appends to Deltas in arrival order.
+// issued it, and no field records the provider, so each adapter replays only
+// opaque blocks its provider issued, judged by Kind and the shape of Data, and
+// drops the rest; nothing upstream strips them. Folding a stream, a non-empty
+// Kind or Data replaces the one before it and each Delta appends to Deltas in
+// arrival order.
 type ContentOpaque struct {
 	Model  string          `json:"model"`  // configured model, as on ContentReasoning
 	Kind   string          `json:"kind"`   // issuing adapter's name for the payload
