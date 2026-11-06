@@ -11,18 +11,18 @@ import (
 
 type buttonPatch struct {
 	_ struct{} `additionalProperties:"false"`
-	Text string `json:"text,omitempty" minLength:"1" description:"new label; omit to keep the current one"`
-	Enabled string `json:"enabled,omitempty" enum:"yes,no" description:"yes lets the user click it, no disables it; omit to keep the current state"`
+	Text string `json:"text,omitempty" minLength:"1" maxLength:"80" description:"new label; omit to keep the current one"`
+	Disabled *bool `json:"disabled,omitempty" description:"true disables the button, false enables it; omit to keep the current state"`
 }
 
 type buttonParams struct {
 	_ struct{} `additionalProperties:"false"`
-	Size string `json:"size" enum:"sm,md,lg" default:"md" description:"button size"`
-	Style string `json:"style" enum:"primary,secondary,success,danger" default:"secondary" description:"visual weight: primary for the main action, danger for destructive ones"`
-	Text string `json:"text" required:"true" minLength:"1" description:"label shown on the button"`
-	Enabled string `json:"enabled" enum:"yes,no" default:"yes" description:"no shows the button disabled"`
-	Value string `json:"value,omitempty" description:"data the click submits; empty when omitted"`
-	Agent string `json:"agent,omitempty" description:"when set, the agent can click this button on the page as the user would; tells the agent what the click does"`
+	Size string `json:"size,omitempty" enum:"sm,md,lg" default:"md" description:"button size"`
+	Style string `json:"style,omitempty" enum:"primary,secondary,success,danger" default:"secondary" description:"visual weight: primary for the main action, danger for destructive ones"`
+	Text string `json:"text" maxLength:"80" required:"true" minLength:"1" description:"label shown on the button"`
+	Disabled bool `json:"disabled,omitempty" description:"true shows the button disabled"`
+	Value string `json:"value,omitempty" maxLength:"1000" description:"data the click submits; empty when omitted"`
+	Agent string `json:"agent,omitempty" maxLength:"300" description:"when set, the agent can click this button on the page as the user would; tells the agent what the click does"`
 }
 
 // NewButton builds a button widget for Library.Control: a click submits the
@@ -34,9 +34,6 @@ func NewButton(p buttonParams, submit func(ctx context.Context, value string) bo
 	}
 	if p.Style == "" {
 		p.Style = "secondary"
-	}
-	if p.Enabled == "" {
-		p.Enabled = "yes"
 	}
 	return button{
 		state: doors.NewSource(p),
@@ -54,8 +51,8 @@ func (b button) Update(ctx context.Context, patch buttonPatch) {
 		if patch.Text != "" {
 			p.Text = patch.Text
 		}
-		if patch.Enabled != "" {
-			p.Enabled = patch.Enabled
+		if patch.Disabled != nil {
+			p.Disabled = *patch.Disabled
 		}
 		return p
 	})
@@ -84,7 +81,7 @@ elem (b button) render(p buttonParams) {
 	} <button
 		type="button"
 		class=("kisland-button kisland-button-" + p.Size + " kisland-button-" + p.Style)
-		disabled=(p.Enabled == "no")>
+		disabled=(p.Disabled)>
 		~(p.Text)
 	</button>
 }

@@ -13,15 +13,15 @@ import (
 
 type textPatch struct {
 	_ struct{} `additionalProperties:"false"`
-	Text string `json:"text,omitempty" minLength:"1" description:"new text; omit to keep the current one"`
+	Text string `json:"text,omitempty" minLength:"1" maxLength:"4000" description:"new text; omit to keep the current one"`
 	Style string `json:"style,omitempty" enum:"plain,info,success,warning,danger" description:"new style; plain turns an alert back into text; omit to keep the current one"`
 }
 
 type textParams struct {
 	_ struct{} `additionalProperties:"false"`
-	Text string `json:"text" required:"true" minLength:"1" description:"the text; line breaks are kept"`
-	Size string `json:"size" enum:"sm,md,lg,xl,2xl" default:"md" description:"text size; lg and above read as headings"`
-	Style string `json:"style" enum:"plain,info,success,warning,danger" default:"plain" description:"plain is ordinary text; any other style shows it as an alert box of that kind"`
+	Text string `json:"text" maxLength:"4000" required:"true" minLength:"1" description:"the text; line breaks are kept"`
+	Size string `json:"size,omitempty" enum:"sm,md,lg,xl,2xl" default:"md" description:"text size; lg and above read as headings"`
+	Style string `json:"style,omitempty" enum:"plain,info,success,warning,danger" default:"plain" description:"plain is ordinary text; any other style shows it as an alert box of that kind"`
 }
 
 // NewText builds a text widget for Library.View: plain text in a size
@@ -76,11 +76,21 @@ func (t text) render(p textParams) gox.Elem {
 			}
 			return base + " kisland-alert kisland-alert-" + p.Style
 		}()); if __e != nil { return }
-			__e = __c.Submit(); if __e != nil { return }
 //line text.gox:65
+			__e = __c.Set("role", func() any {
+			switch p.Style {
+			case "warning", "danger":
+				return "alert"
+			case "info", "success":
+				return "status"
+			}
+			return nil
+		}()); if __e != nil { return }
+			__e = __c.Submit(); if __e != nil { return }
+//line text.gox:74
 			__e = __c.Any(p.Text); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line text.gox:67
+//line text.gox:76
 }

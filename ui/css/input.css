@@ -28,4 +28,15 @@
 	.kisland-item-sm { @apply grid-cols-[repeat(auto-fill,minmax(min(100%,var(--kisland-item-sm,10rem)),1fr))] }
 	.kisland-item-md { @apply grid-cols-[repeat(auto-fill,minmax(min(100%,var(--kisland-item-md,14rem)),1fr))] }
 	.kisland-item-lg { @apply grid-cols-[repeat(auto-fill,minmax(min(100%,var(--kisland-item-lg,20rem)),1fr))] }
+
+	.kisland-table { @apply flex flex-col gap-2 min-w-0 overflow-x-auto }
+	.kisland-table-grid { @apply w-full border-collapse text-sm text-left }
+	.kisland-table-grid th { @apply px-3 py-2 font-semibold border-b border-current/20 }
+	.kisland-table-grid td { @apply px-3 py-2 border-b border-current/10 align-middle }
+	.kisland-table-link { @apply p-0 text-left [font:inherit] text-inherit underline underline-offset-2 cursor-pointer bg-transparent border-0 }
+	.kisland-table-actions { @apply text-right whitespace-nowrap space-x-1 }
+	.kisland-table-empty { @apply text-center opacity-60 }
+	.kisland-table-error { @apply text-center text-red-600 }
+	.kisland-table-pager { @apply flex flex-wrap items-center gap-1 }
+	.kisland-table-current { @apply px-2 font-semibold }
 }

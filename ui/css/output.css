@@ -1,4 +1,5 @@
 /*! tailwindcss v4.3.3 | MIT License | https://tailwindcss.com */
+@layer properties;
 @layer kisland {
   .kisland-column {
     display: flex;
@@ -77,5 +78,105 @@
   }
   .kisland-item-lg {
     grid-template-columns: repeat(auto-fill,minmax(min(100%, var(--kisland-item-lg,20rem)),1fr));
+  }
+  .kisland-table {
+    display: flex;
+    min-width: 0px;
+    flex-direction: column;
+    gap: calc(var(--spacing, 0.25rem) * 2);
+    overflow-x: auto;
+  }
+  .kisland-table-grid {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    font-size: var(--text-sm, 0.875rem);
+    line-height: var(--kisland-tw-leading, var(--text-sm--line-height, calc(1.25 / 0.875)));
+  }
+  .kisland-table-grid th {
+    border-bottom-style: var(--kisland-tw-border-style);
+    border-bottom-width: 1px;
+    border-color: currentcolor;
+    @supports (color: color-mix(in lab, red, red)) {
+      border-color: color-mix(in oklab, currentcolor 20%, transparent);
+    }
+    padding-inline: calc(var(--spacing, 0.25rem) * 3);
+    padding-block: calc(var(--spacing, 0.25rem) * 2);
+    --kisland-tw-font-weight: var(--font-weight-semibold, 600);
+    font-weight: var(--font-weight-semibold, 600);
+  }
+  .kisland-table-grid td {
+    border-bottom-style: var(--kisland-tw-border-style);
+    border-bottom-width: 1px;
+    border-color: currentcolor;
+    @supports (color: color-mix(in lab, red, red)) {
+      border-color: color-mix(in oklab, currentcolor 10%, transparent);
+    }
+    padding-inline: calc(var(--spacing, 0.25rem) * 3);
+    padding-block: calc(var(--spacing, 0.25rem) * 2);
+    vertical-align: middle;
+  }
+  .kisland-table-link {
+    cursor: pointer;
+    border-style: var(--kisland-tw-border-style);
+    border-width: 0px;
+    background-color: transparent;
+    padding: 0px;
+    text-align: left;
+    color: inherit;
+    text-decoration-line: underline;
+    text-underline-offset: 2px;
+    font: inherit;
+  }
+  .kisland-table-actions {
+    :where(& > :not(:last-child)) {
+      --kisland-tw-space-x-reverse: 0;
+      margin-inline-start: calc(var(--spacing, 0.25rem) * var(--kisland-tw-space-x-reverse));
+      margin-inline-end: calc(var(--spacing, 0.25rem) * calc(1 - var(--kisland-tw-space-x-reverse)));
+    }
+    text-align: right;
+    white-space: nowrap;
+  }
+  .kisland-table-empty {
+    text-align: center;
+    opacity: 60%;
+  }
+  .kisland-table-error {
+    text-align: center;
+    color: var(--color-red-600, oklch(57.7% 0.245 27.325));
+  }
+  .kisland-table-pager {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--spacing, 0.25rem);
+  }
+  .kisland-table-current {
+    padding-inline: calc(var(--spacing, 0.25rem) * 2);
+    --kisland-tw-font-weight: var(--font-weight-semibold, 600);
+    font-weight: var(--font-weight-semibold, 600);
+  }
+}
+@property --kisland-tw-border-style {
+  syntax: "*";
+  inherits: false;
+  initial-value: solid;
+}
+@property --kisland-tw-font-weight {
+  syntax: "*";
+  inherits: false;
+}
+@property --kisland-tw-space-x-reverse {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0;
+}
+@layer properties {
+  @supports ((-webkit-hyphens: none) and (not (margin-trim: inline))) or ((-moz-orient: inline) and (not (color:rgb(from red r g b)))) {
+    *, ::before, ::after, ::backdrop {
+      --kisland-tw-border-style: solid;
+      --kisland-tw-font-weight: initial;
+      --kisland-tw-space-x-reverse: 0;
+    }
   }
 }
