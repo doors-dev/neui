@@ -39,26 +39,38 @@ func (t *tableState) data(ctx context.Context) (tableResult, error) {
 	case t.isQuerySource():
 		return t.queryData(ctx)
 	default:
-		return tableResult{}, errors.New("uknown source")
+		return tableResult{}, errors.New("unknown source")
 	}
 }
 
 func (t *tableState) rowsData() tableResult {
-	needle := strings.ToLower(t.search)
-	rows := slices.DeleteFunc(slices.Clone(t.rows), func(r tableRow) bool {
-		return !slices.ContainsFunc(r.Cells, func(c cellText) bool {
-			return strings.Contains(strings.ToLower(string(c)), needle)
+	rows := slices.Clone(t.rows)
+	if t.search != "" {
+		needle := strings.ToLower(t.search)
+		rows = slices.DeleteFunc(rows, func(r tableRow) bool {
+			return !slices.ContainsFunc(r.Cells, func(c cellText) bool {
+				return strings.Contains(strings.ToLower(string(c)), needle)
+			})
 		})
-	})
-	if t.sort == nil {
-		return tableResult{Rows: rows}
 	}
+	if t.sort != nil {
+		t.sortRows(rows)
+	}
+	total := len(rows)
+	start := min((t.page-1)*t.size, total)
+	return tableResult{Rows: rows[start:min(start+t.size, total)], Total: &total}
+}
+
+func (t *tableState) sortRows(rows []tableRow) {
 	col := t.sort.Column
 	slices.SortStableFunc(rows, func(x tableRow, y tableRow) int {
-		if col >= len(x.Cells) || col >= len(y.Cells) {
-			return 0
+		a, b := "", ""
+		if col < len(x.Cells) {
+			a = strings.ToLower(string(x.Cells[col]))
 		}
-		a, b := strings.ToLower(string(x.Cells[col])), strings.ToLower(string(y.Cells[col]))
+		if col < len(y.Cells) {
+			b = strings.ToLower(string(y.Cells[col]))
+		}
 		order := 0
 		for order == 0 && a != "" && b != "" {
 			da, db := len(a)-len(strings.TrimLeft(a, "0123456789")), len(b)-len(strings.TrimLeft(b, "0123456789"))
@@ -79,7 +91,6 @@ func (t *tableState) rowsData() tableResult {
 		}
 		return order
 	})
-	return tableResult{Rows: rows}
 }
 
 func (t *tableState) queryData(ctx context.Context) (tableResult, error) {
@@ -105,10 +116,10 @@ type table struct {
 	_          struct{}                                `additionalProperties:"false"`
 	Columns    []tableColumn                           `json:"columns" required:"true" nullable:"false" minItems:"1" maxItems:"12" description:"column headers, in order"`
 	Query      neui.IslandCall[tablePage, tableResult] `json:"query,omitempty" description:"returns the rows for a page, called when the table shows and on every page change; set either query or rows"`
-	Rows       []tableRow                              `json:"rows,omitempty" maxItems:"100" description:"fixed rows, all shown with no pages; set either query or rows; the table sorts and searches them itself"`
+	Rows       []tableRow                              `json:"rows,omitempty" maxItems:"100" description:"fixed rows; set either query or rows; the table pages, sorts and searches them itself"`
 	Sort       *tableSort                              `json:"sort,omitempty" description:"sort when the table shows; ignored when the column is out of range or not sortable"`
 	Search     bool                                    `json:"search,omitempty" description:"true adds a search input above the table; with query its text goes to every query call, with rows the table shows only rows with a cell containing it, case-insensitive"`
-	PageSize   int                                     `json:"pageSize,omitempty" minimum:"1" maximum:"100" default:"20" description:"rows per page for query"`
+	PageSize   int                                     `json:"pageSize,omitempty" minimum:"1" maximum:"100" default:"20" description:"rows per page"`
 	Clickable  bool                                    `json:"clickable,omitempty" description:"true makes each row's first cell clickable; a click submits the row id with no value"`
 	Selectable bool                                    `json:"selectable,omitempty" description:"true adds a checkbox to each row and, while rows are selected, a bar with the count, a clear control and a button that submits the selected ids; the selection survives page changes and reloads"`
 	Selected   []string                                `json:"selected,omitempty" maxItems:"1000" uniqueItems:"true" items.maxLength:"200" description:"ids of the rows selected when the table shows"`
@@ -194,8 +205,8 @@ type tableSubmit struct {
 type tablePatch struct {
 	_        struct{}                                `additionalProperties:"false" description:"an empty patch reloads the rows: the current page of query, or the rows as they are"`
 	Query    neui.IslandCall[tablePage, tableResult] `json:"query,omitempty" description:"new function that returns the rows; replaces rows, and the table reloads from the first page with the sort and search kept"`
-	Rows     []tableRow                              `json:"rows,omitempty" maxItems:"100" description:"new fixed rows; replaces query, and the table shows them all with no pages"`
+	Rows     []tableRow                              `json:"rows,omitempty" maxItems:"100" description:"new fixed rows; replaces query, and the table goes back to the first page"`
 	Sort     *tableSort                              `json:"sort,omitempty" description:"new sort; ignored when the column is out of range or not sortable; the table goes back to the first page and keeps the selection"`
-	PageSize int                                     `json:"pageSize,omitempty" minimum:"1" maximum:"100" description:"new rows per page for query; the table goes back to the first page"`
+	PageSize int                                     `json:"pageSize,omitempty" minimum:"1" maximum:"100" description:"new rows per page; the table goes back to the first page"`
 	Selected []string                                `json:"selected,omitempty" maxItems:"1000" uniqueItems:"true" items.maxLength:"200" description:"new selection by row id: omit to keep it, [] clears it, a list replaces it; otherwise a query patch clears the selection, a rows patch keeps only ids still in the rows, and pageSize keeps it"`
 }

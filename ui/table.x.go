@@ -45,7 +45,7 @@ type tableWidget struct {
 // buttons submits the row id and the button's value, to the script waiting
 // in ui.draw(). When selectable, rows
 // get checkboxes; the selection, at most 1000 ids, survives page changes and
-// reloads, and its button submits the selected ids in selection order. An
+// reloads, and its button submits the selected ids, sorted. An
 // empty patch reloads the rows.
 func NewTable(p table, submit func(ctx context.Context, s tableSubmit) bool) api.Widget[tablePatch] {
 	p.initDefault()
@@ -70,12 +70,12 @@ func (t tableWidget) Update(ctx context.Context, patch tablePatch) {
 	t.state.Mutate(ctx, func(s tableState) tableState {
 		s.seq++
 		if patch.Query != "" {
-			s.query = patch.Query
+			s.query, s.rows = patch.Query, nil
 			s.page = 1
 			s.selected = nil
 		}
 		if patch.Rows != nil {
-			s.rows = patch.Rows
+			s.query, s.rows = "", patch.Rows
 			s.page = 1
 			s.selected = nil
 		}
@@ -115,9 +115,9 @@ func (t tableWidget) Main() gox.Elem {
 //line table.gox:102
 					__e = __c.Set("class", "kisland-table-search"); if __e != nil { return }
 //line table.gox:103
-					__e = __c.Set("placeholder", "search"); if __e != nil { return }
+					__e = __c.Set("placeholder", "Search"); if __e != nil { return }
 //line table.gox:104
-					__e = __c.Set("aria-label", "smth"); if __e != nil { return }
+					__e = __c.Set("aria-label", "Search"); if __e != nil { return }
 //line table.gox:105
 					__e = __c.Set("maxlength", "100"); if __e != nil { return }
 //line table.gox:106
@@ -169,11 +169,14 @@ func (t tableWidget) render() gox.Elem {
 			if ts.page == 1 {
 				return ts
 			}
+			last := 1
 			if content.Total != nil {
-				ts.page = max(1, (*content.Total + ts.size - 1) / ts.size)
-			} else {
-				ts.page--
+				last = max(1, (*content.Total + ts.size - 1) / ts.size)
 			}
+			if last >= ts.page {
+				last = 1
+			}
+			ts.page = last
 			ts.seq += 1
 			return ts
 		})
@@ -188,19 +191,19 @@ func (t tableWidget) render() gox.Elem {
 	actions := slices.ContainsFunc(content.Rows, func(r tableRow) bool {
 		return len(r.Actions) > 0
 	})
-	columsNumber := len(t.params.Columns)
+	columnCount := len(t.params.Columns)
 	if actions {
-		columsNumber++
+		columnCount++
 	}
 	if t.params.Selectable {
-		columsNumber++
+		columnCount++
 	}
 
 		__e = __c.InitContainer(); if __e != nil { return }
 		{
 			__e = __c.Init("table"); if __e != nil { return }
 			{
-//line table.gox:172
+//line table.gox:175
 				__e = __c.Set("class", "kisland-table-grid"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Init("thead"); if __e != nil { return }
@@ -209,7 +212,7 @@ func (t tableWidget) render() gox.Elem {
 					__e = __c.Init("tr"); if __e != nil { return }
 					{
 						__e = __c.Submit(); if __e != nil { return }
-//line table.gox:175
+//line table.gox:178
 						__e = __c.Any(func() any {
 						if !t.params.Selectable {
 							return nil
@@ -222,26 +225,26 @@ func (t tableWidget) render() gox.Elem {
 							ctx := __c.Context(); _ = ctx
 							__e = __c.Init("th"); if __e != nil { return }
 							{
-//line table.gox:183
+//line table.gox:186
 								__e = __c.Set("class", "kisland-table-check"); if __e != nil { return }
 								__e = __c.Submit(); if __e != nil { return }
-//line table.gox:184
+//line table.gox:187
 								__e = __c.Any(t.checkboxHeader(ids)); if __e != nil { return }
 							}
 							__e = __c.Close(); if __e != nil { return }
-//line table.gox:185
+//line table.gox:188
 						return })
 					}()); if __e != nil { return }
-//line table.gox:187
+//line table.gox:190
 						for i, c := range t.params.Columns {
-//line table.gox:188
+//line table.gox:191
 							__e = __c.Any(t.header(i, c, state.sort)); if __e != nil { return }
 						}
-//line table.gox:190
+//line table.gox:193
 						if actions {
 							__e = __c.Init("th"); if __e != nil { return }
 							{
-//line table.gox:191
+//line table.gox:194
 								__e = __c.Set("aria-label", "Actions"); if __e != nil { return }
 								__e = __c.Submit(); if __e != nil { return }
 							}
@@ -254,37 +257,37 @@ func (t tableWidget) render() gox.Elem {
 				__e = __c.Init("tbody"); if __e != nil { return }
 				{
 					__e = __c.Submit(); if __e != nil { return }
-//line table.gox:196
+//line table.gox:199
 					if failed != "" {
 						__e = __c.Init("tr"); if __e != nil { return }
 						{
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.Init("td"); if __e != nil { return }
 							{
-//line table.gox:197
+//line table.gox:200
 								__e = __c.Set("class", "kisland-table-error"); if __e != nil { return }
-//line table.gox:197
-								__e = __c.Set("colspan", columsNumber); if __e != nil { return }
+//line table.gox:200
+								__e = __c.Set("colspan", columnCount); if __e != nil { return }
 								__e = __c.Submit(); if __e != nil { return }
-//line table.gox:197
+//line table.gox:200
 								__e = __c.Any(failed); if __e != nil { return }
 							}
 							__e = __c.Close(); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
-//line table.gox:198
+//line table.gox:201
 					} else if len(content.Rows) == 0 {
 						__e = __c.Init("tr"); if __e != nil { return }
 						{
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.Init("td"); if __e != nil { return }
 							{
-//line table.gox:200
+//line table.gox:203
 								__e = __c.Set("class", "kisland-table-empty"); if __e != nil { return }
-//line table.gox:200
-								__e = __c.Set("colspan", columsNumber); if __e != nil { return }
+//line table.gox:203
+								__e = __c.Set("colspan", columnCount); if __e != nil { return }
 								__e = __c.Submit(); if __e != nil { return }
-//line table.gox:201
+//line table.gox:204
 								__e = __c.Any(func() any {
 								if state.search != "" {
 									return "No matching rows"
@@ -296,19 +299,19 @@ func (t tableWidget) render() gox.Elem {
 						}
 						__e = __c.Close(); if __e != nil { return }
 					} else  {
-//line table.gox:210
+//line table.gox:213
 						for _, r := range content.Rows {
 							__e = __c.Init("tr"); if __e != nil { return }
 							{
 								__e = __c.Submit(); if __e != nil { return }
-//line table.gox:212
+//line table.gox:215
 								if t.params.Selectable {
 									__e = __c.Init("td"); if __e != nil { return }
 									{
-//line table.gox:213
+//line table.gox:216
 										__e = __c.Set("class", "kisland-table-check"); if __e != nil { return }
 										__e = __c.Submit(); if __e != nil { return }
-//line table.gox:214
+//line table.gox:217
 										__e = __c.Any(func() any {
 										label := r.ID
 										if len(r.Cells) > 0 && r.Cells[0] != "" {
@@ -319,9 +322,9 @@ func (t tableWidget) render() gox.Elem {
 									}
 									__e = __c.Close(); if __e != nil { return }
 								}
-//line table.gox:223
+//line table.gox:226
 								for i := range t.params.Columns {
-//line table.gox:225
+//line table.gox:228
 									c := ""
 								if i < len(r.Cells) {
 									c = string(r.Cells[i])
@@ -330,15 +333,15 @@ func (t tableWidget) render() gox.Elem {
 									__e = __c.Init("td"); if __e != nil { return }
 									{
 										__e = __c.Submit(); if __e != nil { return }
-//line table.gox:231
+//line table.gox:234
 										if i == 0 && t.params.Clickable {
 											__e = __c.Init("button"); if __e != nil { return }
 											{
-//line table.gox:233
+//line table.gox:236
 												__e = __c.Set("type", "button"); if __e != nil { return }
-//line table.gox:234
+//line table.gox:237
 												__e = __c.Set("class", "kisland-table-link"); if __e != nil { return }
-//line table.gox:235
+//line table.gox:238
 												__e = __c.Modify(doors.AClick{
 												Scope: neui.IslandScope(ctx),
 												On: func(ctx context.Context, _ doors.RequestPointer) bool {
@@ -347,33 +350,33 @@ func (t tableWidget) render() gox.Elem {
 												},
 											}); if __e != nil { return }
 												__e = __c.Submit(); if __e != nil { return }
-//line table.gox:242
+//line table.gox:245
 												__e = __c.Any(c); if __e != nil { return }
 											}
 											__e = __c.Close(); if __e != nil { return }
 										} else  {
-//line table.gox:245
+//line table.gox:248
 											__e = __c.Any(c); if __e != nil { return }
 										}
 									}
 									__e = __c.Close(); if __e != nil { return }
 								}
-//line table.gox:249
+//line table.gox:252
 								if actions {
 									__e = __c.Init("td"); if __e != nil { return }
 									{
-//line table.gox:250
+//line table.gox:253
 										__e = __c.Set("class", "kisland-table-actions"); if __e != nil { return }
 										__e = __c.Submit(); if __e != nil { return }
-//line table.gox:251
+//line table.gox:254
 										for _, a := range r.Actions {
 											__e = __c.Init("button"); if __e != nil { return }
 											{
-//line table.gox:253
+//line table.gox:256
 												__e = __c.Set("type", "button"); if __e != nil { return }
-//line table.gox:254
+//line table.gox:257
 												__e = __c.Set("class", "kisland-button kisland-button-sm kisland-button-" + cmp.Or(a.Style, "secondary")); if __e != nil { return }
-//line table.gox:255
+//line table.gox:258
 												__e = __c.Modify(doors.AClick{
 												Scope: neui.IslandScope(ctx),
 												On: func(ctx context.Context, _ doors.RequestPointer) bool {
@@ -382,7 +385,7 @@ func (t tableWidget) render() gox.Elem {
 												},
 											}); if __e != nil { return }
 												__e = __c.Submit(); if __e != nil { return }
-//line table.gox:262
+//line table.gox:265
 												__e = __c.Any(a.Text); if __e != nil { return }
 											}
 											__e = __c.Close(); if __e != nil { return }
@@ -398,31 +401,31 @@ func (t tableWidget) render() gox.Elem {
 				__e = __c.Close(); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line table.gox:272
+//line table.gox:275
 			__e = __c.Any(t.pager(content, page, size)); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line table.gox:274
+//line table.gox:277
 }
 
-//line table.gox:276
+//line table.gox:279
 func (t tableWidget) header(i int, c tableColumn, sort *tableSort) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line table.gox:277
+//line table.gox:280
 		if !c.Sort {
 			__e = __c.Init("th"); if __e != nil { return }
 			{
 				__e = __c.Submit(); if __e != nil { return }
-//line table.gox:278
+//line table.gox:281
 				__e = __c.Any(c.Title); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		} else  {
 			__e = __c.Init("th"); if __e != nil { return }
 			{
-//line table.gox:281
+//line table.gox:284
 				__e = __c.Set("aria-sort", func() any {
 				if sort == nil || sort.Column != i {
 					return nil
@@ -435,11 +438,11 @@ func (t tableWidget) header(i int, c tableColumn, sort *tableSort) gox.Elem {
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Init("button"); if __e != nil { return }
 				{
-//line table.gox:291
+//line table.gox:294
 					__e = __c.Set("type", "button"); if __e != nil { return }
-//line table.gox:292
+//line table.gox:295
 					__e = __c.Set("class", "kisland-table-sort"); if __e != nil { return }
-//line table.gox:293
+//line table.gox:296
 					__e = __c.Modify(doors.AClick{
 					On: func(ctx context.Context, _ doors.RequestPointer) bool {
 						t.state.Mutate(ctx, func(s tableState) tableState {
@@ -452,16 +455,16 @@ func (t tableWidget) header(i int, c tableColumn, sort *tableSort) gox.Elem {
 					},
 				}); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line table.gox:304
+//line table.gox:307
 					__e = __c.Any(c.Title); if __e != nil { return }
 					__e = __c.Init("span"); if __e != nil { return }
 					{
-//line table.gox:305
+//line table.gox:308
 						__e = __c.Set("class", "kisland-table-sort-icon"); if __e != nil { return }
-//line table.gox:305
+//line table.gox:308
 						__e = __c.Set("aria-hidden", "true"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line table.gox:306
+//line table.gox:309
 						__e = __c.Any(func() any {
 						if sort == nil || sort.Column != i {
 							return "↕"
@@ -479,14 +482,14 @@ func (t tableWidget) header(i int, c tableColumn, sort *tableSort) gox.Elem {
 			__e = __c.Close(); if __e != nil { return }
 		}
 	return })
-//line table.gox:319
+//line table.gox:322
 }
 
-//line table.gox:321
+//line table.gox:324
 func (t tableWidget) checkboxHeader(ids []string) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line table.gox:323
+//line table.gox:326
 		check := doors.DeriveBeam(t.selected, func(sel map[string]struct{}) checkboxState {
 		n := 0
 		for _, id := range ids {
@@ -504,24 +507,26 @@ func (t tableWidget) checkboxHeader(ids []string) gox.Elem {
 		}
 	})
 
-//line table.gox:340
+//line table.gox:343
 		__e = __c.Any(check.Bind(func(c checkboxState) gox.Elem {
 		return gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
 			__e = __c.InitVoid("input"); if __e != nil { return }
 			{
-//line table.gox:342
-				__e = __c.Set("type", "checkbox"); if __e != nil { return }
-//line table.gox:343
-				__e = __c.Set("class", "kisland-table-checkbox"); if __e != nil { return }
-//line table.gox:344
-				__e = __c.Set("aria-label", "Select all rows on this page"); if __e != nil { return }
 //line table.gox:345
-				__e = __c.Set("checked", c == checkboxChecked); if __e != nil { return }
+				__e = __c.Set("type", "checkbox"); if __e != nil { return }
 //line table.gox:346
-				__e = __c.Set("disabled", c == checkboxDisabled); if __e != nil { return }
+				__e = __c.Set("class", "kisland-table-checkbox"); if __e != nil { return }
 //line table.gox:347
+				__e = __c.Set("aria-label", "Select all rows on this page"); if __e != nil { return }
+//line table.gox:348
+				__e = __c.Set("checked", c == checkboxChecked); if __e != nil { return }
+//line table.gox:349
+				__e = __c.Set("disabled", c == checkboxDisabled); if __e != nil { return }
+//line table.gox:350
 				__e = __c.Modify(doors.AClick{
+				PreventDefault: true,
+				Scope: new(doors.ScopeBlocking),
 				On: func(ctx context.Context, _ doors.RequestPointer) bool {
 					t.selected.Mutate(ctx, func(sel map[string]struct{}) map[string]struct{} {
 						sel = maps.Clone(sel)
@@ -543,17 +548,17 @@ func (t tableWidget) checkboxHeader(ids []string) gox.Elem {
 			}
 			__e = __c.Submit(); if __e != nil { return }
 		return })
-//line table.gox:366
+//line table.gox:371
 	})); if __e != nil { return }
 	return })
-//line table.gox:367
+//line table.gox:372
 }
 
-//line table.gox:369
+//line table.gox:374
 func (t tableWidget) checkbox(label string, id string) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line table.gox:371
+//line table.gox:376
 		check := doors.DeriveBeam(t.selected, func(sel map[string]struct{}) checkboxState {
 		if _, ok := sel[id]; ok {
 			return checkboxChecked
@@ -564,24 +569,26 @@ func (t tableWidget) checkbox(label string, id string) gox.Elem {
 		return checkboxUnchecked
 	})
 
-//line table.gox:381
+//line table.gox:386
 		__e = __c.Any(check.Bind(func(c checkboxState) gox.Elem {
 		return gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
 			__e = __c.InitVoid("input"); if __e != nil { return }
 			{
-//line table.gox:383
-				__e = __c.Set("type", "checkbox"); if __e != nil { return }
-//line table.gox:384
-				__e = __c.Set("class", "kisland-table-checkbox"); if __e != nil { return }
-//line table.gox:385
-				__e = __c.Set("aria-label", label); if __e != nil { return }
-//line table.gox:386
-				__e = __c.Set("checked", c == checkboxChecked); if __e != nil { return }
-//line table.gox:387
-				__e = __c.Set("disabled", c == checkboxDisabled); if __e != nil { return }
 //line table.gox:388
+				__e = __c.Set("type", "checkbox"); if __e != nil { return }
+//line table.gox:389
+				__e = __c.Set("class", "kisland-table-checkbox"); if __e != nil { return }
+//line table.gox:390
+				__e = __c.Set("aria-label", label); if __e != nil { return }
+//line table.gox:391
+				__e = __c.Set("checked", c == checkboxChecked); if __e != nil { return }
+//line table.gox:392
+				__e = __c.Set("disabled", c == checkboxDisabled); if __e != nil { return }
+//line table.gox:393
 				__e = __c.Modify(doors.AClick{
+				PreventDefault: true,
+				Scope: new(doors.ScopeBlocking),
 				On: func(ctx context.Context, _ doors.RequestPointer) bool {
 					t.selected.Mutate(ctx, func(sel map[string]struct{}) map[string]struct{} {
 						sel = maps.Clone(sel)
@@ -601,37 +608,37 @@ func (t tableWidget) checkbox(label string, id string) gox.Elem {
 			}
 			__e = __c.Submit(); if __e != nil { return }
 		return })
-//line table.gox:405
+//line table.gox:412
 	})); if __e != nil { return }
 	return })
-//line table.gox:406
+//line table.gox:413
 }
 
-//line table.gox:408
+//line table.gox:415
 func (t tableWidget) bar(sel map[string]struct{}) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line table.gox:409
+//line table.gox:416
 		if len(sel) > 0 {
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line table.gox:410
+//line table.gox:417
 				__e = __c.Set("class", "kisland-table-selection"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Init("span"); if __e != nil { return }
 				{
 					__e = __c.Submit(); if __e != nil { return }
-//line table.gox:411
+//line table.gox:418
 					__e = __c.Many(len(sel), " selected"); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
 				__e = __c.Init("button"); if __e != nil { return }
 				{
-//line table.gox:413
+//line table.gox:420
 					__e = __c.Set("type", "button"); if __e != nil { return }
-//line table.gox:414
+//line table.gox:421
 					__e = __c.Set("class", "kisland-button kisland-button-sm kisland-button-secondary"); if __e != nil { return }
-//line table.gox:415
+//line table.gox:422
 					__e = __c.Modify(doors.AClick{
 					On: func(ctx context.Context, _ doors.RequestPointer) bool {
 						t.selected.Update(ctx, nil)
@@ -644,11 +651,11 @@ func (t tableWidget) bar(sel map[string]struct{}) gox.Elem {
 				__e = __c.Close(); if __e != nil { return }
 				__e = __c.Init("button"); if __e != nil { return }
 				{
-//line table.gox:424
+//line table.gox:431
 					__e = __c.Set("type", "button"); if __e != nil { return }
-//line table.gox:425
+//line table.gox:432
 					__e = __c.Set("class", "kisland-button kisland-button-sm kisland-button-primary"); if __e != nil { return }
-//line table.gox:426
+//line table.gox:433
 					__e = __c.Modify(doors.AClick{
 					Scope: neui.IslandScope(ctx),
 					On: func(ctx context.Context, _ doors.RequestPointer) bool {
@@ -664,14 +671,14 @@ func (t tableWidget) bar(sel map[string]struct{}) gox.Elem {
 			__e = __c.Close(); if __e != nil { return }
 		}
 	return })
-//line table.gox:437
+//line table.gox:444
 }
 
-//line table.gox:439
+//line table.gox:446
 func (t tableWidget) pager(content tableResult, page int, size int) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line table.gox:441
+//line table.gox:448
 		pages := 0
 	if content.Total != nil {
 		pages = (*content.Total + size - 1) / size
@@ -679,91 +686,91 @@ func (t tableWidget) pager(content tableResult, page int, size int) gox.Elem {
 	first := max(1, min(page - 2, pages - 4))
 	last := min(pages, first + 4)
 
-//line table.gox:448
+//line table.gox:455
 		if content.Total != nil && pages > 1 {
 			__e = __c.Init("nav"); if __e != nil { return }
 			{
-//line table.gox:449
+//line table.gox:456
 				__e = __c.Set("class", "kisland-table-pager"); if __e != nil { return }
-//line table.gox:449
+//line table.gox:456
 				__e = __c.Set("aria-label", "Pagination"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line table.gox:450
+//line table.gox:457
 				__e = __c.Any(t.pageButton("First", 1, page > 1)); if __e != nil { return }
-//line table.gox:451
+//line table.gox:458
 				__e = __c.Any(t.pageButton("Prev", page - 1, page > 1)); if __e != nil { return }
-//line table.gox:452
+//line table.gox:459
 				for n := first; n <= last; n++ {
-//line table.gox:453
+//line table.gox:460
 					if n == page {
 						__e = __c.Init("span"); if __e != nil { return }
 						{
-//line table.gox:454
+//line table.gox:461
 							__e = __c.Set("class", "kisland-table-current"); if __e != nil { return }
-//line table.gox:454
+//line table.gox:461
 							__e = __c.Set("aria-current", "page"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
-//line table.gox:454
+//line table.gox:461
 							__e = __c.Any(n); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
 					} else  {
-//line table.gox:456
+//line table.gox:463
 						__e = __c.Any(t.pageButton(strconv.Itoa(n), n, true)); if __e != nil { return }
 					}
 				}
-//line table.gox:459
+//line table.gox:466
 				__e = __c.Any(t.pageButton("Next", page + 1, page < pages)); if __e != nil { return }
-//line table.gox:460
+//line table.gox:467
 				__e = __c.Any(t.pageButton("Last", pages, page < pages)); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line table.gox:462
+//line table.gox:469
 		} else if content.Total == nil && (page > 1 || len(content.Rows) == size) {
 			__e = __c.Init("nav"); if __e != nil { return }
 			{
-//line table.gox:463
+//line table.gox:470
 				__e = __c.Set("class", "kisland-table-pager"); if __e != nil { return }
-//line table.gox:463
+//line table.gox:470
 				__e = __c.Set("aria-label", "Pagination"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line table.gox:464
+//line table.gox:471
 				__e = __c.Any(t.pageButton("Prev", page - 1, page > 1)); if __e != nil { return }
-//line table.gox:465
+//line table.gox:472
 				__e = __c.Any(t.pageButton("Next", page + 1, len(content.Rows) == size)); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		}
 	return })
-//line table.gox:468
+//line table.gox:475
 }
 
-//line table.gox:470
+//line table.gox:477
 func (t tableWidget) pageButton(label string, page int, enabled bool) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line table.gox:471
+//line table.gox:478
 		if !enabled {
 			__e = __c.Init("button"); if __e != nil { return }
 			{
-//line table.gox:472
+//line table.gox:479
 				__e = __c.Set("type", "button"); if __e != nil { return }
-//line table.gox:472
+//line table.gox:479
 				__e = __c.Set("class", "kisland-button kisland-button-sm kisland-button-secondary"); if __e != nil { return }
 				__e = __c.Set("disabled", true); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line table.gox:473
+//line table.gox:480
 				__e = __c.Any(label); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		} else  {
 			__e = __c.Init("button"); if __e != nil { return }
 			{
-//line table.gox:477
+//line table.gox:484
 				__e = __c.Set("type", "button"); if __e != nil { return }
-//line table.gox:478
+//line table.gox:485
 				__e = __c.Set("class", "kisland-button kisland-button-sm kisland-button-secondary"); if __e != nil { return }
-//line table.gox:479
+//line table.gox:486
 				__e = __c.Modify(doors.AClick{
 				On: func(ctx context.Context, _ doors.RequestPointer) bool {
 					t.state.Mutate(ctx, func(s tableState) tableState {
@@ -775,11 +782,11 @@ func (t tableWidget) pageButton(label string, page int, enabled bool) gox.Elem {
 				},
 			}); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line table.gox:489
+//line table.gox:496
 				__e = __c.Any(label); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		}
 	return })
-//line table.gox:492
+//line table.gox:499
 }

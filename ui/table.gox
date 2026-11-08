@@ -42,7 +42,7 @@ type tableWidget struct {
 // buttons submits the row id and the button's value, to the script waiting
 // in ui.draw(). When selectable, rows
 // get checkboxes; the selection, at most 1000 ids, survives page changes and
-// reloads, and its button submits the selected ids in selection order. An
+// reloads, and its button submits the selected ids, sorted. An
 // empty patch reloads the rows.
 func NewTable(p table, submit func(ctx context.Context, s tableSubmit) bool) api.Widget[tablePatch] {
 	p.initDefault()
@@ -67,12 +67,12 @@ func (t tableWidget) Update(ctx context.Context, patch tablePatch) {
 	t.state.Mutate(ctx, func(s tableState) tableState {
 		s.seq++
 		if patch.Query != "" {
-			s.query = patch.Query
+			s.query, s.rows = patch.Query, nil
 			s.page = 1
 			s.selected = nil
 		}
 		if patch.Rows != nil {
-			s.rows = patch.Rows
+			s.query, s.rows = "", patch.Rows
 			s.page = 1
 			s.selected = nil
 		}
@@ -100,8 +100,8 @@ elem (t tableWidget) Main() {
 			<input
 				type="search"
 				class="kisland-table-search"
-				placeholder="search"
-				aria-label="smth"
+				placeholder="Search"
+				aria-label="Search"
 				maxlength="100"
 				(doors.AInput{
 					Scope: &doors.ScopeDebounce{Duration: 300 * time.Millisecond},
@@ -141,11 +141,14 @@ elem (t tableWidget) render() {
 			if ts.page == 1 {
 				return ts
 			}
+			last := 1
 			if content.Total != nil {
-				ts.page = max(1, (*content.Total + ts.size - 1) / ts.size)
-			} else {
-				ts.page--
+				last = max(1, (*content.Total + ts.size - 1) / ts.size)
 			}
+			if last >= ts.page {
+				last = 1
+			}
+			ts.page = last
 			ts.seq += 1
 			return ts
 		})
@@ -160,12 +163,12 @@ elem (t tableWidget) render() {
 	actions := slices.ContainsFunc(content.Rows, func(r tableRow) bool {
 		return len(r.Actions) > 0
 	})
-	columsNumber := len(t.params.Columns)
+	columnCount := len(t.params.Columns)
 	if actions {
-		columsNumber++
+		columnCount++
 	}
 	if t.params.Selectable {
-		columsNumber++
+		columnCount++
 	}
 	~~
 	<>
@@ -194,10 +197,10 @@ elem (t tableWidget) render() {
 			</thead>
 			<tbody>
 				~(if failed != "" {
-					<tr><td class="kisland-table-error" colspan=(columsNumber)>~(failed)</td></tr>
+					<tr><td class="kisland-table-error" colspan=(columnCount)>~(failed)</td></tr>
 				} else if len(content.Rows) == 0 {
 					<tr>
-						<td class="kisland-table-empty" colspan=(columsNumber)>
+						<td class="kisland-table-empty" colspan=(columnCount)>
 							~({
 								if state.search != "" {
 									return "No matching rows"
@@ -345,6 +348,8 @@ elem (t tableWidget) checkboxHeader(ids []string) {
 			checked=(c == checkboxChecked)
 			disabled=(c == checkboxDisabled)
 			(doors.AClick{
+				PreventDefault: true,
+				Scope: new(doors.ScopeBlocking),
 				On: func(ctx context.Context, _ doors.RequestPointer) bool {
 					t.selected.Mutate(ctx, func(sel map[string]struct{}) map[string]struct{} {
 						sel = maps.Clone(sel)
@@ -386,6 +391,8 @@ elem (t tableWidget) checkbox(label string, id string) {
 			checked=(c == checkboxChecked)
 			disabled=(c == checkboxDisabled)
 			(doors.AClick{
+				PreventDefault: true,
+				Scope: new(doors.ScopeBlocking),
 				On: func(ctx context.Context, _ doors.RequestPointer) bool {
 					t.selected.Mutate(ctx, func(sel map[string]struct{}) map[string]struct{} {
 						sel = maps.Clone(sel)
