@@ -145,6 +145,28 @@
     text-align: center;
     color: var(--color-red-600, oklch(57.7% 0.245 27.325));
   }
+  .kisland-table-check {
+    width: 1px;
+  }
+  .kisland-table-checkbox {
+    width: calc(var(--spacing, 0.25rem) * 4);
+    height: calc(var(--spacing, 0.25rem) * 4);
+    cursor: pointer;
+    vertical-align: middle;
+    accent-color: currentcolor;
+    &:disabled {
+      cursor: not-allowed;
+    }
+    &:disabled {
+      opacity: 40%;
+    }
+  }
+  .kisland-table-selection {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: calc(var(--spacing, 0.25rem) * 2);
+  }
   .kisland-table-pager {
     display: flex;
     flex-wrap: wrap;
@@ -155,6 +177,55 @@
     padding-inline: calc(var(--spacing, 0.25rem) * 2);
     --kisland-tw-font-weight: var(--font-weight-semibold, 600);
     font-weight: var(--font-weight-semibold, 600);
+  }
+  .kisland-table-search {
+    width: 100%;
+    max-width: var(--container-xs, 20rem);
+    border-radius: var(--radius-md, 0.375rem);
+    border-style: var(--kisland-tw-border-style);
+    border-width: 1px;
+    border-color: currentcolor;
+    @supports (color: color-mix(in lab, red, red)) {
+      border-color: color-mix(in oklab, currentcolor 30%, transparent);
+    }
+    background-color: transparent;
+    padding-inline: calc(var(--spacing, 0.25rem) * 3);
+    padding-block: calc(var(--spacing, 0.25rem) * 1.5);
+    font-size: var(--text-sm, 0.875rem);
+    line-height: var(--kisland-tw-leading, var(--text-sm--line-height, calc(1.25 / 0.875)));
+    color: inherit;
+    --kisland-tw-outline-style: none;
+    outline-style: none;
+    &::placeholder {
+      opacity: 60%;
+    }
+    &:focus {
+      border-color: currentcolor;
+      @supports (color: color-mix(in lab, red, red)) {
+        border-color: color-mix(in oklab, currentcolor 60%, transparent);
+      }
+    }
+  }
+  .kisland-table-sort {
+    display: inline-flex;
+    cursor: pointer;
+    align-items: center;
+    gap: var(--spacing, 0.25rem);
+    border-style: var(--kisland-tw-border-style);
+    border-width: 0px;
+    background-color: transparent;
+    padding: 0px;
+    text-align: left;
+    color: inherit;
+    font: inherit;
+  }
+  .kisland-table-sort-icon {
+    font-size: var(--text-xs, 0.75rem);
+    line-height: var(--kisland-tw-leading, var(--text-xs--line-height, calc(1 / 0.75)));
+    opacity: 40%;
+  }
+  [aria-sort] > .kisland-table-sort > .kisland-table-sort-icon {
+    opacity: 100%;
   }
 }
 @property --kisland-tw-border-style {

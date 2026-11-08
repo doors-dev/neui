@@ -37,6 +37,13 @@
 	.kisland-table-actions { @apply text-right whitespace-nowrap space-x-1 }
 	.kisland-table-empty { @apply text-center opacity-60 }
 	.kisland-table-error { @apply text-center text-red-600 }
+	.kisland-table-check { @apply w-px }
+	.kisland-table-checkbox { @apply size-4 align-middle cursor-pointer accent-current disabled:cursor-not-allowed disabled:opacity-40 }
+	.kisland-table-selection { @apply flex flex-wrap items-center gap-2 }
 	.kisland-table-pager { @apply flex flex-wrap items-center gap-1 }
 	.kisland-table-current { @apply px-2 font-semibold }
+	.kisland-table-search { @apply w-full max-w-xs px-3 py-1.5 text-sm text-inherit bg-transparent border border-current/30 rounded-md outline-none focus:border-current/60 placeholder:opacity-60 }
+	.kisland-table-sort { @apply inline-flex items-center gap-1 p-0 [font:inherit] text-inherit text-left cursor-pointer bg-transparent border-0 }
+	.kisland-table-sort-icon { @apply text-xs opacity-40 }
+	[aria-sort] > .kisland-table-sort > .kisland-table-sort-icon { @apply opacity-100 }
 }
