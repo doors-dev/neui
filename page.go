@@ -351,6 +351,17 @@ func (i Island) Main() gox.Elem {
 // the agent as a call_error notification.
 type IslandCall[I, O any] = island.Call[I, O]
 
+// IslandReport reports a runtime error of a widget to the agent, as a
+// widget_error notification naming the widget and its id. The widget keeps
+// running; the agent decides whether to update or replace it. Each widget
+// reports a given message once per script, within the same cap as
+// call_error, and every report is written to the app's log. ctx must come
+// from the island (a widget's render, Update or event handlers); elsewhere
+// IslandReport does nothing.
+func IslandReport(ctx context.Context, err error) {
+	island.Report(ctx, err)
+}
+
 // IslandStore returns the store of the island app ctx renders or handles
 // events for, shared by all the app's widgets; each app run gets a fresh
 // one. It is nil outside an island.
@@ -413,9 +424,10 @@ func (l Library) Tool[I any, O any](name string, desc string, f func(ctx context
 }
 
 // View adds a widget scripts create with params decoded into I and later
-// patch with values decoded into U; f builds it from the params. Use it for
+// patch with values decoded into U; f builds it from the params, with the
+// island ctx of the script call that creates it. Use it for
 // UI that shows rather than collects, such as text, tables or charts.
-func (l Library) View[I any, U any](name string, desc string, f func(i I) api.Widget[U]) error {
+func (l Library) View[I any, U any](name string, desc string, f func(ctx context.Context, i I) (api.Widget[U], error)) error {
 	return l.inner.View(name, desc, f)
 }
 
@@ -436,6 +448,6 @@ func (l Library) Head(e gox.Elem) {
 // waiting in ui.draw() and reports whether it was taken; it returns false
 // when no script is waiting or the app has ended, so the widget can keep the
 // user's input. Call it from an event handler, with that handler's ctx.
-func (l Library) Control[I any, U any, O any](name string, desc string, f func(i I, submit func(ctx context.Context, o O) bool) api.Widget[U]) error {
+func (l Library) Control[I any, U any, O any](name string, desc string, f func(ctx context.Context, i I, submit func(ctx context.Context, o O) bool) (api.Widget[U], error)) error {
 	return l.inner.Control(name, desc, f)
 }

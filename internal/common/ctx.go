@@ -8,4 +8,10 @@ const (
 	KeySpace
 	KeyController
 	KeyIslandStore
+	KeyIslandWidget
 )
+
+type IslandWidget struct {
+	Name string
+	ID   uint
+}

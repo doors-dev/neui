@@ -1,0 +1,247 @@
+package ui
+
+import (
+	"context"
+	"fmt"
+	"maps"
+	"math"
+	"slices"
+	"strconv"
+	"sync"
+
+	"github.com/doors-dev/doors"
+	"github.com/doors-dev/gox"
+	"neui.dev"
+)
+
+func newFormWidgetList(ctx context.Context, group formGroup, params listInput) (*formWidgetList, error) {
+	base, err := group.newGroup(params.name())
+	if err != nil {
+		return nil, err
+	}
+	base.collector = formListCollector{}
+	list := &formWidgetList{
+		group: base,
+		params: params,
+		append: new(doors.Door),
+	}
+	list.system, err = base.newField("")
+	if err != nil {
+		return nil, err
+	}
+	list.system.parent = list
+	return list, nil
+}
+
+type formListCollector struct{}
+
+func (f formListCollector) collect(m map[string]any) any {
+	slice := make([]any, 0, len(m) - 1)
+	for _, k := range slices.Sorted(maps.Keys(m)) {
+		if k == "" {
+			continue
+		}
+		value := m[k]
+		slice = append(slice, defaultFormGroupCollector{}.value(value))
+	}
+	return slice
+}
+
+var _ formGroupCollector = formListCollector{}
+
+type formWidgetList struct {
+	index int
+	group *formGroupBase
+	system formGroupField
+	params listInput
+	fields []*formWidgetListField
+	append *doors.Door
+}
+func (f *formWidgetList) init(ctx context.Context, value any) error {
+	values := f.params.Value
+	if value != nil {
+		v, ok := value.([]any)
+		if !ok {
+			return fmt.Errorf("list %q: default value is %T, want an array", f.params.name(), value)
+		}
+		values = v
+	}
+	hi := 100
+	if f.params.Max != 0 {
+		hi = f.params.Max
+	}
+	if len(values) > hi {
+		return fmt.Errorf("list %q: %d default items, most is %d", f.params.name(), len(values), hi)
+	}
+	for _, v := range values {
+		if err := f.appendFieldLocked(ctx, v); err != nil {
+			return err
+		}
+	}
+	for len(f.fields) < f.params.Min {
+		if err := f.appendFieldLocked(ctx, nil); err != nil {
+			return err
+		}
+	}
+	f.sync(ctx)
+	return nil
+}
+
+func (f *formWidgetList) removeField(ctx context.Context, field *formWidgetListField) {
+	f.group.mutex().Lock()
+	defer f.group.mutex().Unlock()
+	index := slices.Index(f.fields, field)
+	if index == -1 {
+		return
+	}
+	entry := f.fields[index]
+	f.fields = slices.Delete(f.fields, index, index + 1)
+	entry.door.Static(ctx, nil)
+	entry.field.destroy(ctx)
+}
+
+func (f *formWidgetList) appendField(ctx context.Context) {
+	f.group.mutex().Lock()
+	defer f.group.mutex().Unlock()
+	if err := f.appendFieldLocked(ctx, nil); err != nil {
+		f.onSystemError(ctx, err)
+	}
+}
+
+func (f *formWidgetList) appendFieldLocked(ctx context.Context, value any) error {
+	hi := 100
+	if f.params.Max != 0 {
+		hi = f.params.Max
+	}
+	if len(f.fields) >= hi {
+		return nil
+	}
+	field, err := newFormWidgetField(ctx, f, f.params.Field.v)
+	if err != nil {
+		return err
+	}
+	if err := field.init(ctx, value); err != nil {
+		return err
+	}
+	widgetField := &formWidgetListField{
+		remove: f.removeField,
+		field: field,
+	}
+	widgetField.door.Outer(ctx, field)
+	f.fields = append(f.fields, widgetField)
+	new, old := new(doors.Door), f.append
+	f.append = new
+	old.Static(ctx, doors.Once(<>
+		~(widgetField)
+		(new)
+	</>))
+	return nil
+}
+
+func (f *formWidgetList) onSystemError(ctx context.Context, err error) {
+	neui.IslandReport(ctx, err)
+	f.system.set(ctx, nil, errSystem)
+}
+
+func (f *formWidgetList) sync(ctx context.Context) {
+	if f.group.hasErrors() {
+		f.system.set(ctx, nil, nil)
+		return
+	}
+	if f.group.len() < f.params.Min {
+		f.system.set(ctx, nil, fmt.Errorf("add at least %d", f.params.Min))
+		return
+	}
+	hi := 100
+	if f.params.Max != 0 {
+		hi = f.params.Max
+	}
+	if f.group.len() > hi {
+		f.system.set(ctx, nil, fmt.Errorf("remove some, at most %d", hi))
+		return
+	}
+	f.system.set(ctx, nil, nil)
+}
+
+func (f *formWidgetList) destroy(ctx context.Context) {
+	f.group.destroy(ctx)
+}
+
+func (f *formWidgetList) mutex() *sync.Mutex {
+	return f.group.mutex()
+}
+
+func (f *formWidgetList) scope() doors.Scopes {
+	return f.group.scope()
+}
+
+func (f *formWidgetList) deleteField(ctx context.Context, name string) {
+	f.group.deleteField(ctx, name)
+	f.sync(ctx)
+}
+
+func (f *formWidgetList) deleteGroup(ctx context.Context, name string) {
+	f.group.deleteGroup(ctx, name)
+	f.sync(ctx)
+}
+
+func (f *formWidgetList) setField(ctx context.Context, name string, value any, err error) {
+	f.group.setField(ctx, name, value, err)
+	f.sync(ctx)
+}
+
+var maxIntWidth = len(strconv.Itoa(math.MaxInt))
+
+func (f *formWidgetList) nextName() string {
+	f.index += 1
+	return fmt.Sprintf("%0*d", maxIntWidth, f.index)
+}
+
+func (f *formWidgetList) newGroup(name string) (*formGroupBase, error) {
+	if f.params.name() != name {
+		panic("wrong list group")
+	}
+	name = f.nextName()
+	group, err := f.group.newGroup(name)
+	if err != nil {
+		return nil, err
+	}
+	group.parent = f
+	return group, nil
+}
+
+func (f *formWidgetList) newField(name string) (formGroupField, error) {
+	if f.params.name() != name {
+		panic("wrong list group")
+	}
+	name = f.nextName()
+	field, err := f.group.newField(name)
+	if err != nil {
+		return formGroupField{}, err
+	}
+	field.parent = f
+	return field, nil
+}
+
+elem (f *formWidgetList) Main() {
+	~~
+	f.group.mutex().Lock()
+	defer f.group.mutex().Unlock()
+	~~
+	~(for _, field := range f.fields {
+		~(field)
+	})
+	~(f.append)
+}
+
+var _ formGroup = (*formWidgetList)(nil)
+
+type formWidgetListField struct {
+	remove func(context.Context, *formWidgetListField)
+	field formWidgetField
+	door doors.Door
+}
+
+func (f *formWidgetListField) Main() gox.Elem {
+	return f.door.Main()
+}

@@ -372,11 +372,6 @@
     font-weight: var(--font-weight-medium, 500);
     color: var(--app-ink);
   }
-  .kchat-top-title_quiet {
-    --kchat-tw-font-weight: var(--font-weight-normal, 400);
-    font-weight: var(--font-weight-normal, 400);
-    color: var(--app-ink-quiet);
-  }
   .kchat-ic {
     height: calc(var(--spacing, 0.25rem) * 4);
     width: calc(var(--spacing, 0.25rem) * 4);

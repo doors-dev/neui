@@ -103,14 +103,14 @@ func (l Library) validateLayout(name string, params json.RawMessage) error {
 	return nil
 }
 
-func (l Library) newWidget(name string, params json.RawMessage, submit func(context.Context, any) bool) (anyWidget, error) {
+func (l Library) newWidget(ctx context.Context, name string, params json.RawMessage, submit func(context.Context, any) bool) (anyWidget, error) {
 	factory, ok := l.widgets[name]
 	if !ok {
 		return nil, fmt.Errorf("widget %q: %w", name, errWidgetKindNotFound)
 	}
-	widget, err := factory.new(params, submit)
+	widget, err := factory.new(ctx, params, submit)
 	if err != nil {
-		return nil, fmt.Errorf("ui.%s params: %w", name, err)
+		return nil, fmt.Errorf("ui.%s: %w", name, err)
 	}
 	return widget, nil
 }
@@ -127,7 +127,7 @@ func (l Library) Fetch(tool common.Tool) error {
 	return nil
 }
 
-func (l Library) View[I any, U any](name string, desc string, f func(i I) api.Widget[U]) error {
+func (l Library) View[I any, U any](name string, desc string, f func(ctx context.Context, i I) (api.Widget[U], error)) error {
 	if err := l.checkName(name); err != nil {
 		return err
 	}
@@ -143,8 +143,8 @@ func (l Library) View[I any, U any](name string, desc string, f func(i I) api.Wi
 		desc:         desc,
 		updateSchema: updateSchema,
 		inputSchema:  inputSchema,
-		factory: func(i I, _ func(context.Context, struct{}) bool) api.Widget[U] {
-			return f(i)
+		factory: func(ctx context.Context, i I, _ func(context.Context, struct{}) bool) (api.Widget[U], error) {
+			return f(ctx, i)
 		},
 	}
 	return nil
@@ -166,7 +166,7 @@ func (l Library) Layout[I any](name string, desc string, f func(i I, children []
 	return nil
 }
 
-func (l Library) Control[I any, U any, O any](name string, desc string, f func(i I, submit func(ctx context.Context, o O) bool) api.Widget[U]) error {
+func (l Library) Control[I any, U any, O any](name string, desc string, f func(ctx context.Context, i I, submit func(ctx context.Context, o O) bool) (api.Widget[U], error)) error {
 	if err := l.checkName(name); err != nil {
 		return err
 	}
@@ -193,7 +193,7 @@ func (l Library) Control[I any, U any, O any](name string, desc string, f func(i
 }
 
 type anyWidgetFactory interface {
-	new(params json.RawMessage, submit func(context.Context, any) bool) (anyWidget, error)
+	new(ctx context.Context, params json.RawMessage, submit func(context.Context, any) bool) (anyWidget, error)
 	control() bool
 	writeSpec(b *strings.Builder, name string)
 }
@@ -203,19 +203,23 @@ type widgetFactory[I, U, O any] struct {
 	updateSchema schema.Schema[U]
 	inputSchema  schema.Schema[I]
 	outputSchema *schema.Schema[O]
-	factory      func(i I, submit func(ctx context.Context, o O) bool) api.Widget[U]
+	factory      func(ctx context.Context, i I, submit func(ctx context.Context, o O) bool) (api.Widget[U], error)
 }
 
-func (w widgetFactory[I, U, O]) new(params json.RawMessage, submit func(context.Context, any) bool) (anyWidget, error) {
+func (w widgetFactory[I, U, O]) new(ctx context.Context, params json.RawMessage, submit func(context.Context, any) bool) (anyWidget, error) {
 	input, err := w.inputSchema.Decode(params)
+	if err != nil {
+		return nil, fmt.Errorf("params: %w", err)
+	}
+	inner, err := w.factory(ctx, input, func(ctx context.Context, o O) bool {
+		return submit(ctx, o)
+	})
 	if err != nil {
 		return nil, err
 	}
 	return widget[I, U, O]{
 		factory: w,
-		inner: w.factory(input, func(ctx context.Context, o O) bool {
-			return submit(ctx, o)
-		}),
+		inner:   inner,
 	}, nil
 }
 

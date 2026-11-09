@@ -123,8 +123,8 @@ func board(marks chan<- int, shown chan<- string) gox.Elem {
 				}); err != nil {
 					return err
 				}
-				return l.Control("press", "a button that answers with value(21)", func(p pressParams, submit func(ctx context.Context, n int) bool) api.Widget[struct{}] {
-					return press{params: p, shown: shown, submit: submit}
+				return l.Control("press", "a button that answers with value(21)", func(_ context.Context, p pressParams, submit func(ctx context.Context, n int) bool) (api.Widget[struct{}], error) {
+					return press{params: p, shown: shown, submit: submit}, nil
 				})
 			},
 		})

@@ -193,7 +193,9 @@ func (s *state) toolCreate(ctx context.Context, arg createArg) (uint, error) {
 	}
 	s.nextID++
 	id := s.nextID
-	widget, err := s.run.Library().newWidget(arg.Name, arg.Params, func(ctx context.Context, output any) bool {
+	ctx = context.WithValue(ctx, common.KeyIslandStore, s.run.Store())
+	ctx = context.WithValue(ctx, common.KeyIslandWidget, common.IslandWidget{Name: arg.Name, ID: id})
+	widget, err := s.run.Library().newWidget(ctx, arg.Name, arg.Params, func(ctx context.Context, output any) bool {
 		s.mu.Lock()
 		if s.run.Context().Err() != nil || s.hook == nil {
 			s.mu.Unlock()
@@ -624,7 +626,9 @@ func (s *state) updateWidget(id uint, patch json.RawMessage) (func(ctx context.C
 	if err != nil {
 		return nil, fmt.Errorf("ui.%s #%d update: %w", widget.name, id, err)
 	}
-	return apply, nil
+	return func(ctx context.Context) {
+		apply(context.WithValue(ctx, common.KeyIslandWidget, common.IslandWidget{Name: widget.name, ID: id}))
+	}, nil
 }
 
 func (s *state) seed() gox.Elem {
@@ -650,6 +654,7 @@ func (w widgetSpace) Main() gox.Elem {
 		if err != nil {
 			return err
 		}
+		ctx = context.WithValue(ctx, common.KeyIslandWidget, common.IslandWidget{Name: w.name, ID: w.id})
 		return doors.Ctx(ctx).Proxy(cur, w.widget.Main())
 	}
 }

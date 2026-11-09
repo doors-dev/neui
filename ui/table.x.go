@@ -1,4 +1,4 @@
-// Managed by GoX v0.3.3
+// Managed by GoX v0.3.4
 
 //line table.gox:1
 package ui
@@ -47,7 +47,7 @@ type tableWidget struct {
 // get checkboxes; the selection, at most 1000 ids, survives page changes and
 // reloads, and its button submits the selected ids, sorted. An
 // empty patch reloads the rows.
-func NewTable(p table, submit func(ctx context.Context, s tableSubmit) bool) api.Widget[tablePatch] {
+func NewTable(ctx context.Context, p table, submit func(ctx context.Context, s tableSubmit) bool) (api.Widget[tablePatch], error) {
 	p.initDefault()
 	state := doors.NewSourceEqual(p.state(), tableStateEqual)
 	return tableWidget{
@@ -63,7 +63,7 @@ func NewTable(p table, submit func(ctx context.Context, s tableSubmit) bool) api
 			return s
 		}, maps.Equal),
 		submit: submit,
-	}
+	}, nil
 }
 
 func (t tableWidget) Update(ctx context.Context, patch tablePatch) {

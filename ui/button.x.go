@@ -1,4 +1,4 @@
-// Managed by GoX v0.3.3
+// Managed by GoX v0.3.4
 
 //line button.gox:1
 package ui
@@ -31,7 +31,7 @@ type buttonParams struct {
 // NewButton builds a button widget for Library.Control: a click submits the
 // button's value param to the script waiting in ui.draw(). With agent set, the
 // button is also an Input of the enclosing space, so the agent can click it.
-func NewButton(p buttonParams, submit func(ctx context.Context, value string) bool) api.Widget[buttonPatch] {
+func NewButton(ctx context.Context, p buttonParams, submit func(ctx context.Context, value string) bool) (api.Widget[buttonPatch], error) {
 	if p.Size == "" {
 		p.Size = "md"
 	}
@@ -41,7 +41,7 @@ func NewButton(p buttonParams, submit func(ctx context.Context, value string) bo
 	return button{
 		state: doors.NewSource(p),
 		submit: submit,
-	}
+	}, nil
 }
 
 type button struct {

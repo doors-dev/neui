@@ -444,3 +444,26 @@ func fetch[I, O any](lib Library, name string, f func(ctx context.Context, input
 	}
 	return lib.Fetch(tool)
 }
+
+func TestReportWidget(t *testing.T) {
+	r, task, ctx := newCallTestRun(t, api.IslandConfig{}, NewLibrary())
+	form := context.WithValue(ctx, common.KeyIslandWidget, common.IslandWidget{Name: "form", ID: 3})
+	Report(form, errors.New("query failed"))
+	Report(form, errors.New("query failed"))
+	Report(context.WithValue(ctx, common.KeyIslandWidget, common.IslandWidget{Name: "table", ID: 4}), errors.New("query failed"))
+	Report(context.Background(), errors.New("no island"))
+	notes := task.WaitNotes(t, 2)
+	var data map[string]any
+	if err := json.Unmarshal(notes[0].Data, &data); err != nil {
+		t.Fatal(err)
+	}
+	if notes[0].Meta["kind"] != "widget_error" || data["widget"] != "form" || data["id"] != float64(3) || data["error"] != "query failed" {
+		t.Fatalf("note: %v %v", notes[0].Meta, data)
+	}
+	if n := reported(r); n != 2 {
+		t.Fatalf("%d reports, want 2", n)
+	}
+	if log := readLog(t, r); strings.Count(log, "ERROR widget ") != 3 || !strings.Contains(log, "widget form #3: query failed") {
+		t.Fatalf("log: %s", log)
+	}
+}

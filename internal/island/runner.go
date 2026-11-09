@@ -136,6 +136,35 @@ func (r *runner) report(code string, err error) {
 	go r.owner.task.Notify(data, map[string]any{"kind": "call_error"})
 }
 
+func Report(ctx context.Context, err error) {
+	store, ok := ctx.Value(common.KeyIslandStore).(doors.Store)
+	if !ok {
+		return
+	}
+	runner, ok := store.Load(runnerKey{}).(*runner)
+	if !ok {
+		return
+	}
+	widget, _ := ctx.Value(common.KeyIslandWidget).(common.IslandWidget)
+	runner.reportWidget(widget, err)
+}
+
+func (r *runner) reportWidget(widget common.IslandWidget, err error) {
+	if logErr := js.Log(r.owner.fs, r.owner.log, "ERROR", fmt.Sprintf("widget %s #%d: %s", widget.Name, widget.ID, err)); logErr != nil {
+		slog.Error("island: widget log write failed", "log", r.owner.log, "err", logErr)
+	}
+	key := fmt.Sprintf("widget:%d:%s", widget.ID, err)
+	r.mu.Lock()
+	if r.reported[key] || len(r.reported) >= fnReportsCap {
+		r.mu.Unlock()
+		return
+	}
+	r.reported[key] = true
+	r.mu.Unlock()
+	data, _ := json.Marshal(map[string]any{"widget": widget.Name, "id": widget.ID, "error": err.Error()})
+	go r.owner.task.Notify(data, map[string]any{"kind": "widget_error"})
+}
+
 func (r *runner) newVM() (*quickjs.VM, error) {
 	config := r.owner.config
 	vm, err := quickjs.NewVM()

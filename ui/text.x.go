@@ -1,4 +1,4 @@
-// Managed by GoX v0.3.3
+// Managed by GoX v0.3.4
 
 //line text.gox:1
 package ui
@@ -26,14 +26,14 @@ type textParams struct {
 
 // NewText builds a text widget for Library.View: plain text in a size
 // preset, or an alert box when its style param is not plain.
-func NewText(p textParams) api.Widget[textPatch] {
+func NewText(ctx context.Context, p textParams) (api.Widget[textPatch], error) {
 	if p.Size == "" {
 		p.Size = "md"
 	}
 	if p.Style == "" {
 		p.Style = "plain"
 	}
-	return text{state: doors.NewSource(p)}
+	return text{state: doors.NewSource(p)}, nil
 }
 
 type text struct {
