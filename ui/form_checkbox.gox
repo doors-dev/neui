@@ -1,0 +1,108 @@
+package ui
+
+import (
+	"context"
+	"errors"
+	"fmt"
+
+	"github.com/doors-dev/doors"
+	"github.com/doors-dev/gox"
+)
+
+func newFormWidgetCheckbox(ctx context.Context, group formGroup, params checkboxInput) (*formWidgetCheckbox, error) {
+	field, err := group.newField(params.Name)
+	if err != nil {
+		return nil, err
+	}
+	return &formWidgetCheckbox{
+		id: doors.IDRand(),
+		field: field,
+		params: params,
+	}, nil
+}
+
+type formWidgetCheckbox struct {
+	id string
+	field formGroupField
+	params checkboxInput
+	value bool
+	invalid doors.Setter
+}
+
+func (f *formWidgetCheckbox) name() string {
+	return f.params.Name
+}
+
+func (f *formWidgetCheckbox) init(ctx context.Context, value any) error {
+	checked := f.params.Checked
+	if value != nil {
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("field %q: default value is %T, want a boolean", f.params.Name, value)
+		}
+		checked = v
+	}
+	f.value = checked
+	f.setLocked(ctx, checked, f.validate(ctx, checked))
+	return nil
+}
+
+func (f *formWidgetCheckbox) destroy(ctx context.Context) {
+	f.field.destroy(ctx)
+}
+
+func (f *formWidgetCheckbox) update(ctx context.Context, checked bool) {
+	err := f.validate(ctx, checked)
+	f.field.mutex().Lock()
+	defer f.field.mutex().Unlock()
+	f.setLocked(ctx, checked, err)
+	doors.Call(ctx, f.invalid.Set("aria-invalid", formAria(formShownErr(err))))
+}
+
+func (f *formWidgetCheckbox) setLocked(ctx context.Context, checked bool, err error) {
+	f.field.set(ctx, checked, err)
+}
+
+elem (f *formWidgetCheckbox) Main() {
+	<div class="kisland-form-field">
+		<label class="kisland-form-check">
+			<input
+				(&f.invalid)
+				(doors.AChange{
+					Scope: f.field.scope(),
+					On: func(ctx context.Context, r doors.RequestChange) bool {
+						f.update(ctx, r.Event().Checked)
+						return false
+					},
+				})
+				class="kisland-form-checkbox"
+				type="checkbox"
+				id=(f.id)
+				name=(f.params.Name)
+				checked=(f.value)
+				aria-required=(formAria(f.params.Required))
+				aria-invalid=(formAria(formShownErr(f.field.error.Get())))
+				aria-describedby=(f.id + "-e")/>
+			<span>
+				~(f.params.Label)
+				~(f.field.error.RouteBeam(
+					doors.RouteBeamMatch(func(err error) bool {
+						return f.params.Required && errors.Is(err, errRequired)
+					}, doors.RouteComp[error](<span class="kisland-form-required" aria-hidden="true">*</span>)),
+				))
+			</span>
+		</label>
+		~(f.field.error.RouteBeam(
+			doors.RouteBeamMatch(formShownErr, doors.RouteBind(func(err error) gox.Elem {
+				return <p class="kisland-form-error" id=(f.id + "-e")>~(err.Error())</p>
+			})),
+		))
+	</div>
+}
+
+func (f *formWidgetCheckbox) validate(ctx context.Context, checked bool) error {
+	if !checked && f.params.Required {
+		return errRequired
+	}
+	return nil
+}

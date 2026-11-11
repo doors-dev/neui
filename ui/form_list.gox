@@ -2,13 +2,14 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"math"
 	"slices"
 	"strconv"
 	"sync"
-
+	
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
 	"neui.dev"
@@ -20,23 +21,28 @@ func newFormWidgetList(ctx context.Context, group formGroup, params listInput) (
 		return nil, err
 	}
 	base.collector = formListCollector{}
+	items := doors.NewSourceEqual([]*formWidgetListField(nil), slices.Equal[[]*formWidgetListField])
 	list := &formWidgetList{
+		id: doors.IDRand(),
 		group: base,
 		params: params,
 		append: new(doors.Door),
+		items: items,
+		count: doors.DeriveBeam(items, func(items []*formWidgetListField) int {
+			return len(items)
+		}),
 	}
 	list.system, err = base.newField("")
 	if err != nil {
 		return nil, err
 	}
-	list.system.parent = list
 	return list, nil
 }
 
 type formListCollector struct{}
 
 func (f formListCollector) collect(m map[string]any) any {
-	slice := make([]any, 0, len(m) - 1)
+	slice := make([]any, 0, len(m))
 	for _, k := range slices.Sorted(maps.Keys(m)) {
 		if k == "" {
 			continue
@@ -50,13 +56,22 @@ func (f formListCollector) collect(m map[string]any) any {
 var _ formGroupCollector = formListCollector{}
 
 type formWidgetList struct {
+	id string
 	index int
 	group *formGroupBase
 	system formGroupField
 	params listInput
 	fields []*formWidgetListField
 	append *doors.Door
+	items doors.Source[[]*formWidgetListField]
+	count doors.Beam[int]
+	add doors.Setter
 }
+
+func (f *formWidgetList) name() string {
+	return f.params.name()
+}
+
 func (f *formWidgetList) init(ctx context.Context, value any) error {
 	values := f.params.Value
 	if value != nil {
@@ -96,8 +111,9 @@ func (f *formWidgetList) removeField(ctx context.Context, field *formWidgetListF
 	}
 	entry := f.fields[index]
 	f.fields = slices.Delete(f.fields, index, index + 1)
-	entry.door.Static(ctx, nil)
 	entry.field.destroy(ctx)
+	f.items.Update(ctx, slices.Clone(f.fields))
+	entry.door.Static(ctx, nil)
 }
 
 func (f *formWidgetList) appendField(ctx context.Context) {
@@ -105,7 +121,9 @@ func (f *formWidgetList) appendField(ctx context.Context) {
 	defer f.group.mutex().Unlock()
 	if err := f.appendFieldLocked(ctx, nil); err != nil {
 		f.onSystemError(ctx, err)
+		return
 	}
+	f.sync(ctx)
 }
 
 func (f *formWidgetList) appendFieldLocked(ctx context.Context, value any) error {
@@ -121,19 +139,26 @@ func (f *formWidgetList) appendFieldLocked(ctx context.Context, value any) error
 		return err
 	}
 	if err := field.init(ctx, value); err != nil {
+		field.destroy(ctx)
 		return err
 	}
 	widgetField := &formWidgetListField{
 		remove: f.removeField,
 		field: field,
 	}
-	widgetField.door.Outer(ctx, field)
+	widgetField.state = doors.DeriveBeam(f.items, func(items []*formWidgetListField) formListItemState {
+		return formListItemState{
+			index: slices.Index(items, widgetField) + 1,
+		}
+	})
 	f.fields = append(f.fields, widgetField)
+	f.items.Update(ctx, slices.Clone(f.fields))
+	widgetField.door.Outer(ctx, f.item(widgetField))
 	new, old := new(doors.Door), f.append
 	f.append = new
 	old.Static(ctx, doors.Once(<>
 		~(widgetField)
-		(new)
+		~(new)
 	</>))
 	return nil
 }
@@ -146,6 +171,10 @@ func (f *formWidgetList) onSystemError(ctx context.Context, err error) {
 func (f *formWidgetList) sync(ctx context.Context) {
 	if f.group.hasErrors() {
 		f.system.set(ctx, nil, nil)
+		return
+	}
+	if f.group.len() < f.params.Min && len(f.fields) >= f.params.Min {
+		f.system.set(ctx, nil, errRequired)
 		return
 	}
 	if f.group.len() < f.params.Min {
@@ -164,7 +193,14 @@ func (f *formWidgetList) sync(ctx context.Context) {
 }
 
 func (f *formWidgetList) destroy(ctx context.Context) {
+	for _, field := range f.fields {
+		field.field.destroy(ctx)
+	}
 	f.group.destroy(ctx)
+}
+
+func (f *formWidgetList) form() *root {
+	return f.group.form()
 }
 
 func (f *formWidgetList) mutex() *sync.Mutex {
@@ -227,19 +263,140 @@ elem (f *formWidgetList) Main() {
 	~~
 	f.group.mutex().Lock()
 	defer f.group.mutex().Unlock()
-	~~
-	~(for _, field := range f.fields {
-		~(field)
+	hi := 100
+	if f.params.Max != 0 {
+		hi = f.params.Max
+	}
+	count, _ := f.count.ReadAndSub(ctx, func(ctx context.Context, count int) bool {
+		doors.Call(ctx, f.add.Set("aria-disabled", formAria(count >= hi)))
+		return false
 	})
-	~(f.append)
+	~~
+	<fieldset class="kisland-form-box" aria-describedby=(f.id + "-m")>
+		<legend class="kisland-form-box-legend">
+			~(f.params.label())
+			~(f.system.error.RouteBeam(
+				doors.RouteBeamMatch(func(err error) bool {
+					return errors.Is(err, errRequired)
+				}, doors.RouteComp[error](<span class="kisland-form-required" aria-hidden="true">*</span>)),
+			))
+			~" "
+			<span class="kisland-form-count">
+				~(f.count.Bind(elem(count int) {
+					~(if f.params.Max != 0 && f.params.Min != 0 {
+						~(count, " of ", f.params.Min, "–", f.params.Max)
+					} else if f.params.Max != 0 {
+						~(count, " of ", f.params.Max)
+					} else {
+						~(count)
+					})
+				}))
+			</span>
+		</legend>
+		<ol class="kisland-form-items">
+			~(for _, field := range f.fields {
+				~(field)
+			})
+			~(f.append)
+		</ol>
+		<div class="kisland-form-items-foot">
+			<button
+				(&f.add)
+				(doors.AClick{
+					Scope: f.group.scope(),
+					On: func(ctx context.Context, r doors.RequestPointer) bool {
+						f.appendField(ctx)
+						return false
+					},
+				})
+				type="button"
+				class="kisland-form-item-add"
+				aria-label=({
+					if f.params.label() == "" {
+						return "Add item"
+					}
+					return "Add to " + f.params.label()
+				})
+				aria-disabled=(formAria(count >= hi))
+				aria-describedby=(f.id + "-m")>
+				Add
+			</button>
+			~(f.system.error.RouteBeam(
+				doors.RouteBeamMatch(formShownErr, doors.RouteBind(func(err error) gox.Elem {
+					return <p class="kisland-form-error" id=(f.id + "-m")>~(err.Error())</p>
+				})),
+				doors.RouteComp[error](f.count.Bind(elem(count int) {
+					~(if count >= hi {
+						<p class="kisland-form-help" id=(f.id + "-m")>Maximum of ~(hi) reached.</p>
+					} else if count == 0 {
+						<p class="kisland-form-help" id=(f.id + "-m")>None added.</p>
+					})
+				})),
+			))
+		</div>
+	</fieldset>
+}
+
+elem (f *formWidgetList) item(field *formWidgetListField) {
+	~~
+	_, group := field.field.(*formWidgetGroup)
+	_, series := field.field.(*formWidgetSeries)
+	label := any(nil)
+	if group || series {
+		state, _ := field.state.ReadAndSub(ctx, func(ctx context.Context, state formListItemState) bool {
+			doors.Call(ctx, field.body.Set("aria-label", fmt.Sprintf("%s, item %d", f.params.label(), state.index)))
+			return false
+		})
+		label = fmt.Sprintf("%s, item %d", f.params.label(), state.index)
+	}
+	~~
+	<li class="kisland-form-item">
+		<div
+			(&field.body)
+			class="kisland-form-item-body"
+			role=({
+				if label == nil {
+					return nil
+				}
+				return "group"
+			})
+			aria-label=(label)>
+			~(field.field)
+		</div>
+		~(field.state.Bind(elem(state formListItemState) {
+			<button
+				(doors.AClick{
+					Scope: f.group.scope(),
+					On: func(ctx context.Context, r doors.RequestPointer) bool {
+						field.remove(ctx, field)
+						return false
+					},
+				})
+				type="button"
+				class="kisland-form-item-remove"
+				aria-label=({
+					if f.params.label() == "" {
+						return fmt.Sprintf("Remove item %d", state.index)
+					}
+					return fmt.Sprintf("Remove item %d of %s", state.index, f.params.label())
+				})>
+			</button>
+		}))
+	</li>
 }
 
 var _ formGroup = (*formWidgetList)(nil)
+
+type formListItemState struct {
+	index int
+}
 
 type formWidgetListField struct {
 	remove func(context.Context, *formWidgetListField)
 	field formWidgetField
 	door doors.Door
+	state doors.Beam[formListItemState]
+	body doors.Setter
 }
 
 func (f *formWidgetListField) Main() gox.Elem {

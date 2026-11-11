@@ -1,0 +1,230 @@
+// Managed by GoX v0.3.4
+
+//line form_date.gox:1
+package ui
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+	
+	"github.com/doors-dev/doors"
+	"github.com/doors-dev/gox"
+)
+
+func newFormWidgetDate(ctx context.Context, group formGroup, params dateInput) (*formWidgetDate, error) {
+	field, err := group.newField(params.Name)
+	if err != nil {
+		return nil, err
+	}
+	return &formWidgetDate{
+		id: doors.IDRand(),
+		field: field,
+		params: params,
+	}, nil
+}
+
+type formWidgetDate struct {
+	id string
+	field formGroupField
+	params dateInput
+	value string
+	invalid doors.Setter
+}
+
+func (f *formWidgetDate) name() string {
+	return f.params.Name
+}
+
+func (f *formWidgetDate) init(ctx context.Context, value any) error {
+	str := f.params.Value
+	if value != nil {
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("field %q: default value is %T, want a string", f.params.Name, value)
+		}
+		str = v
+	}
+	f.value = str
+	f.setLocked(ctx, str, f.validate(ctx, str))
+	return nil
+}
+
+func (f *formWidgetDate) destroy(ctx context.Context) {
+	f.field.destroy(ctx)
+}
+
+func (f *formWidgetDate) update(ctx context.Context, str string) {
+	err := f.validate(ctx, str)
+	f.field.mutex().Lock()
+	defer f.field.mutex().Unlock()
+	f.setLocked(ctx, str, err)
+	doors.Call(ctx, f.invalid.Set("aria-invalid", formAria(formShownErr(err))))
+}
+
+func (f *formWidgetDate) setLocked(ctx context.Context, str string, err error) {
+	if str == "" {
+		f.field.set(ctx, nil, err)
+		return
+	}
+	f.field.set(ctx, str, err)
+}
+
+//line form_date.gox:71
+func (f *formWidgetDate) Main() gox.Elem {
+	return gox.Elem(func(__c gox.Cursor) (__e error) {
+		ctx := __c.Context(); _ = ctx
+		__e = __c.Init("div"); if __e != nil { return }
+		{
+//line form_date.gox:72
+			__e = __c.Set("class", "kisland-form-field"); if __e != nil { return }
+			__e = __c.Submit(); if __e != nil { return }
+			__e = __c.Init("label"); if __e != nil { return }
+			{
+//line form_date.gox:73
+				__e = __c.Set("class", "kisland-form-label"); if __e != nil { return }
+//line form_date.gox:73
+				__e = __c.Set("for", f.id); if __e != nil { return }
+				__e = __c.Submit(); if __e != nil { return }
+//line form_date.gox:74
+				__e = __c.Any(f.params.Label); if __e != nil { return }
+//line form_date.gox:75
+				__e = __c.Any(f.field.error.RouteBeam(
+				doors.RouteBeamMatch(func(err error) bool {
+					return f.params.Required && errors.Is(err, errRequired)
+				}, doors.RouteComp[error](gox.Elem(func(__c gox.Cursor) (__e error) {
+					ctx := __c.Context(); _ = ctx
+					__e = __c.Init("span"); if __e != nil { return }
+					{
+//line form_date.gox:78
+						__e = __c.Set("class", "kisland-form-required"); if __e != nil { return }
+//line form_date.gox:78
+						__e = __c.Set("aria-hidden", "true"); if __e != nil { return }
+						__e = __c.Submit(); if __e != nil { return }
+						__e = __c.Text("*"); if __e != nil { return }
+					}
+					__e = __c.Close(); if __e != nil { return }
+//line form_date.gox:78
+				return }))),
+			)); if __e != nil { return }
+			}
+			__e = __c.Close(); if __e != nil { return }
+			__e = __c.InitVoid("input"); if __e != nil { return }
+			{
+//line form_date.gox:82
+				__e = __c.Modify(&f.invalid); if __e != nil { return }
+//line form_date.gox:83
+				__e = __c.Modify(doors.AInput{
+				Scope: f.field.scope().And(&doors.ScopeRate{Tick: 300 * time.Millisecond}),
+				On: func(ctx context.Context, r doors.RequestInput) bool {
+					f.update(ctx, r.Event().Value)
+					return false
+				},
+			}); if __e != nil { return }
+//line form_date.gox:90
+				__e = __c.Set("class", "kisland-form-input"); if __e != nil { return }
+//line form_date.gox:91
+				__e = __c.Set("id", f.id); if __e != nil { return }
+//line form_date.gox:92
+				__e = __c.Set("type", f.params.Type); if __e != nil { return }
+//line form_date.gox:93
+				__e = __c.Set("name", f.params.Name); if __e != nil { return }
+//line form_date.gox:94
+				__e = __c.Set("value", f.value); if __e != nil { return }
+//line form_date.gox:95
+				__e = __c.Set("min", f.params.Min); if __e != nil { return }
+//line form_date.gox:96
+				__e = __c.Set("max", f.params.Max); if __e != nil { return }
+//line form_date.gox:97
+				__e = __c.Set("aria-required", formAria(f.params.Required)); if __e != nil { return }
+//line form_date.gox:98
+				__e = __c.Set("aria-invalid", formAria(formShownErr(f.field.error.Get()))); if __e != nil { return }
+//line form_date.gox:99
+				__e = __c.Set("aria-describedby", f.id + "-e"); if __e != nil { return }
+			}
+			__e = __c.Submit(); if __e != nil { return }
+//line form_date.gox:100
+			__e = __c.Any(f.field.error.RouteBeam(
+			doors.RouteBeamMatch(formShownErr, doors.RouteBind(func(err error) gox.Elem {
+				return gox.Elem(func(__c gox.Cursor) (__e error) {
+					ctx := __c.Context(); _ = ctx
+					__e = __c.Init("p"); if __e != nil { return }
+					{
+//line form_date.gox:102
+						__e = __c.Set("class", "kisland-form-error"); if __e != nil { return }
+//line form_date.gox:102
+						__e = __c.Set("id", f.id + "-e"); if __e != nil { return }
+						__e = __c.Submit(); if __e != nil { return }
+//line form_date.gox:102
+						__e = __c.Any(err.Error()); if __e != nil { return }
+					}
+					__e = __c.Close(); if __e != nil { return }
+//line form_date.gox:102
+				return })
+			})),
+		)); if __e != nil { return }
+		}
+		__e = __c.Close(); if __e != nil { return }
+	return })
+//line form_date.gox:106
+}
+
+func (f *formWidgetDate) validate(ctx context.Context, str string) error {
+	if str == "" {
+		if f.params.Required {
+			return errRequired
+		}
+		return nil
+	}
+	switch f.params.Type {
+	case "date":
+		if _, err := time.Parse("2006-01-02", str); err != nil {
+			return errors.New("enter a date as YYYY-MM-DD")
+		}
+	case "time":
+		_, err := time.Parse("15:04", str)
+		if err != nil {
+			_, err = time.Parse("15:04:05", str)
+		}
+		if err != nil {
+			return errors.New("enter a time as HH:MM")
+		}
+	case "datetime-local":
+		_, err := time.Parse("2006-01-02T15:04", str)
+		if err != nil {
+			_, err = time.Parse("2006-01-02T15:04:05", str)
+		}
+		if err != nil {
+			return errors.New("enter a date and time as YYYY-MM-DDTHH:MM")
+		}
+	case "month":
+		if _, err := time.Parse("2006-01", str); err != nil {
+			return errors.New("enter a month as YYYY-MM")
+		}
+	case "week":
+		var year,week int
+		var rest string
+		n, _ := fmt.Sscanf(str, "%4d-W%2d%s", &year, &week, &rest)
+		_, last := time.Date(year, time.December, 28, 0, 0, 0, 0, time.UTC).ISOWeek()
+		if n != 2 || len(str) != 8 || week < 1 || week > last {
+			return errors.New("enter a week as YYYY-Www")
+		}
+	}
+	if f.params.Min != "" && str < f.params.Min {
+		return fmt.Errorf("pick %s or later", f.params.Min)
+	}
+	if f.params.Max != "" && str > f.params.Max {
+		return fmt.Errorf("pick %s or earlier", f.params.Max)
+	}
+	if f.params.Validate != "" {
+		msg, err := f.params.Validate.Call(ctx, str)
+		if err != nil {
+			return errSystem
+		}
+		if msg != "" {
+			return errors.New(msg)
+		}
+	}
+	return nil
+}

@@ -69,11 +69,11 @@ func (f *formWidgetText) update(ctx context.Context, str string) {
 }
 
 func (f *formWidgetText) setLocked(ctx context.Context, str string, err error) {
-	value := (*string)(nil)
-	if str != "" {
-		value = &str
+	if str == "" {
+		f.field.set(ctx, nil, err)
+		return
 	}
-	f.field.set(ctx, value, err)
+	f.field.set(ctx, str, err)
 }
 
 //line form_text.gox:76

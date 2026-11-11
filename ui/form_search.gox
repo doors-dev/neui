@@ -1,0 +1,400 @@
+package ui
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/doors-dev/doors"
+	"github.com/doors-dev/gox"
+	"neui.dev"
+)
+
+func newFormWidgetSearch(ctx context.Context, group formGroup, params searchInput) (*formWidgetSearch, error) {
+	if params.Search == "" {
+		return nil, fmt.Errorf("field %q: search is required", params.Name)
+	}
+	if params.Max == 0 {
+		params.Max = 1
+	}
+	if params.Max < params.Min {
+		return nil, fmt.Errorf("field %q: max %d is below min %d", params.Name, params.Max, params.Min)
+	}
+	if params.Placeholder == "" {
+		params.Placeholder = "Search…"
+	}
+	field, err := group.newField(params.Name)
+	if err != nil {
+		return nil, err
+	}
+	return &formWidgetSearch{
+		id: doors.IDRand(),
+		field: field,
+		params: params,
+		chosen: doors.NewSourceEqual[[]option](nil, nil),
+		found: doors.NewSourceEqual(formSearchFound{}, nil),
+	}, nil
+}
+
+type formSearchFound struct {
+	query string
+	results []option
+	failed bool
+}
+
+type formWidgetSearch struct {
+	id string
+	field formGroupField
+	params searchInput
+	value []option
+	keys []string
+	query string
+	chosen doors.Source[[]option]
+	found doors.Source[formSearchFound]
+	controls doors.Setter
+	invalid doors.Setter
+}
+
+func (f *formWidgetSearch) name() string {
+	return f.params.Name
+}
+
+func (f *formWidgetSearch) init(ctx context.Context, value any) error {
+	options := f.params.Value
+	if value != nil {
+		items, ok := value.([]any)
+		if !ok {
+			return fmt.Errorf("field %q: default value is %T, want an array of {value, label} objects", f.params.Name, value)
+		}
+		options = make([]option, 0, len(items))
+		for _, item := range items {
+			o, ok := item.(map[string]any)
+			if !ok {
+				return fmt.Errorf("field %q: default item is %T, want a {value, label} object", f.params.Name, item)
+			}
+			label, _ := o["label"].(string)
+			options = append(options, option{Value: o["value"], Label: label})
+		}
+	}
+	if len(options) > f.params.Max {
+		return fmt.Errorf("field %q: %d default options, most is %d", f.params.Name, len(options), f.params.Max)
+	}
+	keys := make([]string, 0, len(options))
+	for _, o := range options {
+		if o.Value == nil || o.Label == "" {
+			return fmt.Errorf("field %q: default item needs a value and a label", f.params.Name)
+		}
+		key, err := json.Marshal(o.Value)
+		if err != nil {
+			return fmt.Errorf("field %q: default %q: %w", f.params.Name, o.Label, err)
+		}
+		if len(key) > 4096 {
+			return fmt.Errorf("field %q: default %q: value is %d bytes as JSON, most is 4096", f.params.Name, o.Label, len(key))
+		}
+		if slices.Contains(keys, string(key)) {
+			return fmt.Errorf("field %q: default value %s is chosen twice", f.params.Name, key)
+		}
+		keys = append(keys, string(key))
+	}
+	if len(options) == 0 {
+		options, keys = nil, nil
+	}
+	f.value = options
+	f.keys = keys
+	f.setLocked(ctx)
+	return nil
+}
+
+func (f *formWidgetSearch) destroy(ctx context.Context) {
+	f.field.destroy(ctx)
+}
+
+func (f *formWidgetSearch) search(ctx context.Context, query string) {
+	query = strings.TrimSpace(query)
+	f.field.mutex().Lock()
+	f.query = query
+	f.field.mutex().Unlock()
+	var options []option
+	failed := false
+	if query != "" {
+		var err error
+		options, err = f.params.Search.Call(ctx, query)
+		if ctx.Err() != nil {
+			return
+		}
+		if err != nil {
+			neui.IslandReport(ctx, fmt.Errorf("field %q search: %w", f.params.Name, err))
+			options, failed = nil, true
+		}
+	}
+	var keys []string
+	var valid []option
+	for _, o := range options {
+		if o.Value == nil || o.Label == "" {
+			neui.IslandReport(ctx, fmt.Errorf("field %q search: an option has no value or no label", f.params.Name))
+			continue
+		}
+		key, err := json.Marshal(o.Value)
+		if err != nil {
+			neui.IslandReport(ctx, fmt.Errorf("field %q search: option %q: %w", f.params.Name, o.Label, err))
+			continue
+		}
+		if len(key) > 4096 {
+			neui.IslandReport(ctx, fmt.Errorf("field %q search: option %q: value is %d bytes as JSON, most is 4096", f.params.Name, o.Label, len(key)))
+			continue
+		}
+		if slices.Contains(keys, string(key)) {
+			neui.IslandReport(ctx, fmt.Errorf("field %q search: option %q: value %s is already used by another option", f.params.Name, o.Label, key))
+			continue
+		}
+		keys = append(keys, string(key))
+		valid = append(valid, o)
+	}
+	f.field.mutex().Lock()
+	defer f.field.mutex().Unlock()
+	if f.query != query {
+		return
+	}
+	var results []option
+	for i, o := range valid {
+		if len(results) == 8 {
+			break
+		}
+		if !slices.Contains(f.keys, keys[i]) {
+			results = append(results, o)
+		}
+	}
+	f.found.Update(ctx, formSearchFound{query: query, results: results, failed: failed})
+	controls := any(nil)
+	if len(results) > 0 {
+		controls = f.id + "-r"
+	}
+	doors.Call(ctx, f.controls.Set("aria-controls", controls))
+}
+
+func (f *formWidgetSearch) pick(ctx context.Context, o option) {
+	key, err := json.Marshal(o.Value)
+	if err != nil {
+		return
+	}
+	f.field.mutex().Lock()
+	defer f.field.mutex().Unlock()
+	if len(f.value) >= f.params.Max || slices.Contains(f.keys, string(key)) {
+		return
+	}
+	f.value = append(slices.Clone(f.value), o)
+	f.keys = append(slices.Clone(f.keys), string(key))
+	f.query = ""
+	f.found.Update(ctx, formSearchFound{})
+	f.setLocked(ctx)
+	doors.Call(ctx, f.invalid.Set("aria-invalid", formAria(formShownErr(f.validate(f.value)))))
+}
+
+func (f *formWidgetSearch) remove(ctx context.Context, key string) {
+	f.field.mutex().Lock()
+	defer f.field.mutex().Unlock()
+	i := slices.Index(f.keys, key)
+	if i == -1 {
+		return
+	}
+	f.value = slices.Delete(slices.Clone(f.value), i, i + 1)
+	f.keys = slices.Delete(slices.Clone(f.keys), i, i + 1)
+	if len(f.value) == 0 {
+		f.value, f.keys = nil, nil
+	}
+	f.setLocked(ctx)
+	doors.Call(ctx, f.invalid.Set("aria-invalid", formAria(formShownErr(f.validate(f.value)))))
+}
+
+func (f *formWidgetSearch) setLocked(ctx context.Context) {
+	f.chosen.Update(ctx, f.value)
+	if len(f.value) == 0 {
+		f.field.set(ctx, nil, f.validate(nil))
+		return
+	}
+	f.field.set(ctx, f.value, f.validate(f.value))
+}
+
+elem (f *formWidgetSearch) Main() {
+	~~
+	var focus doors.Door
+	first := true
+	var prev []option
+	f.chosen.Sub(ctx, func(ctx context.Context, chosen []option) bool {
+		grew := len(chosen) > len(prev) && len(chosen) < f.params.Max
+		if first {
+			first, prev = false, chosen
+			return false
+		}
+		prev = chosen
+		if grew {
+			focus.Inner(ctx, <script data:id=(f.id)>
+				const input = document.getElementById($data("id"))
+				input.value = ""
+				input.focus()
+			</script>)
+		} else {
+			focus.Inner(ctx, nil)
+		}
+		return false
+	})
+	~~
+	<div class="kisland-form-field">
+		<span class="kisland-form-label" id=(f.id + "-l")>
+			~(f.params.Label)
+			~(f.field.error.RouteBeam(
+				doors.RouteBeamMatch(func(err error) bool {
+					return f.params.Min > 0 && errors.Is(err, errRequired)
+				}, doors.RouteComp[error](<span class="kisland-form-required" aria-hidden="true">*</span>)),
+			))
+		</span>
+		~(f.chosen.Bind(f.picked))
+		~(doors.DeriveBeam(f.chosen, func(chosen []option) bool {
+			return len(chosen) >= f.params.Max
+		}).Bind(f.entry))
+		~(&focus)
+		~(f.found.Bind(f.results))
+		<p class="kisland-form-search-status" role="status">
+			~(f.found.Bind(elem(found formSearchFound) {
+				~(if found.failed {
+					Search failed.
+				} else if found.query != "" && len(found.results) == 0 {
+					No matches for “~(found.query)”.
+				} else if len(found.results) == 1 {
+					1 match
+				} else if len(found.results) > 1 {
+					~(len(found.results)) matches
+				})
+			}))
+		</p>
+		~(f.field.error.RouteBeam(
+			doors.RouteBeamMatch(formShownErr, doors.RouteBind(func(err error) gox.Elem {
+				return <p class="kisland-form-error" id=(f.id + "-e")>~(err.Error())</p>
+			})),
+		))
+	</div>
+}
+
+elem (f *formWidgetSearch) picked(chosen []option) {
+	~~
+	full := len(chosen) >= f.params.Max
+	describedby := any(nil)
+	if full && f.params.Max > 1 {
+		describedby = f.id + "-h"
+	}
+	~~
+	<ul class="kisland-form-search-chosen" aria-labelledby=(f.id + "-l") aria-describedby=(describedby)>
+		~(for _, o := range chosen {
+			~~
+			key, _ := json.Marshal(o.Value)
+			~~
+			<li class="kisland-form-search-chip">
+				~(o.Label)
+				<button
+					(doors.AClick{
+						Scope: f.field.scope(),
+						On: func(ctx context.Context, r doors.RequestPointer) bool {
+							f.remove(ctx, string(key))
+							return false
+						},
+					})
+					type="button"
+					class="kisland-form-remove"
+					aria-label=("Remove " + o.Label)>
+					×
+				</button>
+			</li>
+		})
+	</ul>
+}
+
+elem (f *formWidgetSearch) entry(full bool) {
+	~(if !full {
+		~~
+		chosen, _ := f.chosen.Read(ctx)
+		~~
+		<input
+			(&f.controls)
+			(&f.invalid)
+			(doors.AInput{
+				Scope: f.field.scope().And(&doors.ScopeDebounce{Duration: 250 * time.Millisecond, Limit: time.Second}),
+				Race: doors.RaceStrict,
+				On: func(ctx context.Context, r doors.RequestInput) bool {
+					f.search(ctx, r.Event().Value)
+					return false
+				},
+			})
+			(doors.AKeyDown{
+				Key: doors.Key{Key: "Enter"},
+				PreventDefault: true,
+			})
+			class="kisland-form-search-input"
+			id=(f.id)
+			type="text"
+			autocomplete="off"
+			placeholder=(f.params.Placeholder)
+			aria-labelledby=(f.id + "-l")
+			aria-required=(formAria(f.params.Min > 0))
+			aria-invalid=(formAria(formShownErr(f.validate(chosen))))
+			aria-describedby=(f.id + "-e")/>
+	} else if f.params.Max > 1 {
+		<p class="kisland-form-search-max" id=(f.id + "-h")>Maximum of ~(f.params.Max) chosen.</p>
+	})
+}
+
+elem (f *formWidgetSearch) results(found formSearchFound) {
+	~(if len(found.results) > 0 {
+		<ul class="kisland-form-search-results" id=(f.id + "-r") aria-labelledby=(f.id + "-l")>
+			~(for i := range found.results {
+				~~
+				o := found.results[i]
+				before, match, after := o.Label, "", ""
+				for at := range o.Label {
+					if end := at + len(found.query); end <= len(o.Label) && strings.EqualFold(o.Label[at:end], found.query) {
+						before, match, after = o.Label[:at], o.Label[at:end], o.Label[end:]
+						break
+					}
+				}
+				~~
+				<li>
+					<button
+						(doors.AClick{
+							Scope: f.field.scope(),
+							On: func(ctx context.Context, r doors.RequestPointer) bool {
+								f.pick(ctx, found.results[i])
+								return false
+							},
+						})
+						type="button"
+						class="kisland-form-search-result"
+						aria-label=("Choose " + o.Label)>
+						<span>
+							~(before)
+							~(if match != "" {
+								<mark class="kisland-form-match">~(match)</mark>
+							})
+							~(after)
+						</span>
+					</button>
+				</li>
+			})
+		</ul>
+	})
+}
+
+func (f *formWidgetSearch) validate(chosen []option) error {
+	if len(chosen) == 0 {
+		if f.params.Min > 0 {
+			return errRequired
+		}
+		return nil
+	}
+	if len(chosen) < f.params.Min {
+		return fmt.Errorf("choose at least %d", f.params.Min)
+	}
+	return nil
+}

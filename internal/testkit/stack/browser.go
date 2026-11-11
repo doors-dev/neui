@@ -3,12 +3,15 @@
 package stack
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -33,8 +36,14 @@ func Main(m *testing.M) {
 		defer os.RemoveAll(dir)
 		os.Setenv("TMPDIR", dir)
 		l := launcher.New().Headless(true).NoSandbox(true).Leakless(false).UserDataDir(filepath.Join(dir, "chrome"))
+		shells, _ := filepath.Glob(filepath.Join(os.Getenv("HOME"), "Library/Caches/ms-playwright/chromium_headless_shell-*/chrome-headless-shell-mac-arm64/chrome-headless-shell"))
+		slices.SortFunc(shells, func(a, b string) int {
+			return cmp.Or(cmp.Compare(len(a), len(b)), strings.Compare(a, b))
+		})
 		if bin := os.Getenv("NEUI_TEST_CHROME"); bin != "" {
 			l = l.Bin(bin)
+		} else if len(shells) > 0 {
+			l = l.Bin(shells[len(shells)-1]).Set("use-mock-keychain").Set("password-store", "basic")
 		} else if bin, ok := launcher.LookPath(); ok {
 			l = l.Bin(bin)
 		}

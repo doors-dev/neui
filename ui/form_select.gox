@@ -1,0 +1,298 @@
+package ui
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"slices"
+	"strconv"
+
+	"github.com/doors-dev/doors"
+	"github.com/doors-dev/gox"
+)
+
+func newFormWidgetSelect(ctx context.Context, group formGroup, params selectInput) (*formWidgetSelect, error) {
+	if params.Max == 0 {
+		params.Max = 1
+	}
+	if params.Max < params.Min {
+		return nil, fmt.Errorf("field %q: max %d is below min %d", params.Name, params.Max, params.Min)
+	}
+	keys := make(map[string]int, len(params.Options))
+	for i, o := range params.Options {
+		if o.Value == nil {
+			return nil, fmt.Errorf("field %q: option %q has no value", params.Name, o.Label)
+		}
+		key, err := json.Marshal(o.Value)
+		if err != nil {
+			return nil, fmt.Errorf("field %q: option %q: %w", params.Name, o.Label, err)
+		}
+		if len(key) > 4096 {
+			return nil, fmt.Errorf("field %q: option %q: value is %d bytes as JSON, most is 4096", params.Name, o.Label, len(key))
+		}
+		if _, has := keys[string(key)]; has {
+			return nil, fmt.Errorf("field %q: option %q: value %s is already used by another option", params.Name, o.Label, key)
+		}
+		keys[string(key)] = i
+	}
+	var defaults []int
+	for _, o := range params.Value {
+		key, err := json.Marshal(o.Value)
+		if err != nil {
+			return nil, fmt.Errorf("field %q: default %q: %w", params.Name, o.Label, err)
+		}
+		i, has := keys[string(key)]
+		if !has {
+			return nil, fmt.Errorf("field %q: default value %s is not one of the options", params.Name, key)
+		}
+		if !slices.Contains(defaults, i) {
+			defaults = append(defaults, i)
+		}
+	}
+	slices.Sort(defaults)
+	field, err := group.newField(params.Name)
+	if err != nil {
+		return nil, err
+	}
+	return &formWidgetSelect{
+		id: doors.IDRand(),
+		field: field,
+		params: params,
+		keys: keys,
+		defaults: defaults,
+	}, nil
+}
+
+type formWidgetSelect struct {
+	id string
+	field formGroupField
+	params selectInput
+	keys map[string]int
+	defaults []int
+	value []int
+	invalid doors.Setter
+}
+
+func (f *formWidgetSelect) name() string {
+	return f.params.Name
+}
+
+func (f *formWidgetSelect) init(ctx context.Context, value any) error {
+	selected := f.defaults
+	if value != nil {
+		items, ok := value.([]any)
+		if !ok {
+			return fmt.Errorf("field %q: default value is %T, want an array of {value, label} objects", f.params.Name, value)
+		}
+		selected = nil
+		for _, item := range items {
+			o, ok := item.(map[string]any)
+			if !ok {
+				return fmt.Errorf("field %q: default item is %T, want a {value, label} object", f.params.Name, item)
+			}
+			v, hasValue := o["value"]
+			_, hasLabel := o["label"].(string)
+			if !hasValue || !hasLabel {
+				return fmt.Errorf("field %q: default item needs a value and a string label", f.params.Name)
+			}
+			key, err := json.Marshal(v)
+			if err != nil {
+				return fmt.Errorf("field %q: default item: %w", f.params.Name, err)
+			}
+			i, has := f.keys[string(key)]
+			if !has {
+				return fmt.Errorf("field %q: default value %s is not one of the options", f.params.Name, key)
+			}
+			if !slices.Contains(selected, i) {
+				selected = append(selected, i)
+			}
+		}
+		slices.Sort(selected)
+	}
+	f.value = selected
+	f.setLocked(ctx, selected, f.validate(selected))
+	return nil
+}
+
+func (f *formWidgetSelect) destroy(ctx context.Context) {
+	f.field.destroy(ctx)
+}
+
+func (f *formWidgetSelect) update(ctx context.Context, changed string, checked bool) {
+	index := -1
+	if changed != "" {
+		i, err := strconv.Atoi(changed)
+		if err != nil || i < 0 || i >= len(f.params.Options) {
+			return
+		}
+		index = i
+	}
+	f.field.mutex().Lock()
+	defer f.field.mutex().Unlock()
+	var selected []int
+	if f.params.Max == 1 {
+		if index != -1 {
+			selected = []int{index}
+		}
+	} else {
+		for i := range f.params.Options {
+			if i == index && checked || i != index && slices.Contains(f.value, i) {
+				selected = append(selected, i)
+			}
+		}
+	}
+	err := f.validate(selected)
+	f.value = selected
+	f.setLocked(ctx, selected, err)
+	doors.Call(ctx, f.invalid.Set("aria-invalid", formAria(formShownErr(err))))
+}
+
+func (f *formWidgetSelect) setLocked(ctx context.Context, selected []int, err error) {
+	if len(selected) == 0 {
+		f.field.set(ctx, nil, err)
+		return
+	}
+	options := make([]option, 0, len(selected))
+	for _, i := range selected {
+		options = append(options, f.params.Options[i])
+	}
+	f.field.set(ctx, options, err)
+}
+
+elem (f *formWidgetSelect) Main() {
+	~~
+	f.field.mutex().Lock()
+	value := f.value
+	f.field.mutex().Unlock()
+	change := doors.A(ctx, doors.AChange{
+		Scope: f.field.scope(),
+		On: func(ctx context.Context, r doors.RequestChange) bool {
+			f.update(ctx, r.Event().Value, r.Event().Checked)
+			return false
+		},
+	})
+	invalid := formAria(formShownErr(f.field.error.Get()))
+	required := f.field.error.RouteBeam(
+		doors.RouteBeamMatch(func(err error) bool {
+			return f.params.Min > 0 && errors.Is(err, errRequired)
+		}, doors.RouteComp[error](<span class="kisland-form-required" aria-hidden="true">*</span>)),
+	)
+	errorLine := f.field.error.RouteBeam(
+		doors.RouteBeamMatch(formShownErr, doors.RouteBind(func(err error) gox.Elem {
+			return <p class="kisland-form-error" id=(f.id + "-e")>~(err.Error())</p>
+		})),
+	)
+	~~
+	~(if f.params.Max == 1 && len(f.params.Options) > 5 {
+		<div class="kisland-form-field">
+			<label class="kisland-form-label" for=(f.id)>
+				~(f.params.Label)
+				~(required)
+			</label>
+			<select
+				(&f.invalid)
+				(change)
+				class="kisland-form-select"
+				id=(f.id)
+				name=(f.id)
+				aria-required=(formAria(f.params.Min > 0))
+				aria-invalid=(invalid)
+				aria-describedby=(f.id + "-e")>
+				<option class="kisland-form-option" value="">Choose…</option>
+				~(for i, o := range f.params.Options {
+					<option class="kisland-form-option" value=(strconv.Itoa(i)) selected=(slices.Contains(value, i))>~(o.Label)</option>
+				})
+			</select>
+			~(errorLine)
+		</div>
+	} else if f.params.Max == 1 {
+		<fieldset class="kisland-form-group">
+			<legend class="kisland-form-label kisland-form-legend">
+				~(f.params.Label)
+				~(required)
+			</legend>
+			<div
+				(&f.invalid)
+				class="kisland-form-options"
+				role="radiogroup"
+				aria-required=(formAria(f.params.Min > 0))
+				aria-invalid=(invalid)
+				aria-describedby=(f.id + "-e")>
+				~(if f.params.Min == 0 {
+					<label class="kisland-form-check">
+						<input
+							(&f.invalid)
+							(change)
+							class="kisland-form-radio"
+							type="radio"
+							name=(f.id)
+							value=""
+							checked=(len(value) == 0)
+							aria-invalid=(invalid)/>
+						None
+					</label>
+				})
+				~(for i, o := range f.params.Options {
+					<label class="kisland-form-check">
+						<input
+							(&f.invalid)
+							(change)
+							class="kisland-form-radio"
+							type="radio"
+							name=(f.id)
+							value=(strconv.Itoa(i))
+							checked=(slices.Contains(value, i))
+							aria-invalid=(invalid)/>
+						~(o.Label)
+					</label>
+				})
+			</div>
+			~(errorLine)
+		</fieldset>
+	} else {
+		<fieldset class="kisland-form-group">
+			<legend class="kisland-form-label kisland-form-legend">
+				~(f.params.Label)
+				~(required)
+			</legend>
+			<div
+				(&f.invalid)
+				class="kisland-form-options"
+				aria-invalid=(invalid)
+				aria-describedby=(f.id + "-e")>
+				~(for i, o := range f.params.Options {
+					<label class="kisland-form-check">
+						<input
+							(&f.invalid)
+							(change)
+							class="kisland-form-checkbox"
+							type="checkbox"
+							name=(f.id)
+							value=(strconv.Itoa(i))
+							checked=(slices.Contains(value, i))
+							aria-invalid=(invalid)/>
+						~(o.Label)
+					</label>
+				})
+			</div>
+			~(errorLine)
+		</fieldset>
+	})
+}
+
+func (f *formWidgetSelect) validate(selected []int) error {
+	if len(selected) == 0 {
+		if f.params.Min > 0 {
+			return errRequired
+		}
+		return nil
+	}
+	if len(selected) < f.params.Min {
+		return fmt.Errorf("choose at least %d", f.params.Min)
+	}
+	if len(selected) > f.params.Max {
+		return fmt.Errorf("choose at most %d", f.params.Max)
+	}
+	return nil
+}

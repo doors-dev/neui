@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,15 +9,14 @@ import (
 	"sync"
 
 	"github.com/doors-dev/doors"
-	"github.com/swaggest/jsonschema-go"
 	"neui.dev"
 )
 
 type textInput struct {
 	_           struct{}                        `additionalProperties:"false" description:"single-line text input; its value is the typed string, \"\" when empty"`
-	Type        string                          `json:"type" required:"true" enum:"text,email,tel,url,password,search" description:"text for plain text; email, tel and url check the format and bring up the matching keyboard; password hides what is typed; search shows a search box"`
+	Type        string                          `json:"type" required:"true" enum:"text,email,tel,url,password" description:"text for plain text; email, tel and url check the format and bring up the matching keyboard; password hides what is typed"`
 	Label       string                          `json:"label" required:"true" minLength:"1" maxLength:"80" description:"text shown with the field"`
-	Name        string                          `json:"name,omitempty" minLength:"1" maxLength:"80" description:"key of the value in the result; set it on every field except a list's template, where it is unused"`
+	Name        string                          `json:"name" required:"true" minLength:"1" maxLength:"80" description:"key of the value in the result, unique among the fields beside it; in a list's template it is the key of the whole list"`
 	Required    bool                            `json:"required,omitempty" description:"true makes the user fill it before submitting"`
 	Value       string                          `json:"value,omitempty" maxLength:"1000" description:"prefilled text"`
 	Placeholder string                          `json:"placeholder,omitempty" maxLength:"200" description:"hint shown while the field is empty, such as an example value"`
@@ -32,11 +30,15 @@ func (p textInput) name() string {
 	return p.Name
 }
 
+func (p textInput) label() string {
+	return p.Label
+}
+
 type numberInput struct {
 	_        struct{}                          `additionalProperties:"false" description:"number input, or a slider with range; its value is a number, null when left empty"`
 	Type     string                            `json:"type" required:"true" enum:"number,range" description:"number for a typed number; range for a slider between min and max"`
 	Label    string                            `json:"label" required:"true" minLength:"1" maxLength:"80" description:"text shown with the field"`
-	Name     string                            `json:"name,omitempty" minLength:"1" maxLength:"80" description:"key of the value in the result; set it on every field except a list's template, where it is unused"`
+	Name     string                            `json:"name" required:"true" minLength:"1" maxLength:"80" description:"key of the value in the result, unique among the fields beside it; in a list's template it is the key of the whole list"`
 	Required bool                              `json:"required,omitempty" description:"true makes the user fill it before submitting"`
 	Value    *float64                          `json:"value,omitempty" description:"prefilled number"`
 	Min      *float64                          `json:"min,omitempty" description:"lowest allowed value"`
@@ -49,11 +51,15 @@ func (p numberInput) name() string {
 	return p.Name
 }
 
+func (p numberInput) label() string {
+	return p.Label
+}
+
 type dateInput struct {
 	_        struct{}                        `additionalProperties:"false" description:"date or time picker; its value is a string in the type's format, \"\" when empty"`
 	Type     string                          `json:"type" required:"true" enum:"date,time,datetime-local,month,week" description:"what is picked, and the format of value, min, max and the result: date YYYY-MM-DD, time HH:MM, datetime-local YYYY-MM-DDTHH:MM, month YYYY-MM, week YYYY-Www"`
 	Label    string                          `json:"label" required:"true" minLength:"1" maxLength:"80" description:"text shown with the field"`
-	Name     string                          `json:"name,omitempty" minLength:"1" maxLength:"80" description:"key of the value in the result; set it on every field except a list's template, where it is unused"`
+	Name     string                          `json:"name" required:"true" minLength:"1" maxLength:"80" description:"key of the value in the result, unique among the fields beside it; in a list's template it is the key of the whole list"`
 	Required bool                            `json:"required,omitempty" description:"true makes the user pick a value before submitting"`
 	Value    string                          `json:"value,omitempty" maxLength:"20" description:"prefilled value in the type's format"`
 	Min      string                          `json:"min,omitempty" maxLength:"20" description:"earliest allowed value in the type's format"`
@@ -65,11 +71,15 @@ func (p dateInput) name() string {
 	return p.Name
 }
 
+func (p dateInput) label() string {
+	return p.Label
+}
+
 type textArea struct {
 	_           struct{}                        `additionalProperties:"false" description:"multi-line text input for longer text; its value is the typed string with its line breaks, \"\" when empty"`
 	Type        string                          `json:"type" required:"true" const:"textarea"`
 	Label       string                          `json:"label" required:"true" minLength:"1" maxLength:"80" description:"text shown with the field"`
-	Name        string                          `json:"name,omitempty" minLength:"1" maxLength:"80" description:"key of the value in the result; set it on every field except a list's template, where it is unused"`
+	Name        string                          `json:"name" required:"true" minLength:"1" maxLength:"80" description:"key of the value in the result, unique among the fields beside it; in a list's template it is the key of the whole list"`
 	Required    bool                            `json:"required,omitempty" description:"true makes the user fill it before submitting"`
 	Value       string                          `json:"value,omitempty" maxLength:"4000" description:"prefilled text; line breaks are kept"`
 	Placeholder string                          `json:"placeholder,omitempty" maxLength:"200" description:"hint shown while the field is empty"`
@@ -83,97 +93,77 @@ func (p textArea) name() string {
 	return p.Name
 }
 
+func (p textArea) label() string {
+	return p.Label
+}
+
 type option struct {
-	_     struct{} `additionalProperties:"false"`
-	Value string   `json:"value" required:"true" minLength:"1" maxLength:"200" description:"what the result gets when this option is picked"`
+	_     struct{} `additionalProperties:"false" description:"one choice: value is what the result gets, label what the user sees; both are required"`
+	Value any      `json:"value" required:"true" description:"any JSON value except null: a string, number, boolean, object or array; values must be unique within the field, each at most 4096 bytes as JSON"`
 	Label string   `json:"label" required:"true" minLength:"1" maxLength:"80" description:"text the user sees"`
 }
 
-type options struct {
-	list   []option
-	search neui.IslandCall[string, []option]
-}
-
-func (options) JSONSchemaAnyOf() []any {
-	return []any{[]option{}, neui.IslandCall[string, []option]("")}
-}
-
-func (options) PrepareJSONSchema(s *jsonschema.Schema) error {
-	s.Type = nil
-	return nil
-}
-
-func (o *options) UnmarshalJSON(data []byte) error {
-	if data = bytes.TrimSpace(data); len(data) > 0 && data[0] == '[' {
-		return json.Unmarshal(data, &o.list)
-	}
-	return json.Unmarshal(data, &o.search)
-}
-
 type selectInput struct {
-	_        struct{}                        `additionalProperties:"false" description:"dropdown to pick one option; its value is the picked option's value, \"\" when none"`
-	Type     string                          `json:"type" required:"true" const:"select"`
-	Label    string                          `json:"label" required:"true" minLength:"1" maxLength:"80" description:"text shown with the field"`
-	Name     string                          `json:"name,omitempty" minLength:"1" maxLength:"80" description:"key of the value in the result; set it on every field except a list's template, where it is unused"`
-	Required bool                            `json:"required,omitempty" description:"true makes the user pick an option before submitting"`
-	Options  options                         `json:"options" required:"true" description:"either a fixed array of options, or a function that gets the text the user typed in the dropdown and returns the matching options; the function is called with \"\" when the dropdown opens, for the initial options; use it for long or looked-up lists"`
-	Value    string                          `json:"value,omitempty" maxLength:"200" description:"value of the option picked when the form shows"`
-	Validate neui.IslandCall[string, string] `json:"validate,omitempty" description:"gets the picked value, \"\" when none; returns an error message to show under the field, or \"\" when valid"`
+	_       struct{} `additionalProperties:"false" description:"choice from a fixed list of options; its value is an array of the chosen options as {value, label} objects in option order, a single item when max is 1; it shows as radio buttons, a dropdown or checkboxes depending on max and the number of options"`
+	Type    string   `json:"type" required:"true" const:"select"`
+	Label   string   `json:"label" required:"true" minLength:"1" maxLength:"80" description:"text shown with the field"`
+	Name    string   `json:"name" required:"true" minLength:"1" maxLength:"80" description:"key of the value in the result, unique among the fields beside it; in a list's template it is the key of the whole list"`
+	Options []option `json:"options" required:"true" nullable:"false" minItems:"1" maxItems:"200" description:"options in display order"`
+	Value   []option `json:"value,omitempty" maxItems:"200" description:"options chosen when the form shows, each as {value, label} with the value of one of the options"`
+	Min     int      `json:"min,omitempty" minimum:"0" description:"fewest options the user must choose; 1 or more makes the field required"`
+	Max     int      `json:"max,omitempty" minimum:"1" description:"most options the user can choose, at least min; 1 when omitted, for a single choice"`
 }
 
 func (p selectInput) name() string {
 	return p.Name
 }
 
-type multiSelect struct {
-	_        struct{}                          `additionalProperties:"false" description:"dropdown to pick any number of options; its value is an array of the picked options' values, [] when none"`
-	Type     string                            `json:"type" required:"true" const:"multiselect"`
-	Label    string                            `json:"label" required:"true" minLength:"1" maxLength:"80" description:"text shown with the field"`
-	Name     string                            `json:"name,omitempty" minLength:"1" maxLength:"80" description:"key of the value in the result; set it on every field except a list's template, where it is unused"`
-	Required bool                              `json:"required,omitempty" description:"true makes the user pick at least one option before submitting"`
-	Options  options                           `json:"options" required:"true" description:"either a fixed array of options, or a function that gets the text the user typed in the dropdown and returns the matching options; the function is called with \"\" when the dropdown opens, for the initial options; use it for long or looked-up lists"`
-	Value    []string                          `json:"value,omitempty" maxItems:"200" uniqueItems:"true" items.maxLength:"200" description:"values of the options picked when the form shows"`
-	Validate neui.IslandCall[[]string, string] `json:"validate,omitempty" description:"gets the array of picked values; returns an error message to show under the field, or \"\" when valid"`
+func (p selectInput) label() string {
+	return p.Label
 }
 
-func (p multiSelect) name() string {
+type searchInput struct {
+	_           struct{}                          `additionalProperties:"false" description:"choice from options the agent's search function finds for what the user types, for when the options are too many to list; its value is an array of the chosen options as {value, label} objects in the order they were picked, a single item when max is 1; chosen options show as removable chips, and the search box hides once max are chosen"`
+	Type        string                            `json:"type" required:"true" const:"search"`
+	Label       string                            `json:"label" required:"true" minLength:"1" maxLength:"80" description:"text shown with the field"`
+	Name        string                            `json:"name" required:"true" minLength:"1" maxLength:"80" description:"key of the value in the result, unique among the fields beside it; in a list's template it is the key of the whole list"`
+	Search      neui.IslandCall[string, []option] `json:"search" required:"true" description:"gets the typed text, trimmed and never empty; returns the matching options, best first; the first 8 the user hasn't chosen yet show, the rest are ignored; values must be unique among the returned options"`
+	Value       []option                          `json:"value,omitempty" maxItems:"100" description:"options chosen when the form shows, each as {value, label}, with unique values and at most max of them"`
+	Min         int                               `json:"min,omitempty" minimum:"0" description:"fewest options the user must choose; 1 or more makes the field required"`
+	Max         int                               `json:"max,omitempty" minimum:"1" maximum:"100" description:"most options the user can choose, at least min; 1 when omitted, for a single choice"`
+	Placeholder string                            `json:"placeholder,omitempty" maxLength:"200" description:"hint shown in the empty search box, such as what can be searched for; \"Search…\" when omitted"`
+}
+
+func (p searchInput) name() string {
 	return p.Name
 }
 
-type radioInput struct {
-	_        struct{}                        `additionalProperties:"false" description:"a few options shown at once, one of them pickable; its value is the picked option's value, \"\" when none; prefer select for more than about 6 options"`
-	Type     string                          `json:"type" required:"true" const:"radio"`
-	Label    string                          `json:"label" required:"true" minLength:"1" maxLength:"80" description:"text shown with the field"`
-	Name     string                          `json:"name,omitempty" minLength:"1" maxLength:"80" description:"key of the value in the result; set it on every field except a list's template, where it is unused"`
-	Required bool                            `json:"required,omitempty" description:"true makes the user pick an option before submitting"`
-	Options  []option                        `json:"options" required:"true" nullable:"false" minItems:"2" maxItems:"20" description:"options in display order"`
-	Value    string                          `json:"value,omitempty" maxLength:"200" description:"value of the option picked when the form shows"`
-	Validate neui.IslandCall[string, string] `json:"validate,omitempty" description:"gets the picked value, \"\" when none; returns an error message to show under the field, or \"\" when valid"`
-}
-
-func (p radioInput) name() string {
-	return p.Name
+func (p searchInput) label() string {
+	return p.Label
 }
 
 type checkboxInput struct {
-	_        struct{}                      `additionalProperties:"false" description:"a single yes/no box with the label beside it; its value is true when checked, otherwise false"`
-	Type     string                        `json:"type" required:"true" const:"checkbox"`
-	Label    string                        `json:"label" required:"true" minLength:"1" maxLength:"200" description:"text beside the box, such as the statement the user agrees to"`
-	Name     string                        `json:"name,omitempty" minLength:"1" maxLength:"80" description:"key of the value in the result; set it on every field except a list's template, where it is unused"`
-	Required bool                          `json:"required,omitempty" description:"true makes the user check it before submitting, as for accepting terms"`
-	Checked  bool                          `json:"checked,omitempty" description:"true shows the box checked"`
-	Validate neui.IslandCall[bool, string] `json:"validate,omitempty" description:"gets true when checked, otherwise false; returns an error message to show under the field, or \"\" when valid"`
+	_        struct{} `additionalProperties:"false" description:"a single yes/no box with the label beside it; its value is true when checked, otherwise false"`
+	Type     string   `json:"type" required:"true" const:"checkbox"`
+	Label    string   `json:"label" required:"true" minLength:"1" maxLength:"200" description:"text beside the box, such as the statement the user agrees to"`
+	Name     string   `json:"name" required:"true" minLength:"1" maxLength:"80" description:"key of the value in the result, unique among the fields beside it; in a list's template it is the key of the whole list"`
+	Required bool     `json:"required,omitempty" description:"true makes the user check it before submitting, as for accepting terms"`
+	Checked  bool     `json:"checked,omitempty" description:"true shows the box checked"`
 }
 
 func (p checkboxInput) name() string {
 	return p.Name
 }
 
+func (p checkboxInput) label() string {
+	return p.Label
+}
+
 type fileInput struct {
-	_        struct{} `additionalProperties:"false" description:"file upload; the file is saved in the agent's workdir and its value is that file's path, or an array of paths with multiple"`
+	_        struct{} `additionalProperties:"false" description:"file upload; on submit the file is saved in the agent's workspace as island/<field id>/<file name>, and its value is that path, or an array of paths with multiple"`
 	Type     string   `json:"type" required:"true" const:"file"`
 	Label    string   `json:"label" required:"true" minLength:"1" maxLength:"80" description:"text shown with the field"`
-	Name     string   `json:"name,omitempty" minLength:"1" maxLength:"80" description:"key of the value in the result; set it on every field except a list's template, where it is unused"`
+	Name     string   `json:"name" required:"true" minLength:"1" maxLength:"80" description:"key of the value in the result, unique among the fields beside it; in a list's template it is the key of the whole list"`
 	Required bool     `json:"required,omitempty" description:"true makes the user upload a file before submitting"`
 	Accept   string   `json:"accept,omitempty" maxLength:"200" description:"file types the picker offers, as in the HTML accept attribute: comma-separated extensions or MIME types, such as .pdf,image/*"`
 	Multiple bool     `json:"multiple,omitempty" description:"true lets the user upload several files, and the value becomes an array of paths"`
@@ -183,11 +173,15 @@ func (p fileInput) name() string {
 	return p.Name
 }
 
+func (p fileInput) label() string {
+	return p.Label
+}
+
 type fieldGroup struct {
 	_      struct{}    `additionalProperties:"false" description:"fields shown together under one label; its value is an object with each field's value under that field's name"`
 	Type   string      `json:"type" required:"true" const:"group"`
-	Label  string      `json:"label,omitempty" maxLength:"80" description:"heading shown above the fields"`
-	Name   string      `json:"name,omitempty" minLength:"1" maxLength:"80" description:"key of the object in the result; set it unless this is a list's template, where it is unused"`
+	Label  string      `json:"label" required:"true" minLength:"1" maxLength:"80" description:"heading shown above the fields"`
+	Name   string      `json:"name" required:"true" minLength:"1" maxLength:"80" description:"key of the object in the result, unique among the fields beside it; in a list's template it is the key of the whole list"`
 	Fields []formField `json:"fields" required:"true" nullable:"false" minItems:"1" maxItems:"50" description:"fields in display order, each with a name unique within the group"`
 }
 
@@ -195,25 +189,32 @@ func (p fieldGroup) name() string {
 	return p.Name
 }
 
+func (p fieldGroup) label() string {
+	return p.Label
+}
+
 type listInput struct {
 	_     struct{}  `additionalProperties:"false" description:"one field the user repeats, adding and removing copies within min and max; its value is an array with one item per copy, each the template's value"`
 	Type  string    `json:"type" required:"true" const:"list"`
-	Label string    `json:"label,omitempty" maxLength:"80" description:"heading shown above the copies"`
-	Field formField `json:"field" required:"true" description:"template of each copy: any field, a group for several values per item, even another list; its own name is unused, and with a group the names of its fields become the keys of each item"`
-	Value []any
-	Min   int `json:"min,omitempty" minimum:"0" maximum:"100" description:"fewest copies the user can submit"`
-	Max   int `json:"max,omitempty" minimum:"1" maximum:"100" description:"most copies the user can add"`
+	Field formField `json:"field" required:"true" description:"template of each copy: any field, a group for several values per item, even another list; its name is the list's key in the result, and with a group the names of its fields become the keys of each item"`
+	Value []any     `json:"value,omitempty" maxItems:"100" description:"initial copies, one per item, each shaped like the template's value: a string, number or boolean for a plain field, an array of {value, label} for select and search, an object for a group or series, an array for a list"`
+	Min   int       `json:"min,omitempty" minimum:"0" maximum:"100" description:"fewest copies the user can submit"`
+	Max   int       `json:"max,omitempty" minimum:"1" maximum:"100" description:"most copies the user can add"`
 }
 
 func (p listInput) name() string {
 	return p.Field.v.name()
 }
 
+func (p listInput) label() string {
+	return p.Field.v.label()
+}
+
 type seriesInput struct {
 	_        struct{}                            `additionalProperties:"false" description:"fields shown one at a time, each chosen from the answer to the previous one, as in a wizard; its value is an object with each shown field's value under that field's name, like a group"`
 	Type     string                              `json:"type" required:"true" const:"series"`
-	Label    string                              `json:"label,omitempty" maxLength:"80" description:"heading shown above the fields"`
-	Name     string                              `json:"name,omitempty" minLength:"1" maxLength:"80" description:"key of the object in the result; set it unless this is a list's template, where it is unused"`
+	Label    string                              `json:"label" required:"true" minLength:"1" maxLength:"80" description:"heading shown above the fields"`
+	Name     string                              `json:"name" required:"true" minLength:"1" maxLength:"80" description:"key of the object in the result, unique among the fields beside it; in a list's template it is the key of the whole list"`
 	Required bool                                `json:"required,omitempty" description:"true makes the user answer every step before submitting; false lets the user leave the first step empty to skip the series, but once it is answered every step must be"`
 	Fields   []neui.IslandCall[any, seriesField] `json:"fields" required:"true" nullable:"false" minItems:"2" maxItems:"20" description:"one step function per field, in order: each gets the value of the field the previous step returned, null for the first step, and returns the field to show; a series always shows one field per step, so to let a path end early return a field whose only option is a skip value, preselected; a step returns a plain field only, not a group, list or series; a step field's own required is ignored, the series' required applies"` // first one accepts "" as prev value, null returns null there is no more fields
 }
@@ -222,8 +223,13 @@ func (p seriesInput) name() string {
 	return p.Name
 }
 
+func (p seriesInput) label() string {
+	return p.Label
+}
+
 type formFieldParams interface {
 	name() string
+	label() string
 }
 
 type formField struct {
@@ -231,7 +237,7 @@ type formField struct {
 }
 
 func (formField) JSONSchemaAnyOf() []any {
-	return []any{textInput{}, numberInput{}, dateInput{}, textArea{}, selectInput{}, multiSelect{}, radioInput{}, checkboxInput{}, fileInput{}, fieldGroup{}, listInput{}, seriesInput{}}
+	return []any{textInput{}, numberInput{}, dateInput{}, textArea{}, selectInput{}, searchInput{}, checkboxInput{}, fileInput{}, fieldGroup{}, listInput{}, seriesInput{}}
 }
 
 func (f *formField) UnmarshalJSON(data []byte) error {
@@ -242,7 +248,7 @@ func (f *formField) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	switch head.Type {
-	case "text", "email", "tel", "url", "password", "search":
+	case "text", "email", "tel", "url", "password":
 		f.v = new(textInput)
 	case "number", "range":
 		f.v = new(numberInput)
@@ -252,10 +258,8 @@ func (f *formField) UnmarshalJSON(data []byte) error {
 		f.v = new(textArea)
 	case "select":
 		f.v = new(selectInput)
-	case "multiselect":
-		f.v = new(multiSelect)
-	case "radio":
-		f.v = new(radioInput)
+	case "search":
+		f.v = new(searchInput)
 	case "checkbox":
 		f.v = new(checkboxInput)
 	case "file":
@@ -277,7 +281,7 @@ type seriesField struct {
 }
 
 func (seriesField) JSONSchemaAnyOf() []any {
-	return []any{textInput{}, numberInput{}, dateInput{}, textArea{}, selectInput{}, multiSelect{}, radioInput{}, checkboxInput{}, fileInput{}}
+	return []any{textInput{}, numberInput{}, dateInput{}, textArea{}, selectInput{}, searchInput{}, checkboxInput{}, fileInput{}}
 }
 
 func (f *seriesField) UnmarshalJSON(data []byte) error {
@@ -294,8 +298,17 @@ func (f *seriesField) UnmarshalJSON(data []byte) error {
 }
 
 type form struct {
-	_      struct{}    `additionalProperties:"false" description:"form the user fills and submits; the submit is one JSON object with each field's value under its name: text, textarea, date, select and radio give a string, number and range a number or null when empty, checkbox a boolean, multiselect an array of strings, file the path of the uploaded file in the agent's workdir or an array of paths with multiple; a group nests its fields' values as an object, a list gives an array with one item per copy, a series an object like a group"`
-	Fields []formField `json:"fields" required:"true" nullable:"false" minItems:"1" maxItems:"50" description:"fields in display order, each with a name unique within the form"`
+	_       struct{}     `additionalProperties:"false" description:"form the user fills and submits; a submit gives {\"data\": object, \"submit\": the pressed button's value}, where data has each filled field's value under its name and leaves empty fields out: text, textarea and date give a string, number and range a number, checkbox a boolean, select and search an array of the chosen options as {\"value\": the option's value, \"label\": its label} objects, file the path of the uploaded file in the agent's workspace or an array of paths with multiple; a group nests its fields' values as an object, a list gives an array with one item per filled copy, a series an object like a group; cancel gives {\"canceled\": true}"`
+	Fields  []formField  `json:"fields" required:"true" nullable:"false" minItems:"1" maxItems:"50" description:"fields in display order, each with a name unique within the form"`
+	Submits []formSubmit `json:"submits,omitempty" maxItems:"5" description:"submit buttons in display order; the first is the default, pressed by Enter; omitted gives one Submit button; buttons stay disabled while a field has an error or a required field is empty"`
+	Cancel  string       `json:"cancel,omitempty" minLength:"1" maxLength:"80" description:"label of a cancel button, shown before the submit buttons; it skips the checks and gives {\"canceled\": true}; omit for no cancel button"`
+}
+
+type formSubmit struct {
+	_     struct{} `additionalProperties:"false"`
+	Text  string   `json:"text" required:"true" minLength:"1" maxLength:"80" description:"label of the button"`
+	Value string   `json:"value,omitempty" maxLength:"200" description:"what the result's submit gets when this button is pressed; \"\" when omitted"`
+	Style string   `json:"style,omitempty" enum:"primary,secondary,success,danger" description:"visual weight; primary for the first button and secondary for the others when omitted"`
 }
 
 var errDuplicateName = errors.New("duplicate field name")
@@ -337,6 +350,7 @@ func (f *formController) deriveError(name string) doors.Source[error] {
 }
 
 type formGroup interface {
+	form() *root
 	mutex() *sync.Mutex
 	scope() doors.Scopes
 	setField(ctx context.Context, name string, value any, err error)
@@ -350,6 +364,7 @@ type root struct {
 	mu     sync.Mutex
 	values map[string]any
 	scope  *doors.ScopeFrame
+	files  map[string]*formWidgetFile
 }
 
 type formGroupBase struct {
@@ -360,6 +375,10 @@ type formGroupBase struct {
 	errors    doors.Source[*map[string]any]
 	reserved  map[string]struct{}
 	values    map[string]any
+}
+
+func (f *formGroupBase) form() *root {
+	return f.root
 }
 
 func (f *formGroupBase) mutex() *sync.Mutex {
@@ -382,6 +401,33 @@ func (f *formGroupBase) hasErrors() bool {
 		}
 	}
 	return false
+}
+
+type formErrors int
+
+const (
+	formErrorsNone formErrors = iota
+	formErrorsRequired
+	formErrorsShown
+)
+
+func formErrorsOf(m map[string]any) formErrors {
+	kind := formErrorsNone
+	for _, v := range m {
+		switch v := v.(type) {
+		case error:
+			if formShownErr(v) {
+				return formErrorsShown
+			}
+			kind = formErrorsRequired
+		case *map[string]any:
+			kind = max(kind, formErrorsOf(*v))
+			if kind == formErrorsShown {
+				return kind
+			}
+		}
+	}
+	return kind
 }
 
 func (f *formGroupBase) len() int {
@@ -444,6 +490,7 @@ func (f *formGroupBase) newField(name string) (formGroupField, error) {
 	if _, has := f.reserved[name]; has {
 		return formGroupField{}, errDuplicateName
 	}
+	f.reserved[name] = struct{}{}
 	return formGroupField{
 		parent: f,
 		name:   name,
@@ -490,6 +537,7 @@ func (f *formGroupBase) newGroup(name string) (*formGroupBase, error) {
 	if _, has := f.reserved[name]; has {
 		return nil, errDuplicateName
 	}
+	f.reserved[name] = struct{}{}
 	errors := doors.DeriveSource[*map[string]any, *map[string]any](
 		f.errors,
 		func(v *map[string]any) *map[string]any {
@@ -555,7 +603,7 @@ func (f *formGroupBase) deleteGroup(ctx context.Context, name string) {
 	f.errors.Mutate(ctx, func(v1 *map[string]any) *map[string]any {
 		m, _ := (*v1)[name].(*map[string]any)
 		if m == nil {
-			return m
+			return v1
 		}
 		clone := maps.Clone(*v1)
 		delete(clone, name)

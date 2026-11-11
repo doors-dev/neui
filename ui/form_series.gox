@@ -2,9 +2,10 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
-
+	
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
 	"neui.dev"
@@ -15,10 +16,16 @@ func newFormWidgetSeries(ctx context.Context, group formGroup, params seriesInpu
 	if err != nil {
 		return nil, err
 	}
+	state := doors.NewSource(formSeriesState{})
 	series := &formWidgetSeries{
+		id: doors.IDRand(),
 		params: params,
 		group: base,
 		fields: make([]*formWidgetSeriesField, len(params.Fields)),
+		state: state,
+		complete: doors.DeriveBeam(state, func(s formSeriesState) bool {
+			return s.complete
+		}),
 	}
 	for i := range params.Fields {
 		series.fields[i] = &formWidgetSeriesField{}
@@ -31,7 +38,13 @@ func newFormWidgetSeries(ctx context.Context, group formGroup, params seriesInpu
 	return series, nil
 }
 
+type formSeriesState struct {
+	steps int
+	complete bool
+}
+
 type formWidgetSeries struct {
+	id string
 	params seriesInput
 	group *formGroupBase
 	system formGroupField
@@ -39,6 +52,12 @@ type formWidgetSeries struct {
 	defaults map[string]any
 	initialized bool
 	initError error
+	state doors.Source[formSeriesState]
+	complete doors.Beam[bool]
+}
+
+func (f *formWidgetSeries) name() string {
+	return f.params.Name
 }
 
 func (f *formWidgetSeries) init(ctx context.Context, value any) error {
@@ -84,6 +103,7 @@ func (f *formWidgetSeries) setField(ctx context.Context, name string, value any,
 			field.unset(ctx)
 		}
 	}
+	f.state.Update(ctx, formSeriesState{steps: nextIndex})
 	if err != nil {
 		return
 	}
@@ -96,6 +116,7 @@ func (f *formWidgetSeries) setField(ctx context.Context, name string, value any,
 		return
 	}
 	if nextIndex == len(f.params.Fields) {
+		f.state.Update(ctx, formSeriesState{steps: nextIndex, complete: true})
 		f.system.set(ctx, nil, nil)
 		return
 	}
@@ -114,11 +135,9 @@ func (f *formWidgetSeries) setField(ctx context.Context, name string, value any,
 	case *textArea:
 		v.Required = false
 	case *selectInput:
-		v.Required = false
-	case *multiSelect:
-		v.Required = false
-	case *radioInput:
-		v.Required = false
+		v.Min = 0
+	case *searchInput:
+		v.Min = 0
 	case *checkboxInput:
 		v.Required = false
 	case *fileInput:
@@ -129,10 +148,14 @@ func (f *formWidgetSeries) setField(ctx context.Context, name string, value any,
 		f.onSystemError(ctx, err)
 		return
 	}
-	f.fields[nextIndex].set(ctx, widgetField)
+	step := f.fields[nextIndex]
+	step.set(widgetField)
+	f.state.Update(ctx, formSeriesState{steps: nextIndex + 1})
 	initial := f.defaults[widgetField.name()]
 	delete(f.defaults, widgetField.name())
-	if err := widgetField.init(ctx, initial); err != nil {
+	err = widgetField.init(ctx, initial)
+	step.door.Outer(ctx, f.step(nextIndex, &step.current, widgetField))
+	if err != nil {
 		f.onSystemError(ctx, err)
 		return
 	}
@@ -148,7 +171,16 @@ func (f *formWidgetSeries) onSystemError(ctx context.Context, err error) {
 }
 
 func (f *formWidgetSeries) destroy(ctx context.Context) {
+	for _, field := range f.fields {
+		if field.isSet() {
+			field.unset(ctx)
+		}
+	}
 	f.group.destroy(ctx)
+}
+
+func (f *formWidgetSeries) form() *root {
+	return f.group.form()
 }
 
 func (f *formWidgetSeries) mutex() *sync.Mutex {
@@ -180,22 +212,79 @@ func (f *formWidgetSeries) deleteGroup(ctx context.Context, name string) {
 	f.group.deleteGroup(ctx, name)
 }
 
+elem (f *formWidgetSeries) Main() {
+	~~
+	steps := <ol class="kisland-form-steps">
+		~(for _, field := range f.fields {
+			~(field)
+		})
+		~(f.complete.Bind(elem(complete bool) {
+			~(if complete {
+				<li class="kisland-form-step" data-complete>
+					<span class="kisland-form-step-mark" aria-hidden="true"></span>
+					<p class="kisland-form-help">Completed.</p>
+				</li>
+			})
+		}))
+	</ol>
+	errLine := f.system.error.RouteBeam(
+		doors.RouteBeamMatch(formShownErr, doors.RouteBind(func(err error) gox.Elem {
+			return <p class="kisland-form-error" id=(f.id + "-e")>~(err.Error())</p>
+		})),
+	)
+	~~
+	<fieldset class="kisland-form-box" aria-describedby=(f.id + "-e")>
+		<legend class="kisland-form-box-legend">
+			~(f.params.Label)
+			~(f.system.error.RouteBeam(
+				doors.RouteBeamMatch(func(err error) bool {
+					return errors.Is(err, errRequired)
+				}, doors.RouteComp[error](<span class="kisland-form-required" aria-hidden="true">*</span>)),
+			))
+		</legend>
+		~(steps)
+		~(errLine)
+	</fieldset>
+}
+
+elem (f *formWidgetSeries) step(index int, current *doors.Setter, field formWidgetField) {
+	~~
+	isCurrent, _ := doors.DeriveBeam(f.state, func(s formSeriesState) bool {
+		return !s.complete && s.steps == index + 1
+	}).ReadAndSub(ctx, func(ctx context.Context, isCurrent bool) bool {
+		doors.Call(ctx, current.Set("aria-current", formStep(isCurrent)))
+		return false
+	})
+	~~
+	<li class="kisland-form-step" (current) aria-current=(formStep(isCurrent))>
+		<span class="kisland-form-step-mark" aria-hidden="true"></span>
+		~(field)
+	</li>
+}
+
+func formStep(current bool) any {
+	if current {
+		return "step"
+	}
+	return nil
+}
+
 var _ formGroup = (*formWidgetSeries)(nil)
 
 type formWidgetSeriesField struct {
 	name string
 	field formWidgetField
 	door doors.Door
+	current doors.Setter
 }
 
 func (f *formWidgetSeriesField) Main() gox.Elem {
 	return f.door.Main()
 }
 
-func (f *formWidgetSeriesField) set(ctx context.Context, field formWidgetField) {
+func (f *formWidgetSeriesField) set(field formWidgetField) {
 	f.name = field.name()
 	f.field = field
-	f.door.Outer(ctx, field)
 }
 
 func (f *formWidgetSeriesField) unset(ctx context.Context) {

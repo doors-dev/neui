@@ -1,0 +1,163 @@
+package ui
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+	"unicode/utf8"
+
+	"github.com/doors-dev/doors"
+	"github.com/doors-dev/gox"
+)
+
+func newFormWidgetTextArea(ctx context.Context, group formGroup, params textArea) (*formWidgetTextArea, error) {
+	field, err := group.newField(params.Name)
+	if err != nil {
+		return nil, err
+	}
+	return &formWidgetTextArea{
+		id: doors.IDRand(),
+		field: field,
+		params: params,
+	}, nil
+}
+
+type formWidgetTextArea struct {
+	id string
+	field formGroupField
+	params textArea
+	value string
+	count doors.Source[int]
+	invalid doors.Setter
+}
+
+func (f *formWidgetTextArea) name() string {
+	return f.params.Name
+}
+
+func (f *formWidgetTextArea) init(ctx context.Context, value any) error {
+	str := f.params.Value
+	if value != nil {
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("field %q: default value is %T, want a string", f.params.Name, value)
+		}
+		str = v
+	}
+	f.value = str
+	f.count = doors.NewSource(utf8.RuneCountInString(str))
+	f.setLocked(ctx, str, f.validate(ctx, str))
+	return nil
+}
+
+func (f *formWidgetTextArea) destroy(ctx context.Context) {
+	f.field.destroy(ctx)
+}
+
+func (f *formWidgetTextArea) update(ctx context.Context, str string) {
+	err := f.validate(ctx, str)
+	f.field.mutex().Lock()
+	defer f.field.mutex().Unlock()
+	f.setLocked(ctx, str, err)
+	f.count.Update(ctx, utf8.RuneCountInString(str))
+	doors.Call(ctx, f.invalid.Set("aria-invalid", formAria(formShownErr(err))))
+}
+
+func (f *formWidgetTextArea) setLocked(ctx context.Context, str string, err error) {
+	if str == "" {
+		f.field.set(ctx, nil, err)
+		return
+	}
+	f.field.set(ctx, str, err)
+}
+
+elem (f *formWidgetTextArea) Main() {
+	~~
+	errLine := f.field.error.RouteBeam(
+		doors.RouteBeamMatch(formShownErr, doors.RouteBind(func(err error) gox.Elem {
+			return <p class="kisland-form-error" id=(f.id + "-e")>~(err.Error())</p>
+		})),
+	)
+	~~
+	<div class="kisland-form-field">
+		<label class="kisland-form-label" for=(f.id)>
+			~(f.params.Label)
+			~(f.field.error.RouteBeam(
+				doors.RouteBeamMatch(func(err error) bool {
+					return f.params.Required && errors.Is(err, errRequired)
+				}, doors.RouteComp[error](<span class="kisland-form-required" aria-hidden="true">*</span>)),
+			))
+		</label>
+		<textarea
+			(&f.invalid)
+			(doors.AInput{
+				Scope: f.field.scope().And(&doors.ScopeRate{Tick: 300 * time.Millisecond}),
+				On: func(ctx context.Context, r doors.RequestInput) bool {
+					f.update(ctx, r.Event().Value)
+					return false
+				},
+			})
+			class="kisland-form-textarea"
+			id=(f.id)
+			name=(f.params.Name)
+			rows=({
+				if f.params.Rows > 0 {
+					return f.params.Rows
+				}
+				return nil
+			})
+			maxlength=({
+				if f.params.MaxLength > 0 {
+					return f.params.MaxLength
+				}
+				return nil
+			})
+			placeholder=(f.params.Placeholder)
+			aria-required=(formAria(f.params.Required))
+			aria-invalid=(formAria(formShownErr(f.field.error.Get())))
+			aria-describedby=(f.id + "-e")>~(f.value)</textarea>
+		~(if f.params.MinLength > 0 || f.params.MaxLength > 0 {
+			<div class="kisland-form-foot">
+				~(errLine)
+				~(f.count.Bind(func(n int) gox.Elem {
+					if f.params.MinLength > 0 && n < f.params.MinLength {
+						return <span class="kisland-form-count">~(n, " / ", f.params.MinLength, " min")</span>
+					}
+					if f.params.MaxLength > 0 {
+						return <span class="kisland-form-count">~(n, " / ", f.params.MaxLength)</span>
+					}
+					return nil
+				}))
+			</div>
+		} else {
+			~(errLine)
+		})
+	</div>
+}
+
+func (f *formWidgetTextArea) validate(ctx context.Context, str string) error {
+	if str == "" {
+		if f.params.Required {
+			return errRequired
+		}
+		return nil
+	}
+	length := utf8.RuneCountInString(str)
+	if f.params.MinLength > 0 && length < f.params.MinLength {
+		return fmt.Errorf("use at least %d characters", f.params.MinLength)
+	}
+	if f.params.MaxLength > 0 && length > f.params.MaxLength {
+		return fmt.Errorf("use at most %d characters", f.params.MaxLength)
+	}
+	if f.params.Validate != "" {
+		msg, err := f.params.Validate.Call(ctx, str)
+		if err != nil {
+			return errSystem
+		}
+		if msg != "" {
+			return errors.New(msg)
+		}
+	}
+	return nil
+}

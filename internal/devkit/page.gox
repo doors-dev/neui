@@ -1,0 +1,39 @@
+package devkit
+
+import (
+	"context"
+	
+	"github.com/doors-dev/doors"
+	"github.com/doors-dev/gox"
+	"neui.dev/internal/common"
+	"neui.dev/internal/page"
+)
+
+elem (k *Kit) page() {
+	~~
+	c := &controller{kit: k, page: page.NewPage(doors.InstanceContext(ctx)), path: k.path()}
+	k.mu.Lock()
+	k.current = c
+	k.mu.Unlock()
+	~~
+	<!doctype html>
+	<html lang="en">
+		<head>
+			<meta charset="utf-8">
+			<meta name="viewport" content="width=device-width, initial-scale=1">
+			<title>devkit</title>
+		</head>
+		<body>
+			~>(doors.Ctx(context.WithValue(ctx, common.KeySpace, c.page.Space()))) <main>
+				~(k.app.Island)
+			</main>
+			~(if k.app.Script != "" {
+				~(doors.Go(func(ctx context.Context) {
+					if _, _, err := c.start(ctx, k.app.Script); err != nil {
+						k.app.Report(Report{Kind: "error", Err: err})
+					}
+				}))
+			})
+		</body>
+	</html>
+}

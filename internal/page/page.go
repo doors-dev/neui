@@ -243,6 +243,11 @@ func (s *page) Module(ctx context.Context) common.Module {
 	return pageModule
 }
 
+func (s Page) Island(ctx context.Context, path string) (island.Island, string, error) {
+	island, _, path, err := s.island(ctx, path)
+	return island, path, err
+}
+
 func (s *page) island(ctx context.Context, path string) (island.Island, uint, string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
