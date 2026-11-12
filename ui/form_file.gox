@@ -4,100 +4,493 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"mime"
+	"net/http"
 	"path"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
+	"neui.dev"
+	"neui.dev/api"
+	"neui.dev/internal/common"
 )
 
 func newFormWidgetFile(ctx context.Context, group formGroup, params fileInput) (*formWidgetFile, error) {
+	if params.Max != 0 && !params.Multiple {
+		return nil, fmt.Errorf("field %q: max needs multiple", params.Name)
+	}
+	switch {
+	case !params.Multiple:
+		params.Max = 1
+	case params.Max == 0:
+		params.Max = 10
+	}
 	field, err := group.newField(params.Name)
 	if err != nil {
 		return nil, err
 	}
+	config := api.FilesConfig{}
+	if store := neui.IslandStore(ctx); store != nil {
+		config, _ = store.Load(common.IslandFilesConfigKey{}).(api.FilesConfig)
+	}
+	id := doors.IDRand()
 	return &formWidgetFile{
-		id: doors.IDRand(),
+		id: id,
+		folder: path.Join(neui.IslandDir(ctx), id),
+		fs: neui.IslandFS(ctx),
+		limit: int64(common.FilesConfigDefaults(config).DocumentLimit),
 		field: field,
 		params: params,
-		chosen: doors.NewSource(&[]formFileChosen{}),
+		count: doors.NewSource(formFileCount{}),
 	}, nil
 }
 
-type formFileChosen struct {
+type formFilePicked struct {
 	Name string `json:"name"`
 	Size int64 `json:"size"`
 	Type string `json:"type"`
 }
 
+type formFileStatus int
+
+const (
+	formFileUploading formFileStatus = iota
+	formFileDone
+	formFileFailed
+)
+
+type formFileEntry struct {
+	key string
+	name string
+	path string
+	size int64
+	status formFileStatus
+	reason string
+	retry bool
+	own bool
+	cancel context.CancelFunc
+	door *doors.Door
+}
+
+type formFileCount struct {
+	held int
+	done int
+}
+
 type formWidgetFile struct {
 	id string
+	folder string
+	fs api.FS
+	limit int64
 	field formGroupField
 	params fileInput
-	chosen doors.Source[*[]formFileChosen]
-	invalid doors.Setter
+	entries []*formFileEntry
+	seq int
+	edge *doors.Door
+	focus *doors.Door
+	count doors.Source[formFileCount]
+	empty doors.Setter
+	list doors.Setter
+	label doors.Setter
 }
 
 func (f *formWidgetFile) name() string {
 	return f.params.Name
 }
 
-func (f *formWidgetFile) inputName() string {
-	return f.id
-}
-
-func (f *formWidgetFile) dir() string {
-	return path.Join("island", f.id)
-}
-
 func (f *formWidgetFile) init(ctx context.Context, value any) error {
-	if value != nil {
-		return fmt.Errorf("field %q: default value is %T, a file field can't be prefilled", f.params.Name, value)
+	paths := f.params.Value
+	switch v := value.(type) {
+	case nil:
+	case string:
+		if f.params.Multiple {
+			return fmt.Errorf("field %q: default value is a string, want an array of paths", f.params.Name)
+		}
+		paths = []string{v}
+	case []any:
+		if !f.params.Multiple {
+			return fmt.Errorf("field %q: default value is an array, want a path", f.params.Name)
+		}
+		paths = make([]string, 0, len(v))
+		for _, item := range v {
+			p, ok := item.(string)
+			if !ok {
+				return fmt.Errorf("field %q: default item is %T, want a path", f.params.Name, item)
+			}
+			paths = append(paths, p)
+		}
+	default:
+		return fmt.Errorf("field %q: default value is %T, want a path or an array of paths", f.params.Name, value)
 	}
-	f.setLocked(ctx, nil, f.validate(nil))
-	f.field.parent.form().files[f.id] = f
+	if len(paths) > f.params.Max {
+		return fmt.Errorf("field %q: %d default files, most is %d", f.params.Name, len(paths), f.params.Max)
+	}
+	for _, p := range paths {
+		p = path.Clean(p)
+		if f.fs == nil {
+			return fmt.Errorf("field %q: default file %q: no workspace", f.params.Name, p)
+		}
+		entry, err := f.fs.Stat(ctx, p)
+		if err != nil {
+			return fmt.Errorf("field %q: default file %q not found", f.params.Name, p)
+		}
+		if entry.Dir {
+			return fmt.Errorf("field %q: default file %q is a directory", f.params.Name, p)
+		}
+		f.seq++
+		e := &formFileEntry{
+			key: strconv.Itoa(f.seq),
+			name: path.Base(p),
+			path: p,
+			size: entry.Size,
+			status: formFileDone,
+			door: new(doors.Door),
+		}
+		f.entries = append(f.entries, e)
+		e.door.Outer(ctx, f.chip(*e))
+	}
+	f.setLocked(ctx)
 	return nil
 }
 
 func (f *formWidgetFile) destroy(ctx context.Context) {
-	delete(f.field.parent.form().files, f.id)
+	for _, e := range f.entries {
+		if e.cancel != nil {
+			e.cancel()
+		}
+	}
+	f.entries = nil
+	if f.fs != nil {
+		if err := f.fs.Remove(ctx, f.folder); err != nil {
+			doors.Logger(ctx).Error("ui: form file cleanup", "dir", f.folder, "err", err)
+		}
+	}
 	f.field.destroy(ctx)
 }
 
-func (f *formWidgetFile) update(ctx context.Context, files []formFileChosen) {
-	files = slices.DeleteFunc(files, func(file formFileChosen) bool {
-		return file.Name == "" || file.Name == "." || file.Name == ".." || strings.ContainsAny(file.Name, "/\\")
-	})
-	err := f.validate(files)
-	f.field.mutex().Lock()
-	defer f.field.mutex().Unlock()
-	f.setLocked(ctx, files, err)
-	f.chosen.Update(ctx, &files)
-	doors.Call(ctx, f.invalid.Set("aria-invalid", formAria(formShownErr(err))))
-}
-
-func (f *formWidgetFile) setLocked(ctx context.Context, files []formFileChosen, err error) {
+func (f *formWidgetFile) setLocked(ctx context.Context) {
+	var paths []string
+	count := formFileCount{}
+	for _, e := range f.entries {
+		switch e.status {
+		case formFileDone:
+			paths = append(paths, e.path)
+			count.held++
+			count.done++
+		case formFileUploading:
+			count.held++
+		}
+	}
+	var err error
+	switch {
+	case count.held > count.done:
+		err = errUploading
+	case f.params.Required && count.done == 0:
+		err = errRequired
+	}
 	var value any
 	switch {
-	case len(files) == 0:
+	case len(paths) == 0:
 	case f.params.Multiple:
-		paths := make([]string, len(files))
-		for i, file := range files {
-			paths[i] = path.Join(f.dir(), file.Name)
-		}
 		value = paths
 	default:
-		value = path.Join(f.dir(), files[0].Name)
+		value = paths[0]
 	}
 	f.field.set(ctx, value, err)
+	f.count.Update(ctx, count)
+}
+
+func (f *formWidgetFile) tooLarge() string {
+	if f.limit < 1 << 20 {
+		return fmt.Sprintf("larger than %d KB", f.limit >> 10)
+	}
+	return fmt.Sprintf("larger than %d MB", f.limit >> 20)
+}
+
+func (f *formWidgetFile) pick(ctx context.Context, picked []formFilePicked) []any {
+	f.field.mutex().Lock()
+	defer f.field.mutex().Unlock()
+	held := 0
+	for _, e := range f.entries {
+		if e.status != formFileFailed {
+			held++
+		}
+	}
+	keys := make([]any, len(picked))
+	for i, file := range picked {
+		name := path.Base(file.Name)
+		f.seq++
+		e := &formFileEntry{
+			key: strconv.Itoa(f.seq),
+			name: name,
+			size: file.Size,
+			status: formFileFailed,
+			door: new(doors.Door),
+		}
+		if file.Name == "" {
+			e.name = "unnamed"
+		}
+		kind, _, _ := strings.Cut(mime.TypeByExtension(strings.ToLower(path.Ext(name))), ";")
+		if kind == "" {
+			kind = file.Type
+		}
+		kind = strings.ToLower(strings.TrimSpace(kind))
+		accepted := f.params.Accept == ""
+		var tokens []string
+		for _, token := range strings.Split(f.params.Accept, ",") {
+			token = strings.ToLower(strings.TrimSpace(token))
+			if token == "" {
+				continue
+			}
+			tokens = append(tokens, token)
+			switch {
+			case strings.HasPrefix(token, "."):
+				accepted = accepted || strings.HasSuffix(strings.ToLower(name), token)
+			case strings.HasSuffix(token, "/*"):
+				accepted = accepted || strings.HasPrefix(kind, strings.TrimSuffix(token, "*"))
+			default:
+				accepted = accepted || kind == token
+			}
+		}
+		switch {
+		case file.Name == "" || name == "." || name == ".." || name == "/" || strings.ContainsAny(name, "/\\"):
+			e.reason = "bad file name"
+		case !accepted:
+			e.reason = "not " + strings.Join(tokens, " or ")
+		case file.Size > f.limit:
+			e.reason = f.tooLarge()
+		case held >= f.params.Max && f.params.Max == 1:
+			e.reason = "at most 1 file"
+		case held >= f.params.Max:
+			e.reason = fmt.Sprintf("at most %d files", f.params.Max)
+		case f.fs == nil:
+			e.reason = "upload failed"
+		default:
+			ext := path.Ext(name)
+			stem := strings.TrimSuffix(name, ext)
+			stored := name
+			for n := 2; ; n++ {
+				p := path.Join(f.folder, stored)
+				if !slices.ContainsFunc(f.entries, func(e *formFileEntry) bool {
+					return e.path == p
+				}) {
+					if _, err := f.fs.Stat(ctx, p); err != nil {
+						break
+					}
+				}
+				stored = fmt.Sprintf("%s (%d)%s", stem, n, ext)
+			}
+			e.name = stored
+			e.path = path.Join(f.folder, stored)
+			e.status = formFileUploading
+			e.own = true
+			held++
+			keys[i] = e.key
+		}
+		f.entries = append(f.entries, e)
+		e.door.Outer(ctx, f.chip(*e))
+		next := new(doors.Door)
+		f.edge.Static(ctx, <>
+			~(e.door)
+			~(next)
+		</>)
+		f.edge = next
+	}
+	f.setLocked(ctx)
+	return keys
+}
+
+func (f *formWidgetFile) receive(ctx context.Context, w http.ResponseWriter, r *http.Request) bool {
+	if r.Method != http.MethodPut {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return false
+	}
+	key := r.URL.Query().Get("k")
+	f.field.mutex().Lock()
+	i := slices.IndexFunc(f.entries, func(e *formFileEntry) bool {
+		return e.key == key
+	})
+	if i == -1 || f.entries[i].status != formFileUploading || f.entries[i].cancel != nil {
+		f.field.mutex().Unlock()
+		w.Header().Set("Connection", "close")
+		w.WriteHeader(http.StatusGone)
+		return false
+	}
+	e := f.entries[i]
+	read, cancel := context.WithCancel(r.Context())
+	defer cancel()
+	e.cancel = cancel
+	f.field.mutex().Unlock()
+	var err error
+	var size int64
+	if r.ContentLength > f.limit {
+		err = &http.MaxBytesError{Limit: f.limit}
+	} else {
+		var dst io.WriteCloser
+		dst, err = f.fs.Create(e.path)
+		if err == nil {
+			size, err = io.Copy(dst, formFileReader{ctx: read, r: http.MaxBytesReader(w, r.Body, f.limit)})
+			if closeErr := dst.Close(); err == nil {
+				err = closeErr
+			}
+			if err != nil {
+				if removeErr := f.fs.Remove(context.WithoutCancel(r.Context()), e.path); removeErr != nil {
+					doors.Logger(ctx).Error("ui: form file cleanup", "name", e.path, "err", removeErr)
+				}
+			}
+		}
+	}
+	ctx = doors.InstanceContext(ctx)
+	f.field.mutex().Lock()
+	defer f.field.mutex().Unlock()
+	if !slices.Contains(f.entries, e) {
+		if err == nil {
+			if removeErr := f.fs.Remove(context.WithoutCancel(r.Context()), e.path); removeErr != nil {
+				doors.Logger(ctx).Error("ui: form file cleanup", "name", e.path, "err", removeErr)
+			}
+		}
+		w.Header().Set("Connection", "close")
+		w.WriteHeader(http.StatusGone)
+		return false
+	}
+	var maxBytes *http.MaxBytesError
+	status := http.StatusOK
+	switch {
+	case err == nil:
+		e.status = formFileDone
+		e.size = size
+	case errors.As(err, &maxBytes):
+		e.status, e.reason, status = formFileFailed, f.tooLarge(), http.StatusRequestEntityTooLarge
+	case errors.Is(err, api.ErrQuota):
+		e.status, e.reason, status = formFileFailed, "workspace is full", http.StatusInsufficientStorage
+	case errors.Is(err, api.ErrInvalidName):
+		e.status, e.reason, status = formFileFailed, "bad file name", http.StatusBadRequest
+	case errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, io.ErrUnexpectedEOF):
+		e.status, e.reason, e.retry, status = formFileFailed, "upload interrupted", true, http.StatusBadRequest
+	default:
+		doors.Logger(ctx).Error("ui: form file upload", "name", e.path, "err", err)
+		e.status, e.reason, e.retry, status = formFileFailed, "upload failed", true, http.StatusInternalServerError
+	}
+	e.cancel = nil
+	if status != http.StatusOK {
+		w.Header().Set("Connection", "close")
+	}
+	w.WriteHeader(status)
+	e.door.Outer(ctx, f.chip(*e))
+	f.setLocked(ctx)
+	return false
+}
+
+type formFileReader struct {
+	ctx context.Context
+	r io.Reader
+}
+
+func (r formFileReader) Read(p []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return r.r.Read(p)
+}
+
+func (f *formWidgetFile) retry(ctx context.Context, key string) bool {
+	f.field.mutex().Lock()
+	defer f.field.mutex().Unlock()
+	i := slices.IndexFunc(f.entries, func(e *formFileEntry) bool {
+		return e.key == key
+	})
+	if i == -1 || f.entries[i].status != formFileFailed || !f.entries[i].retry {
+		return false
+	}
+	held := 0
+	for _, e := range f.entries {
+		if e.status != formFileFailed {
+			held++
+		}
+	}
+	if held >= f.params.Max {
+		return false
+	}
+	e := f.entries[i]
+	e.status, e.reason, e.retry = formFileUploading, "", false
+	e.door.Outer(ctx, f.chip(*e))
+	f.setLocked(ctx)
+	return true
+}
+
+func (f *formWidgetFile) failed(ctx context.Context, key string) {
+	f.field.mutex().Lock()
+	defer f.field.mutex().Unlock()
+	i := slices.IndexFunc(f.entries, func(e *formFileEntry) bool {
+		return e.key == key
+	})
+	if i == -1 || f.entries[i].status != formFileUploading || f.entries[i].cancel != nil {
+		return
+	}
+	e := f.entries[i]
+	e.status, e.reason, e.retry = formFileFailed, "upload interrupted", true
+	e.door.Outer(ctx, f.chip(*e))
+	f.setLocked(ctx)
+}
+
+func (f *formWidgetFile) remove(ctx context.Context, key string) {
+	f.field.mutex().Lock()
+	defer f.field.mutex().Unlock()
+	i := slices.IndexFunc(f.entries, func(e *formFileEntry) bool {
+		return e.key == key
+	})
+	if i == -1 {
+		return
+	}
+	e := f.entries[i]
+	held := 0
+	for _, e := range f.entries {
+		if e.status != formFileFailed {
+			held++
+		}
+	}
+	f.entries = slices.Delete(f.entries, i, i + 1)
+	if e.cancel != nil {
+		e.cancel()
+	}
+	if e.status == formFileDone && e.own {
+		if err := f.fs.Remove(ctx, e.path); err != nil {
+			doors.Logger(ctx).Error("ui: form file remove", "name", e.path, "err", err)
+		}
+	}
+	f.setLocked(ctx)
+	target := f.id
+	switch {
+	case held >= f.params.Max && e.status != formFileFailed:
+	case i < len(f.entries):
+		target = f.id + "-x" + f.entries[i].key
+	case i > 0:
+		target = f.id + "-x" + f.entries[i - 1].key
+	}
+	f.focus.Inner(ctx, <script data:id=(target)>
+		const id = $data("id")
+		const focus = (tries) => {
+			const el = document.getElementById(id)
+			if (el) {
+				el.focus()
+			} else if (tries > 0) {
+				requestAnimationFrame(() => focus(tries - 1))
+			}
+		}
+		focus(30)
+	</script>)
+	e.door.Static(ctx, nil)
 }
 
 func formFileSize(size int64) string {
 	switch {
 	case size < 1000:
 		return fmt.Sprintf("%d B", size)
-	case size < 1000*1000:
+	case size < 1000 * 1000:
 		return fmt.Sprintf("%d KB", (size + 500) / 1000)
 	default:
 		return fmt.Sprintf("%.1f MB", float64(size) / 1e6)
@@ -105,169 +498,356 @@ func formFileSize(size int64) string {
 }
 
 elem (f *formWidgetFile) Main() {
+	~~
+	label, labelledby := any(nil), any(f.id + "-l")
+	if f.field.item != nil {
+		label, _ = f.field.item.ReadAndSub(ctx, func(ctx context.Context, name string) bool {
+			doors.Call(ctx, f.label.Set("aria-label", name))
+			return false
+		})
+		labelledby = nil
+	}
+	f.field.mutex().Lock()
+	entries := slices.Clone(f.entries)
+	f.edge = new(doors.Door)
+	f.focus = new(doors.Door)
+	edge, focus := f.edge, f.focus
+	f.field.mutex().Unlock()
+	full := doors.DeriveBeam(f.count, func(c formFileCount) bool {
+		return c.held >= f.params.Max
+	})
+	empty := doors.DeriveBeam(f.count, func(c formFileCount) bool {
+		return f.params.Required && c.done == 0
+	})
+	describedby := func(full bool) any {
+		if full && f.params.Max > 1 {
+			return f.id + "-h"
+		}
+		return nil
+	}
+	isFull, _ := full.ReadAndSub(ctx, func(ctx context.Context, full bool) bool {
+		doors.Call(ctx, f.list.Set("aria-describedby", describedby(full)))
+		return false
+	})
+	empty.Sub(ctx, func(ctx context.Context, empty bool) bool {
+		doors.Call(ctx, f.empty.Set("data-required-empty", empty))
+		return false
+	})
+	~~
 	<div class="kisland-form-field">
-		<span class="kisland-form-label" id=(f.id + "-l")>
-			~(f.params.Label)
-			~(f.field.error.RouteBeam(
-				doors.RouteBeamMatch(func(err error) bool {
-					return f.params.Required && errors.Is(err, errRequired)
-				}, doors.RouteComp[error](<span class="kisland-form-required" aria-hidden="true">*</span>)),
-			))
-		</span>
-		<label class="kisland-form-file">
-			<input
-				(&f.invalid)
-				class="kisland-form-file-input"
-				id=(f.id)
-				type="file"
-				name=(f.id)
-				accept=(f.params.Accept)
-				multiple=(f.params.Multiple)
-				aria-required=(formAria(f.params.Required))
-				aria-invalid=(formAria(formShownErr(f.field.error.Get())))
-				aria-labelledby=(f.id + "-l")
-				aria-describedby=(f.id + "-s " + f.id + "-e")/>
-			<span class="kisland-form-file-button" aria-hidden="true">
-				~(f.chosen.Bind(elem(files *[]formFileChosen) {
-					~(if f.params.Multiple && len(*files) != 0 {
-						Add files
-					} else if f.params.Multiple {
-						Choose files
-					} else if len(*files) != 0 {
-						Replace
-					} else {
-						Choose file
+		~(if label == nil {
+			<span class="kisland-form-label" id=(f.id + "-l")>
+				~(f.params.Label)
+				~(empty.Bind(elem(empty bool) {
+					~(if empty {
+						<span class="kisland-form-required" aria-hidden="true">*</span>
 					})
 				}))
 			</span>
-			<span class="kisland-form-file-summary" id=(f.id + "-s")>
-				~(f.chosen.Bind(elem(files *[]formFileChosen) {
-					~~
-					total := int64(0)
-					for _, file := range *files {
-						total += file.Size
-					}
-					~~
-					~(if len(*files) == 0 && f.params.Multiple {
-						No files chosen
-					} else if len(*files) == 0 {
-						No file chosen
-					} else if !f.params.Multiple {
-						<span class="kisland-form-file-name">~((*files)[0].Name)</span>
-						~(" · ", formFileSize(total))
-					} else if len(*files) == 1 {
-						~("1 file · ", formFileSize(total))
-					} else {
-						~(len(*files), " files · ", formFileSize(total))
-					})
-				}))
-			</span>
-		</label>
-		~(f.chosen.Bind(elem(files *[]formFileChosen) {
-			~(if f.params.Multiple && len(*files) != 0 {
-				<ul class="kisland-form-file-list" aria-label="Chosen files">
-					~(for _, file := range *files {
-						<li class="kisland-form-file-item">
-							<span class="kisland-form-file-name">~(file.Name)</span>
-							<span class="kisland-form-file-meta">~(formFileSize(file.Size))</span>
-							<button
-								type="button"
-								class="kisland-form-remove"
-								data-file-remove=(file.Name)
-								aria-label=("Remove " + file.Name)>×</button>
-						</li>
-					})
-				</ul>
+		})
+		<ul
+			(&f.label)
+			(&f.list)
+			class="kisland-form-search-chosen"
+			aria-label=(label)
+			aria-labelledby=(labelledby)
+			aria-describedby=(describedby(isFull))
+			aria-live="polite"
+			aria-relevant="additions">
+			~(for _, e := range entries {
+				~(e.door)
 			})
-		}))
-		~(f.field.error.RouteBeam(
-			doors.RouteBeamMatch(formShownErr, doors.RouteBind(func(err error) gox.Elem {
-				return <p class="kisland-form-error" id=(f.id + "-e")>~(err.Error())</p>
-			})),
-		))
+			~(edge)
+		</ul>
+		~(full.Bind(f.zone))
+		~(focus)
 		<script
-			(doors.AHook[[]formFileChosen]{
-				Name: "files",
+			(doors.AHook[[]formFilePicked]{
+				Name: "pick",
 				Scope: f.field.scope(),
-				On: func(ctx context.Context, r doors.RequestHook[[]formFileChosen]) (any, bool) {
-					f.update(ctx, r.Data())
+				On: func(ctx context.Context, r doors.RequestHook[[]formFilePicked]) (any, bool) {
+					return f.pick(ctx, r.Data()), false
+				},
+			})
+			(doors.AHook[string]{
+				Name: "retry",
+				Scope: f.field.scope(),
+				On: func(ctx context.Context, r doors.RequestHook[string]) (any, bool) {
+					return f.retry(ctx, r.Data()), false
+				},
+			})
+			(doors.AHook[string]{
+				Name: "failed",
+				Scope: f.field.scope(),
+				On: func(ctx context.Context, r doors.RequestHook[string]) (any, bool) {
+					f.failed(ctx, r.Data())
 					return nil, false
 				},
+			})
+			data:upload=({
+				url, _ := doors.NewHook(ctx, doors.ResourceHook(f.receive))
+				return url
 			})>
 			const root = document.currentScript.parentElement
-			const input = root.querySelector(".kisland-form-file-input")
-			let files = []
-			const send = async (next) => {
-				const prev = files
-				files = next
-				const transfer = new DataTransfer()
-				for (const file of files) {
-					transfer.items.add(file)
-				}
-				input.files = transfer.files
-				try {
-					await $hook("files", files.map((file) => ({ name: file.name, size: file.size, type: file.type })))
-				} catch {
-					files = prev
-					const restore = new DataTransfer()
-					for (const file of files) {
-						restore.items.add(file)
+			const list = root.querySelector(":scope > .kisland-form-search-chosen")
+			const upload = $data("upload")
+			const files = new Map()
+			const size = (n) =>
+				n < 1000
+					? n + " B"
+					: n < 1e6
+						? Math.round(n / 1000) + " KB"
+						: (n / 1e6).toFixed(1) + " MB"
+			const report = (key) => {
+				$hook("failed", key).catch(() => {
+					setTimeout(() => files.has(key) && report(key), 1000)
+				})
+			}
+			const send = (key, file) => {
+				const xhr = new XMLHttpRequest()
+				files.set(key, file)
+				let last = 0
+				xhr.upload.onprogress = (event) => {
+					const now = Date.now()
+					if (!event.lengthComputable || now - last < 500) {
+						return
 					}
-					input.files = restore.files
+					last = now
+					const p = Math.min(99, Math.floor((event.loaded / event.total) * 100))
+					const chip = list.querySelector(`li[data-key="${key}"][data-uploading]`)
+					const bar = chip?.querySelector(".kisland-form-file-percent")
+					if (!bar) {
+						return
+					}
+					chip.style.setProperty("--kisland-file-p", p + "%")
+					bar.textContent = p + "%"
+					bar.setAttribute("aria-valuenow", p)
+					bar.setAttribute("aria-valuetext", `${p}%, ${size(event.loaded)} of ${size(event.total)}`)
+				}
+				xhr.onload = () => {
+					if (xhr.status < 300) {
+						files.delete(key)
+					}
+				}
+				xhr.onerror = () => report(key)
+				xhr.open("PUT", `${upload}?k=${encodeURIComponent(key)}`)
+				xhr.send(file)
+			}
+			const pick = async (picked) => {
+				if (picked.length === 0) {
+					return
+				}
+				let keys
+				try {
+					keys = await $hook(
+						"pick",
+						picked.map((file) => ({ name: file.name, size: file.size, type: file.type })),
+					)
+				} catch {
+					return
+				}
+				keys.forEach((key, i) => key && send(key, picked[i]))
+			}
+			const reveal = () => {
+				for (const button of list.querySelectorAll("[data-file-retry][hidden]")) {
+					if (files.has(button.dataset.fileRetry)) {
+						button.hidden = false
+					}
 				}
 			}
-			input.addEventListener("change", () => {
-				const picked = Array.from(input.files)
-				if (!input.multiple) {
-					send(picked)
+			const observer = new MutationObserver(reveal)
+			observer.observe(list, { childList: true, subtree: true })
+			$sys.clean(() => observer.disconnect())
+			root.addEventListener("change", (event) => {
+				if (!event.target.matches(".kisland-form-file-input")) {
 					return
 				}
-				send(files.filter((file) => !picked.some((p) => p.name === file.name)).concat(picked))
+				const picked = Array.from(event.target.files)
+				event.target.value = ""
+				pick(picked)
 			})
-			root.addEventListener("click", (event) => {
-				const button = event.target.closest("[data-file-remove]")
-				if (!button) {
+			root.addEventListener("click", async (event) => {
+				const retry = event.target.closest("[data-file-retry]")
+				if (retry) {
+					const key = retry.dataset.fileRetry
+					const file = files.get(key)
+					if (!file) {
+						return
+					}
+					retry.disabled = true
+					let ok = false
+					try {
+						ok = await $hook("retry", key)
+					} catch {}
+					if (ok) {
+						send(key, file)
+					} else {
+						retry.disabled = false
+					}
 					return
 				}
-				send(files.filter((file) => file.name !== button.dataset.fileRemove))
+				const remove = event.target.closest("li[data-key] > .kisland-form-remove")
+				if (remove) {
+					files.delete(remove.parentElement.dataset.key)
+				}
+			})
+			let text = null
+			const leave = (zone) => {
+				zone.removeAttribute("data-dragover")
+				const summary = zone.querySelector(".kisland-form-file-summary")
+				if (summary && text !== null) {
+					summary.textContent = text
+				}
+				text = null
+			}
+			const over = (event) => {
+				if (!event.dataTransfer?.types.includes("Files")) {
+					return
+				}
+				event.preventDefault()
+				const zone = event.target.closest(".kisland-form-file-zone")
+				if (!zone) {
+					event.dataTransfer.dropEffect = "none"
+					return
+				}
+				event.dataTransfer.dropEffect = "copy"
+				if (zone.hasAttribute("data-dragover")) {
+					return
+				}
+				zone.setAttribute("data-dragover", "")
+				const summary = zone.querySelector(".kisland-form-file-summary")
+				const n = event.dataTransfer.items.length
+				text = summary.textContent
+				summary.textContent = n === 1 ? "Drop to upload 1 file" : `Drop to upload ${n} files`
+			}
+			root.addEventListener("dragenter", over)
+			root.addEventListener("dragover", over)
+			root.addEventListener("dragleave", (event) => {
+				const zone = event.target.closest(".kisland-form-file-zone")
+				if (zone && !zone.contains(event.relatedTarget)) {
+					leave(zone)
+				}
+			})
+			root.addEventListener("drop", (event) => {
+				if (!event.dataTransfer?.types.includes("Files")) {
+					return
+				}
+				event.preventDefault()
+				const zone = event.target.closest(".kisland-form-file-zone")
+				if (!zone) {
+					return
+				}
+				leave(zone)
+				pick(Array.from(event.dataTransfer.files))
 			})
 		</script>
 	</div>
 }
 
-func (f *formWidgetFile) validate(files []formFileChosen) error {
-	if len(files) == 0 {
-		if f.params.Required {
-			return errRequired
+elem (f *formWidgetFile) zone(full bool) {
+	~(if !full {
+		~~
+		count, _ := f.count.Read(ctx)
+		label, labelledby := any(nil), any(f.id + "-l")
+		if f.field.item != nil {
+			label, _ = f.field.item.Read(ctx)
+			labelledby = nil
 		}
-		return nil
-	}
-	if !f.params.Multiple && len(files) > 1 {
-		return errors.New("choose one file")
-	}
-	if f.params.Accept == "" {
-		return nil
-	}
-	for _, file := range files {
-		accepted := false
-		for _, token := range strings.Split(f.params.Accept, ",") {
-			token = strings.ToLower(strings.TrimSpace(token))
-			switch {
-			case token == "":
-			case strings.HasPrefix(token, "."):
-				accepted = strings.HasSuffix(strings.ToLower(file.Name), token)
-			case strings.HasSuffix(token, "/*"):
-				accepted = strings.HasPrefix(strings.ToLower(file.Type), strings.TrimSuffix(token, "*"))
-			default:
-				accepted = strings.ToLower(file.Type) == token
+		~~
+		<label class="kisland-form-file-zone">
+			<input
+				(&f.empty)
+				(&f.label)
+				class="kisland-form-file-input"
+				id=(f.id)
+				type="file"
+				accept=(f.params.Accept)
+				multiple=(f.params.Multiple)
+				aria-required=(formAria(f.params.Required))
+				data-required-empty=(f.params.Required && count.done == 0)
+				aria-label=(label)
+				aria-labelledby=(labelledby)
+				aria-describedby=(f.id + "-z")/>
+			<span class="kisland-form-file-summary" id=(f.id + "-z")>
+				~(if f.params.Multiple {
+					Drop files or click to choose
+				} else {
+					Drop a file or click to choose
+				})
+			</span>
+		</label>
+	} else if f.params.Max > 1 {
+		<p class="kisland-form-search-max" id=(f.id + "-h")>Maximum of ~(f.params.Max) chosen.</p>
+	})
+}
+
+elem (f *formWidgetFile) chip(e formFileEntry) {
+	<li
+		class="kisland-form-file-chip"
+		data-key=(e.key)
+		data-uploading=(e.status == formFileUploading)
+		data-failed=(e.status == formFileFailed)
+		style=({
+			if e.status == formFileUploading {
+				return "--kisland-file-p:0%"
 			}
-			if accepted {
-				break
-			}
-		}
-		if !accepted {
-			return fmt.Errorf("%s isn't an accepted file type, choose %s", file.Name, f.params.Accept)
-		}
-	}
-	return nil
+			return nil
+		})>
+		<span class="kisland-form-file-body">
+			~(if e.status == formFileDone {
+				<a
+					class="kisland-form-file-link"
+					href=(markdownServe(f.fs, e.path, true))
+					download=(path.Base(e.path))
+					title=(e.name)>
+					~(e.name)
+				</a>
+				~(" ")
+				<span class="kisland-form-file-size">~(formFileSize(e.size))</span>
+			} else if e.status == formFileUploading {
+				<span class="kisland-form-file-text" title=(e.name)>~(e.name)</span>
+				~(" ")
+				<span
+					class="kisland-form-file-percent"
+					role="progressbar"
+					aria-label=("Uploading " + e.name)
+					aria-valuemin="0"
+					aria-valuemax="100"
+					aria-valuenow="0"
+					aria-valuetext="0%">
+					0%
+				</span>
+			} else {
+				<span class="kisland-form-file-text" title=(e.name)>~(e.name)</span>
+				~(" ")
+				<span class="kisland-form-file-reason">~(e.reason)</span>
+			})
+		</span>
+		~(if e.retry {
+			<button type="button" class="kisland-form-file-retry" data-file-retry=(e.key) hidden>Retry</button>
+		})
+		<button
+			(doors.AClick{
+				Scope: f.field.scope(),
+				On: func(ctx context.Context, r doors.RequestPointer) bool {
+					f.remove(ctx, e.key)
+					return false
+				},
+			})
+			type="button"
+			class="kisland-form-remove"
+			id=(f.id + "-x" + e.key)
+			aria-label=({
+				switch e.status {
+				case formFileUploading:
+					return "Cancel upload of " + e.name
+				case formFileFailed:
+					return "Dismiss " + e.name
+				default:
+					return "Remove " + e.name
+				}
+			})>
+			×
+		</button>
+	</li>
 }

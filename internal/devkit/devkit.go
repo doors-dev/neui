@@ -53,6 +53,9 @@ type App struct {
 	Island neui.Island
 	// Config limits the runs; zero fields take the defaults.
 	Config api.IslandConfig
+	// Files limits the workspace, such as the size of a file a form
+	// uploads; zero fields take the defaults.
+	Files api.FilesConfig
 	// Dir is the workspace directory; empty uses a temporary one that Close
 	// removes.
 	Dir string
@@ -117,7 +120,7 @@ func New(a App) (*Kit, error) {
 	k := &Kit{
 		app:   a,
 		store: store,
-		fs:    filesystem.Open(threadID, storage, store, common.FilesConfigDefaults(api.FilesConfig{})),
+		fs:    filesystem.Open(threadID, storage, store, common.FilesConfigDefaults(a.Files)),
 	}
 	k.handler = doors.NewApp(func(context.Context, doors.Request) gox.Elem {
 		return k.page()

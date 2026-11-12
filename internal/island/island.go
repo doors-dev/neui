@@ -66,6 +66,7 @@ func (i *island) Spec(ctx context.Context, space string) string {
 	b.WriteString("\n\nRuntime\n")
 	b.WriteString(specRuntime)
 	fmt.Fprintf(&b, "- console.log, info, warn and error append to the workspace file %s, emptied when an app starts.\n", logFile(space))
+	fmt.Fprintf(&b, "- Widgets keep their files, such as form uploads, under the workspace dir %s, emptied when an app starts; copy the files you want to keep elsewhere in the workspace.\n", islandDir(space))
 	ctrl := common.GetController(ctx)
 	fmt.Fprintf(&b, "- Limits: %d slots, views, controls and layouts alive at once; %d set, update and notify calls between ui.draw calls; %d bytes of ui.notify values between ui.draw calls; %s between ui.draw calls, app function and tool calls included; %d MiB memory; call depth %d; %d scripts queued; %s and %d MiB per function call.\n", c.MaxItems, c.MaxOps, notificationsCap(ctrl.Config(), ctrl.Model()), c.TurnTime, c.Memory>>20, c.MaxCallDepth, c.MaxQueue, c.FnTime, c.FnMemory>>20)
 	i.lib.WriteSpec(&b)

@@ -11,6 +11,7 @@ import (
 
 	"github.com/swaggest/jsonschema-go"
 	"neui.dev"
+	"neui.dev/internal/markdown"
 )
 
 type tableState struct {
@@ -48,8 +49,8 @@ func (t *tableState) rowsData() tableResult {
 	if t.search != "" {
 		needle := strings.ToLower(t.search)
 		rows = slices.DeleteFunc(rows, func(r tableRow) bool {
-			return !slices.ContainsFunc(r.Cells, func(c cellText) bool {
-				return strings.Contains(strings.ToLower(string(c)), needle)
+			return !slices.ContainsFunc(r.plain, func(c string) bool {
+				return strings.Contains(strings.ToLower(c), needle)
 			})
 		})
 	}
@@ -65,11 +66,11 @@ func (t *tableState) sortRows(rows []tableRow) {
 	col := t.sort.Column
 	slices.SortStableFunc(rows, func(x tableRow, y tableRow) int {
 		a, b := "", ""
-		if col < len(x.Cells) {
-			a = strings.ToLower(string(x.Cells[col]))
+		if col < len(x.plain) {
+			a = strings.ToLower(x.plain[col])
 		}
-		if col < len(y.Cells) {
-			b = strings.ToLower(string(y.Cells[col]))
+		if col < len(y.plain) {
+			b = strings.ToLower(y.plain[col])
 		}
 		order := 0
 		for order == 0 && a != "" && b != "" {
@@ -141,7 +142,7 @@ func (p *table) state() tableState {
 	}
 	return tableState{
 		query:    p.Query,
-		rows:     p.Rows,
+		rows:     tableRowsPlain(p.Rows),
 		size:     p.PageSize,
 		page:     1,
 		sort:     p.Sort,
@@ -178,8 +179,19 @@ type tableResult struct {
 type tableRow struct {
 	_       struct{}     `additionalProperties:"false"`
 	ID      string       `json:"id" required:"true" minLength:"1" maxLength:"200" description:"identifies the row in what a click submits"`
-	Cells   []cellText   `json:"cells" required:"true" nullable:"false" description:"one text per column, in column order"`
+	Cells   []cellText   `json:"cells" required:"true" nullable:"false" description:"one text per column, in column order; inline markdown: **bold**, *italic*, ~~strike~~, code in backquotes, [links](https://…) and [name](file:///path) downloads of workspace files, path relative to the workspace root; search and sort use the text as shown"`
 	Actions []cellButton `json:"actions,omitempty" maxItems:"5" description:"buttons shown at the end of the row"`
+	plain   []string
+}
+
+func tableRowsPlain(rows []tableRow) []tableRow {
+	for i := range rows {
+		rows[i].plain = make([]string, len(rows[i].Cells))
+		for j, c := range rows[i].Cells {
+			rows[i].plain[j] = markdown.Plain(markdown.Inline(string(c)))
+		}
+	}
+	return rows
 }
 
 type cellText string
@@ -199,7 +211,7 @@ type cellButton struct {
 type tableSubmit struct {
 	ID    string   `json:"id,omitempty" description:"id of the row the user acted on: alone for a click on the row's first cell, with value for a row action; empty for a selection submit"`
 	Value string   `json:"value,omitempty" description:"value of the row action button clicked; empty for a first-cell click and a selection submit"`
-	IDs   []string `json:"ids,omitempty" maxItems:"1000" description:"ids of the selected rows in the order they were selected; set only when the selection button was clicked"`
+	IDs   []string `json:"ids,omitempty" maxItems:"1000" description:"ids of the selected rows, sorted; set only when the selection button was clicked"`
 }
 
 type tablePatch struct {

@@ -28,6 +28,7 @@ type formWidgetDate struct {
 	params dateInput
 	value string
 	invalid doors.Setter
+	label doors.Setter
 }
 
 func (f *formWidgetDate) name() string {
@@ -58,6 +59,7 @@ func (f *formWidgetDate) update(ctx context.Context, str string) {
 	defer f.field.mutex().Unlock()
 	f.setLocked(ctx, str, err)
 	doors.Call(ctx, f.invalid.Set("aria-invalid", formAria(formShownErr(err))))
+	doors.Call(ctx, f.invalid.Set("data-required-empty", errors.Is(err, errRequired)))
 }
 
 func (f *formWidgetDate) setLocked(ctx context.Context, str string, err error) {
@@ -69,19 +71,31 @@ func (f *formWidgetDate) setLocked(ctx context.Context, str string, err error) {
 }
 
 elem (f *formWidgetDate) Main() {
+	~~
+	label := any(nil)
+	if f.field.item != nil {
+		label, _ = f.field.item.ReadAndSub(ctx, func(ctx context.Context, name string) bool {
+			doors.Call(ctx, f.label.Set("aria-label", name))
+			return false
+		})
+	}
+	~~
 	<div class="kisland-form-field">
-		<label class="kisland-form-label" for=(f.id)>
-			~(f.params.Label)
-			~(f.field.error.RouteBeam(
-				doors.RouteBeamMatch(func(err error) bool {
-					return f.params.Required && errors.Is(err, errRequired)
-				}, doors.RouteComp[error](<span class="kisland-form-required" aria-hidden="true">*</span>)),
-			))
-		</label>
+		~(if label == nil {
+			<label class="kisland-form-label" for=(f.id)>
+				~(f.params.Label)
+				~(f.field.error.RouteBeam(
+					doors.RouteBeamMatch(func(err error) bool {
+						return f.params.Required && err != nil
+					}, doors.RouteComp[error](<span class="kisland-form-required" aria-hidden="true">*</span>)),
+				))
+			</label>
+		})
 		<input
 			(&f.invalid)
+			(&f.label)
 			(doors.AInput{
-				Scope: f.field.scope().And(&doors.ScopeRate{Tick: 300 * time.Millisecond}),
+				Scope: f.field.scope().And(&doors.ScopeDebounce{Duration: 250 * time.Millisecond, Limit: time.Second}),
 				On: func(ctx context.Context, r doors.RequestInput) bool {
 					f.update(ctx, r.Event().Value)
 					return false
@@ -95,7 +109,9 @@ elem (f *formWidgetDate) Main() {
 			min=(f.params.Min)
 			max=(f.params.Max)
 			aria-required=(formAria(f.params.Required))
+			aria-label=(label)
 			aria-invalid=(formAria(formShownErr(f.field.error.Get())))
+			data-required-empty=(errors.Is(f.field.error.Get(), errRequired))
 			aria-describedby=(f.id + "-e")/>
 		~(f.field.error.RouteBeam(
 			doors.RouteBeamMatch(formShownErr, doors.RouteBind(func(err error) gox.Elem {

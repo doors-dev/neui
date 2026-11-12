@@ -7,11 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"mime/multipart"
-	"path"
 	"slices"
-	"time"
 	
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
@@ -19,16 +15,11 @@ import (
 	"neui.dev/api"
 )
 
-const formUploadLimit = 64 << 20
-
-const formUploadMemory = 8 << 20
-
 // NewForm builds a form widget for Library.Control: the user fills the
 // fields and presses one of the submit buttons, which sends
 // {"data": values, "submit": button value} to the script waiting in
-// ui.draw(), after saving the chosen files in the agent's workspace under
-// island/<field id>/. The cancel button sends {"canceled": true}. A submit
-// carries at most 64 MB of files.
+// ui.draw(). Files upload into the island dir as they are picked, each under
+// <field id>/. The cancel button sends {"canceled": true}.
 func NewForm(ctx context.Context, p form, submit func(ctx context.Context, s map[string]any) bool) (api.Widget[struct{}], error) {
 	if len(p.Submits) == 0 {
 		p.Submits = []formSubmit{{Text: "Submit"}}
@@ -46,7 +37,6 @@ func NewForm(ctx context.Context, p form, submit func(ctx context.Context, s map
 	root := &root{
 		values: make(map[string]any),
 		scope: new(doors.ScopeFrame),
-		files: make(map[string]*formWidgetFile),
 	}
 	group := &formGroupBase{
 		root: root,
@@ -123,8 +113,7 @@ func (f *formWidget) Update(context.Context, struct{}) {
 }
 
 func (f *formWidget) onSubmit(ctx context.Context, r doors.RequestRawForm) {
-	r.SetRequestBodyLimit(formUploadLimit)
-	parsed, err := r.ParseForm(formUploadMemory)
+	parsed, err := r.ParseForm(64 << 10)
 	if err != nil {
 		neui.IslandReport(ctx, fmt.Errorf("form submit: %w", err))
 		return
@@ -135,73 +124,21 @@ func (f *formWidget) onSubmit(ctx context.Context, r doors.RequestRawForm) {
 	}) {
 		choice = value
 	}
-	type upload struct {
-		dir string
-		input string
-		files []formFileChosen
-	}
 	f.root.mu.Lock()
 	if formErrorsOf(*f.group.errors.Get()) != formErrorsNone {
 		f.root.mu.Unlock()
 		return
 	}
-	uploads := make([]upload, 0, len(f.root.files))
-	for _, file := range f.root.files {
-		uploads = append(uploads, upload{dir: file.dir(), input: file.inputName(), files: *file.chosen.Get()})
-	}
 	data := f.group.collect()
 	f.root.mu.Unlock()
-	fs := neui.IslandFS(ctx)
-	for _, upload := range uploads {
-		if len(upload.files) == 0 {
-			continue
-		}
-		if fs == nil {
-			neui.IslandReport(ctx, errors.New("form submit: no workspace to save the files in"))
-			return
-		}
-		var headers []*multipart.FileHeader
-		if parsed.Form() != nil {
-			headers = parsed.Form().File[upload.input]
-		}
-		for _, chosen := range upload.files {
-			i := slices.IndexFunc(headers, func(h *multipart.FileHeader) bool {
-				return h.Filename == chosen.Name
-			})
-			if i == -1 {
-				neui.IslandReport(ctx, fmt.Errorf("form submit: file %q didn't arrive", chosen.Name))
-				return
-			}
-			src, err := headers[i].Open()
-			if err != nil {
-				neui.IslandReport(ctx, fmt.Errorf("form submit: file %q: %w", chosen.Name, err))
-				return
-			}
-			dst, err := fs.Create(path.Join(upload.dir, chosen.Name))
-			if err != nil {
-				src.Close()
-				neui.IslandReport(ctx, fmt.Errorf("form submit: file %q: %w", chosen.Name, err))
-				return
-			}
-			_, err = io.Copy(dst, src)
-			src.Close()
-			if closeErr := dst.Close(); err == nil {
-				err = closeErr
-			}
-			if err != nil {
-				neui.IslandReport(ctx, fmt.Errorf("form submit: file %q: %w", chosen.Name, err))
-				return
-			}
-		}
-	}
 	f.submit(ctx, map[string]any{"data": data, "submit": choice})
 }
 
-//line form.gox:197
+//line form.gox:134
 func (f *formWidget) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line form.gox:199
+//line form.gox:136
 		scope := f.root.scope.Scope(true).And(neui.IslandScope(ctx))
 	errs, _ := f.errors.ReadAndSub(ctx, func(ctx context.Context, errs formErrors) bool {
 		doors.Call(ctx, f.locked.Set("disabled", errs != formErrorsNone))
@@ -210,33 +147,54 @@ func (f *formWidget) Main() gox.Elem {
 
 		__e = __c.Init("form"); if __e != nil { return }
 		{
-//line form.gox:206
+//line form.gox:143
 			__e = __c.Modify(doors.ARawSubmit{
 			Scope: scope,
-			RequestTimeout: 5 * time.Minute,
 			On: func(ctx context.Context, r doors.RequestRawForm) bool {
 				f.onSubmit(ctx, r)
 				return false
 			},
 		}); if __e != nil { return }
-//line form.gox:214
-			__e = __c.Set("class", "kisland-form"); if __e != nil { return }
+//line form.gox:150
+			__e = __c.Set("class", "kisland-form kisland-form-framed"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line form.gox:215
+//line form.gox:151
 			for _, field := range f.fields {
-//line form.gox:216
+//line form.gox:152
 				__e = __c.Any(field); if __e != nil { return }
 			}
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line form.gox:218
-				__e = __c.Set("class", "kisland-form-actions"); if __e != nil { return }
+//line form.gox:154
+				__e = __c.Set("class", "kisland-form-actions kisland-form-actions-band"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line form.gox:219
+//line form.gox:155
+				for _, s := range f.params.Submits {
+					__e = __c.Init("button"); if __e != nil { return }
+					{
+//line form.gox:157
+						__e = __c.Modify(&f.locked); if __e != nil { return }
+//line form.gox:158
+						__e = __c.Set("type", "submit"); if __e != nil { return }
+//line form.gox:159
+						__e = __c.Set("class", "kisland-button kisland-button-md kisland-button-" + s.Style); if __e != nil { return }
+//line form.gox:160
+						__e = __c.Set("data-submit", s.Value); if __e != nil { return }
+//line form.gox:161
+						__e = __c.Set("disabled", errs != formErrorsNone); if __e != nil { return }
+//line form.gox:162
+						__e = __c.Set("aria-describedby", f.id + "-s"); if __e != nil { return }
+						__e = __c.Submit(); if __e != nil { return }
+//line form.gox:163
+						__e = __c.Any(s.Text); if __e != nil { return }
+					}
+					__e = __c.Close(); if __e != nil { return }
+				}
+//line form.gox:166
 				if f.params.Cancel != "" {
 					__e = __c.Init("button"); if __e != nil { return }
 					{
-//line form.gox:221
+//line form.gox:168
 						__e = __c.Modify(doors.AClick{
 						Scope: scope,
 						On: func(ctx context.Context, r doors.RequestPointer) bool {
@@ -244,85 +202,51 @@ func (f *formWidget) Main() gox.Elem {
 							return false
 						},
 					}); if __e != nil { return }
-//line form.gox:228
+//line form.gox:175
 						__e = __c.Set("type", "button"); if __e != nil { return }
-//line form.gox:229
-						__e = __c.Set("class", "kisland-button kisland-button-md kisland-button-secondary"); if __e != nil { return }
+//line form.gox:176
+						__e = __c.Set("class", "kisland-form-cancel"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line form.gox:230
+//line form.gox:177
 						__e = __c.Any(f.params.Cancel); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
 				}
-//line form.gox:233
-				for _, s := range f.params.Submits {
-					__e = __c.Init("button"); if __e != nil { return }
-					{
-//line form.gox:235
-						__e = __c.Modify(&f.locked); if __e != nil { return }
-//line form.gox:236
-						__e = __c.Set("type", "submit"); if __e != nil { return }
-//line form.gox:237
-						__e = __c.Set("class", "kisland-button kisland-button-md kisland-button-" + s.Style); if __e != nil { return }
-//line form.gox:238
-						__e = __c.Set("data-submit", s.Value); if __e != nil { return }
-//line form.gox:239
-						__e = __c.Set("disabled", errs != formErrorsNone); if __e != nil { return }
-//line form.gox:240
-						__e = __c.Set("aria-describedby", f.id + "-s"); if __e != nil { return }
-						__e = __c.Submit(); if __e != nil { return }
-//line form.gox:241
-						__e = __c.Any(s.Text); if __e != nil { return }
-					}
-					__e = __c.Close(); if __e != nil { return }
-				}
-//line form.gox:244
+//line form.gox:180
 				__e = __c.Any(f.errors.Bind(func(errs formErrors) gox.Elem {
 				return gox.Elem(func(__c gox.Cursor) (__e error) {
 					ctx := __c.Context(); _ = ctx
-//line form.gox:245
-					if errs == formErrorsShown {
+//line form.gox:181
+					if errs != formErrorsNone {
 						__e = __c.Init("p"); if __e != nil { return }
 						{
-//line form.gox:246
+//line form.gox:182
 							__e = __c.Set("class", "kisland-form-help"); if __e != nil { return }
-//line form.gox:246
+//line form.gox:182
 							__e = __c.Set("id", f.id + "-s"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
-							__e = __c.Text("fix the errors above"); if __e != nil { return }
-						}
-						__e = __c.Close(); if __e != nil { return }
-//line form.gox:247
-					} else if errs == formErrorsRequired {
-						__e = __c.Init("p"); if __e != nil { return }
-						{
-//line form.gox:248
-							__e = __c.Set("class", "kisland-form-help"); if __e != nil { return }
-//line form.gox:248
-							__e = __c.Set("id", f.id + "-s"); if __e != nil { return }
-							__e = __c.Submit(); if __e != nil { return }
-							__e = __c.Text("fill the fields marked *"); if __e != nil { return }
+							__e = __c.Text("form is not completed or contains errors"); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
 					}
 				return })
-//line form.gox:250
+//line form.gox:184
 			})); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 			__e = __c.InitVoid("input"); if __e != nil { return }
 			{
-//line form.gox:252
+//line form.gox:186
 				__e = __c.Set("type", "hidden"); if __e != nil { return }
-//line form.gox:252
+//line form.gox:186
 				__e = __c.Set("name", f.id); if __e != nil { return }
-//line form.gox:252
+//line form.gox:186
 				__e = __c.Set("value", f.params.Submits[0].Value); if __e != nil { return }
 			}
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Init("script"); if __e != nil { return }
 			{
-//line form.gox:253
+//line form.gox:187
 				__e = __c.Set("data:name", f.id); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Raw("const form = document.currentScript.parentElement\n\t\t\tconst choice = form.querySelector(\n\t\t\t\t`input[type=\"hidden\"][name=\"${$data(\"name\")}\"]`,\n\t\t\t)\n\t\t\tform.addEventListener(\"click\", (event) => {\n\t\t\t\tconst button = event.target.closest(\"button[type=submit][data-submit]\")\n\t\t\t\tif (button && button.form === form) {\n\t\t\t\t\tchoice.value = button.dataset.submit\n\t\t\t\t}\n\t\t\t})"); if __e != nil { return }
@@ -331,11 +255,11 @@ func (f *formWidget) Main() gox.Elem {
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line form.gox:266
+//line form.gox:200
 }
 
 func formShownErr(err error) bool {
-	return err != nil && !errors.Is(err, errRequired)
+	return err != nil && !errors.Is(err, errRequired) && !errors.Is(err, errUploading)
 }
 
 func formAria(b bool) any {

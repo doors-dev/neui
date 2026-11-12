@@ -15,6 +15,7 @@ import (
 	gmparser "github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/renderer/html"
 	"github.com/yuin/goldmark/text"
+	"neui.dev/internal/markdown"
 )
 
 //go:embed testdata/examples.json

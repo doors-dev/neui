@@ -4,6 +4,7 @@ package devkit_test
 
 import (
 	"encoding/json"
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -88,7 +89,7 @@ func TestFormNumber(t *testing.T) {
 	age := f.Field("Age")
 	age.Type("17")
 	age.ExpectError("enter 18 or more")
-	f.ExpectSubmitMessage("fix the errors above")
+	f.ExpectSubmitMessage("form is not completed or contains errors")
 	age.Type("100")
 	age.ExpectError("enter 99 or less")
 	age.Type("20.5")
@@ -131,11 +132,13 @@ func TestFormDate(t *testing.T) {
 	start.ExpectRequiredMark(true)
 	start.Type("2025-12-31")
 	start.ExpectError("pick 2026-01-01 or later")
-	start.ExpectRequiredMark(false)
+	start.ExpectRequiredMark(true)
 	start.Type("2027-01-01")
 	start.ExpectError("pick 2026-12-31 or earlier")
+	start.ExpectRequiredMark(true)
 	start.Type("2026-06-15")
 	start.ExpectNoError()
+	start.ExpectRequiredMark(false)
 	f.Field("When").ExpectValue("09:30")
 	f.Submit("Submit")
 	stack.ExpectJSON(t, a.Submitted(), `{"data": {"start": "2026-06-15", "when": "09:30"}, "submit": ""}`)
@@ -235,7 +238,7 @@ func TestFormCheckbox(t *testing.T) {
 	terms.ExpectRequiredMark(true)
 	terms.ExpectValue("false")
 	f.ExpectSubmitDisabled(true)
-	f.ExpectSubmitMessage("fill the fields marked *")
+	f.ExpectSubmitMessage("form is not completed or contains errors")
 	terms.Check()
 	terms.ExpectRequiredMark(false)
 	f.ExpectSubmitDisabled(false)
@@ -263,13 +266,13 @@ func TestFormGroup(t *testing.T) {
 	a, f := formApp(t, groupSpec)
 	address := f.Group("Address")
 	address.Field("Street").ExpectRequiredMark(true)
-	f.ExpectSubmitMessage("fill the fields marked *")
+	f.ExpectSubmitMessage("form is not completed or contains errors")
 	address.Field("Street").Type("Main 1")
 	address.Field("City").Type("Lima")
 	lat := address.Group("Geo").Field("Lat")
 	lat.Type("100")
 	lat.ExpectError("enter 90 or less")
-	f.ExpectSubmitMessage("fix the errors above")
+	f.ExpectSubmitMessage("form is not completed or contains errors")
 	lat.Type("-12")
 	lat.ExpectNoError()
 	f.Submit("Submit")
@@ -283,27 +286,37 @@ const listSpec = `{fields: [
 func TestFormList(t *testing.T) {
 	a, f := formApp(t, listSpec)
 	tags := f.List("Tags")
+	tags.ExpectCount(0)
+	tags.ExpectRequiredMark(true)
+	tags.ExpectNoError()
+	f.ExpectSubmitMessage("form is not completed or contains errors")
+	tags.Add()
+	tags.Add()
 	tags.ExpectCount(2)
 	tags.WaitCount("button.kisland-form-item-remove", 2)
 	tags.Find("button.kisland-form-item-remove").WaitAttr("aria-label", "Remove item 1 of Tags")
 	tags.ExpectRequiredMark(true)
 	tags.ExpectNoError()
-	f.ExpectSubmitMessage("fill the fields marked *")
+	tags.Item(0).Control().ExpectRequiredEmpty(true)
+	tags.Item(1).Control().ExpectRequiredEmpty(true)
+	f.ExpectSubmitMessage("form is not completed or contains errors")
 
-	tags.Remove(0)
+	tags.Item(0).Control().Type("go")
+	tags.Remove(1)
 	tags.ExpectCount(1)
 	tags.ExpectError("add at least 2")
-	f.ExpectSubmitMessage("fix the errors above")
+	f.ExpectSubmitMessage("form is not completed or contains errors")
 	tags.Add()
 	tags.ExpectCount(2)
 	tags.ExpectNoError()
 	tags.ExpectRequiredMark(true)
+	tags.Item(1).Control().ExpectRequiredEmpty(true)
 
-	tags.Item(0).Field("Tags").Type("go")
-	tags.Item(1).Field("Tags").Type("toolong")
-	tags.Item(1).Field("Tags").ExpectError("use at most 4 characters")
-	f.ExpectSubmitMessage("fix the errors above")
-	tags.Item(1).Field("Tags").Type("js")
+	tags.Item(0).Control().Type("go")
+	tags.Item(1).Control().Type("toolong")
+	tags.Item(1).Control().ExpectError("use at most 4 characters")
+	f.ExpectSubmitMessage("form is not completed or contains errors")
+	tags.Item(1).Control().Type("js")
 	tags.ExpectRequiredMark(false)
 	tags.ExpectAddDisabled(false)
 
@@ -314,12 +327,12 @@ func TestFormList(t *testing.T) {
 	tags.Add()
 	tags.ExpectCount(3)
 	tags.WaitCount("button.kisland-form-item-remove", 3)
-	tags.Item(2).Field("Tags").Type("rs")
+	tags.Item(2).Control().Type("rs")
 	tags.Remove(0)
 	tags.ExpectCount(2)
 	tags.ExpectAddDisabled(false)
 	tags.Find("button.kisland-form-item-remove").WaitAttr("aria-label", "Remove item 1 of Tags")
-	tags.Item(0).Field("Tags").ExpectValue("js")
+	tags.Item(0).Control().ExpectValue("js")
 
 	f.Submit("Submit")
 	stack.ExpectJSON(t, a.Submitted(), `{"data": {"tags": ["js", "rs"]}, "submit": ""}`)
@@ -335,6 +348,10 @@ const listGroupsSpec = `{fields: [
 func TestFormListGroups(t *testing.T) {
 	a, f := formApp(t, listGroupsSpec)
 	people := f.List("People")
+	people.ExpectCount(0)
+	people.ExpectRequiredMark(true)
+	f.ExpectSubmitMessage("form is not completed or contains errors")
+	people.Add()
 	people.ExpectCount(1)
 	people.Find(".kisland-form-items-foot").WaitGone(".kisland-form-help")
 	people.Item(0).Field("Name").ExpectRequiredMark(true)
@@ -355,30 +372,185 @@ func TestFormListGroups(t *testing.T) {
 	stack.ExpectJSON(t, a.Submitted(), `{"data": {"people": [{"name": "Ada", "age": 36}, {"name": "Alan"}]}, "submit": ""}`)
 }
 
+const listKindsSpec = `{fields: [
+	{type: "list", min: 2, field: {type: "text", label: "Texts", name: "texts", required: true}},
+	{type: "list", min: 2, field: {type: "number", label: "Numbers", name: "numbers"}},
+	{type: "list", min: 2, field: {type: "range", label: "Ranges", name: "ranges", min: 0, max: 10}},
+	{type: "list", min: 2, field: {type: "date", label: "Dates", name: "dates"}},
+	{type: "list", min: 2, field: {type: "textarea", label: "Notes", name: "notes"}},
+	{type: "list", min: 2, field: {type: "select", label: "Radios", name: "radios", options: [{value: "a", label: "A"}, {value: "b", label: "B"}]}},
+	{type: "list", min: 2, field: {type: "select", label: "Dropdowns", name: "dropdowns", options: [
+		{value: 1, label: "One"}, {value: 2, label: "Two"}, {value: 3, label: "Three"}, {value: 4, label: "Four"}, {value: 5, label: "Five"}, {value: 6, label: "Six"}
+	]}},
+	{type: "list", min: 2, field: {type: "select", label: "Boxes", name: "boxes", max: 2, options: [{value: "x", label: "X"}, {value: "y", label: "Y"}]}},
+	{type: "list", min: 2, field: {type: "search", label: "Finds", name: "finds", search: "(q) => [{value: 'kale', label: 'Kale'}]"}},
+	{type: "list", min: 2, field: {type: "file", label: "Files", name: "files"}}
+]}`
+
+func TestFormListItemNames(t *testing.T) {
+	_, f := formApp(t, listKindsSpec)
+	for _, label := range []string{"Texts", "Numbers", "Ranges", "Dates", "Notes", "Radios", "Dropdowns", "Boxes", "Finds", "Files"} {
+		list := f.List(label)
+		list.ExpectCount(0)
+		list.Add()
+		list.Add()
+		list.ExpectCount(2)
+		list.Item(0).WaitGone(".kisland-form-label, legend, label.kisland-form-check > span")
+		list.Item(0).Control().ExpectName(label + ", item 1")
+		list.Item(1).Control().ExpectName(label + ", item 2")
+		list.Remove(0)
+		list.ExpectCount(1)
+		list.Item(0).Control().ExpectName(label + ", item 1")
+		list.Add()
+		list.ExpectCount(2)
+		list.Item(1).Control().ExpectName(label + ", item 2")
+	}
+	texts := f.List("Texts")
+	texts.Item(0).Control().Type("a")
+	texts.Item(0).Control().ExpectValue("a")
+	f.List("Radios").Item(0).Control().Choose("B")
+	f.List("Radios").Item(0).Control().ExpectValue("B")
+	f.List("Dropdowns").Item(1).Control().Choose("Six")
+	f.List("Dropdowns").Item(1).Control().ExpectValue("Six")
+}
+
 func TestFormListDefaults(t *testing.T) {
 	a, f := formApp(t, `{fields: [{type: "list", value: ["go", "js"], field: {type: "text", label: "Tags", name: "tags"}}]}`)
 	tags := f.List("Tags")
 	tags.ExpectCount(2)
-	tags.Item(0).Field("Tags").ExpectValue("go")
-	tags.Item(1).Field("Tags").ExpectValue("js")
+	tags.Item(0).Control().ExpectValue("go")
+	tags.Item(1).Control().ExpectValue("js")
 	f.Submit("Submit")
 	stack.ExpectJSON(t, a.Submitted(), `{"data": {"tags": ["go", "js"]}, "submit": ""}`)
 }
 
 func TestFormNumberFraction(t *testing.T) {
-	t.Skip("bug: a number field without step renders no step attribute, so the browser's own validation takes step 1, rejects 1.5 the widget accepts, and blocks the submit with no message")
-	a, f := formApp(t, `{fields: [{type: "number", label: "Weight", name: "weight"}]}`)
+	a, f := formApp(t, `{fields: [
+		{type: "number", label: "Weight", name: "weight"},
+		{type: "number", label: "Offset", name: "offset", min: -1.5, max: 1.5}
+	]}`)
 	f.Field("Weight").Type("1.5")
 	f.Field("Weight").ExpectNoError()
+	f.Field("Offset").Type("0.25")
+	f.Field("Offset").ExpectNoError()
 	f.WaitCount(":invalid", 0)
 	f.Submit("Submit")
-	stack.ExpectJSON(t, a.Submitted(), `{"data": {"weight": 1.5}, "submit": ""}`)
+	stack.ExpectJSON(t, a.Submitted(), `{"data": {"weight": 1.5, "offset": 0.25}, "submit": ""}`)
 }
 
+func TestFormRangeDefaultOnBrowserStep(t *testing.T) {
+	a, f := formApp(t, `{fields: [
+		{type: "range", label: "Ratio", name: "ratio", min: 0, max: 1},
+		{type: "range", label: "Five", name: "five", min: 0, max: 5},
+		{type: "range", label: "Below", name: "below", min: -5, max: 0}
+	]}`)
+	f.Field("Ratio").ExpectValue("1")
+	f.Field("Ratio").Find("output").WaitText("1")
+	f.Field("Five").ExpectValue("3")
+	f.Field("Five").Find("output").WaitText("3")
+	f.Field("Below").ExpectValue("-2")
+	f.Field("Below").Find("output").WaitText("-2")
+	f.Submit("Submit")
+	stack.ExpectJSON(t, a.Submitted(), `{"data": {"ratio": 1, "five": 3, "below": -2}, "submit": ""}`)
+}
+
+const markJS = `() => {
+	const box = this.getBoundingClientRect()
+	const mark = getComputedStyle(this, "::after")
+	return [Math.round(box.height), mark.content, mark.width, mark.backgroundImage.split("linear-gradient").length - 1, mark.rotate === "none" ? "straight" : "turned"].join(" ")
+}`
+
 func TestFormListRemoveShowsCross(t *testing.T) {
-	t.Skip("bug: the list item remove button has no content and no style, so it shows nothing where the × should be")
 	_, f := formApp(t, listSpec)
-	f.List("Tags").Find("button.kisland-form-item-remove").WaitText("×")
+	tags := f.List("Tags")
+	tags.Add()
+	tags.ExpectCount(1)
+	if got := tags.Find("button.kisland-form-item-remove").Element().MustEval(markJS).String(); got != `24 "" 24px 2 turned` {
+		t.Fatalf("the remove button draws %q, want a 24px mark of two turned bars", got)
+	}
+	if got := tags.Find("button.kisland-form-item-add").Element().MustEval(markJS).String(); got != `24 "" 24px 2 straight` {
+		t.Fatalf("the add button draws %q, want a 24px mark of two straight bars", got)
+	}
+}
+
+const markGapJS = `() => {
+	let node = this
+	while (!node.previousSibling) {
+		node = node.parentNode
+	}
+	const range = document.createRange()
+	range.selectNodeContents(node.previousSibling)
+	const rects = range.getClientRects()
+	return this.getBoundingClientRect().left - rects[rects.length - 1].right
+}`
+
+func TestFormRequiredMarkBesideLegend(t *testing.T) {
+	_, f := formApp(t, `{fields: [
+		{type: "text", label: "Name", name: "name", required: true},
+		{type: "list", min: 1, field: {type: "text", label: "Tags", name: "tags"}},
+		{type: "series", label: "Pick", name: "pick", required: true, fields: ["(p) => ({type: 'text', label: 'A', name: 'a'})", "(p) => ({type: 'text', label: 'B', name: 'b'})"]}
+	]}`)
+	f.List("Tags").ExpectRequiredMark(true)
+	f.Series("Pick").ExpectRequiredMark(true)
+	field := f.Field("Name").Find(".kisland-form-required").Element().MustEval(markGapJS).Num()
+	list := f.List("Tags").Find(":scope > legend .kisland-form-required").Element().MustEval(markGapJS).Num()
+	series := f.Series("Pick").Find(":scope > legend .kisland-form-required").Element().MustEval(markGapJS).Num()
+	if math.Abs(list-field) > 0.5 || math.Abs(series-field) > 0.5 {
+		t.Fatalf("the * sits %.1fpx after a list legend and %.1fpx after a series legend, want %.1fpx as after a field label", list, series, field)
+	}
+}
+
+func TestFormSeriesSearchStep(t *testing.T) {
+	a, f := formApp(t, `{fields: [{type: "series", label: "Pick", name: "pick", required: true, fields: [
+		"(p) => ({type: 'search', label: 'Veg', name: 'veg', max: 2, search: \"(q) => [{value: 'kale', label: 'Kale'}, {value: 'leek', label: 'Leek'}]\"})",
+		"(p) => ({type: 'text', label: 'Note ' + p.length, name: 'note'})"
+	]}]}`)
+	pick := f.Series("Pick")
+	veg := pick.Step(0).Field("Veg")
+	pick.ExpectSteps(1)
+	for range 3 {
+		veg.Type("k")
+		veg.Find(`button[aria-label="Choose Kale"]`).Click()
+		pick.Step(1).Field("Note 1").ExpectValue("")
+		veg.Find(`button[aria-label="Remove Kale"]`).Click()
+		pick.ExpectSteps(1)
+	}
+	veg.Type("k")
+	veg.Find(`button[aria-label="Choose Kale"]`).Click()
+	pick.Step(1).Field("Note 1").ExpectValue("")
+	veg.Type("l")
+	veg.Find(`button[aria-label="Choose Leek"]`).Click()
+	pick.Step(1).Field("Note 2").ExpectValue("")
+	veg.Find(`button[aria-label="Remove Kale"]`).Click()
+	pick.Step(1).Field("Note 1").Type("fresh")
+	pick.ExpectCompleted(true)
+	pick.ExpectNoError()
+	f.Submit("Submit")
+	stack.ExpectJSON(t, a.Submitted(), `{"data": {"pick": {"veg": [{"value": "leek", "label": "Leek"}], "note": "fresh"}}, "submit": ""}`)
+}
+
+func TestFormListOfGroupsWithLists(t *testing.T) {
+	a, f := formApp(t, `{fields: [{type: "list", min: 1, max: 3, field: {type: "group", label: "Teams", name: "teams", fields: [
+		{type: "text", label: "Team", name: "team"},
+		{type: "list", value: ["Ann"], field: {type: "text", label: "Members", name: "members"}}
+	]}}]}`)
+	teams := f.List("Teams")
+	teams.ExpectCount(0)
+	teams.ExpectRequiredMark(true)
+	teams.Add()
+	teams.ExpectCount(1)
+	teams.Add()
+	teams.ExpectCount(2)
+	teams.Item(0).List("Members").ExpectCount(1)
+	teams.Item(1).List("Members").ExpectCount(1)
+	teams.Item(0).List("Members").Add()
+	teams.Item(0).List("Members").ExpectCount(2)
+	teams.Item(1).List("Members").ExpectCount(1)
+	teams.ExpectCount(2)
+	teams.Item(0).Field("Team").Type("Red")
+	teams.Item(0).List("Members").Item(1).Control().Type("Bob")
+	f.Submit("Submit")
+	stack.ExpectJSON(t, a.Submitted(), `{"data": {"teams": [{"team": "Red", "members": ["Ann", "Bob"]}, {"members": ["Ann"]}]}, "submit": ""}`)
 }
 
 const seriesSpec = `{fields: [
@@ -395,8 +567,9 @@ func TestFormSeries(t *testing.T) {
 	pick.ExpectSteps(1)
 	pick.ExpectRequiredMark(true)
 	pick.ExpectCompleted(false)
-	f.ExpectSubmitMessage("fill the fields marked *")
-	pick.Step(0).Field("Kind").ExpectRequiredMark(false)
+	f.ExpectSubmitMessage("form is not completed or contains errors")
+	pick.Step(0).Field("Kind").ExpectRequiredMark(true)
+	pick.Step(0).Field("Kind").ExpectRequiredEmpty(true)
 
 	pick.Step(0).Field("Kind").Choose("Fruit")
 	pick.ExpectSteps(2)
@@ -454,8 +627,9 @@ func TestFormSeriesOptional(t *testing.T) {
 func TestFormSeriesOptionalStartedMarksRequired(t *testing.T) {
 	_, f := formApp(t, optionalSeriesSpec)
 	f.Series("Extra").Step(0).Field("Want").Choose("Yes")
-	f.ExpectSubmitMessage("fill the fields marked *")
-	f.Series("Extra").ExpectRequiredMark(true)
+	f.ExpectSubmitMessage("form is not completed or contains errors")
+	f.Series("Extra").Step(1).Field("What").ExpectRequiredMark(true)
+	f.Series("Extra").ExpectRequiredMark(false)
 }
 
 const gatingSpec = `{fields: [
@@ -466,11 +640,11 @@ const gatingSpec = `{fields: [
 func TestFormSubmitGating(t *testing.T) {
 	a, f := formApp(t, gatingSpec)
 	f.ExpectSubmitDisabled(true)
-	f.ExpectSubmitMessage("fill the fields marked *")
+	f.ExpectSubmitMessage("form is not completed or contains errors")
 	f.Field("Count").Type("0")
-	f.ExpectSubmitMessage("fix the errors above")
+	f.ExpectSubmitMessage("form is not completed or contains errors")
 	f.Field("Count").Type("2")
-	f.ExpectSubmitMessage("fill the fields marked *")
+	f.ExpectSubmitMessage("form is not completed or contains errors")
 	f.ExpectSubmitDisabled(true)
 	f.Field("Name").Type("Ada")
 	f.ExpectSubmitMessage("")
@@ -498,6 +672,31 @@ func TestFormCancel(t *testing.T) {
 	stack.ExpectJSON(t, a.Submitted(), `{"canceled": true}`)
 }
 
+func TestFormCancelQuietAfterSubmits(t *testing.T) {
+	_, f := formApp(t, `{fields: [{type: "text", label: "Name", name: "name", required: true}], submits: [{text: "Save", value: "save"}, {text: "Publish", value: "publish"}], cancel: "Never mind"}`)
+	f.ExpectSubmitMessage("form is not completed or contains errors")
+	got := f.Find(".kisland-form-actions").Element().MustEval(`() => {
+		const order = Array.from(this.children).map((c) => c.matches("button[type=submit]") ? "submit" : c.matches("button.kisland-form-cancel") ? "cancel" : c.matches(".kisland-form-help") ? "help" : c.tagName).join(" ")
+		const cancel = this.querySelector(".kisland-form-cancel")
+		const save = this.querySelector("button[type=submit]")
+		const s = getComputedStyle(cancel)
+		const r = cancel.getBoundingClientRect()
+		const row = Math.abs(r.top + r.height / 2 - (save.getBoundingClientRect().top + save.getBoundingClientRect().height / 2)) < 1
+		return [order, s.backgroundColor, s.borderTopWidth, s.textDecorationLine, r.height >= 24, row].join(" | ")
+	}`).String()
+	if want := "submit submit cancel help | rgba(0, 0, 0, 0) | 0px | underline | true | true"; got != want {
+		t.Fatalf("the actions are %q, want %q", got, want)
+	}
+	focus := f.Find(".kisland-form-cancel").Element().MustEval(`() => {
+		this.focus()
+		const s = getComputedStyle(this)
+		return [this.matches(":focus-visible"), s.outlineStyle, s.outlineWidth].join(" ")
+	}`).String()
+	if focus != "true solid 2px" {
+		t.Fatalf("the focused cancel shows %q, want a 2px focus ring", focus)
+	}
+}
+
 func TestFormFile(t *testing.T) {
 	dir := t.TempDir()
 	a := stack.Island(t, devkit.App{Island: widgets(), Dir: dir, Script: `ui.root.set(ui.form({fields: [
@@ -515,13 +714,14 @@ func TestFormFile(t *testing.T) {
 	}
 	doc := f.Field("Doc")
 	doc.ExpectRequiredMark(true)
-	doc.ExpectValue("No file chosen")
+	doc.ExpectValue("")
 	doc.SetFiles(image)
-	doc.ExpectError("image.png isn't an accepted file type, choose .txt")
+	doc.ExpectFileFailed("image.png", "not .txt")
+	doc.ExpectNoError()
 	f.ExpectSubmitDisabled(true)
 	doc.SetFiles(note)
-	doc.ExpectNoError()
-	doc.ExpectValue("note.txt · 5 B")
+	doc.ExpectValue("note.txt")
+	doc.Find(".kisland-form-file-size").WaitText("5 B")
 	f.Submit("Submit")
 	var got struct {
 		Data struct{ Doc string }
@@ -529,7 +729,7 @@ func TestFormFile(t *testing.T) {
 	if err := json.Unmarshal(a.Submitted(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if filepath.Base(got.Data.Doc) != "note.txt" || filepath.Dir(filepath.Dir(got.Data.Doc)) != "island" {
+	if filepath.Base(got.Data.Doc) != "note.txt" || filepath.Dir(filepath.Dir(got.Data.Doc)) != "board.island" {
 		t.Fatalf("the file field gave %q, want island/<id>/note.txt", got.Data.Doc)
 	}
 	saved, err := os.ReadFile(filepath.Join(dir, got.Data.Doc))

@@ -382,6 +382,18 @@ func IslandFS(ctx context.Context) api.FS {
 	return fs
 }
 
+// IslandDir returns the workspace dir of the island app ctx renders or
+// handles events for, where widgets keep their files. It is emptied when the
+// app starts and kept after it ends. It is "" outside an island.
+func IslandDir(ctx context.Context) string {
+	store := IslandStore(ctx)
+	if store == nil {
+		return ""
+	}
+	dir, _ := store.Load(common.IslandDirKey{}).(string)
+	return dir
+}
+
 // IslandScope returns a blocking doors scope shared by all widgets of the
 // island app: put it on their event hooks so a new event is rejected while an
 // earlier one is still being handled. It is nil outside an island.

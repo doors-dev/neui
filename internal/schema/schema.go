@@ -23,7 +23,7 @@ var schemas sync.Map
 var rawSchemas = newCache(time.Hour)
 
 func newSchema[T any](raw []byte, doc any, defaultDraft *jsonvalid.Draft) (Schema[T], error) {
-	const loc = "schema.json"
+	const loc = "urn:neui:input"
 	c := jsonvalid.NewCompiler()
 	c.UseLoader(jsonvalid.SchemeURLLoader{})
 	c.DefaultDraft(defaultDraft)

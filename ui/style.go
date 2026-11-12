@@ -12,7 +12,9 @@ var style []byte
 
 // Style is the stylesheet of the layouts and widgets, for Library.Head.
 // Spacing and grid cell widths read --kisland-gap-sm, -md, -lg and
-// --kisland-item-sm, -md, -lg, so a host can override them in CSS.
+// --kisland-item-sm, -md, -lg, so a host can override them in CSS; a fill
+// column wraps onto the next line rather than get narrower than
+// --kisland-item-md.
 func Style() gox.Elem {
 	return func(cur gox.Cursor) error {
 		if err := cur.InitVoid("link"); err != nil {

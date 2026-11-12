@@ -2,7 +2,6 @@ package ui
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"maps"
 	"math"
@@ -16,6 +15,24 @@ import (
 )
 
 func newFormWidgetList(ctx context.Context, group formGroup, params listInput) (*formWidgetList, error) {
+	switch v := params.Field.v.(type) {
+	case *textInput:
+		v.Required = true
+	case *numberInput:
+		v.Required = true
+	case *dateInput:
+		v.Required = true
+	case *textArea:
+		v.Required = true
+	case *selectInput:
+		v.Min = max(v.Min, 1)
+	case *searchInput:
+		v.Min = max(v.Min, 1)
+	case *fileInput:
+		v.Required = true
+	case *seriesInput:
+		v.Required = true
+	}
 	base, err := group.newGroup(params.name())
 	if err != nil {
 		return nil, err
@@ -58,6 +75,7 @@ var _ formGroupCollector = formListCollector{}
 type formWidgetList struct {
 	id string
 	index int
+	next string
 	group *formGroupBase
 	system formGroupField
 	params listInput
@@ -90,11 +108,6 @@ func (f *formWidgetList) init(ctx context.Context, value any) error {
 	}
 	for _, v := range values {
 		if err := f.appendFieldLocked(ctx, v); err != nil {
-			return err
-		}
-	}
-	for len(f.fields) < f.params.Min {
-		if err := f.appendFieldLocked(ctx, nil); err != nil {
 			return err
 		}
 	}
@@ -134,6 +147,7 @@ func (f *formWidgetList) appendFieldLocked(ctx context.Context, value any) error
 	if len(f.fields) >= hi {
 		return nil
 	}
+	f.next = f.nextName()
 	field, err := newFormWidgetField(ctx, f, f.params.Field.v)
 	if err != nil {
 		return err
@@ -143,6 +157,7 @@ func (f *formWidgetList) appendFieldLocked(ctx context.Context, value any) error
 		return err
 	}
 	widgetField := &formWidgetListField{
+		name: f.next,
 		remove: f.removeField,
 		field: field,
 	}
@@ -169,15 +184,11 @@ func (f *formWidgetList) onSystemError(ctx context.Context, err error) {
 }
 
 func (f *formWidgetList) sync(ctx context.Context) {
-	if f.group.hasErrors() {
-		f.system.set(ctx, nil, nil)
-		return
-	}
-	if f.group.len() < f.params.Min && len(f.fields) >= f.params.Min {
+	if len(f.fields) == 0 && f.params.Min > 0 {
 		f.system.set(ctx, nil, errRequired)
 		return
 	}
-	if f.group.len() < f.params.Min {
+	if len(f.fields) < f.params.Min {
 		f.system.set(ctx, nil, fmt.Errorf("add at least %d", f.params.Min))
 		return
 	}
@@ -237,8 +248,7 @@ func (f *formWidgetList) newGroup(name string) (*formGroupBase, error) {
 	if f.params.name() != name {
 		panic("wrong list group")
 	}
-	name = f.nextName()
-	group, err := f.group.newGroup(name)
+	group, err := f.group.newGroup(f.next)
 	if err != nil {
 		return nil, err
 	}
@@ -250,12 +260,17 @@ func (f *formWidgetList) newField(name string) (formGroupField, error) {
 	if f.params.name() != name {
 		panic("wrong list group")
 	}
-	name = f.nextName()
-	field, err := f.group.newField(name)
+	next := f.next
+	field, err := f.group.newField(next)
 	if err != nil {
 		return formGroupField{}, err
 	}
 	field.parent = f
+	field.item = doors.DeriveBeam(f.items, func(items []*formWidgetListField) string {
+		return fmt.Sprintf("%s, item %d", f.params.label(), slices.IndexFunc(items, func(item *formWidgetListField) bool {
+			return item.name == next
+		}) + 1)
+	})
 	return field, nil
 }
 
@@ -274,16 +289,19 @@ elem (f *formWidgetList) Main() {
 	~~
 	<fieldset class="kisland-form-box" aria-describedby=(f.id + "-m")>
 		<legend class="kisland-form-box-legend">
-			~(f.params.label())
-			~(f.system.error.RouteBeam(
-				doors.RouteBeamMatch(func(err error) bool {
-					return errors.Is(err, errRequired)
-				}, doors.RouteComp[error](<span class="kisland-form-required" aria-hidden="true">*</span>)),
-			))
+			<span>
+				~(f.params.label())
+				~(doors.DeriveBeam(f.group.errors, func(m *map[string]any) bool {
+					return f.params.Min > 0 && m != nil && len(*m) > 0
+				}).RouteBeam(
+					doors.RouteBeamValue(true, doors.RouteComp[bool](<span class="kisland-form-required" aria-hidden="true">*</span>)),
+				))
+			</span>
 			~" "
 			<span class="kisland-form-count">
 				~(f.count.Bind(elem(count int) {
-					~(if f.params.Max != 0 && f.params.Min != 0 {
+					~(if count == 0 {
+					} else if f.params.Max != 0 && f.params.Min != 0 {
 						~(count, " of ", f.params.Min, "–", f.params.Max)
 					} else if f.params.Max != 0 {
 						~(count, " of ", f.params.Max)
@@ -392,6 +410,7 @@ type formListItemState struct {
 }
 
 type formWidgetListField struct {
+	name string
 	remove func(context.Context, *formWidgetListField)
 	field formWidgetField
 	door doors.Door

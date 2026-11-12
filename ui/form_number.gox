@@ -30,6 +30,7 @@ type formWidgetNumber struct {
 	params numberInput
 	value string
 	invalid doors.Setter
+	label doors.Setter
 	output doors.Door
 }
 
@@ -54,14 +55,16 @@ func (f *formWidgetNumber) init(ctx context.Context, value any) error {
 		if f.params.Max != nil {
 			hi = *f.params.Max
 		}
+		step := 1.0
+		if f.params.Step != nil {
+			step = *f.params.Step
+		}
 		v := lo
 		if hi > lo {
 			v = lo + (hi - lo) / 2
-			if f.params.Step != nil {
-				v = lo + math.Round((v - lo) / *f.params.Step) * *f.params.Step
-				for v > hi {
-					v -= *f.params.Step
-				}
+			v = lo + math.Round((v - lo) / step) * step
+			for v > hi {
+				v -= step
 			}
 		}
 		number = &v
@@ -96,6 +99,7 @@ func (f *formWidgetNumber) update(ctx context.Context, str string) {
 	defer f.field.mutex().Unlock()
 	f.setLocked(ctx, number, err)
 	doors.Call(ctx, f.invalid.Set("aria-invalid", formAria(formShownErr(err))))
+	doors.Call(ctx, f.invalid.Set("data-required-empty", errors.Is(err, errRequired)))
 	if f.params.Type == "range" {
 		f.output.Inner(ctx, str)
 	}
@@ -111,6 +115,13 @@ func (f *formWidgetNumber) setLocked(ctx context.Context, number *float64, err e
 
 elem (f *formWidgetNumber) Main() {
 	~~
+	label := any(nil)
+	if f.field.item != nil {
+		label, _ = f.field.item.ReadAndSub(ctx, func(ctx context.Context, name string) bool {
+			doors.Call(ctx, f.label.Set("aria-label", name))
+			return false
+		})
+	}
 	min, max, step := any(nil), any(nil), any(nil)
 	if f.params.Min != nil {
 		min = strconv.FormatFloat(*f.params.Min, 'f', -1, 64)
@@ -120,23 +131,28 @@ elem (f *formWidgetNumber) Main() {
 	}
 	if f.params.Step != nil {
 		step = strconv.FormatFloat(*f.params.Step, 'f', -1, 64)
+	} else if f.params.Type == "number" {
+		step = "any"
 	}
 	~~
 	<div class="kisland-form-field">
-		<label class="kisland-form-label" for=(f.id)>
-			~(f.params.Label)
-			~(f.field.error.RouteBeam(
-				doors.RouteBeamMatch(func(err error) bool {
-					return f.params.Required && errors.Is(err, errRequired)
-				}, doors.RouteComp[error](<span class="kisland-form-required" aria-hidden="true">*</span>)),
-			))
-		</label>
+		~(if label == nil {
+			<label class="kisland-form-label" for=(f.id)>
+				~(f.params.Label)
+				~(f.field.error.RouteBeam(
+					doors.RouteBeamMatch(func(err error) bool {
+						return f.params.Required && err != nil
+					}, doors.RouteComp[error](<span class="kisland-form-required" aria-hidden="true">*</span>)),
+				))
+			</label>
+		})
 		~(if f.params.Type == "range" {
 			<div class="kisland-form-slider">
 				<input
 					(&f.invalid)
+					(&f.label)
 					(doors.AInput{
-						Scope: f.field.scope().And(&doors.ScopeRate{Tick: 300 * time.Millisecond}),
+						Scope: f.field.scope().And(&doors.ScopeDebounce{Duration: 250 * time.Millisecond, Limit: time.Second}),
 						On: func(ctx context.Context, r doors.RequestInput) bool {
 							f.update(ctx, r.Event().Value)
 							return false
@@ -151,15 +167,18 @@ elem (f *formWidgetNumber) Main() {
 					max=(max)
 					step=(step)
 					aria-required=(formAria(f.params.Required))
+					aria-label=(label)
 					aria-invalid=(formAria(formShownErr(f.field.error.Get())))
+					data-required-empty=(errors.Is(f.field.error.Get(), errRequired))
 					aria-describedby=(f.id + "-e")/>
 				~>(&f.output) <output class="kisland-form-output" for=(f.id)>~(f.value)</output>
 			</div>
 		} else {
 			<input
 				(&f.invalid)
+				(&f.label)
 				(doors.AInput{
-					Scope: f.field.scope().And(&doors.ScopeRate{Tick: 300 * time.Millisecond}),
+					Scope: f.field.scope().And(&doors.ScopeDebounce{Duration: 250 * time.Millisecond, Limit: time.Second}),
 					On: func(ctx context.Context, r doors.RequestInput) bool {
 						f.update(ctx, r.Event().Value)
 						return false
@@ -174,7 +193,9 @@ elem (f *formWidgetNumber) Main() {
 				max=(max)
 				step=(step)
 				aria-required=(formAria(f.params.Required))
+				aria-label=(label)
 				aria-invalid=(formAria(formShownErr(f.field.error.Get())))
+				data-required-empty=(errors.Is(f.field.error.Get(), errRequired))
 				aria-describedby=(f.id + "-e")/>
 		})
 		~(f.field.error.RouteBeam(
@@ -209,7 +230,7 @@ func (f *formWidgetNumber) validate(ctx context.Context, number *float64) error 
 		}
 	}
 	if f.params.Validate != "" {
-		msg, err := f.params.Validate.Call(ctx, number)
+		msg, err := f.params.Validate.Call(ctx, *number)
 		if err != nil {
 			return errSystem
 		}

@@ -75,6 +75,7 @@ type formWidgetSelect struct {
 	defaults []int
 	value []int
 	invalid doors.Setter
+	label doors.Setter
 }
 
 func (f *formWidgetSelect) name() string {
@@ -149,6 +150,7 @@ func (f *formWidgetSelect) update(ctx context.Context, changed string, checked b
 	f.value = selected
 	f.setLocked(ctx, selected, err)
 	doors.Call(ctx, f.invalid.Set("aria-invalid", formAria(formShownErr(err))))
+	doors.Call(ctx, f.invalid.Set("data-required-empty", errors.Is(err, errRequired)))
 }
 
 func (f *formWidgetSelect) setLocked(ctx context.Context, selected []int, err error) {
@@ -163,11 +165,11 @@ func (f *formWidgetSelect) setLocked(ctx context.Context, selected []int, err er
 	f.field.set(ctx, options, err)
 }
 
-//line form_select.gox:163
+//line form_select.gox:165
 func (f *formWidgetSelect) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line form_select.gox:165
+//line form_select.gox:167
 		f.field.mutex().Lock()
 	value := f.value
 	f.field.mutex().Unlock()
@@ -179,22 +181,30 @@ func (f *formWidgetSelect) Main() gox.Elem {
 		},
 	})
 	invalid := formAria(formShownErr(f.field.error.Get()))
+	requiredEmpty := errors.Is(f.field.error.Get(), errRequired)
+	label := any(nil)
+	if f.field.item != nil {
+		label, _ = f.field.item.ReadAndSub(ctx, func(ctx context.Context, name string) bool {
+			doors.Call(ctx, f.label.Set("aria-label", name))
+			return false
+		})
+	}
 	required := f.field.error.RouteBeam(
 		doors.RouteBeamMatch(func(err error) bool {
-			return f.params.Min > 0 && errors.Is(err, errRequired)
+			return f.params.Min > 0 && err != nil
 		}, doors.RouteComp[error](gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
 			__e = __c.Init("span"); if __e != nil { return }
 			{
-//line form_select.gox:179
+//line form_select.gox:189
 				__e = __c.Set("class", "kisland-form-required"); if __e != nil { return }
-//line form_select.gox:179
+//line form_select.gox:189
 				__e = __c.Set("aria-hidden", "true"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Text("*"); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line form_select.gox:179
+//line form_select.gox:189
 		return }))),
 	)
 	errorLine := f.field.error.RouteBeam(
@@ -203,262 +213,295 @@ func (f *formWidgetSelect) Main() gox.Elem {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.Init("p"); if __e != nil { return }
 				{
-//line form_select.gox:183
+//line form_select.gox:193
 					__e = __c.Set("class", "kisland-form-error"); if __e != nil { return }
-//line form_select.gox:183
+//line form_select.gox:193
 					__e = __c.Set("id", f.id + "-e"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line form_select.gox:183
+//line form_select.gox:193
 					__e = __c.Any(err.Error()); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
-//line form_select.gox:183
+//line form_select.gox:193
 			return })
 		})),
 	)
 
-//line form_select.gox:187
+//line form_select.gox:197
 		if f.params.Max == 1 && len(f.params.Options) > 5 {
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line form_select.gox:188
+//line form_select.gox:198
 				__e = __c.Set("class", "kisland-form-field"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-				__e = __c.Init("label"); if __e != nil { return }
-				{
-//line form_select.gox:189
-					__e = __c.Set("class", "kisland-form-label"); if __e != nil { return }
-//line form_select.gox:189
-					__e = __c.Set("for", f.id); if __e != nil { return }
-					__e = __c.Submit(); if __e != nil { return }
-//line form_select.gox:190
-					__e = __c.Any(f.params.Label); if __e != nil { return }
-//line form_select.gox:191
-					__e = __c.Any(required); if __e != nil { return }
+//line form_select.gox:199
+				if label == nil {
+					__e = __c.Init("label"); if __e != nil { return }
+					{
+//line form_select.gox:200
+						__e = __c.Set("class", "kisland-form-label"); if __e != nil { return }
+//line form_select.gox:200
+						__e = __c.Set("for", f.id); if __e != nil { return }
+						__e = __c.Submit(); if __e != nil { return }
+//line form_select.gox:201
+						__e = __c.Any(f.params.Label); if __e != nil { return }
+//line form_select.gox:202
+						__e = __c.Any(required); if __e != nil { return }
+					}
+					__e = __c.Close(); if __e != nil { return }
 				}
-				__e = __c.Close(); if __e != nil { return }
 				__e = __c.Init("select"); if __e != nil { return }
 				{
-//line form_select.gox:194
+//line form_select.gox:206
 					__e = __c.Modify(&f.invalid); if __e != nil { return }
-//line form_select.gox:195
+//line form_select.gox:207
+					__e = __c.Modify(&f.label); if __e != nil { return }
+//line form_select.gox:208
 					__e = __c.Modify(change); if __e != nil { return }
-//line form_select.gox:196
+//line form_select.gox:209
 					__e = __c.Set("class", "kisland-form-select"); if __e != nil { return }
-//line form_select.gox:197
+//line form_select.gox:210
 					__e = __c.Set("id", f.id); if __e != nil { return }
-//line form_select.gox:198
+//line form_select.gox:211
 					__e = __c.Set("name", f.id); if __e != nil { return }
-//line form_select.gox:199
+//line form_select.gox:212
 					__e = __c.Set("aria-required", formAria(f.params.Min > 0)); if __e != nil { return }
-//line form_select.gox:200
+//line form_select.gox:213
+					__e = __c.Set("aria-label", label); if __e != nil { return }
+//line form_select.gox:214
 					__e = __c.Set("aria-invalid", invalid); if __e != nil { return }
-//line form_select.gox:201
+//line form_select.gox:215
+					__e = __c.Set("data-required-empty", requiredEmpty); if __e != nil { return }
+//line form_select.gox:216
 					__e = __c.Set("aria-describedby", f.id + "-e"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
 					__e = __c.Init("option"); if __e != nil { return }
 					{
-//line form_select.gox:202
+//line form_select.gox:217
 						__e = __c.Set("class", "kisland-form-option"); if __e != nil { return }
-//line form_select.gox:202
+//line form_select.gox:217
 						__e = __c.Set("value", ""); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 						__e = __c.Text("Choose…"); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
-//line form_select.gox:203
+//line form_select.gox:218
 					for i, o := range f.params.Options {
 						__e = __c.Init("option"); if __e != nil { return }
 						{
-//line form_select.gox:204
+//line form_select.gox:219
 							__e = __c.Set("class", "kisland-form-option"); if __e != nil { return }
-//line form_select.gox:204
+//line form_select.gox:219
 							__e = __c.Set("value", strconv.Itoa(i)); if __e != nil { return }
-//line form_select.gox:204
+//line form_select.gox:219
 							__e = __c.Set("selected", slices.Contains(value, i)); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
-//line form_select.gox:204
+//line form_select.gox:219
 							__e = __c.Any(o.Label); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
 					}
 				}
 				__e = __c.Close(); if __e != nil { return }
-//line form_select.gox:207
+//line form_select.gox:222
 				__e = __c.Any(errorLine); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line form_select.gox:209
+//line form_select.gox:224
 		} else if f.params.Max == 1 {
 			__e = __c.Init("fieldset"); if __e != nil { return }
 			{
-//line form_select.gox:210
+//line form_select.gox:225
+				__e = __c.Modify(&f.label); if __e != nil { return }
+//line form_select.gox:225
 				__e = __c.Set("class", "kisland-form-group"); if __e != nil { return }
+//line form_select.gox:225
+				__e = __c.Set("aria-label", label); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-				__e = __c.Init("legend"); if __e != nil { return }
-				{
-//line form_select.gox:211
-					__e = __c.Set("class", "kisland-form-label kisland-form-legend"); if __e != nil { return }
-					__e = __c.Submit(); if __e != nil { return }
-//line form_select.gox:212
-					__e = __c.Any(f.params.Label); if __e != nil { return }
-//line form_select.gox:213
-					__e = __c.Any(required); if __e != nil { return }
+//line form_select.gox:226
+				if label == nil {
+					__e = __c.Init("legend"); if __e != nil { return }
+					{
+//line form_select.gox:227
+						__e = __c.Set("class", "kisland-form-label kisland-form-legend"); if __e != nil { return }
+						__e = __c.Submit(); if __e != nil { return }
+//line form_select.gox:228
+						__e = __c.Any(f.params.Label); if __e != nil { return }
+//line form_select.gox:229
+						__e = __c.Any(required); if __e != nil { return }
+					}
+					__e = __c.Close(); if __e != nil { return }
 				}
-				__e = __c.Close(); if __e != nil { return }
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line form_select.gox:216
+//line form_select.gox:233
 					__e = __c.Modify(&f.invalid); if __e != nil { return }
-//line form_select.gox:217
+//line form_select.gox:234
 					__e = __c.Set("class", "kisland-form-options"); if __e != nil { return }
-//line form_select.gox:218
+//line form_select.gox:235
 					__e = __c.Set("role", "radiogroup"); if __e != nil { return }
-//line form_select.gox:219
+//line form_select.gox:236
 					__e = __c.Set("aria-required", formAria(f.params.Min > 0)); if __e != nil { return }
-//line form_select.gox:220
+//line form_select.gox:237
 					__e = __c.Set("aria-invalid", invalid); if __e != nil { return }
-//line form_select.gox:221
+//line form_select.gox:238
+					__e = __c.Set("data-required-empty", requiredEmpty); if __e != nil { return }
+//line form_select.gox:239
 					__e = __c.Set("aria-describedby", f.id + "-e"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line form_select.gox:222
+//line form_select.gox:240
 					if f.params.Min == 0 {
 						__e = __c.Init("label"); if __e != nil { return }
 						{
-//line form_select.gox:223
+//line form_select.gox:241
 							__e = __c.Set("class", "kisland-form-check"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.InitVoid("input"); if __e != nil { return }
 							{
-//line form_select.gox:225
+//line form_select.gox:243
 								__e = __c.Modify(&f.invalid); if __e != nil { return }
-//line form_select.gox:226
+//line form_select.gox:244
 								__e = __c.Modify(change); if __e != nil { return }
-//line form_select.gox:227
+//line form_select.gox:245
 								__e = __c.Set("class", "kisland-form-radio"); if __e != nil { return }
-//line form_select.gox:228
+//line form_select.gox:246
 								__e = __c.Set("type", "radio"); if __e != nil { return }
-//line form_select.gox:229
+//line form_select.gox:247
 								__e = __c.Set("name", f.id); if __e != nil { return }
-//line form_select.gox:230
+//line form_select.gox:248
 								__e = __c.Set("value", ""); if __e != nil { return }
-//line form_select.gox:231
+//line form_select.gox:249
 								__e = __c.Set("checked", len(value) == 0); if __e != nil { return }
-//line form_select.gox:232
+//line form_select.gox:250
 								__e = __c.Set("aria-invalid", invalid); if __e != nil { return }
+//line form_select.gox:251
+								__e = __c.Set("data-required-empty", requiredEmpty); if __e != nil { return }
 							}
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.Text("None"); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
 					}
-//line form_select.gox:236
+//line form_select.gox:255
 					for i, o := range f.params.Options {
 						__e = __c.Init("label"); if __e != nil { return }
 						{
-//line form_select.gox:237
+//line form_select.gox:256
 							__e = __c.Set("class", "kisland-form-check"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.InitVoid("input"); if __e != nil { return }
 							{
-//line form_select.gox:239
+//line form_select.gox:258
 								__e = __c.Modify(&f.invalid); if __e != nil { return }
-//line form_select.gox:240
+//line form_select.gox:259
 								__e = __c.Modify(change); if __e != nil { return }
-//line form_select.gox:241
+//line form_select.gox:260
 								__e = __c.Set("class", "kisland-form-radio"); if __e != nil { return }
-//line form_select.gox:242
+//line form_select.gox:261
 								__e = __c.Set("type", "radio"); if __e != nil { return }
-//line form_select.gox:243
+//line form_select.gox:262
 								__e = __c.Set("name", f.id); if __e != nil { return }
-//line form_select.gox:244
+//line form_select.gox:263
 								__e = __c.Set("value", strconv.Itoa(i)); if __e != nil { return }
-//line form_select.gox:245
+//line form_select.gox:264
 								__e = __c.Set("checked", slices.Contains(value, i)); if __e != nil { return }
-//line form_select.gox:246
+//line form_select.gox:265
 								__e = __c.Set("aria-invalid", invalid); if __e != nil { return }
+//line form_select.gox:266
+								__e = __c.Set("data-required-empty", requiredEmpty); if __e != nil { return }
 							}
 							__e = __c.Submit(); if __e != nil { return }
-//line form_select.gox:247
+//line form_select.gox:267
 							__e = __c.Any(o.Label); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
 					}
 				}
 				__e = __c.Close(); if __e != nil { return }
-//line form_select.gox:251
+//line form_select.gox:271
 				__e = __c.Any(errorLine); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		} else  {
 			__e = __c.Init("fieldset"); if __e != nil { return }
 			{
-//line form_select.gox:254
+//line form_select.gox:274
+				__e = __c.Modify(&f.label); if __e != nil { return }
+//line form_select.gox:274
 				__e = __c.Set("class", "kisland-form-group"); if __e != nil { return }
+//line form_select.gox:274
+				__e = __c.Set("aria-label", label); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-				__e = __c.Init("legend"); if __e != nil { return }
-				{
-//line form_select.gox:255
-					__e = __c.Set("class", "kisland-form-label kisland-form-legend"); if __e != nil { return }
-					__e = __c.Submit(); if __e != nil { return }
-//line form_select.gox:256
-					__e = __c.Any(f.params.Label); if __e != nil { return }
-//line form_select.gox:257
-					__e = __c.Any(required); if __e != nil { return }
+//line form_select.gox:275
+				if label == nil {
+					__e = __c.Init("legend"); if __e != nil { return }
+					{
+//line form_select.gox:276
+						__e = __c.Set("class", "kisland-form-label kisland-form-legend"); if __e != nil { return }
+						__e = __c.Submit(); if __e != nil { return }
+//line form_select.gox:277
+						__e = __c.Any(f.params.Label); if __e != nil { return }
+//line form_select.gox:278
+						__e = __c.Any(required); if __e != nil { return }
+					}
+					__e = __c.Close(); if __e != nil { return }
 				}
-				__e = __c.Close(); if __e != nil { return }
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line form_select.gox:260
+//line form_select.gox:282
 					__e = __c.Modify(&f.invalid); if __e != nil { return }
-//line form_select.gox:261
+//line form_select.gox:283
 					__e = __c.Set("class", "kisland-form-options"); if __e != nil { return }
-//line form_select.gox:262
+//line form_select.gox:284
 					__e = __c.Set("aria-invalid", invalid); if __e != nil { return }
-//line form_select.gox:263
+//line form_select.gox:285
+					__e = __c.Set("data-required-empty", requiredEmpty); if __e != nil { return }
+//line form_select.gox:286
 					__e = __c.Set("aria-describedby", f.id + "-e"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line form_select.gox:264
+//line form_select.gox:287
 					for i, o := range f.params.Options {
 						__e = __c.Init("label"); if __e != nil { return }
 						{
-//line form_select.gox:265
+//line form_select.gox:288
 							__e = __c.Set("class", "kisland-form-check"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.InitVoid("input"); if __e != nil { return }
 							{
-//line form_select.gox:267
+//line form_select.gox:290
 								__e = __c.Modify(&f.invalid); if __e != nil { return }
-//line form_select.gox:268
+//line form_select.gox:291
 								__e = __c.Modify(change); if __e != nil { return }
-//line form_select.gox:269
+//line form_select.gox:292
 								__e = __c.Set("class", "kisland-form-checkbox"); if __e != nil { return }
-//line form_select.gox:270
+//line form_select.gox:293
 								__e = __c.Set("type", "checkbox"); if __e != nil { return }
-//line form_select.gox:271
+//line form_select.gox:294
 								__e = __c.Set("name", f.id); if __e != nil { return }
-//line form_select.gox:272
+//line form_select.gox:295
 								__e = __c.Set("value", strconv.Itoa(i)); if __e != nil { return }
-//line form_select.gox:273
+//line form_select.gox:296
 								__e = __c.Set("checked", slices.Contains(value, i)); if __e != nil { return }
-//line form_select.gox:274
+//line form_select.gox:297
 								__e = __c.Set("aria-invalid", invalid); if __e != nil { return }
+//line form_select.gox:298
+								__e = __c.Set("data-required-empty", requiredEmpty); if __e != nil { return }
 							}
 							__e = __c.Submit(); if __e != nil { return }
-//line form_select.gox:275
+//line form_select.gox:299
 							__e = __c.Any(o.Label); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
 					}
 				}
 				__e = __c.Close(); if __e != nil { return }
-//line form_select.gox:279
+//line form_select.gox:303
 				__e = __c.Any(errorLine); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		}
 	return })
-//line form_select.gox:282
+//line form_select.gox:306
 }
 
 func (f *formWidgetSelect) validate(selected []int) error {

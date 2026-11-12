@@ -1,49 +1,433 @@
 @reference "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 @layer kisland {
+	:where([class*="kisland-"]), :where([class*="kisland-"])::before, :where([class*="kisland-"])::after { @apply box-border }
+
 	.kisland-column { @apply flex flex-col min-w-0 }
 	.kisland-row { @apply flex flex-row flex-wrap min-w-0 }
 	.kisland-grid { @apply grid min-w-0 }
 	.kisland-grid-cell { @apply min-w-0 }
 
-	.kisland-gap-sm { @apply gap-(--kisland-gap-sm,0.5rem) }
-	.kisland-gap-md { @apply gap-(--kisland-gap-md,1rem) }
-	.kisland-gap-lg { @apply gap-(--kisland-gap-lg,1.5rem) }
+	.kisland-gap-sm { @apply gap-(--kisland-gap-sm,0.375rem) }
+	.kisland-gap-md { @apply gap-(--kisland-gap-md,0.75rem) }
+	.kisland-gap-lg { @apply gap-(--kisland-gap-lg,1.25rem) }
 
 	.kisland-align-start { @apply items-start }
 	.kisland-align-center { @apply items-center }
 	.kisland-align-end { @apply items-end }
-
 	.kisland-justify-start { @apply justify-start }
 	.kisland-justify-end { @apply justify-end }
 	.kisland-justify-between { @apply justify-between }
 
-	.kisland-row > .kisland-fill-1 { @apply grow-1 basis-0 }
-	.kisland-row > .kisland-fill-2 { @apply grow-2 basis-0 }
-	.kisland-row > .kisland-fill-3 { @apply grow-3 basis-0 }
-	.kisland-row > .kisland-fill-4 { @apply grow-4 basis-0 }
-	.kisland-row > .kisland-fill-5 { @apply grow-5 basis-0 }
-	.kisland-row > .kisland-fill-6 { @apply grow-6 basis-0 }
+	.kisland-row > .kisland-fill-1 { @apply grow basis-0 min-w-[min(100%,var(--kisland-item-md,12rem))] }
+	.kisland-row > .kisland-fill-2 { @apply grow-2 basis-0 min-w-[min(100%,var(--kisland-item-md,12rem))] }
+	.kisland-row > .kisland-fill-3 { @apply grow-3 basis-0 min-w-[min(100%,var(--kisland-item-md,12rem))] }
+	.kisland-row > .kisland-fill-4 { @apply grow-4 basis-0 min-w-[min(100%,var(--kisland-item-md,12rem))] }
+	.kisland-row > .kisland-fill-5 { @apply grow-5 basis-0 min-w-[min(100%,var(--kisland-item-md,12rem))] }
+	.kisland-row > .kisland-fill-6 { @apply grow-6 basis-0 min-w-[min(100%,var(--kisland-item-md,12rem))] }
 
-	.kisland-item-sm { @apply grid-cols-[repeat(auto-fill,minmax(min(100%,var(--kisland-item-sm,10rem)),1fr))] }
-	.kisland-item-md { @apply grid-cols-[repeat(auto-fill,minmax(min(100%,var(--kisland-item-md,14rem)),1fr))] }
-	.kisland-item-lg { @apply grid-cols-[repeat(auto-fill,minmax(min(100%,var(--kisland-item-lg,20rem)),1fr))] }
+	.kisland-item-sm { @apply grid-cols-[repeat(auto-fill,minmax(min(100%,var(--kisland-item-sm,9rem)),1fr))] }
+	.kisland-item-md { @apply grid-cols-[repeat(auto-fill,minmax(min(100%,var(--kisland-item-md,12rem)),1fr))] }
+	.kisland-item-lg { @apply grid-cols-[repeat(auto-fill,minmax(min(100%,var(--kisland-item-lg,18rem)),1fr))] }
 
-	.kisland-table { @apply flex flex-col gap-2 min-w-0 overflow-x-auto }
-	.kisland-table-grid { @apply w-full border-collapse text-sm text-left }
-	.kisland-table-grid th { @apply px-3 py-2 font-semibold border-b border-current/20 }
-	.kisland-table-grid td { @apply px-3 py-2 border-b border-current/10 align-middle }
-	.kisland-table-link { @apply p-0 text-left [font:inherit] text-inherit underline underline-offset-2 cursor-pointer bg-transparent border-0 }
-	.kisland-table-actions { @apply text-right whitespace-nowrap space-x-1 }
-	.kisland-table-empty { @apply text-center opacity-60 }
-	.kisland-table-error { @apply text-center text-red-600 }
-	.kisland-table-check { @apply w-px }
-	.kisland-table-checkbox { @apply size-4 align-middle cursor-pointer accent-current disabled:cursor-not-allowed disabled:opacity-40 }
-	.kisland-table-selection { @apply flex flex-wrap items-center gap-2 }
+	.kisland-button {
+		@apply inline-flex items-center justify-center gap-1 max-w-full py-0.5 text-center wrap-anywhere select-none cursor-pointer font-[inherit] font-medium leading-tight tabular-nums
+			border border-transparent rounded-(--kisland-radius,0.25rem) transition-[color,background-color,border-color] duration-75
+			focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--kisland-focus,light-dark(var(--color-blue-600,#2563eb),var(--color-blue-400,#60a5fa)))
+			enabled:active:translate-y-px disabled:opacity-45 disabled:cursor-not-allowed
+			aria-busy:relative aria-busy:pointer-events-none aria-busy:cursor-progress aria-busy:[-webkit-text-fill-color:transparent]
+			aria-busy:after:absolute aria-busy:after:inset-0 aria-busy:after:m-auto aria-busy:after:size-3.5 aria-busy:after:rounded-full
+			aria-busy:after:border-2 aria-busy:after:border-current aria-busy:after:border-r-transparent aria-busy:after:animate-spin motion-reduce:aria-busy:after:animate-pulse
+			aria-disabled:opacity-45 aria-disabled:cursor-not-allowed aria-disabled:pointer-events-none aria-disabled:focus-visible:opacity-100
+			forced-colors:disabled:opacity-100 forced-colors:disabled:text-[GrayText] forced-colors:disabled:border-[GrayText]
+			forced-colors:aria-disabled:opacity-100 forced-colors:aria-disabled:text-[GrayText] forced-colors:aria-disabled:border-[GrayText]
+	}
+	.kisland-button-sm { @apply min-h-6 px-2 text-xs }
+	.kisland-button-md { @apply min-h-7 px-2.5 text-sm }
+	.kisland-button-lg { @apply min-h-9 px-3.5 text-base }
+	.kisland-button-primary {
+		@apply bg-(--kisland-primary,var(--color-blue-600,#2563eb)) text-(--kisland-on-primary,#fff)
+			enabled:hover:bg-[var(--kisland-primary-hover,var(--color-blue-700,#1d4ed8))]
+			enabled:active:bg-[var(--kisland-primary-active,var(--color-blue-800,#1e40af))]
+	}
+	.kisland-button-success {
+		@apply bg-(--kisland-success,var(--color-green-700,#15803d)) text-(--kisland-on-success,#fff)
+			enabled:hover:bg-[var(--kisland-success-hover,var(--color-green-800,#166534))]
+			enabled:active:bg-[var(--kisland-success-active,var(--color-green-900,#14532d))]
+	}
+	.kisland-button-danger {
+		@apply bg-(--kisland-danger,var(--color-red-600,#dc2626)) text-(--kisland-on-danger,#fff)
+			enabled:hover:bg-[var(--kisland-danger-hover,var(--color-red-700,#b91c1c))]
+			enabled:active:bg-[var(--kisland-danger-active,var(--color-red-800,#991b1b))]
+	}
+	.kisland-button-secondary {
+		@apply text-inherit bg-current/5 border-current/24
+			enabled:hover:bg-current/10 enabled:hover:border-current/36 enabled:active:bg-current/15
+	}
+
+	.kisland-text { @apply text-sm wrap-anywhere }
+
+	.kisland-prose {
+		@apply prose prose-sm;
+
+		--tw-prose-body: currentColor;
+		--tw-prose-headings: currentColor;
+		--tw-prose-lead: currentColor;
+		--tw-prose-bold: currentColor;
+		--tw-prose-links: color-mix(in oklab, var(--kisland-primary, #2563eb) 62%, currentColor);
+		--tw-prose-counters: color-mix(in oklab, currentColor 72%, transparent);
+		--tw-prose-bullets: color-mix(in oklab, currentColor 56%, transparent);
+		--tw-prose-hr: color-mix(in oklab, currentColor 16%, transparent);
+		--tw-prose-quotes: color-mix(in oklab, currentColor 82%, transparent);
+		--tw-prose-quote-borders: color-mix(in oklab, currentColor 24%, transparent);
+		--tw-prose-captions: color-mix(in oklab, currentColor 72%, transparent);
+		--tw-prose-kbd: currentColor;
+		--tw-prose-kbd-shadows: currentColor;
+		--tw-prose-code: currentColor;
+		--tw-prose-pre-code: currentColor;
+		--tw-prose-pre-bg: color-mix(in oklab, currentColor 5%, transparent);
+		--tw-prose-th-borders: color-mix(in oklab, currentColor 24%, transparent);
+		--tw-prose-td-borders: color-mix(in oklab, currentColor 8%, transparent);
+
+		@apply max-w-none min-w-0 text-sm/normal wrap-break-word;
+		@apply [&>:first-child]:mt-0 [&>.kisland-tone-label:first-child+*]:mt-0 [&>:last-child]:mb-0;
+
+		@apply prose-headings:mt-4 prose-headings:mb-1.5 prose-headings:font-semibold prose-headings:tracking-normal prose-headings:text-balance;
+		@apply prose-h1:text-lg/tight prose-h2:text-base/tight prose-h3:text-sm/tight prose-h4:text-sm/tight prose-h5:text-sm/tight prose-h6:text-sm/tight;
+		@apply prose-h1:mt-5 prose-h5:text-current/72 prose-h6:text-current/72;
+
+		@apply prose-p:my-2;
+		@apply prose-strong:font-semibold;
+
+		@apply prose-a:font-medium prose-a:underline prose-a:decoration-current/35 prose-a:decoration-1 prose-a:underline-offset-2 prose-a:rounded-xs;
+		@apply prose-a:hover:decoration-current prose-a:hover:decoration-2;
+		@apply prose-a:focus-visible:outline-2 prose-a:focus-visible:outline-offset-1 prose-a:focus-visible:outline-(--kisland-focus,light-dark(var(--color-blue-600,#2563eb),var(--color-blue-400,#60a5fa)));
+		@apply prose-a:forced-colors:text-[LinkText];
+
+		@apply prose-ul:my-2 prose-ul:pl-5 prose-ol:my-2 prose-ol:pl-5 prose-ol:marker:tabular-nums;
+		@apply prose-li:my-0.5 prose-li:pl-0.5;
+		@apply [&_li>:is(ul,ol)]:my-0.5 [&_li>p]:my-1;
+		@apply [&_li:has(>input[type=checkbox])]:list-none [&_li>input[type=checkbox]]:m-0 [&_li>input[type=checkbox]]:mr-1.5 [&_li>input[type=checkbox]]:-ml-5 [&_li>input[type=checkbox]]:align-[-0.125em];
+
+		@apply prose-code:font-[JetBrains_Mono,ui-monospace,monospace] prose-code:font-normal prose-code:before:content-none prose-code:after:content-none;
+		@apply [&_:not(pre)>code]:px-1 [&_:not(pre)>code]:py-px [&_:not(pre)>code]:rounded-xs [&_:not(pre)>code]:bg-current/8 [&_:not(pre)>code]:text-[0.857em] [&_:not(pre)>code]:wrap-anywhere;
+		@apply forced-colors:[&_:not(pre)>code]:border forced-colors:[&_:not(pre)>code]:border-solid forced-colors:[&_:not(pre)>code]:border-[CanvasText];
+
+		@apply prose-pre:my-2 prose-pre:px-2.5 prose-pre:py-2 prose-pre:rounded-(--kisland-radius,0.25rem) prose-pre:border prose-pre:border-solid prose-pre:border-current/12;
+		@apply prose-pre:font-[JetBrains_Mono,ui-monospace,monospace] prose-pre:text-xs/relaxed prose-pre:whitespace-pre prose-pre:[tab-size:4] prose-pre:wrap-normal prose-pre:overflow-x-auto;
+		@apply prose-pre:focus-visible:outline-2 prose-pre:focus-visible:outline-offset-2 prose-pre:focus-visible:outline-(--kisland-focus,light-dark(var(--color-blue-600,#2563eb),var(--color-blue-400,#60a5fa)));
+		@apply prose-pre:forced-colors:border-[CanvasText];
+
+		@apply prose-blockquote:mx-0 prose-blockquote:my-2 prose-blockquote:pl-3 prose-blockquote:border-0 prose-blockquote:border-l-2 prose-blockquote:border-solid prose-blockquote:not-italic prose-blockquote:font-normal prose-blockquote:[quotes:none];
+		@apply prose-blockquote:forced-colors:border-[CanvasText] [&_blockquote>:first-child]:mt-0 [&_blockquote>:last-child]:mb-0;
+
+		@apply prose-hr:my-3 prose-hr:h-0 prose-hr:border-0 prose-hr:border-t prose-hr:border-solid prose-hr:forced-colors:border-[CanvasText];
+
+		@apply prose-img:block prose-img:my-0 prose-img:max-w-full prose-img:h-auto prose-img:max-h-80 prose-img:rounded-(--kisland-radius,0.25rem) prose-img:border prose-img:border-solid prose-img:border-current/12;
+
+		@apply [&_[role=region]:has(>table)]:my-2 [&_[role=region]:has(>table)]:max-w-full [&_[role=region]:has(>table)]:w-fit [&_[role=region]:has(>table)]:overflow-x-auto;
+		@apply [&_[role=region]:has(>table)]:rounded-(--kisland-radius,0.25rem) [&_[role=region]:has(>table)]:border [&_[role=region]:has(>table)]:border-solid [&_[role=region]:has(>table)]:border-current/16;
+		@apply [&_[role=region]:has(>table)]:focus-visible:outline-2 [&_[role=region]:has(>table)]:focus-visible:outline-offset-2 [&_[role=region]:has(>table)]:focus-visible:outline-(--kisland-focus,light-dark(var(--color-blue-600,#2563eb),var(--color-blue-400,#60a5fa)));
+		@apply [&_[role=region]:has(>table)]:forced-colors:border-[CanvasText];
+		@apply prose-table:my-0 prose-table:w-auto prose-table:border-separate prose-table:border-spacing-0 prose-table:text-sm/snug prose-table:text-left prose-table:tabular-nums;
+		@apply prose-thead:border-0 prose-tr:border-0;
+		@apply prose-th:px-2.5 prose-th:py-1.5 prose-th:whitespace-nowrap prose-th:text-xs/tight prose-th:font-semibold prose-th:uppercase prose-th:tracking-wider prose-th:text-current/72 prose-th:bg-current/6;
+		@apply prose-th:border-0 prose-th:border-b prose-th:border-solid prose-th:border-current/24 prose-th:align-bottom;
+		@apply prose-td:h-8 prose-td:px-2.5 prose-td:py-1 prose-td:align-middle prose-td:border-0 prose-td:border-b prose-td:border-solid prose-td:border-current/8 [&_tbody_tr:last-child>td]:border-b-0;
+		@apply [&_tbody_tr:nth-child(even)]:bg-current/4;
+		@apply [&_:is(th,td)[align=left]]:text-left [&_:is(th,td)[align=center]]:text-center [&_:is(th,td)[align=right]]:text-right;
+	}
+
+	.kisland-table-prose { @apply text-[length:inherit] leading-[inherit] }
+
+	.kisland-file {
+		@apply inline-flex items-baseline gap-1.5 max-w-full px-1.5 rounded-xs border border-solid border-current/24 bg-current/5 no-underline text-inherit font-normal align-baseline leading-[1.45]
+			hover:bg-current/10 hover:border-current/40
+			focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-(--kisland-focus,light-dark(var(--color-blue-600,#2563eb),var(--color-blue-400,#60a5fa)))
+			forced-colors:border-[LinkText] forced-colors:text-[LinkText]
+	}
+	.kisland-file-icon { @apply self-center shrink-0 size-3 text-current/72 }
+	.kisland-file-name { @apply min-w-0 font-medium underline decoration-current/40 underline-offset-2 wrap-anywhere }
+	.kisland-file-meta { @apply shrink-0 text-xs tabular-nums text-current/72 }
+	.kisland-file-gone { @apply *:text-inherit border-dashed bg-transparent hover:bg-transparent hover:border-current/24 text-current/72 forced-colors:border-[GrayText] forced-colors:text-[GrayText] }
+
+	.kisland-text-card { @apply min-w-0 p-3 rounded-(--kisland-radius-lg,0.375rem) border border-solid border-current/16 forced-colors:border-[CanvasText] }
+	.kisland-tone-info { @apply shadow-[inset_0_3px_0_var(--kisland-info,var(--color-sky-700,#0369a1))] forced-colors:border-t-4 }
+	.kisland-tone-success { @apply shadow-[inset_0_3px_0_var(--kisland-success,var(--color-green-700,#15803d))] forced-colors:border-t-4 }
+	.kisland-tone-warning { @apply shadow-[inset_0_3px_0_var(--kisland-warning,var(--color-amber-700,#b45309))] forced-colors:border-t-4 }
+	.kisland-tone-danger { @apply shadow-[inset_0_3px_0_var(--kisland-danger,var(--color-red-600,#dc2626))] forced-colors:border-t-4 }
+	.kisland-tone-label { @apply sr-only }
+
+	.kisland-table { @apply flex flex-col gap-1.5 min-w-0 }
+	.kisland-table-box {
+		@apply overflow-auto max-h-(--kisland-table-max-h,28rem) scroll-pt-8 rounded-(--kisland-radius,0.25rem) border border-current/16
+			focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--kisland-focus,light-dark(var(--color-blue-600,#2563eb),var(--color-blue-400,#60a5fa)))
+	}
+	.kisland-table-caption { @apply sr-only }
+	.kisland-table-grid { @apply w-full border-separate border-spacing-0 text-sm/snug text-left tabular-nums }
+	.kisland-table-head-cell {
+		@apply sticky top-0 z-1 px-2.5 py-1.5 whitespace-nowrap text-xs/tight font-semibold uppercase tracking-wider text-current/72
+			bg-(--kisland-bg,Canvas) bg-linear-to-b from-current/6 to-current/6 border-b border-current/24
+			aria-[sort=ascending]:text-current aria-[sort=descending]:text-current
+	}
+	.kisland-table-sort {
+		@apply inline-flex items-center gap-1 min-h-6 -my-1.5 -mx-1 px-1 border-0 bg-transparent cursor-pointer rounded-xs
+			font-[inherit] text-[length:inherit] [font-weight:inherit] leading-[inherit] tracking-[inherit] uppercase text-inherit hover:text-current
+			focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--kisland-focus,light-dark(var(--color-blue-600,#2563eb),var(--color-blue-400,#60a5fa)))
+	}
+	.kisland-table-sort-icon { @apply inline-block w-3 text-center font-normal not-italic }
+	.kisland-table-row {
+		@apply even:bg-current/4 hover:bg-(--kisland-primary,var(--color-blue-600,#2563eb))/8 last:*:border-b-0
+			has-checked:bg-(--kisland-primary,var(--color-blue-600,#2563eb))/14 has-checked:hover:bg-(--kisland-primary,var(--color-blue-600,#2563eb))/20
+	}
+	.kisland-table-message-row { @apply bg-transparent last:*:border-b-0 }
+	.kisland-table-filler { @apply last:*:border-b-0 }
+	.kisland-table-cell { @apply h-8 min-w-22 px-2.5 py-0.5 align-middle border-b border-current/8 }
+	.kisland-table-link {
+		@apply inline-flex items-center min-h-6 min-w-6 p-0 m-0 border-0 bg-transparent cursor-pointer text-left font-[inherit] text-[length:inherit] font-medium rounded-xs
+			text-[color-mix(in_oklab,var(--kisland-primary,var(--color-blue-600,#2563eb))_62%,currentColor)] underline decoration-current/35 underline-offset-2 hover:decoration-current
+			focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--kisland-focus,light-dark(var(--color-blue-600,#2563eb),var(--color-blue-400,#60a5fa)))
+	}
+	.kisland-table-check { @apply w-px min-w-0 px-1.5 text-center }
+	.kisland-table-check-target {
+		@apply inline-flex items-center justify-center size-6 -my-1.5 align-middle cursor-pointer rounded-xs
+			has-disabled:cursor-not-allowed has-disabled:opacity-50 forced-colors:has-disabled:opacity-100 has-aria-busy:cursor-wait
+	}
+	.kisland-table-checkbox, .kisland-form-checkbox {
+		@apply appearance-none relative inline-block align-middle m-0 size-3.25 shrink-0 cursor-[inherit] rounded-xs border border-current/56 bg-(--kisland-bg,Canvas)
+			before:hidden before:content-[''] before:absolute before:inset-0 before:m-auto before:w-1 before:h-2 before:-translate-y-px before:rotate-45 before:border-r-[1.5px] before:border-b-[1.5px] before:border-(--kisland-bg,Canvas)
+			checked:border-[color-mix(in_oklab,var(--kisland-primary,var(--color-blue-600,#2563eb))_62%,currentColor)] checked:bg-[color-mix(in_oklab,var(--kisland-primary,var(--color-blue-600,#2563eb))_62%,currentColor)] checked:before:block
+			aria-busy:cursor-wait aria-busy:border-[color-mix(in_oklab,var(--kisland-primary,var(--color-blue-600,#2563eb))_62%,currentColor)] aria-busy:bg-[color-mix(in_oklab,var(--kisland-primary,var(--color-blue-600,#2563eb))_62%,currentColor)]
+			aria-busy:checked:border-current/56 aria-busy:checked:bg-current/56 aria-busy:checked:before:hidden
+			aria-invalid:not-checked:border-[color-mix(in_oklab,var(--kisland-danger,var(--color-red-600,#dc2626))_70%,currentColor)]
+			focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--kisland-focus,light-dark(var(--color-blue-600,#2563eb),var(--color-blue-400,#60a5fa)))
+			forced-colors:forced-color-adjust-none forced-colors:border-[CanvasText] forced-colors:aria-invalid:not-checked:border-[CanvasText] forced-colors:bg-[Canvas] forced-colors:before:border-[HighlightText]
+			forced-colors:checked:border-[Highlight] forced-colors:checked:bg-[Highlight] forced-colors:aria-busy:border-[Highlight] forced-colors:aria-busy:bg-[Highlight]
+			forced-colors:aria-busy:checked:border-[GrayText] forced-colors:aria-busy:checked:bg-[GrayText]
+			forced-colors:disabled:border-[GrayText] forced-colors:disabled:checked:bg-[GrayText] forced-colors:disabled:before:border-[Canvas]
+			forced-colors:focus-visible:outline-[CanvasText]
+	}
+	.kisland-table-actions { @apply w-[1%] text-right whitespace-nowrap }
+	.kisland-table-action { @apply min-h-6 px-2 text-xs ml-1 first:ml-0 }
+	.kisland-table-empty { @apply h-18 text-center italic bg-transparent text-current/72 }
+	.kisland-table-error {
+		@apply h-16 text-center font-medium bg-(--kisland-danger,var(--color-red-600,#dc2626))/8
+			text-[color-mix(in_oklab,var(--kisland-danger,var(--color-red-600,#dc2626))_70%,currentColor)]
+	}
+	.kisland-table-footer { @apply @container flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 min-w-0 }
+	.kisland-table-status { @apply flex items-center gap-1.5 h-6 w-52 whitespace-nowrap text-xs text-current/72 }
+	.kisland-table-status-text { @apply tabular-nums }
+	.kisland-table-clear {
+		@apply inline-flex items-center min-h-6 m-0 px-1.5 border-0 rounded-(--kisland-radius,0.25rem) bg-transparent cursor-pointer select-none font-[inherit] text-xs/tight font-medium text-current/82
+			underline decoration-current/40 underline-offset-2 hover:text-current hover:decoration-current
+			focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--kisland-focus,light-dark(var(--color-blue-600,#2563eb),var(--color-blue-400,#60a5fa)))
+			forced-colors:text-[LinkText] forced-colors:decoration-[LinkText]
+	}
+	.kisland-table-count { @apply font-semibold text-current }
 	.kisland-table-pager { @apply flex flex-wrap items-center gap-1 }
-	.kisland-table-current { @apply px-2 font-semibold }
-	.kisland-table-search { @apply w-full max-w-xs px-3 py-1.5 text-sm text-inherit bg-transparent border border-current/30 rounded-md outline-none focus:border-current/60 placeholder:opacity-60 }
-	.kisland-table-sort { @apply inline-flex items-center gap-1 p-0 [font:inherit] text-inherit text-left cursor-pointer bg-transparent border-0 }
-	.kisland-table-sort-icon { @apply text-xs opacity-40 }
-	[aria-sort] > .kisland-table-sort > .kisland-table-sort-icon { @apply opacity-100 }
+	.kisland-table-page { @apply min-h-6 min-w-6 px-1.5 text-xs }
+	.kisland-table-current {
+		@apply inline-flex items-center justify-center min-h-6 min-w-6 px-1.5 text-xs font-semibold tabular-nums rounded-(--kisland-radius,0.25rem)
+			border border-current/48 bg-current/15 text-current
+			forced-colors:border-2 forced-colors:border-[Highlight] forced-colors:text-[CanvasText]
+	}
+	.kisland-table-search { @apply max-w-xs }
+
+	.kisland-form { @apply flex flex-col gap-y-2.5 min-w-0 @container text-sm }
+	.kisland-form-field { @apply flex flex-col gap-1 min-w-0 }
+	.kisland-form-label { @apply text-sm font-medium text-current/82 }
+	.kisland-form-legend { @apply float-left w-full px-0 }
+	.kisland-form-required { @apply ml-0.5 text-[color-mix(in_oklab,var(--kisland-danger,var(--color-red-600,#dc2626))_60%,currentColor)] }
+	.kisland-form-input, .kisland-form-textarea, .kisland-form-select, .kisland-form-search-input {
+		@apply w-full min-w-0 m-0 font-[inherit] text-sm text-inherit tabular-nums bg-current/3 border border-current/56 rounded-(--kisland-radius,0.25rem)
+			transition-[border-color,box-shadow] duration-75 placeholder:text-current/52 hover:border-current/70
+			focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--kisland-focus,light-dark(var(--color-blue-600,#2563eb),var(--color-blue-400,#60a5fa)))
+			aria-invalid:border-[color-mix(in_oklab,var(--kisland-danger,var(--color-red-600,#dc2626))_70%,currentColor)]
+			aria-invalid:inset-ring aria-invalid:inset-ring-[color-mix(in_oklab,var(--kisland-danger,var(--color-red-600,#dc2626))_70%,currentColor)]
+			data-required-empty:bg-[color-mix(in_oklab,var(--kisland-danger,var(--color-red-600,#dc2626))_7%,var(--kisland-bg,Canvas))]
+			disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-current/6
+			forced-colors:disabled:opacity-100 forced-colors:disabled:text-[GrayText] forced-colors:disabled:border-[GrayText]
+			forced-colors:data-required-empty:border-b-2 forced-colors:data-required-empty:border-b-[CanvasText]
+	}
+	.kisland-form-input, .kisland-form-select, .kisland-form-search-input { @apply min-h-8 px-2 }
+	.kisland-form-textarea { @apply min-h-19 px-2 py-1.5 resize-y }
+	.kisland-form-select {
+		@apply appearance-none pr-6.5 cursor-pointer bg-no-repeat bg-position-[right_0.5rem_center]
+			bg-[url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='10'%20height='6'%20fill='none'%20stroke='%23767676'%20stroke-width='1.5'%3E%3Cpath%20d='M1%201l4%204%204-4'/%3E%3C/svg%3E")]
+	}
+	.kisland-form-option { @apply text-[initial] }
+	.kisland-form-help { @apply m-0 text-xs/snug text-current/72 }
+	.kisland-form-error { @apply m-0 text-xs/snug font-medium text-[color-mix(in_oklab,var(--kisland-danger,var(--color-red-600,#dc2626))_70%,currentColor)] }
+	.kisland-form-group { @apply m-0 p-0 border-0 min-w-0 flex flex-col gap-1 }
+	.kisland-form-options {
+		@apply flex flex-wrap gap-x-4 gap-y-1 w-fit max-w-[calc(100%+1rem)] -mx-2 px-2 py-0.5 rounded-(--kisland-radius,0.25rem) border-b-2 border-transparent
+			data-required-empty:bg-[color-mix(in_oklab,var(--kisland-danger,var(--color-red-600,#dc2626))_7%,var(--kisland-bg,Canvas))]
+			forced-colors:border-b-[Canvas] forced-colors:data-required-empty:border-b-[CanvasText]
+	}
+	.kisland-form-check {
+		@apply inline-flex items-center gap-1.5 min-h-6 cursor-pointer text-sm has-[:disabled]:opacity-50 has-[:disabled]:cursor-not-allowed
+			forced-colors:has-[:disabled]:opacity-100 forced-colors:has-[:disabled]:text-[GrayText]
+	}
+	.kisland-form-check-single {
+		@apply w-fit -mx-2 px-2 py-0.5 rounded-(--kisland-radius,0.25rem) border-b-2 border-transparent
+			has-[>[data-required-empty]]:bg-[color-mix(in_oklab,var(--kisland-danger,var(--color-red-600,#dc2626))_7%,var(--kisland-bg,Canvas))]
+			forced-colors:border-b-[Canvas] forced-colors:has-[>[data-required-empty]]:border-b-[CanvasText]
+	}
+	.kisland-form-radio {
+		@apply appearance-none relative inline-block align-middle m-0 size-3.25 shrink-0 cursor-[inherit] rounded-full border border-current/56 bg-(--kisland-bg,Canvas)
+			before:hidden before:content-[''] before:absolute before:inset-0 before:m-auto before:size-1.5 before:rounded-full before:bg-(--kisland-bg,Canvas)
+			checked:border-[color-mix(in_oklab,var(--kisland-primary,var(--color-blue-600,#2563eb))_62%,currentColor)] checked:bg-[color-mix(in_oklab,var(--kisland-primary,var(--color-blue-600,#2563eb))_62%,currentColor)] checked:before:block
+			aria-invalid:not-checked:border-[color-mix(in_oklab,var(--kisland-danger,var(--color-red-600,#dc2626))_70%,currentColor)]
+			focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--kisland-focus,light-dark(var(--color-blue-600,#2563eb),var(--color-blue-400,#60a5fa)))
+			forced-colors:forced-color-adjust-none forced-colors:border-[CanvasText] forced-colors:aria-invalid:not-checked:border-[CanvasText] forced-colors:bg-[Canvas] forced-colors:before:bg-[HighlightText]
+			forced-colors:checked:border-[Highlight] forced-colors:checked:bg-[Highlight]
+			forced-colors:disabled:border-[GrayText] forced-colors:disabled:checked:bg-[GrayText] forced-colors:disabled:before:bg-[Canvas]
+			forced-colors:focus-visible:outline-[CanvasText]
+	}
+	.kisland-form-foot { @apply flex items-start justify-between gap-3 min-w-0 }
+	.kisland-form-count { @apply ml-auto shrink-0 text-xs/snug font-normal tabular-nums text-current/88 }
+	.kisland-form-slider { @apply grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 min-h-8 min-w-0 }
+	.kisland-form-range {
+		@apply w-full min-w-0 h-6 m-0 p-0 appearance-none bg-transparent text-inherit cursor-pointer rounded-xs
+			[&::-webkit-slider-runnable-track]:h-1 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-current/56 [&::-moz-range-track]:h-1 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-current/56
+			[&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:box-border [&::-webkit-slider-thumb]:size-4 [&::-webkit-slider-thumb]:-mt-1.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-solid [&::-webkit-slider-thumb]:border-(--kisland-bg,Canvas) [&::-webkit-slider-thumb]:bg-[color-mix(in_oklab,var(--kisland-primary,var(--color-blue-600,#2563eb))_62%,currentColor)]
+			[&::-moz-range-thumb]:box-border [&::-moz-range-thumb]:size-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-solid [&::-moz-range-thumb]:border-(--kisland-bg,Canvas) [&::-moz-range-thumb]:bg-[color-mix(in_oklab,var(--kisland-primary,var(--color-blue-600,#2563eb))_62%,currentColor)]
+			focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--kisland-focus,light-dark(var(--color-blue-600,#2563eb),var(--color-blue-400,#60a5fa)))
+			disabled:opacity-50 disabled:cursor-not-allowed
+			forced-colors:forced-color-adjust-none forced-colors:[&::-webkit-slider-runnable-track]:bg-[CanvasText] forced-colors:[&::-moz-range-track]:bg-[CanvasText]
+			forced-colors:[&::-webkit-slider-thumb]:border-[Canvas] forced-colors:[&::-webkit-slider-thumb]:bg-[Highlight] forced-colors:[&::-moz-range-thumb]:border-[Canvas] forced-colors:[&::-moz-range-thumb]:bg-[Highlight]
+			forced-colors:disabled:opacity-100 forced-colors:disabled:[&::-webkit-slider-runnable-track]:bg-[GrayText] forced-colors:disabled:[&::-moz-range-track]:bg-[GrayText] forced-colors:disabled:[&::-webkit-slider-thumb]:bg-[GrayText] forced-colors:disabled:[&::-moz-range-thumb]:bg-[GrayText]
+			forced-colors:focus-visible:outline-[CanvasText]
+	}
+	.kisland-form-output { @apply min-w-12 text-right text-sm font-medium tabular-nums }
+	.kisland-form-remove {
+		@apply inline-flex items-center justify-center size-6 shrink-0 m-0 p-0 border-0 rounded-xs bg-transparent cursor-pointer font-[inherit] text-base leading-none text-current/72
+			hover:bg-current/10 hover:text-current disabled:cursor-not-allowed disabled:hover:bg-transparent
+			focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--kisland-focus,light-dark(var(--color-blue-600,#2563eb),var(--color-blue-400,#60a5fa)))
+			forced-colors:disabled:text-[GrayText]
+	}
+	.kisland-form-match { @apply bg-transparent text-inherit font-bold }
+	.kisland-form-search-input {
+		@apply pl-7 bg-no-repeat bg-position-[left_0.625rem_center]
+			bg-[url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='12'%20height='12'%20fill='none'%20stroke='%23767676'%20stroke-width='1.5'%3E%3Ccircle%20cx='5'%20cy='5'%20r='4'/%3E%3Cpath%20d='M8%208l3.25%203.25'/%3E%3C/svg%3E")]
+	}
+	.kisland-form-search-results { @apply m-0 p-1 list-none flex flex-col gap-0.5 min-w-0 rounded-(--kisland-radius,0.25rem) border border-current/24 forced-colors:border-[CanvasText] }
+	.kisland-form-search-result {
+		@apply flex items-center w-full min-h-7 m-0 px-1.5 py-1 border-0 rounded-xs bg-transparent cursor-pointer text-left font-[inherit] text-sm text-inherit wrap-anywhere
+			hover:bg-current/6 focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-(--kisland-focus,light-dark(var(--color-blue-600,#2563eb),var(--color-blue-400,#60a5fa)))
+			forced-colors:hover:outline forced-colors:hover:outline-1 forced-colors:hover:-outline-offset-1 forced-colors:focus-visible:outline-[CanvasText]
+	}
+	.kisland-form-search-status { @apply m-0 text-xs/snug text-current/72 empty:sr-only }
+	.kisland-form-search-chosen { @apply m-0 p-0 list-none flex flex-wrap gap-1 min-w-0 not-has-[li]:hidden }
+	.kisland-form-search-chip {
+		@apply flex items-center gap-1 max-w-full min-h-8 min-w-0 pl-2 pr-0.75 py-0.75 rounded-none border border-transparent bg-current/10 text-sm/tight wrap-anywhere
+			forced-colors:border-[CanvasText]
+	}
+	.kisland-form-search-max { @apply flex items-center min-h-8 m-0 text-xs/snug text-current/72 }
+	.kisland-form-file-zone {
+		@apply flex items-center min-w-0 w-full min-h-8 pl-7 pr-2 py-1 m-0 cursor-pointer text-sm bg-current/3 border border-current/56 rounded-(--kisland-radius,0.25rem) hover:border-current/70 transition-[border-color,box-shadow] duration-75
+			bg-no-repeat bg-position-[left_0.625rem_center]
+			bg-[url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='12'%20height='12'%20fill='none'%20stroke='%23767676'%20stroke-width='1.5'%3E%3Cpath%20d='M6%208.5V1.5M3%204.25L6%201.25l3%203M1%208.25v2.5h10v-2.5'/%3E%3C/svg%3E")]
+			has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-offset-2 has-[input:focus-visible]:outline-(--kisland-focus,light-dark(var(--color-blue-600,#2563eb),var(--color-blue-400,#60a5fa)))
+			has-data-required-empty:bg-[color-mix(in_oklab,var(--kisland-danger,var(--color-red-600,#dc2626))_7%,var(--kisland-bg,Canvas))]
+			data-dragover:border-[color-mix(in_oklab,var(--kisland-primary,var(--color-blue-600,#2563eb))_62%,currentColor)] data-dragover:bg-[color-mix(in_oklab,var(--kisland-primary,var(--color-blue-600,#2563eb))_9%,var(--kisland-bg,Canvas))] data-dragover:inset-ring data-dragover:inset-ring-[color-mix(in_oklab,var(--kisland-primary,var(--color-blue-600,#2563eb))_62%,currentColor)]
+			has-disabled:opacity-50 has-disabled:cursor-not-allowed has-disabled:bg-current/6 has-disabled:hover:border-current/56
+			forced-colors:data-dragover:border-[Highlight] forced-colors:data-dragover:border-2
+			forced-colors:has-data-required-empty:border-b-2 forced-colors:has-data-required-empty:border-b-[CanvasText]
+			forced-colors:has-disabled:opacity-100 forced-colors:has-disabled:text-[GrayText] forced-colors:has-disabled:border-[GrayText]
+	}
+	.kisland-form-file-input { @apply sr-only }
+	.kisland-form-file-summary { @apply min-w-0 text-sm text-current/72 wrap-anywhere [[data-dragover]_&]:font-medium [[data-dragover]_&]:text-current }
+	.kisland-form-file-chip {
+		@apply relative flex items-center gap-x-1 max-w-[min(16rem,100%)] min-h-8 min-w-0 pl-2 pr-0.75 py-0.75 rounded-none border border-transparent bg-current/10 text-sm/tight has-[>.kisland-form-file-size:last-child]:pr-2 has-[>.kisland-form-file-body:last-child]:pr-2
+			data-uploading:bg-current/5 data-uploading:bg-no-repeat data-uploading:bg-[image:linear-gradient(color-mix(in_oklab,var(--kisland-primary,var(--color-blue-600,#2563eb))_22%,transparent),color-mix(in_oklab,var(--kisland-primary,var(--color-blue-600,#2563eb))_22%,transparent))] data-uploading:bg-size-[var(--kisland-file-p,0%)_100%]
+			data-failed:bg-[color-mix(in_oklab,var(--kisland-danger,var(--color-red-600,#dc2626))_8%,transparent)] data-failed:shadow-[inset_2px_0_0_color-mix(in_oklab,var(--kisland-danger,var(--color-red-600,#dc2626))_70%,currentColor)]
+			forced-colors:border-[CanvasText] forced-colors:data-failed:border-l-4
+			forced-colors:data-uploading:after:content-[''] forced-colors:data-uploading:after:absolute forced-colors:data-uploading:after:left-0 forced-colors:data-uploading:after:bottom-0 forced-colors:data-uploading:after:h-0.75 forced-colors:data-uploading:after:w-(--kisland-file-p,0%) forced-colors:data-uploading:after:forced-color-adjust-none forced-colors:data-uploading:after:bg-[Highlight]
+	}
+	.kisland-form-file-body { @apply flex flex-nowrap items-center gap-x-1.5 min-w-0 }
+	.kisland-form-file-link {
+		@apply block truncate min-w-0 min-h-6 leading-6 rounded-xs font-medium text-[color-mix(in_oklab,var(--kisland-primary,var(--color-blue-600,#2563eb))_62%,currentColor)] underline decoration-current/35 underline-offset-2 hover:decoration-current
+			focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--kisland-focus,light-dark(var(--color-blue-600,#2563eb),var(--color-blue-400,#60a5fa))) forced-colors:text-[LinkText]
+	}
+	.kisland-form-file-text { @apply block truncate min-w-0 leading-6 font-medium }
+	.kisland-form-file-size { @apply shrink-0 whitespace-nowrap text-xs tabular-nums text-current/72 }
+	.kisland-form-file-percent { @apply shrink-0 whitespace-nowrap min-w-[4ch] text-right text-xs font-medium tabular-nums text-current/88 }
+	.kisland-form-file-reason { @apply shrink-0 whitespace-nowrap text-xs/snug font-medium text-[color-mix(in_oklab,var(--kisland-danger,var(--color-red-600,#dc2626))_70%,currentColor)] }
+	.kisland-form-file-retry {
+		@apply inline-flex items-center shrink-0 min-h-6 px-1.5 m-0 border-0 rounded-xs bg-transparent cursor-pointer font-[inherit] text-xs font-medium leading-none text-inherit
+			underline decoration-current/35 underline-offset-2 hover:bg-current/10 hover:decoration-current [&[hidden]]:hidden
+			focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--kisland-focus,light-dark(var(--color-blue-600,#2563eb),var(--color-blue-400,#60a5fa)))
+	}
+	.kisland-form-box { @apply m-0 p-0 border-0 min-w-0 flex flex-col @container }
+	.kisland-form-box-legend { @apply float-left w-full flex flex-wrap items-baseline gap-x-2 m-0 mb-1.5 p-0 text-sm/tight font-semibold text-current }
+	.kisland-form-rail {
+		@apply relative flex flex-col gap-y-2.5 min-w-0 m-0 [--kisland-form-indent:clamp(1rem,100cqw-12rem,1.75rem)] [--kisland-form-x:clamp(0.25rem,var(--kisland-form-indent)-1.125rem,0.625rem)] pl-(--kisland-form-indent)
+			before:absolute before:inset-y-0 before:left-[calc(var(--kisland-form-x)-0.5px)] before:w-px before:bg-[color-mix(in_oklab,currentColor_40%,var(--kisland-bg,Canvas))]
+			forced-colors:before:forced-color-adjust-none forced-colors:before:bg-[CanvasText]
+	}
+	.kisland-form-items { @apply m-0 p-0 list-none flex flex-col gap-4 min-w-0 @container }
+	.kisland-form-item {
+		@apply relative flex flex-col min-w-0 [--kisland-form-indent:clamp(1.5rem,100cqw-12rem,1.75rem)] [--kisland-form-x:calc(var(--kisland-form-indent)-1.125rem)] pl-(--kisland-form-indent) [--kisland-form-m:1rem] [--kisland-form-tone:currentColor] [--kisland-form-ring:24%] [--kisland-form-mark-hover:color-mix(in_oklab,currentColor_36%,var(--kisland-bg,Canvas))]
+			has-[>.kisland-form-item-body>.kisland-form-field:first-child>.kisland-form-label:first-child]:[--kisland-form-m:0.625rem]
+			has-[>.kisland-form-item-body>.kisland-form-steps:first-child]:[--kisland-form-m:0.625rem]
+			has-[>.kisland-form-item-body>.kisland-form-box:first-child]:[--kisland-form-m:0.546875rem]
+			has-[>.kisland-form-item-body[aria-invalid=true]]:[--kisland-form-tone:var(--kisland-danger,var(--color-red-600,#dc2626))] has-[>.kisland-form-item-body[aria-invalid=true]]:[--kisland-form-ring:100%] has-[>.kisland-form-item-body[aria-invalid=true]]:[--kisland-form-mark-hover:currentColor]
+			has-[>.kisland-form-item-body>.kisland-form-field>[aria-invalid=true]]:[--kisland-form-tone:var(--kisland-danger,var(--color-red-600,#dc2626))] has-[>.kisland-form-item-body>.kisland-form-field>[aria-invalid=true]]:[--kisland-form-ring:100%] has-[>.kisland-form-item-body>.kisland-form-field>[aria-invalid=true]]:[--kisland-form-mark-hover:currentColor]
+			before:absolute before:-top-4 before:bottom-0 before:left-[calc(var(--kisland-form-x)-0.5px)] before:w-px before:bg-[color-mix(in_oklab,currentColor_40%,var(--kisland-bg,Canvas))]
+			first:before:top-0 first:has-[>.kisland-form-item-remove]:before:top-(--kisland-form-m)
+			forced-colors:before:forced-color-adjust-none forced-colors:before:bg-[CanvasText]
+	}
+	.kisland-form-item-body { @apply flex flex-col gap-y-2.5 min-w-0 }
+	.kisland-form-items-foot {
+		@apply relative flex items-center gap-2 min-h-6 min-w-0 [--kisland-form-indent:clamp(1.5rem,100cqw-12rem,1.75rem)] [--kisland-form-x:calc(var(--kisland-form-indent)-1.125rem)] [--kisland-form-tone:currentColor] [--kisland-form-ring:24%] [--kisland-form-mark-hover:color-mix(in_oklab,currentColor_36%,var(--kisland-bg,Canvas))] [.kisland-form-items+&]:mt-4
+			before:absolute before:top-1/2 before:bottom-1/2 before:left-[calc(var(--kisland-form-x)-0.5px)] before:w-px before:bg-[color-mix(in_oklab,currentColor_40%,var(--kisland-bg,Canvas))]
+			[.kisland-form-items+&]:before:-top-4
+			[.kisland-form-items:not(:has(>.kisland-form-item))+&]:mt-0 [.kisland-form-items:not(:has(>.kisland-form-item))+&]:before:hidden
+			forced-colors:before:forced-color-adjust-none forced-colors:before:bg-[CanvasText]
+	}
+	.kisland-form-item-remove, .kisland-form-item-add {
+		@apply box-border h-6 m-0 p-0 border-0 rounded-full bg-transparent cursor-pointer isolate
+			text-[color-mix(in_oklab,var(--kisland-form-tone,currentColor)_70%,currentColor)]
+			before:absolute before:-z-1 before:box-border before:rounded-full before:border before:border-solid before:border-[color-mix(in_oklab,currentColor_var(--kisland-form-ring,24%),var(--kisland-bg,Canvas))] before:bg-[color-mix(in_oklab,currentColor_5%,var(--kisland-bg,Canvas))]
+			after:absolute after:inset-y-0 after:left-0 after:w-6 after:bg-[linear-gradient(currentColor,currentColor),linear-gradient(currentColor,currentColor)] after:bg-center after:bg-no-repeat
+			hover:before:border-(--kisland-form-mark-hover) hover:before:bg-[color-mix(in_oklab,currentColor_10%,var(--kisland-bg,Canvas))]
+			focus-visible:outline-2 focus-visible:outline-(--kisland-focus,light-dark(var(--color-blue-600,#2563eb),var(--color-blue-400,#60a5fa)))
+			forced-colors:after:forced-color-adjust-none forced-colors:after:bg-[linear-gradient(ButtonText,ButtonText),linear-gradient(ButtonText,ButtonText)]
+	}
+	.kisland-form-item-remove {
+		@apply absolute left-[calc(var(--kisland-form-x)-0.75rem)] top-[calc(var(--kisland-form-m)-0.75rem)] w-6 before:inset-0.5 focus-visible:outline-offset-0
+			after:rotate-45 after:bg-size-[calc(0.625rem*1.41421-2px)_2px,2px_calc(0.625rem*1.41421-2px)]
+	}
+	.kisland-form-item-add {
+		@apply relative shrink-0 ml-[calc(var(--kisland-form-x)-0.75rem)] pl-6 pr-2.5 font-[inherit] text-xs/none font-medium whitespace-nowrap focus-visible:outline-offset-2
+			before:inset-0 after:bg-size-[0.625rem_2px,2px_0.625rem]
+			aria-disabled:cursor-not-allowed aria-disabled:opacity-45 aria-disabled:hover:before:border-[color-mix(in_oklab,currentColor_var(--kisland-form-ring,24%),var(--kisland-bg,Canvas))] aria-disabled:hover:before:bg-[color-mix(in_oklab,currentColor_5%,var(--kisland-bg,Canvas))]
+			forced-colors:aria-disabled:opacity-100 forced-colors:aria-disabled:text-[GrayText] forced-colors:aria-disabled:before:border-[GrayText] forced-colors:aria-disabled:after:bg-[linear-gradient(GrayText,GrayText),linear-gradient(GrayText,GrayText)]
+	}
+	.kisland-form-steps { @apply m-0 p-0 list-none flex flex-col gap-2.5 min-w-0 @container }
+	.kisland-form-step {
+		@apply relative flex flex-col gap-1 min-w-0 [--kisland-form-indent:clamp(1rem,100cqw-12rem,1.75rem)] [--kisland-form-x:clamp(0.25rem,var(--kisland-form-indent)-1.125rem,0.625rem)] pl-(--kisland-form-indent) [--kisland-form-m:0.625rem] has-[>.kisland-form-help:nth-child(2)]:[--kisland-form-m:0.515625rem]
+			before:absolute before:-top-2.5 before:bottom-0 before:left-[calc(var(--kisland-form-x)-0.5px)] before:w-px before:bg-[color-mix(in_oklab,currentColor_40%,var(--kisland-bg,Canvas))]
+			first:before:top-(--kisland-form-m) last:before:bottom-[calc(100%-var(--kisland-form-m))]
+			forced-colors:before:forced-color-adjust-none forced-colors:before:bg-[CanvasText]
+	}
+	.kisland-form-step-mark {
+		@apply absolute left-(--kisland-form-x) top-(--kisland-form-m) -translate-1/2 box-border size-2 rounded-full bg-[color-mix(in_oklab,currentColor_40%,var(--kisland-bg,Canvas))]
+			[[aria-current=step]>&]:size-3 [[aria-current=step]>&]:bg-[color-mix(in_oklab,var(--kisland-primary,var(--color-blue-600,#2563eb))_62%,currentColor)]
+			[[data-complete]>&]:size-5 [[data-complete]>&]:bg-(--kisland-bg,Canvas) [[data-complete]>&]:border [[data-complete]>&]:border-solid [[data-complete]>&]:border-[color-mix(in_oklab,currentColor_40%,var(--kisland-bg,Canvas))]
+			[[data-complete]>&]:after:absolute [[data-complete]>&]:after:inset-0 [[data-complete]>&]:after:bg-current/72 [[data-complete]>&]:after:[mask:url(data:image/svg+xml,%3Csvg%20xmlns=%27http%3A//www.w3.org/2000/svg%27%20viewBox=%270%200%2010%2010%27%3E%3Cpath%20d=%27M2.2%205.3L4.2%207.2L7.8%203%27%20fill=%27none%27%20stroke=%27black%27%20stroke-width=%271.6%27/%3E%3C/svg%3E)_center/0.625rem_no-repeat]
+			forced-colors:forced-color-adjust-none forced-colors:bg-[CanvasText] forced-colors:[[aria-current=step]>&]:bg-[Highlight]
+			forced-colors:[[data-complete]>&]:bg-[Canvas] forced-colors:[[data-complete]>&]:border-[CanvasText] forced-colors:[[data-complete]>&]:after:bg-[CanvasText]
+	}
+	.kisland-form-actions { @apply flex flex-wrap items-center justify-start gap-1.5 mt-2 }
+	.kisland-form-cancel {
+		@apply inline-flex items-center min-h-6 m-0 px-1.5 border-0 rounded-(--kisland-radius,0.25rem) bg-transparent cursor-pointer select-none font-[inherit] text-sm/tight font-medium text-current/82
+			underline decoration-current/40 underline-offset-2 hover:text-current hover:decoration-current
+			focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--kisland-focus,light-dark(var(--color-blue-600,#2563eb),var(--color-blue-400,#60a5fa)))
+			forced-colors:text-[LinkText] forced-colors:decoration-[LinkText]
+	}
+	.kisland-form-framed { @apply p-3 rounded-(--kisland-radius-lg,0.375rem) border border-current/16 forced-colors:border-[CanvasText] }
+	.kisland-form-actions-band { @apply -mx-3 -mb-3 mt-1 px-3 py-2 rounded-b-[calc(var(--kisland-radius-lg,0.375rem)-1px)] border-t border-current/10 bg-current/3 forced-colors:border-[CanvasText] }
 }

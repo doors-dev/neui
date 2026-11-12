@@ -5,6 +5,7 @@ package devkit_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -27,10 +28,15 @@ func widgets() neui.Island {
 		},
 		Library: func(l neui.Library) error {
 			l.Head(ui.Style())
-			if err := l.View("text", "a text", ui.NewText); err != nil {
-				return err
-			}
-			return l.Control("form", "a form", ui.NewForm)
+			return errors.Join(
+				l.View("text", "a text", ui.NewText),
+				l.Control("form", "a form", ui.NewForm),
+				l.Control("table", "a table", ui.NewTable),
+				l.Control("button", "a button", ui.NewButton),
+				l.Layout("column", ui.ColumnDesc, ui.Column),
+				l.Layout("row", ui.RowDesc, ui.Row),
+				l.Layout("grid", ui.GridDesc, ui.Grid),
+			)
 		},
 	}
 }

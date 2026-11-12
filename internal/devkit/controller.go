@@ -44,7 +44,7 @@ func (c *controller) Modules() iter.Seq[common.Module] {
 func (c *controller) Config() api.ThreadConfig { return common.ConfigDefaults(api.ThreadConfig{}) }
 
 func (c *controller) FilesConfig() api.FilesConfig {
-	return common.FilesConfigDefaults(api.FilesConfig{})
+	return common.FilesConfigDefaults(c.kit.app.Files)
 }
 
 func (c *controller) Model() api.Model { return api.Model{} }

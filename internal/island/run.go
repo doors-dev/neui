@@ -41,6 +41,10 @@ func newRun(ctx context.Context, island *island, seq uint, space string, comment
 		vm.Close()
 		return nil, err
 	}
+	if err := ctrl.FS().Remove(ctx, islandDir(space)); err != nil {
+		vm.Close()
+		return nil, err
+	}
 	if err := js.RegisterLoggers(vm, ctrl.FS(), log); err != nil {
 		vm.Close()
 		return nil, err
@@ -62,6 +66,8 @@ func newRun(ctx context.Context, island *island, seq uint, space string, comment
 		store:            doors.NewStore(),
 	}
 	r.store.Save(common.IslandFSKey{}, ctrl.FS())
+	r.store.Save(common.IslandDirKey{}, islandDir(space))
+	r.store.Save(common.IslandFilesConfigKey{}, ctrl.FilesConfig())
 	r.store.Save(common.IslandScopeKey{}, new(doors.ScopeBlocking))
 	r.runner = newRunner(r)
 	r.store.Save(runnerKey{}, r.runner)
@@ -388,6 +394,10 @@ var _ core.Run = (*run)(nil)
 
 func logFile(space string) string {
 	return space + ".island.log"
+}
+
+func islandDir(space string) string {
+	return space + ".island"
 }
 
 func notificationsCap(c api.ThreadConfig, m api.Model) int {

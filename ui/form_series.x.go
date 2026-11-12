@@ -5,7 +5,6 @@ package ui
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	
@@ -107,7 +106,7 @@ func (f *formWidgetSeries) setField(ctx context.Context, name string, value any,
 		}
 	}
 	f.state.Update(ctx, formSeriesState{steps: nextIndex})
-	if err != nil {
+	if formShownErr(err) {
 		return
 	}
 	if nextIndex != 0 && value == nil {
@@ -125,26 +124,36 @@ func (f *formWidgetSeries) setField(ctx context.Context, name string, value any,
 	}
 	field, err := f.params.Fields[nextIndex].Call(ctx, value)
 	if err != nil {
-		f.onSystemError(ctx, err)
+		if !f.initialized {
+			f.initError = err
+		}
+		f.system.set(ctx, nil, errSystem)
 		return
 	}
+	required := f.params.Required || nextIndex > 0
 	switch v := field.v.(type) {
 	case *textInput:
-		v.Required = false
+		v.Required = required
 	case *numberInput:
-		v.Required = false
+		v.Required = required
 	case *dateInput:
-		v.Required = false
+		v.Required = required
 	case *textArea:
-		v.Required = false
+		v.Required = required
 	case *selectInput:
-		v.Min = 0
+		if required {
+			v.Min = max(v.Min, 1)
+		} else {
+			v.Min = 0
+		}
 	case *searchInput:
-		v.Min = 0
-	case *checkboxInput:
-		v.Required = false
+		if required {
+			v.Min = max(v.Min, 1)
+		} else {
+			v.Min = 0
+		}
 	case *fileInput:
-		v.Required = false
+		v.Required = required
 	}
 	widgetField, err := newFormWidgetField(ctx, f, field.v)
 	if err != nil {
@@ -215,47 +224,47 @@ func (f *formWidgetSeries) deleteGroup(ctx context.Context, name string) {
 	f.group.deleteGroup(ctx, name)
 }
 
-//line form_series.gox:215
+//line form_series.gox:224
 func (f *formWidgetSeries) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line form_series.gox:217
+//line form_series.gox:226
 		steps := gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("ol"); if __e != nil { return }
 		{
-//line form_series.gox:217
+//line form_series.gox:226
 			__e = __c.Set("class", "kisland-form-steps"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line form_series.gox:218
+//line form_series.gox:227
 			for _, field := range f.fields {
-//line form_series.gox:219
+//line form_series.gox:228
 				__e = __c.Any(field); if __e != nil { return }
 			}
-//line form_series.gox:221
+//line form_series.gox:230
 			__e = __c.Any(f.complete.Bind(func(complete bool) gox.Elem {
 			return gox.Elem(func(__c gox.Cursor) (__e error) {
 				ctx := __c.Context(); _ = ctx
-//line form_series.gox:222
+//line form_series.gox:231
 				if complete {
 					__e = __c.Init("li"); if __e != nil { return }
 					{
-//line form_series.gox:223
+//line form_series.gox:232
 						__e = __c.Set("class", "kisland-form-step"); if __e != nil { return }
 						__e = __c.Set("data-complete", true); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 						__e = __c.Init("span"); if __e != nil { return }
 						{
-//line form_series.gox:224
+//line form_series.gox:233
 							__e = __c.Set("class", "kisland-form-step-mark"); if __e != nil { return }
-//line form_series.gox:224
+//line form_series.gox:233
 							__e = __c.Set("aria-hidden", "true"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
 						__e = __c.Init("p"); if __e != nil { return }
 						{
-//line form_series.gox:225
+//line form_series.gox:234
 							__e = __c.Set("class", "kisland-form-help"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.Text("Completed."); if __e != nil { return }
@@ -265,11 +274,11 @@ func (f *formWidgetSeries) Main() gox.Elem {
 					__e = __c.Close(); if __e != nil { return }
 				}
 			return })
-//line form_series.gox:228
+//line form_series.gox:237
 		})); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
-//line form_series.gox:229
+//line form_series.gox:238
 	return })
 	errLine := f.system.error.RouteBeam(
 		doors.RouteBeamMatch(formShownErr, doors.RouteBind(func(err error) gox.Elem {
@@ -277,70 +286,75 @@ func (f *formWidgetSeries) Main() gox.Elem {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.Init("p"); if __e != nil { return }
 				{
-//line form_series.gox:232
+//line form_series.gox:241
 					__e = __c.Set("class", "kisland-form-error"); if __e != nil { return }
-//line form_series.gox:232
+//line form_series.gox:241
 					__e = __c.Set("id", f.id + "-e"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line form_series.gox:232
+//line form_series.gox:241
 					__e = __c.Any(err.Error()); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
-//line form_series.gox:232
+//line form_series.gox:241
 			return })
 		})),
 	)
 
 		__e = __c.Init("fieldset"); if __e != nil { return }
 		{
-//line form_series.gox:236
+//line form_series.gox:245
 			__e = __c.Set("class", "kisland-form-box"); if __e != nil { return }
-//line form_series.gox:236
+//line form_series.gox:245
 			__e = __c.Set("aria-describedby", f.id + "-e"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Init("legend"); if __e != nil { return }
 			{
-//line form_series.gox:237
+//line form_series.gox:246
 				__e = __c.Set("class", "kisland-form-box-legend"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line form_series.gox:238
-				__e = __c.Any(f.params.Label); if __e != nil { return }
-//line form_series.gox:239
-				__e = __c.Any(f.system.error.RouteBeam(
-				doors.RouteBeamMatch(func(err error) bool {
-					return errors.Is(err, errRequired)
-				}, doors.RouteComp[error](gox.Elem(func(__c gox.Cursor) (__e error) {
-					ctx := __c.Context(); _ = ctx
-					__e = __c.Init("span"); if __e != nil { return }
-					{
-//line form_series.gox:242
-						__e = __c.Set("class", "kisland-form-required"); if __e != nil { return }
-//line form_series.gox:242
-						__e = __c.Set("aria-hidden", "true"); if __e != nil { return }
-						__e = __c.Submit(); if __e != nil { return }
-						__e = __c.Text("*"); if __e != nil { return }
-					}
-					__e = __c.Close(); if __e != nil { return }
-//line form_series.gox:242
-				return }))),
-			)); if __e != nil { return }
+				__e = __c.Init("span"); if __e != nil { return }
+				{
+					__e = __c.Submit(); if __e != nil { return }
+//line form_series.gox:248
+					__e = __c.Any(f.params.Label); if __e != nil { return }
+//line form_series.gox:249
+					__e = __c.Any(f.system.error.RouteBeam(
+					doors.RouteBeamMatch(func(err error) bool {
+						return f.params.Required && err != nil
+					}, doors.RouteComp[error](gox.Elem(func(__c gox.Cursor) (__e error) {
+						ctx := __c.Context(); _ = ctx
+						__e = __c.Init("span"); if __e != nil { return }
+						{
+//line form_series.gox:252
+							__e = __c.Set("class", "kisland-form-required"); if __e != nil { return }
+//line form_series.gox:252
+							__e = __c.Set("aria-hidden", "true"); if __e != nil { return }
+							__e = __c.Submit(); if __e != nil { return }
+							__e = __c.Text("*"); if __e != nil { return }
+						}
+						__e = __c.Close(); if __e != nil { return }
+//line form_series.gox:252
+					return }))),
+				)); if __e != nil { return }
+				}
+				__e = __c.Close(); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line form_series.gox:245
+//line form_series.gox:256
 			__e = __c.Any(steps); if __e != nil { return }
-//line form_series.gox:246
+//line form_series.gox:257
 			__e = __c.Any(errLine); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line form_series.gox:248
+//line form_series.gox:259
 }
 
-//line form_series.gox:250
+//line form_series.gox:261
 func (f *formWidgetSeries) step(index int, current *doors.Setter, field formWidgetField) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line form_series.gox:252
+//line form_series.gox:263
 		isCurrent, _ := doors.DeriveBeam(f.state, func(s formSeriesState) bool {
 		return !s.complete && s.steps == index + 1
 	}).ReadAndSub(ctx, func(ctx context.Context, isCurrent bool) bool {
@@ -350,28 +364,28 @@ func (f *formWidgetSeries) step(index int, current *doors.Setter, field formWidg
 
 		__e = __c.Init("li"); if __e != nil { return }
 		{
-//line form_series.gox:259
+//line form_series.gox:270
 			__e = __c.Set("class", "kisland-form-step"); if __e != nil { return }
-//line form_series.gox:259
+//line form_series.gox:270
 			__e = __c.Modify(current); if __e != nil { return }
-//line form_series.gox:259
+//line form_series.gox:270
 			__e = __c.Set("aria-current", formStep(isCurrent)); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Init("span"); if __e != nil { return }
 			{
-//line form_series.gox:260
+//line form_series.gox:271
 				__e = __c.Set("class", "kisland-form-step-mark"); if __e != nil { return }
-//line form_series.gox:260
+//line form_series.gox:271
 				__e = __c.Set("aria-hidden", "true"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line form_series.gox:261
+//line form_series.gox:272
 			__e = __c.Any(field); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line form_series.gox:263
+//line form_series.gox:274
 }
 
 func formStep(current bool) any {

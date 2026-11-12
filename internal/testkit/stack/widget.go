@@ -4,6 +4,7 @@ package stack
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/proto"
 	"neui.dev/internal/devkit"
 )
 
@@ -88,6 +90,37 @@ func (a *IslandApp) Form() Form {
 // FormAt locates the form widget matching selector.
 func (a *IslandApp) FormAt(selector string) Form {
 	return Form{a.Find(selector)}
+}
+
+// ThrottleUploads limits what the page sends to bytesPerSecond, so uploads
+// stay in progress long enough to watch; 0 lifts the limit.
+func (a *IslandApp) ThrottleUploads(bytesPerSecond float64) {
+	a.t.Helper()
+	if bytesPerSecond == 0 {
+		bytesPerSecond = -1
+	}
+	if err := (proto.NetworkEnable{}).Call(a.Page); err != nil {
+		a.t.Fatal(err)
+	}
+	if err := (proto.NetworkEmulateNetworkConditions{Latency: 0, DownloadThroughput: -1, UploadThroughput: bytesPerSecond}).Call(a.Page); err != nil {
+		a.t.Fatal(err)
+	}
+}
+
+// FailUploads makes every file upload of the page fail with a network
+// error before it reaches the server, until the returned func is called.
+func (a *IslandApp) FailUploads() func() {
+	a.t.Helper()
+	router := a.Page.Context(context.Background()).HijackRequests()
+	if err := router.Add("*?k=*", "", func(h *rod.Hijack) {
+		h.Response.Fail(proto.NetworkErrorReasonConnectionFailed)
+	}); err != nil {
+		a.t.Fatal(err)
+	}
+	go router.Run()
+	return func() {
+		router.Stop()
+	}
 }
 
 // Locator is a path to an element, resolved anew on every action, so it
@@ -276,7 +309,8 @@ func (f Field) Type(s string) {
 
 // Value is the shown value: the control's value, "true" or "false" for a
 // single checkbox, the chosen option labels joined by ", " for a select,
-// "" when none, and the summary line for a file field.
+// "" when none, and the names of the uploaded files joined by ", " for a
+// file field.
 func (f Field) Value() string {
 	f.a.t.Helper()
 	return f.read("value", nil, "value")
@@ -313,16 +347,101 @@ func (f Field) Unchoose(option string) {
 	f.do("unchoose", option, fmt.Sprintf("unchoose %q", option))
 }
 
-// SetFiles picks the files at paths in a file field.
+// SetFiles picks the files at paths in a file field and waits until each
+// shows as a chip and none is uploading.
 func (f Field) SetFiles(paths ...string) {
 	f.a.t.Helper()
+	before := f.read("maxkey", nil, "last chip key")
+	f.PickFiles(paths...)
+	f.waitChips(before, len(paths))
+}
+
+// PickFiles picks the files at paths in a file field without waiting for
+// their uploads.
+func (f Field) PickFiles(paths ...string) {
+	f.a.t.Helper()
 	f.Find(`input[type="file"]`).Element().MustSetFiles(paths...)
+}
+
+// DropFiles drops files on a file field's box, given as name and content
+// pairs, and waits until each shows as a chip and none is uploading.
+func (f Field) DropFiles(pairs ...string) {
+	f.a.t.Helper()
+	before := f.read("maxkey", nil, "last chip key")
+	f.do("drop", pairs, "drop files")
+	f.waitChips(before, len(pairs)/2)
+}
+
+func (f Field) waitChips(after string, n int) {
+	f.a.t.Helper()
+	f.expect("settled", after, strconv.Itoa(n), "new chips with no upload running")
+}
+
+// ExpectFiles waits until the file field shows exactly the uploaded files
+// names, in order, ignoring failed chips, with no upload running.
+func (f Field) ExpectFiles(names ...string) {
+	f.a.t.Helper()
+	f.expect("files", nil, strings.Join(names, ", "), "uploaded files")
+}
+
+// ExpectFileChips waits until the file field's chips read want, in order:
+// the name of an uploaded file, "name uploading", or "name failed: reason".
+func (f Field) ExpectFileChips(want ...string) {
+	f.a.t.Helper()
+	f.expect("chipstates", nil, strings.Join(want, ", "), "chips")
+}
+
+// ExpectFileFailed waits until a chip of the file field shows name failed
+// with reason.
+func (f Field) ExpectFileFailed(name, reason string) {
+	f.a.t.Helper()
+	f.expect("failed", name, reason, fmt.Sprintf("failure of %q", name))
+}
+
+// RemoveFile presses the × of the uploaded file name.
+func (f Field) RemoveFile(name string) {
+	f.a.t.Helper()
+	f.Find(`button[aria-label="Remove ` + name + `"]`).Click()
+}
+
+// CancelFile presses the × of the file name while it uploads.
+func (f Field) CancelFile(name string) {
+	f.a.t.Helper()
+	f.Find(`button[aria-label="Cancel upload of ` + name + `"]`).Click()
+}
+
+// DismissFile presses the × of the failed file name.
+func (f Field) DismissFile(name string) {
+	f.a.t.Helper()
+	f.Find(`button[aria-label="Dismiss ` + name + `"]`).Click()
+}
+
+// RetryFile presses Retry on the failed file name once it shows.
+func (f Field) RetryFile(name string) {
+	f.a.t.Helper()
+	f.do("retry", name, fmt.Sprintf("retry %q", name))
+}
+
+// ExpectName waits until the control's accessible name is want: its
+// aria-label, the text of the elements its aria-labelledby names, or its
+// label; for a radio or checkbox group, the group's aria-label or legend.
+func (f Field) ExpectName(want string) {
+	f.a.t.Helper()
+	f.expect("name", nil, want, "accessible name")
 }
 
 // ExpectInvalid waits until the control's aria-invalid is true, or unset.
 func (f Field) ExpectInvalid(invalid bool) {
 	f.a.t.Helper()
 	f.expect("invalid", nil, strconv.FormatBool(invalid), "aria-invalid")
+}
+
+// ExpectRequiredEmpty waits until the control carries data-required-empty,
+// the underline of a required field still empty, or doesn't; the mark never
+// counts as carried together with aria-invalid or on a disabled control.
+func (f Field) ExpectRequiredEmpty(empty bool) {
+	f.a.t.Helper()
+	f.expect("requiredempty", nil, strconv.FormatBool(empty), "data-required-empty")
 }
 
 // ExpectDisabled waits until the control is disabled, or enabled.
@@ -368,8 +487,20 @@ func (l List) ExpectAddDisabled(disabled bool) {
 }
 
 // Item scopes item i, counted from 0, to find its fields.
-func (l List) Item(i int) Locator {
-	return l.with("item", i, fmt.Sprintf("item %d", i))
+func (l List) Item(i int) Item {
+	return Item{l.with("item", i, fmt.Sprintf("item %d", i))}
+}
+
+// Item is a list item; a group item's fields are found by label as within
+// any locator, while a field item has no label of its own.
+type Item struct {
+	Locator
+}
+
+// Control locates the field that makes up a list of fields' item, which
+// shows no label of its own.
+func (i Item) Control() Field {
+	return Field{i.with("control", nil, "control")}
 }
 
 // Series is a series field found by its legend.
@@ -487,6 +618,13 @@ const widgetJS = `function (path, op, arg) {
 			return findBox(scope, "ol.kisland-form-steps", "series", s.arg)
 		case "item":
 			return nth(items(scope), s.arg, "item")
+		case "control": {
+			const hit = scope.querySelector(":scope > .kisland-form-item-body > .kisland-form-field, :scope > .kisland-form-item-body > fieldset.kisland-form-group")
+			if (!hit) {
+				throw new Error("the item is not a field")
+			}
+			return hit
+		}
 		case "step":
 			return nth(steps(scope).filter((n) => !n.hasAttribute("data-complete")), s.arg, "step")
 		}
@@ -502,6 +640,14 @@ const widgetJS = `function (path, op, arg) {
 		}
 		return o.input
 	}
+	const fileField = () => el.matches(".kisland-form-field") && !!el.querySelector(":scope > .kisland-form-file-zone, :scope > .kisland-form-search-chosen > .kisland-form-file-chip, :scope > .kisland-form-search-chosen .kisland-form-file-chip")
+	const chips = () => Array.from(el.querySelectorAll("li.kisland-form-file-chip"))
+	const chipName = (li) => norm(li.querySelector(".kisland-form-file-link, .kisland-form-file-text").textContent)
+	const chipState = (li) => li.hasAttribute("data-uploading")
+		? chipName(li) + " uploading"
+		: li.hasAttribute("data-failed")
+			? chipName(li) + " failed: " + norm(li.querySelector(".kisland-form-file-reason").textContent)
+			: chipName(li)
 	const actions = () => el.querySelector(".kisland-form-actions")
 	const submits = () => Array.from(actions().querySelectorAll("button[type=submit]"))
 	const fire = (c, ...types) => types.forEach((t) => c.dispatchEvent(new Event(t, {bubbles: true})))
@@ -527,16 +673,40 @@ const widgetJS = `function (path, op, arg) {
 	}
 	case "required":
 		return String(!!labelOf(el)?.querySelector(".kisland-form-required"))
+	case "name": {
+		const c = el.matches("fieldset") ? el : control()
+		if (c.hasAttribute("aria-label")) {
+			return norm(c.getAttribute("aria-label"))
+		}
+		if (c.hasAttribute("aria-labelledby")) {
+			return c.getAttribute("aria-labelledby").split(" ").map((id) => document.getElementById(id)).filter(Boolean).map(text).join(" ")
+		}
+		const l = c.matches("fieldset") ? c.querySelector(":scope > legend") : c.closest("label") || (c.id && document.querySelector("label[for=\"" + c.id + "\"]"))
+		return l ? text(l) : ""
+	}
 	case "invalid":
 		return String(control().getAttribute("aria-invalid") === "true")
+	case "requiredempty": {
+		const c = control()
+		if (!c || !c.hasAttribute("data-required-empty")) {
+			return "false"
+		}
+		if (c.getAttribute("aria-invalid") === "true") {
+			return "together with aria-invalid"
+		}
+		if (c.disabled) {
+			return "on a disabled control"
+		}
+		return "true"
+	}
 	case "disabled": {
 		const c = control()
 		return String(!!c.disabled || c.getAttribute("aria-disabled") === "true")
 	}
 	case "value": {
 		const c = control()
-		if (el.querySelector(".kisland-form-file-summary")) {
-			return text(el.querySelector(".kisland-form-file-summary"))
+		if (fileField()) {
+			return chips().filter((li) => !li.hasAttribute("data-uploading") && !li.hasAttribute("data-failed")).map(chipName).join(", ")
 		}
 		if (el.matches("fieldset")) {
 			return options().filter((o) => o.input.checked && o.input.value !== "").map((o) => o.label).join(", ")
@@ -593,13 +763,55 @@ const widgetJS = `function (path, op, arg) {
 		}
 		return ""
 	}
+	case "maxkey":
+		return String(Math.max(0, ...chips().map((li) => Number(li.dataset.key))))
+	case "settled": {
+		const all = chips()
+		return all.some((li) => li.hasAttribute("data-uploading")) ? "uploading " + all.map(chipState).join(", ") : String(all.filter((li) => Number(li.dataset.key) > Number(arg)).length)
+	}
+	case "files": {
+		const all = chips()
+		if (all.some((li) => li.hasAttribute("data-uploading"))) {
+			return "uploading " + all.map(chipState).join(", ")
+		}
+		return all.filter((li) => !li.hasAttribute("data-failed")).map(chipName).join(", ")
+	}
+	case "chipstates":
+		return chips().map(chipState).join(", ")
+	case "failed": {
+		const li = chips().find((li) => li.hasAttribute("data-failed") && chipName(li) === arg)
+		return li ? norm(li.querySelector(".kisland-form-file-reason").textContent) : "no failed chip; chips: " + chips().map(chipState).join(", ")
+	}
+	case "retry": {
+		const li = chips().find((li) => li.hasAttribute("data-failed") && chipName(li) === arg)
+		const b = li && li.querySelector("button.kisland-form-file-retry")
+		if (!b || b.hidden) {
+			throw new Error("no Retry for " + JSON.stringify(arg) + "; chips: " + chips().map(chipState).join(", "))
+		}
+		b.click()
+		return ""
+	}
+	case "drop": {
+		const zone = el.querySelector(".kisland-form-file-zone")
+		if (!zone) {
+			throw new Error("no box to drop on")
+		}
+		const transfer = new DataTransfer()
+		for (let i = 0; i < arg.length; i += 2) {
+			transfer.items.add(new File([arg[i + 1]], arg[i]))
+		}
+		for (const type of ["dragenter", "dragover", "drop"]) {
+			zone.dispatchEvent(new DragEvent(type, {bubbles: true, cancelable: true, dataTransfer: transfer}))
+		}
+		return ""
+	}
 	case "items":
 		return String(items(el).length)
 	case "add":
-		el.querySelector(".kisland-form-items-foot > .kisland-form-item-add").click()
+		el.querySelector(":scope > .kisland-form-items-foot > .kisland-form-item-add").click()
 		return ""
 	case "adddisabled":
-		return String(el.querySelector(".kisland-form-items-foot > .kisland-form-item-add").getAttribute("aria-disabled") === "true")
+		return String(el.querySelector(":scope > .kisland-form-items-foot > .kisland-form-item-add").getAttribute("aria-disabled") === "true")
 	case "remove": {
 		const item = nth(items(el), arg, "item")
 		Array.from(item.querySelectorAll("button.kisland-form-item-remove")).find((b) => b.closest("li.kisland-form-item") === item).click()

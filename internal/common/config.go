@@ -20,6 +20,10 @@ type SystemKey struct{}
 
 type IslandFSKey struct{}
 
+type IslandDirKey struct{}
+
+type IslandFilesConfigKey struct{}
+
 type IslandScopeKey struct{}
 
 type ProviderKey struct{}

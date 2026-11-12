@@ -4,11 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"mime/multipart"
-	"path"
 	"slices"
-	"time"
 	
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
@@ -16,16 +12,11 @@ import (
 	"neui.dev/api"
 )
 
-const formUploadLimit = 64 << 20
-
-const formUploadMemory = 8 << 20
-
 // NewForm builds a form widget for Library.Control: the user fills the
 // fields and presses one of the submit buttons, which sends
 // {"data": values, "submit": button value} to the script waiting in
-// ui.draw(), after saving the chosen files in the agent's workspace under
-// island/<field id>/. The cancel button sends {"canceled": true}. A submit
-// carries at most 64 MB of files.
+// ui.draw(). Files upload into the island dir as they are picked, each under
+// <field id>/. The cancel button sends {"canceled": true}.
 func NewForm(ctx context.Context, p form, submit func(ctx context.Context, s map[string]any) bool) (api.Widget[struct{}], error) {
 	if len(p.Submits) == 0 {
 		p.Submits = []formSubmit{{Text: "Submit"}}
@@ -43,7 +34,6 @@ func NewForm(ctx context.Context, p form, submit func(ctx context.Context, s map
 	root := &root{
 		values: make(map[string]any),
 		scope: new(doors.ScopeFrame),
-		files: make(map[string]*formWidgetFile),
 	}
 	group := &formGroupBase{
 		root: root,
@@ -120,8 +110,7 @@ func (f *formWidget) Update(context.Context, struct{}) {
 }
 
 func (f *formWidget) onSubmit(ctx context.Context, r doors.RequestRawForm) {
-	r.SetRequestBodyLimit(formUploadLimit)
-	parsed, err := r.ParseForm(formUploadMemory)
+	parsed, err := r.ParseForm(64 << 10)
 	if err != nil {
 		neui.IslandReport(ctx, fmt.Errorf("form submit: %w", err))
 		return
@@ -132,65 +121,13 @@ func (f *formWidget) onSubmit(ctx context.Context, r doors.RequestRawForm) {
 	}) {
 		choice = value
 	}
-	type upload struct {
-		dir string
-		input string
-		files []formFileChosen
-	}
 	f.root.mu.Lock()
 	if formErrorsOf(*f.group.errors.Get()) != formErrorsNone {
 		f.root.mu.Unlock()
 		return
 	}
-	uploads := make([]upload, 0, len(f.root.files))
-	for _, file := range f.root.files {
-		uploads = append(uploads, upload{dir: file.dir(), input: file.inputName(), files: *file.chosen.Get()})
-	}
 	data := f.group.collect()
 	f.root.mu.Unlock()
-	fs := neui.IslandFS(ctx)
-	for _, upload := range uploads {
-		if len(upload.files) == 0 {
-			continue
-		}
-		if fs == nil {
-			neui.IslandReport(ctx, errors.New("form submit: no workspace to save the files in"))
-			return
-		}
-		var headers []*multipart.FileHeader
-		if parsed.Form() != nil {
-			headers = parsed.Form().File[upload.input]
-		}
-		for _, chosen := range upload.files {
-			i := slices.IndexFunc(headers, func(h *multipart.FileHeader) bool {
-				return h.Filename == chosen.Name
-			})
-			if i == -1 {
-				neui.IslandReport(ctx, fmt.Errorf("form submit: file %q didn't arrive", chosen.Name))
-				return
-			}
-			src, err := headers[i].Open()
-			if err != nil {
-				neui.IslandReport(ctx, fmt.Errorf("form submit: file %q: %w", chosen.Name, err))
-				return
-			}
-			dst, err := fs.Create(path.Join(upload.dir, chosen.Name))
-			if err != nil {
-				src.Close()
-				neui.IslandReport(ctx, fmt.Errorf("form submit: file %q: %w", chosen.Name, err))
-				return
-			}
-			_, err = io.Copy(dst, src)
-			src.Close()
-			if closeErr := dst.Close(); err == nil {
-				err = closeErr
-			}
-			if err != nil {
-				neui.IslandReport(ctx, fmt.Errorf("form submit: file %q: %w", chosen.Name, err))
-				return
-			}
-		}
-	}
 	f.submit(ctx, map[string]any{"data": data, "submit": choice})
 }
 
@@ -205,31 +142,16 @@ elem (f *formWidget) Main() {
 	<form
 		(doors.ARawSubmit{
 			Scope: scope,
-			RequestTimeout: 5 * time.Minute,
 			On: func(ctx context.Context, r doors.RequestRawForm) bool {
 				f.onSubmit(ctx, r)
 				return false
 			},
 		})
-		class="kisland-form">
+		class="kisland-form kisland-form-framed">
 		~(for _, field := range f.fields {
 			~(field)
 		})
-		<div class="kisland-form-actions">
-			~(if f.params.Cancel != "" {
-				<button
-					(doors.AClick{
-						Scope: scope,
-						On: func(ctx context.Context, r doors.RequestPointer) bool {
-							f.submit(ctx, map[string]any{"canceled": true})
-							return false
-						},
-					})
-					type="button"
-					class="kisland-button kisland-button-md kisland-button-secondary">
-					~(f.params.Cancel)
-				</button>
-			})
+		<div class="kisland-form-actions kisland-form-actions-band">
 			~(for _, s := range f.params.Submits {
 				<button
 					(&f.locked)
@@ -241,11 +163,23 @@ elem (f *formWidget) Main() {
 					~(s.Text)
 				</button>
 			})
+			~(if f.params.Cancel != "" {
+				<button
+					(doors.AClick{
+						Scope: scope,
+						On: func(ctx context.Context, r doors.RequestPointer) bool {
+							f.submit(ctx, map[string]any{"canceled": true})
+							return false
+						},
+					})
+					type="button"
+					class="kisland-form-cancel">
+					~(f.params.Cancel)
+				</button>
+			})
 			~(f.errors.Bind(elem(errs formErrors) {
-				~(if errs == formErrorsShown {
-					<p class="kisland-form-help" id=(f.id + "-s")>fix the errors above</p>
-				} else if errs == formErrorsRequired {
-					<p class="kisland-form-help" id=(f.id + "-s")>fill the fields marked *</p>
+				~(if errs != formErrorsNone {
+					<p class="kisland-form-help" id=(f.id + "-s")>form is not completed or contains errors</p>
 				})
 			}))
 		</div>
@@ -266,7 +200,7 @@ elem (f *formWidget) Main() {
 }
 
 func formShownErr(err error) bool {
-	return err != nil && !errors.Is(err, errRequired)
+	return err != nil && !errors.Is(err, errRequired) && !errors.Is(err, errUploading)
 }
 
 func formAria(b bool) any {

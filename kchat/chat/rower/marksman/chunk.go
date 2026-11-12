@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"io"
 	"net/http"
-	"net/url"
-	"path"
 	"strconv"
 	"strings"
 
@@ -13,14 +11,13 @@ import (
 	"github.com/doors-dev/gox"
 	"golang.org/x/net/html"
 	"neui.dev/api"
+	"neui.dev/internal/markdown"
 	"neui.dev/kchat/chat/uploader"
 )
 
-const fileScheme = "file:///"
-
 func chunk(fs api.FS, data []byte) gox.Elem {
 	return gox.Elem(func(cur gox.Cursor) error {
-		if fs == nil || !bytes.Contains(data, []byte(fileScheme)) {
+		if fs == nil || !bytes.Contains(data, []byte(markdown.FileScheme)) {
 			return cur.Bytes(data)
 		}
 		z := html.NewTokenizer(bytes.NewReader(data))
@@ -88,15 +85,10 @@ func chunk(fs api.FS, data []byte) gox.Elem {
 }
 
 func fileName(href string) (string, bool) {
-	rest, ok := strings.CutPrefix(href, fileScheme)
+	name, ok := markdown.FilePath(href)
 	if !ok {
 		return "", false
 	}
-	name, err := url.PathUnescape(rest)
-	if err != nil || name == "" {
-		return "", false
-	}
-	name = path.Clean(name)
 	if !strings.HasPrefix(name, api.UserUploadsDir+"/") && !strings.HasPrefix(name, api.AgentUploadsDir+"/") {
 		return "", false
 	}

@@ -15,10 +15,17 @@ import (
 
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
-	"neui.dev"
 )
 
 func newFormWidgetText(ctx context.Context, group formGroup, params textInput) (*formWidgetText, error) {
+	var pattern *regexp.Regexp
+	if params.Pattern != "" {
+		re, err := regexp.Compile("^(?:" + params.Pattern + ")$")
+		if err != nil {
+			return nil, fmt.Errorf("field %q pattern: %w", params.Name, err)
+		}
+		pattern = re
+	}
 	field, err := group.newField(params.Name)
 	if err != nil {
 		return nil, err
@@ -27,6 +34,7 @@ func newFormWidgetText(ctx context.Context, group formGroup, params textInput) (
 		id: doors.IDRand(),
 		field: field,
 		params: params,
+		pattern: pattern,
 	}, nil
 }
 
@@ -34,8 +42,10 @@ type formWidgetText struct {
 	id string
 	field formGroupField
 	params textInput
+	pattern *regexp.Regexp
 	value string
 	invalid doors.Setter
+	label doors.Setter
 }
 
 func (f *formWidgetText) name() string {
@@ -66,6 +76,7 @@ func (f *formWidgetText) update(ctx context.Context, str string) {
 	defer f.field.mutex().Unlock()
 	f.setLocked(ctx, str, err)
 	doors.Call(ctx, f.invalid.Set("aria-invalid", formAria(formShownErr(err))))
+	doors.Call(ctx, f.invalid.Set("data-required-empty", errors.Is(err, errRequired)))
 }
 
 func (f *formWidgetText) setLocked(ctx context.Context, str string, err error) {
@@ -76,101 +87,126 @@ func (f *formWidgetText) setLocked(ctx context.Context, str string, err error) {
 	f.field.set(ctx, str, err)
 }
 
-//line form_text.gox:76
+//line form_text.gox:87
 func (f *formWidgetText) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
+//line form_text.gox:89
+		label := any(nil)
+	if f.field.item != nil {
+		label, _ = f.field.item.ReadAndSub(ctx, func(ctx context.Context, name string) bool {
+			doors.Call(ctx, f.label.Set("aria-label", name))
+			return false
+		})
+	}
+
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line form_text.gox:77
+//line form_text.gox:97
 			__e = __c.Set("class", "kisland-form-field"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-			__e = __c.Init("label"); if __e != nil { return }
-			{
-//line form_text.gox:78
-				__e = __c.Set("class", "kisland-form-label"); if __e != nil { return }
-//line form_text.gox:78
-				__e = __c.Set("for", f.id); if __e != nil { return }
-				__e = __c.Submit(); if __e != nil { return }
-//line form_text.gox:79
-				__e = __c.Any(f.params.Label); if __e != nil { return }
-//line form_text.gox:80
-				__e = __c.Any(f.field.error.RouteBeam(
-				doors.RouteBeamMatch(func(err error) bool {
-					return f.params.Required && errors.Is(err, errRequired)
-				}, doors.RouteComp[error](gox.Elem(func(__c gox.Cursor) (__e error) {
-					ctx := __c.Context(); _ = ctx
-					__e = __c.Init("span"); if __e != nil { return }
-					{
-//line form_text.gox:83
-						__e = __c.Set("class", "kisland-form-required"); if __e != nil { return }
-//line form_text.gox:83
-						__e = __c.Set("aria-hidden", "true"); if __e != nil { return }
-						__e = __c.Submit(); if __e != nil { return }
-						__e = __c.Text("*"); if __e != nil { return }
-					}
-					__e = __c.Close(); if __e != nil { return }
-//line form_text.gox:83
-				return }))),
-			)); if __e != nil { return }
+//line form_text.gox:98
+			if label == nil {
+				__e = __c.Init("label"); if __e != nil { return }
+				{
+//line form_text.gox:99
+					__e = __c.Set("class", "kisland-form-label"); if __e != nil { return }
+//line form_text.gox:99
+					__e = __c.Set("for", f.id); if __e != nil { return }
+					__e = __c.Submit(); if __e != nil { return }
+//line form_text.gox:100
+					__e = __c.Any(f.params.Label); if __e != nil { return }
+//line form_text.gox:101
+					__e = __c.Any(f.field.error.RouteBeam(
+					doors.RouteBeamMatch(func(err error) bool {
+						return f.params.Required && err != nil
+					}, doors.RouteComp[error](gox.Elem(func(__c gox.Cursor) (__e error) {
+						ctx := __c.Context(); _ = ctx
+						__e = __c.Init("span"); if __e != nil { return }
+						{
+//line form_text.gox:104
+							__e = __c.Set("class", "kisland-form-required"); if __e != nil { return }
+//line form_text.gox:104
+							__e = __c.Set("aria-hidden", "true"); if __e != nil { return }
+							__e = __c.Submit(); if __e != nil { return }
+							__e = __c.Text("*"); if __e != nil { return }
+						}
+						__e = __c.Close(); if __e != nil { return }
+//line form_text.gox:104
+					return }))),
+				)); if __e != nil { return }
+				}
+				__e = __c.Close(); if __e != nil { return }
 			}
-			__e = __c.Close(); if __e != nil { return }
 			__e = __c.InitVoid("input"); if __e != nil { return }
 			{
-//line form_text.gox:87
+//line form_text.gox:109
 				__e = __c.Modify(&f.invalid); if __e != nil { return }
-//line form_text.gox:88
+//line form_text.gox:110
+				__e = __c.Modify(&f.label); if __e != nil { return }
+//line form_text.gox:111
 				__e = __c.Modify(doors.AInput{
-				Scope: f.field.scope().And(&doors.ScopeRate{Tick: 300 * time.Millisecond}),
+				Scope: f.field.scope().And(&doors.ScopeDebounce{Duration: 250 * time.Millisecond, Limit: time.Second}),
 				On: func(ctx context.Context, r doors.RequestInput) bool {
 					f.update(ctx, r.Event().Value)
 					return false
 				},
 			}); if __e != nil { return }
-//line form_text.gox:95
+//line form_text.gox:118
 				__e = __c.Set("class", "kisland-form-input"); if __e != nil { return }
-//line form_text.gox:96
+//line form_text.gox:119
 				__e = __c.Set("id", f.id); if __e != nil { return }
-//line form_text.gox:97
+//line form_text.gox:120
 				__e = __c.Set("type", f.params.Type); if __e != nil { return }
-//line form_text.gox:98
+//line form_text.gox:121
 				__e = __c.Set("name", f.params.Name); if __e != nil { return }
-//line form_text.gox:99
+//line form_text.gox:122
 				__e = __c.Set("value", f.value); if __e != nil { return }
-//line form_text.gox:100
+//line form_text.gox:123
+				__e = __c.Set("maxlength", func() any {
+				if f.params.MaxLength > 0 {
+					return f.params.MaxLength
+				}
+				return nil
+			}()); if __e != nil { return }
+//line form_text.gox:129
 				__e = __c.Set("placeholder", f.params.Placeholder); if __e != nil { return }
-//line form_text.gox:101
+//line form_text.gox:130
 				__e = __c.Set("aria-required", formAria(f.params.Required)); if __e != nil { return }
-//line form_text.gox:102
+//line form_text.gox:131
+				__e = __c.Set("aria-label", label); if __e != nil { return }
+//line form_text.gox:132
 				__e = __c.Set("aria-invalid", formAria(formShownErr(f.field.error.Get()))); if __e != nil { return }
-//line form_text.gox:103
+//line form_text.gox:133
+				__e = __c.Set("data-required-empty", errors.Is(f.field.error.Get(), errRequired)); if __e != nil { return }
+//line form_text.gox:134
 				__e = __c.Set("aria-describedby", f.id + "-e"); if __e != nil { return }
 			}
 			__e = __c.Submit(); if __e != nil { return }
-//line form_text.gox:104
+//line form_text.gox:135
 			__e = __c.Any(f.field.error.RouteBeam(
 			doors.RouteBeamMatch(formShownErr, doors.RouteBind(func(err error) gox.Elem {
 				return gox.Elem(func(__c gox.Cursor) (__e error) {
 					ctx := __c.Context(); _ = ctx
 					__e = __c.Init("p"); if __e != nil { return }
 					{
-//line form_text.gox:106
+//line form_text.gox:137
 						__e = __c.Set("class", "kisland-form-error"); if __e != nil { return }
-//line form_text.gox:106
+//line form_text.gox:137
 						__e = __c.Set("id", f.id + "-e"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line form_text.gox:106
+//line form_text.gox:137
 						__e = __c.Any(err.Error()); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
-//line form_text.gox:106
+//line form_text.gox:137
 				return })
 			})),
 		)); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line form_text.gox:110
+//line form_text.gox:141
 }
 
 func (f *formWidgetText) validate(ctx context.Context, str string) error {
@@ -197,13 +233,8 @@ func (f *formWidgetText) validate(ctx context.Context, str string) error {
 			return errors.New("enter a full URL, like https://example.com")
 		}
 	}
-	if f.params.Pattern != "" {
-		re, err := regexp.Compile("^(?:" + f.params.Pattern + ")$")
-		if err != nil {
-			neui.IslandReport(ctx, fmt.Errorf("field %q pattern: %w", f.params.Name, err))
-		} else if !re.MatchString(str) {
-			return errors.New("use the requested format")
-		}
+	if f.pattern != nil && !f.pattern.MatchString(str) {
+		return errors.New("use the requested format")
 	}
 	if f.params.Validate != "" {
 		msg, err := f.params.Validate.Call(ctx, str)

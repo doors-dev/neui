@@ -14,6 +14,7 @@ import (
 	"github.com/doors-dev/gox"
 	"neui.dev"
 	"neui.dev/api"
+	"neui.dev/internal/markdown"
 )
 type checkboxState int
 
@@ -72,9 +73,15 @@ func (t tableWidget) Update(ctx context.Context, patch tablePatch) {
 			s.selected = nil
 		}
 		if patch.Rows != nil {
-			s.query, s.rows = "", patch.Rows
+			s.query, s.rows = "", tableRowsPlain(patch.Rows)
 			s.page = 1
-			s.selected = nil
+			kept := make(map[string]struct{})
+			for _, r := range patch.Rows {
+				if _, ok := s.selected[r.ID]; ok {
+					kept[r.ID] = struct{}{}
+				}
+			}
+			s.selected = kept
 		}
 		if patch.PageSize != 0 {
 			s.size = patch.PageSize
@@ -99,12 +106,12 @@ elem (t tableWidget) Main() {
 		~(if t.params.Search {
 			<input
 				type="search"
-				class="kisland-table-search"
+				class="kisland-form-search-input kisland-table-search"
 				placeholder="Search"
 				aria-label="Search"
 				maxlength="100"
 				(doors.AInput{
-					Scope: &doors.ScopeDebounce{Duration: 300 * time.Millisecond},
+					Scope: &doors.ScopeDebounce{Duration: 250 * time.Millisecond, Limit: time.Second},
 					Race: doors.RaceStrict,
 					On: func(ctx context.Context, r doors.RequestInput) bool {
 						text := strings.TrimSpace(r.Event().Value)
@@ -125,7 +132,6 @@ elem (t tableWidget) Main() {
 		~(t.body.Bind(func(i int) gox.Elem {
 			return t.render()
 		}))
-		~(t.selected.Bind(t.bar))
 	</div>
 }
 
@@ -141,7 +147,7 @@ elem (t tableWidget) render() {
 			if ts.page == 1 {
 				return ts
 			}
-			last := 1
+			last := ts.page - 1
 			if content.Total != nil {
 				last = max(1, (*content.Total + ts.size - 1) / ts.size)
 			}
@@ -172,115 +178,141 @@ elem (t tableWidget) render() {
 	}
 	~~
 	<>
-		<table class="kisland-table-grid">
-			<thead>
-				<tr>
-					~({
-						if !t.params.Selectable {
-							return nil
-						}
-						ids := make([]string, len(content.Rows))
-						for i, r := range content.Rows {
-							ids[i] = r.ID
-						}
-						return <th class="kisland-table-check">
-							~(t.checkboxHeader(ids))
-						</th>
-					})
-					~(for i, c := range t.params.Columns {
-						~(t.header(i, c, state.sort))
-					})
-					~(if actions {
-						<th aria-label="Actions"></th>
-					})
-				</tr>
-			</thead>
-			<tbody>
-				~(if failed != "" {
-					<tr><td class="kisland-table-error" colspan=(columnCount)>~(failed)</td></tr>
-				} else if len(content.Rows) == 0 {
+		<div class="kisland-table-box" tabindex="0" role="region" aria-label="Table">
+			<table class="kisland-table-grid">
+				<thead>
 					<tr>
-						<td class="kisland-table-empty" colspan=(columnCount)>
-							~({
-								if state.search != "" {
-									return "No matching rows"
-								}
-								return "No rows"
-							})
-						</td>
+						~({
+							if !t.params.Selectable {
+								return nil
+							}
+							ids := make([]string, len(content.Rows))
+							for i, r := range content.Rows {
+								ids[i] = r.ID
+							}
+							return <th scope="col" class="kisland-table-head-cell kisland-table-check">
+								<label class="kisland-table-check-target">~(t.checkboxHeader(ids))</label>
+							</th>
+						})
+						~(for i, c := range t.params.Columns {
+							~(t.header(i, c, state.sort))
+						})
+						~(if actions {
+							<th scope="col" class="kisland-table-head-cell" aria-label="Actions"></th>
+						})
 					</tr>
-				} else {
-					~(for _, r := range content.Rows {
-						<tr>
-							~(if t.params.Selectable {
-								<td class="kisland-table-check">
-									~({
-										label := r.ID
-										if len(r.Cells) > 0 && r.Cells[0] != "" {
-											label = string(r.Cells[0])
-										}
-										return t.checkbox("Select " + label, r.ID)
-									})
-								</td>
-							})
-							~(for i := range t.params.Columns {
-								~~
-								c := ""
-								if i < len(r.Cells) {
-									c = string(r.Cells[i])
-								}
-								~~
-								<td>
-									~(if i == 0 && t.params.Clickable {
-										<button
-											type="button"
-											class="kisland-table-link"
-											(doors.AClick{
-												Scope: neui.IslandScope(ctx),
-												On: func(ctx context.Context, _ doors.RequestPointer) bool {
-													t.submit(ctx, tableSubmit{ID: r.ID})
-													return false
-												},
-											})>
-											~(c)
-										</button>
-									} else {
-										~(c)
-									})
-								</td>
-							})
-							~(if actions {
-								<td class="kisland-table-actions">
-									~(for _, a := range r.Actions {
-										<button
-											type="button"
-											class=("kisland-button kisland-button-sm kisland-button-" + cmp.Or(a.Style, "secondary"))
-											(doors.AClick{
-												Scope: neui.IslandScope(ctx),
-												On: func(ctx context.Context, _ doors.RequestPointer) bool {
-													t.submit(ctx, tableSubmit{ID: r.ID, Value: a.Value})
-													return false
-												},
-											})>
-											~(a.Text)
-										</button>
-									})
-								</td>
-							})
+				</thead>
+				<tbody>
+					~(if failed != "" {
+						<tr class="kisland-table-message-row"><td class="kisland-table-cell kisland-table-error" colspan=(columnCount)>~(failed)</td></tr>
+					} else if len(content.Rows) == 0 {
+						<tr class="kisland-table-message-row">
+							<td class="kisland-table-cell kisland-table-empty" colspan=(columnCount)>
+								~({
+									if state.search != "" {
+										return "No matching rows"
+									}
+									return "No rows"
+								})
+							</td>
 						</tr>
+					} else {
+						~(for _, r := range content.Rows {
+							<tr class="kisland-table-row">
+								~(if t.params.Selectable {
+									<td class="kisland-table-cell kisland-table-check">
+										~({
+											label := r.ID
+											if len(r.Cells) > 0 && r.Cells[0] != "" {
+												label = cmp.Or(markdown.Plain(markdown.Inline(string(r.Cells[0]))), r.ID)
+											}
+											return <label class="kisland-table-check-target">~(t.checkbox("Select " + label, r.ID))</label>
+										})
+									</td>
+								})
+								~(for i := range t.params.Columns {
+									~~
+									c := ""
+									if i < len(r.Cells) {
+										c = string(r.Cells[i])
+									}
+									~~
+									<td class="kisland-table-cell">
+										~(if i == 0 && t.params.Clickable {
+											<button
+												type="button"
+												class="kisland-table-link"
+												(doors.AClick{
+													Scope: neui.IslandScope(ctx),
+													On: func(ctx context.Context, _ doors.RequestPointer) bool {
+														t.submit(ctx, tableSubmit{ID: r.ID})
+														return false
+													},
+												})>
+												~(markdown.Plain(markdown.Inline(c)))
+											</button>
+										} else if c != "" {
+											<span class="kisland-prose kisland-table-prose">~(markdownBody(neui.IslandFS(ctx), markdown.Inline(c)))</span>
+										})
+									</td>
+								})
+								~(if actions {
+									<td class="kisland-table-cell kisland-table-actions">
+										~(for _, a := range r.Actions {
+											<button
+												type="button"
+												class=("kisland-button kisland-table-action kisland-button-" + cmp.Or(a.Style, "secondary"))
+												(doors.AClick{
+													Scope: neui.IslandScope(ctx),
+													On: func(ctx context.Context, _ doors.RequestPointer) bool {
+														t.submit(ctx, tableSubmit{ID: r.ID, Value: a.Value})
+														return false
+													},
+												})>
+												~(a.Text)
+											</button>
+										})
+									</td>
+								})
+							</tr>
+						})
+						~(if page > 1 || content.Total != nil && *content.Total > size {
+							~(for range size - len(content.Rows) {
+								<tr class="kisland-table-filler" aria-hidden="true">
+									~(if t.params.Selectable {
+										<td class="kisland-table-cell kisland-table-check"></td>
+									})
+									~(for range t.params.Columns {
+										<td class="kisland-table-cell"></td>
+									})
+									~(if actions {
+										<td class="kisland-table-cell kisland-table-actions"></td>
+									})
+								</tr>
+							})
+						})
 					})
-				})
-			</tbody>
-		</table>
-		~(t.pager(content, page, size))
+				</tbody>
+			</table>
+		</div>
+		<div class="kisland-table-footer">
+			<div class="kisland-table-status">
+				~(t.selected.Bind(func(sel map[string]struct{}) gox.Elem {
+					return t.status(sel, content, page, size)
+				}))
+			</div>
+			~(t.pager(content, page, size))
+		</div>
 	</>
 }
 
 elem (t tableWidget) header(i int, c tableColumn, sort *tableSort) {
 	~(if !c.Sort {
-		<th>~(c.Title)</th>
+		<th scope="col" class="kisland-table-head-cell">~(c.Title)</th>
 	} else {
 		<th
+			scope="col"
+			class="kisland-table-head-cell"
 			aria-sort=({
 				if sort == nil || sort.Column != i {
 					return nil
@@ -412,34 +444,38 @@ elem (t tableWidget) checkbox(label string, id string) {
 	}))
 }
 
-elem (t tableWidget) bar(sel map[string]struct{}) {
+elem (t tableWidget) status(sel map[string]struct{}, content tableResult, page int, size int) {
 	~(if len(sel) > 0 {
-		<div class="kisland-table-selection">
-			<span>~(len(sel), " selected")</span>
-			<button
-				type="button"
-				class="kisland-button kisland-button-sm kisland-button-secondary"
-				(doors.AClick{
-					On: func(ctx context.Context, _ doors.RequestPointer) bool {
-						t.selected.Update(ctx, nil)
-						return false
-					},
-				})>
-				Clear
-			</button>
-			<button
-				type="button"
-				class="kisland-button kisland-button-sm kisland-button-primary"
-				(doors.AClick{
-					Scope: neui.IslandScope(ctx),
-					On: func(ctx context.Context, _ doors.RequestPointer) bool {
-						t.submit(ctx, tableSubmit{IDs: slices.Sorted(maps.Keys(sel))})
-						return false
-					},
-				})>
-				Submit
-			</button>
-		</div>
+		<span class="kisland-table-status-text" role="status"><span class="kisland-table-count">~(len(sel))</span> selected</span>
+		<button
+			type="button"
+			class="kisland-button kisland-button-sm kisland-button-primary"
+			(doors.AClick{
+				Scope: neui.IslandScope(ctx),
+				On: func(ctx context.Context, _ doors.RequestPointer) bool {
+					t.submit(ctx, tableSubmit{IDs: slices.Sorted(maps.Keys(sel))})
+					return false
+				},
+			})>
+			Submit
+		</button>
+		<button
+			type="button"
+			class="kisland-table-clear"
+			(doors.AClick{
+				On: func(ctx context.Context, _ doors.RequestPointer) bool {
+					t.selected.Update(ctx, nil)
+					return false
+				},
+			})>
+			Clear
+		</button>
+	} else if len(content.Rows) == 0 {
+		<span class="kisland-table-status-text" role="status">Nothing to show</span>
+	} else {
+		<span class="kisland-table-status-text" role="status">Showing <span class="kisland-table-count">~((page - 1) * size + 1)</span>–<span class="kisland-table-count">~((page - 1) * size + len(content.Rows))</span>~(if content.Total != nil {
+			<> of <span class="kisland-table-count">~(*content.Total)</span></>
+		})</span>
 	})
 }
 
@@ -476,13 +512,13 @@ elem (t tableWidget) pager(content tableResult, page int, size int) {
 
 elem (t tableWidget) pageButton(label string, page int, enabled bool) {
 	~(if !enabled {
-		<button type="button" class="kisland-button kisland-button-sm kisland-button-secondary" disabled>
+		<button type="button" class="kisland-button kisland-table-page kisland-button-secondary" disabled>
 			~(label)
 		</button>
 	} else {
 		<button
 			type="button"
-			class="kisland-button kisland-button-sm kisland-button-secondary"
+			class="kisland-button kisland-table-page kisland-button-secondary"
 			(doors.AClick{
 				On: func(ctx context.Context, _ doors.RequestPointer) bool {
 					t.state.Mutate(ctx, func(s tableState) tableState {

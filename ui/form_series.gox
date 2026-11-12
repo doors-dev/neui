@@ -2,7 +2,6 @@ package ui
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	
@@ -104,7 +103,7 @@ func (f *formWidgetSeries) setField(ctx context.Context, name string, value any,
 		}
 	}
 	f.state.Update(ctx, formSeriesState{steps: nextIndex})
-	if err != nil {
+	if formShownErr(err) {
 		return
 	}
 	if nextIndex != 0 && value == nil {
@@ -122,26 +121,36 @@ func (f *formWidgetSeries) setField(ctx context.Context, name string, value any,
 	}
 	field, err := f.params.Fields[nextIndex].Call(ctx, value)
 	if err != nil {
-		f.onSystemError(ctx, err)
+		if !f.initialized {
+			f.initError = err
+		}
+		f.system.set(ctx, nil, errSystem)
 		return
 	}
+	required := f.params.Required || nextIndex > 0
 	switch v := field.v.(type) {
 	case *textInput:
-		v.Required = false
+		v.Required = required
 	case *numberInput:
-		v.Required = false
+		v.Required = required
 	case *dateInput:
-		v.Required = false
+		v.Required = required
 	case *textArea:
-		v.Required = false
+		v.Required = required
 	case *selectInput:
-		v.Min = 0
+		if required {
+			v.Min = max(v.Min, 1)
+		} else {
+			v.Min = 0
+		}
 	case *searchInput:
-		v.Min = 0
-	case *checkboxInput:
-		v.Required = false
+		if required {
+			v.Min = max(v.Min, 1)
+		} else {
+			v.Min = 0
+		}
 	case *fileInput:
-		v.Required = false
+		v.Required = required
 	}
 	widgetField, err := newFormWidgetField(ctx, f, field.v)
 	if err != nil {
@@ -235,12 +244,14 @@ elem (f *formWidgetSeries) Main() {
 	~~
 	<fieldset class="kisland-form-box" aria-describedby=(f.id + "-e")>
 		<legend class="kisland-form-box-legend">
-			~(f.params.Label)
-			~(f.system.error.RouteBeam(
-				doors.RouteBeamMatch(func(err error) bool {
-					return errors.Is(err, errRequired)
-				}, doors.RouteComp[error](<span class="kisland-form-required" aria-hidden="true">*</span>)),
-			))
+			<span>
+				~(f.params.Label)
+				~(f.system.error.RouteBeam(
+					doors.RouteBeamMatch(func(err error) bool {
+						return f.params.Required && err != nil
+					}, doors.RouteComp[error](<span class="kisland-form-required" aria-hidden="true">*</span>)),
+				))
+			</span>
 		</legend>
 		~(steps)
 		~(errLine)

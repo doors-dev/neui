@@ -12,10 +12,17 @@ import (
 
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
-	"neui.dev"
 )
 
 func newFormWidgetText(ctx context.Context, group formGroup, params textInput) (*formWidgetText, error) {
+	var pattern *regexp.Regexp
+	if params.Pattern != "" {
+		re, err := regexp.Compile("^(?:" + params.Pattern + ")$")
+		if err != nil {
+			return nil, fmt.Errorf("field %q pattern: %w", params.Name, err)
+		}
+		pattern = re
+	}
 	field, err := group.newField(params.Name)
 	if err != nil {
 		return nil, err
@@ -24,6 +31,7 @@ func newFormWidgetText(ctx context.Context, group formGroup, params textInput) (
 		id: doors.IDRand(),
 		field: field,
 		params: params,
+		pattern: pattern,
 	}, nil
 }
 
@@ -31,8 +39,10 @@ type formWidgetText struct {
 	id string
 	field formGroupField
 	params textInput
+	pattern *regexp.Regexp
 	value string
 	invalid doors.Setter
+	label doors.Setter
 }
 
 func (f *formWidgetText) name() string {
@@ -63,6 +73,7 @@ func (f *formWidgetText) update(ctx context.Context, str string) {
 	defer f.field.mutex().Unlock()
 	f.setLocked(ctx, str, err)
 	doors.Call(ctx, f.invalid.Set("aria-invalid", formAria(formShownErr(err))))
+	doors.Call(ctx, f.invalid.Set("data-required-empty", errors.Is(err, errRequired)))
 }
 
 func (f *formWidgetText) setLocked(ctx context.Context, str string, err error) {
@@ -74,19 +85,31 @@ func (f *formWidgetText) setLocked(ctx context.Context, str string, err error) {
 }
 
 elem (f *formWidgetText) Main() {
+	~~
+	label := any(nil)
+	if f.field.item != nil {
+		label, _ = f.field.item.ReadAndSub(ctx, func(ctx context.Context, name string) bool {
+			doors.Call(ctx, f.label.Set("aria-label", name))
+			return false
+		})
+	}
+	~~
 	<div class="kisland-form-field">
-		<label class="kisland-form-label" for=(f.id)>
-			~(f.params.Label)
-			~(f.field.error.RouteBeam(
-				doors.RouteBeamMatch(func(err error) bool {
-					return f.params.Required && errors.Is(err, errRequired)
-				}, doors.RouteComp[error](<span class="kisland-form-required" aria-hidden="true">*</span>)),
-			))
-		</label>
+		~(if label == nil {
+			<label class="kisland-form-label" for=(f.id)>
+				~(f.params.Label)
+				~(f.field.error.RouteBeam(
+					doors.RouteBeamMatch(func(err error) bool {
+						return f.params.Required && err != nil
+					}, doors.RouteComp[error](<span class="kisland-form-required" aria-hidden="true">*</span>)),
+				))
+			</label>
+		})
 		<input
 			(&f.invalid)
+			(&f.label)
 			(doors.AInput{
-				Scope: f.field.scope().And(&doors.ScopeRate{Tick: 300 * time.Millisecond}),
+				Scope: f.field.scope().And(&doors.ScopeDebounce{Duration: 250 * time.Millisecond, Limit: time.Second}),
 				On: func(ctx context.Context, r doors.RequestInput) bool {
 					f.update(ctx, r.Event().Value)
 					return false
@@ -97,9 +120,17 @@ elem (f *formWidgetText) Main() {
 			type=(f.params.Type)
 			name=(f.params.Name)
 			value=(f.value)
+			maxlength=({
+				if f.params.MaxLength > 0 {
+					return f.params.MaxLength
+				}
+				return nil
+			})
 			placeholder=(f.params.Placeholder)
 			aria-required=(formAria(f.params.Required))
+			aria-label=(label)
 			aria-invalid=(formAria(formShownErr(f.field.error.Get())))
+			data-required-empty=(errors.Is(f.field.error.Get(), errRequired))
 			aria-describedby=(f.id + "-e")/>
 		~(f.field.error.RouteBeam(
 			doors.RouteBeamMatch(formShownErr, doors.RouteBind(func(err error) gox.Elem {
@@ -133,13 +164,8 @@ func (f *formWidgetText) validate(ctx context.Context, str string) error {
 			return errors.New("enter a full URL, like https://example.com")
 		}
 	}
-	if f.params.Pattern != "" {
-		re, err := regexp.Compile("^(?:" + f.params.Pattern + ")$")
-		if err != nil {
-			neui.IslandReport(ctx, fmt.Errorf("field %q pattern: %w", f.params.Name, err))
-		} else if !re.MatchString(str) {
-			return errors.New("use the requested format")
-		}
+	if f.pattern != nil && !f.pattern.MatchString(str) {
+		return errors.New("use the requested format")
 	}
 	if f.params.Validate != "" {
 		msg, err := f.params.Validate.Call(ctx, str)
