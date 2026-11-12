@@ -318,6 +318,7 @@ elem (f *formWidgetSearch) picked(chosen []option) {
 				<button
 					(doors.AClick{
 						Scope: f.field.scope(),
+						Batch: true,
 						On: func(ctx context.Context, r doors.RequestPointer) bool {
 							f.remove(ctx, string(key))
 							return false
@@ -405,6 +406,7 @@ elem (f *formWidgetSearch) results(found formSearchFound) {
 					<button
 						(doors.AClick{
 							Scope: f.field.scope(),
+							Batch: true,
 							On: func(ctx context.Context, r doors.RequestPointer) bool {
 								f.pick(ctx, found.results[i])
 								return false

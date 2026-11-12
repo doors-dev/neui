@@ -23,14 +23,11 @@ import (
 )
 
 func newFormWidgetFile(ctx context.Context, group formGroup, params fileInput) (*formWidgetFile, error) {
-	if params.Max != 0 && !params.Multiple {
-		return nil, fmt.Errorf("field %q: max needs multiple", params.Name)
-	}
-	switch {
-	case !params.Multiple:
+	if params.Max == 0 {
 		params.Max = 1
-	case params.Max == 0:
-		params.Max = 10
+	}
+	if params.Max < params.Min {
+		return nil, fmt.Errorf("field %q: max %d is below min %d", params.Name, params.Max, params.Min)
 	}
 	field, err := group.newField(params.Name)
 	if err != nil {
@@ -45,7 +42,7 @@ func newFormWidgetFile(ctx context.Context, group formGroup, params fileInput) (
 		id: id,
 		folder: path.Join(neui.IslandDir(ctx), id),
 		fs: neui.IslandFS(ctx),
-		limit: int64(common.FilesConfigDefaults(config).DocumentLimit),
+		limit: int64(min(common.FilesConfigDefaults(config).DocumentLimit, doors.AppConf(ctx).ServerRequestBodyLimit)),
 		field: field,
 		params: params,
 		count: doors.NewSource(formFileCount{}),
@@ -74,7 +71,6 @@ type formFileEntry struct {
 	status formFileStatus
 	reason string
 	retry bool
-	own bool
 	cancel context.CancelFunc
 	door *doors.Door
 }
@@ -107,27 +103,19 @@ func (f *formWidgetFile) name() string {
 
 func (f *formWidgetFile) init(ctx context.Context, value any) error {
 	paths := f.params.Value
-	switch v := value.(type) {
-	case nil:
-	case string:
-		if f.params.Multiple {
-			return fmt.Errorf("field %q: default value is a string, want an array of paths", f.params.Name)
+	if value != nil {
+		items, ok := value.([]any)
+		if !ok {
+			return fmt.Errorf("field %q: default value is %T, want an array of paths", f.params.Name, value)
 		}
-		paths = []string{v}
-	case []any:
-		if !f.params.Multiple {
-			return fmt.Errorf("field %q: default value is an array, want a path", f.params.Name)
-		}
-		paths = make([]string, 0, len(v))
-		for _, item := range v {
+		paths = make([]string, 0, len(items))
+		for _, item := range items {
 			p, ok := item.(string)
 			if !ok {
 				return fmt.Errorf("field %q: default item is %T, want a path", f.params.Name, item)
 			}
 			paths = append(paths, p)
 		}
-	default:
-		return fmt.Errorf("field %q: default value is %T, want a path or an array of paths", f.params.Name, value)
 	}
 	if len(paths) > f.params.Max {
 		return fmt.Errorf("field %q: %d default files, most is %d", f.params.Name, len(paths), f.params.Max)
@@ -137,21 +125,22 @@ func (f *formWidgetFile) init(ctx context.Context, value any) error {
 		if f.fs == nil {
 			return fmt.Errorf("field %q: default file %q: no workspace", f.params.Name, p)
 		}
-		entry, err := f.fs.Stat(ctx, p)
-		if err != nil {
-			return fmt.Errorf("field %q: default file %q not found", f.params.Name, p)
-		}
-		if entry.Dir {
-			return fmt.Errorf("field %q: default file %q is a directory", f.params.Name, p)
-		}
 		f.seq++
 		e := &formFileEntry{
 			key: strconv.Itoa(f.seq),
 			name: path.Base(p),
 			path: p,
-			size: entry.Size,
 			status: formFileDone,
 			door: new(doors.Door),
+		}
+		entry, err := f.fs.Stat(ctx, p)
+		switch {
+		case err != nil:
+			e.status, e.reason = formFileFailed, "file not found"
+		case entry.Dir:
+			e.status, e.reason = formFileFailed, "is a folder"
+		default:
+			e.size = entry.Size
 		}
 		f.entries = append(f.entries, e)
 		e.door.Outer(ctx, f.chip(*e))
@@ -192,18 +181,16 @@ func (f *formWidgetFile) setLocked(ctx context.Context) {
 	switch {
 	case count.held > count.done:
 		err = errUploading
-	case f.params.Required && count.done == 0:
+	case f.params.Min > 0 && count.done == 0:
 		err = errRequired
+	case count.done < f.params.Min:
+		err = fmt.Errorf("choose at least %d", f.params.Min)
 	}
-	var value any
-	switch {
-	case len(paths) == 0:
-	case f.params.Multiple:
-		value = paths
-	default:
-		value = paths[0]
+	if len(paths) == 0 {
+		f.field.set(ctx, nil, err)
+	} else {
+		f.field.set(ctx, paths, err)
 	}
-	f.field.set(ctx, value, err)
 	f.count.Update(ctx, count)
 }
 
@@ -290,7 +277,6 @@ func (f *formWidgetFile) pick(ctx context.Context, picked []formFilePicked) []an
 			e.name = stored
 			e.path = path.Join(f.folder, stored)
 			e.status = formFileUploading
-			e.own = true
 			held++
 			keys[i] = e.key
 		}
@@ -301,13 +287,13 @@ func (f *formWidgetFile) pick(ctx context.Context, picked []formFilePicked) []an
 			ctx := __c.Context(); _ = ctx
 			__e = __c.InitContainer(); if __e != nil { return }
 			{
-//line form_file.gox:298
+//line form_file.gox:284
 				__e = __c.Any(e.door); if __e != nil { return }
-//line form_file.gox:299
+//line form_file.gox:285
 				__e = __c.Any(next); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line form_file.gox:300
+//line form_file.gox:286
 		return }))
 		f.edge = next
 	}
@@ -468,7 +454,7 @@ func (f *formWidgetFile) remove(ctx context.Context, key string) {
 	if e.cancel != nil {
 		e.cancel()
 	}
-	if e.status == formFileDone && e.own {
+	if e.status == formFileDone {
 		if err := f.fs.Remove(ctx, e.path); err != nil {
 			doors.Logger(ctx).Error("ui: form file remove", "name", e.path, "err", err)
 		}
@@ -486,13 +472,13 @@ func (f *formWidgetFile) remove(ctx context.Context, key string) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("script"); if __e != nil { return }
 		{
-//line form_file.gox:474
+//line form_file.gox:460
 			__e = __c.Set("data:id", target); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Raw("const id = $data(\"id\")\n\t\tconst focus = (tries) => {\n\t\t\tconst el = document.getElementById(id)\n\t\t\tif (el) {\n\t\t\t\tel.focus()\n\t\t\t} else if (tries > 0) {\n\t\t\t\trequestAnimationFrame(() => focus(tries - 1))\n\t\t\t}\n\t\t}\n\t\tfocus(30)"); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
-//line form_file.gox:485
+//line form_file.gox:471
 	return }))
 	e.door.Static(ctx, nil)
 }
@@ -508,11 +494,11 @@ func formFileSize(size int64) string {
 	}
 }
 
-//line form_file.gox:500
+//line form_file.gox:486
 func (f *formWidgetFile) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line form_file.gox:502
+//line form_file.gox:488
 		label, labelledby := any(nil), any(f.id + "-l")
 	if f.field.item != nil {
 		label, _ = f.field.item.ReadAndSub(ctx, func(ctx context.Context, name string) bool {
@@ -531,7 +517,7 @@ func (f *formWidgetFile) Main() gox.Elem {
 		return c.held >= f.params.Max
 	})
 	empty := doors.DeriveBeam(f.count, func(c formFileCount) bool {
-		return f.params.Required && c.done == 0
+		return f.params.Min > 0 && c.done == 0
 	})
 	describedby := func(full bool) any {
 		if full && f.params.Max > 1 {
@@ -547,34 +533,38 @@ func (f *formWidgetFile) Main() gox.Elem {
 		doors.Call(ctx, f.empty.Set("data-required-empty", empty))
 		return false
 	})
+	f.field.error.Sub(ctx, func(ctx context.Context, err error) bool {
+		doors.Call(ctx, f.empty.Set("aria-invalid", formAria(formShownErr(err))))
+		return false
+	})
 
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line form_file.gox:537
+//line form_file.gox:527
 			__e = __c.Set("class", "kisland-form-field"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line form_file.gox:538
+//line form_file.gox:528
 			if label == nil {
 				__e = __c.Init("span"); if __e != nil { return }
 				{
-//line form_file.gox:539
+//line form_file.gox:529
 					__e = __c.Set("class", "kisland-form-label"); if __e != nil { return }
-//line form_file.gox:539
+//line form_file.gox:529
 					__e = __c.Set("id", f.id + "-l"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line form_file.gox:540
+//line form_file.gox:530
 					__e = __c.Any(f.params.Label); if __e != nil { return }
-//line form_file.gox:541
+//line form_file.gox:531
 					__e = __c.Any(empty.Bind(func(empty bool) gox.Elem {
 					return gox.Elem(func(__c gox.Cursor) (__e error) {
 						ctx := __c.Context(); _ = ctx
-//line form_file.gox:542
+//line form_file.gox:532
 						if empty {
 							__e = __c.Init("span"); if __e != nil { return }
 							{
-//line form_file.gox:543
+//line form_file.gox:533
 								__e = __c.Set("class", "kisland-form-required"); if __e != nil { return }
-//line form_file.gox:543
+//line form_file.gox:533
 								__e = __c.Set("aria-hidden", "true"); if __e != nil { return }
 								__e = __c.Submit(); if __e != nil { return }
 								__e = __c.Text("*"); if __e != nil { return }
@@ -582,54 +572,75 @@ func (f *formWidgetFile) Main() gox.Elem {
 							__e = __c.Close(); if __e != nil { return }
 						}
 					return })
-//line form_file.gox:545
+//line form_file.gox:535
 				})); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
 			}
 			__e = __c.Init("ul"); if __e != nil { return }
 			{
-//line form_file.gox:549
+//line form_file.gox:539
 				__e = __c.Modify(&f.label); if __e != nil { return }
-//line form_file.gox:550
+//line form_file.gox:540
 				__e = __c.Modify(&f.list); if __e != nil { return }
-//line form_file.gox:551
+//line form_file.gox:541
 				__e = __c.Set("class", "kisland-form-search-chosen"); if __e != nil { return }
-//line form_file.gox:552
+//line form_file.gox:542
 				__e = __c.Set("aria-label", label); if __e != nil { return }
-//line form_file.gox:553
+//line form_file.gox:543
 				__e = __c.Set("aria-labelledby", labelledby); if __e != nil { return }
-//line form_file.gox:554
+//line form_file.gox:544
 				__e = __c.Set("aria-describedby", describedby(isFull)); if __e != nil { return }
-//line form_file.gox:555
+//line form_file.gox:545
 				__e = __c.Set("aria-live", "polite"); if __e != nil { return }
-//line form_file.gox:556
+//line form_file.gox:546
 				__e = __c.Set("aria-relevant", "additions"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line form_file.gox:557
+//line form_file.gox:547
 				for _, e := range entries {
-//line form_file.gox:558
+//line form_file.gox:548
 					__e = __c.Any(e.door); if __e != nil { return }
 				}
-//line form_file.gox:560
+//line form_file.gox:550
 				__e = __c.Any(edge); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line form_file.gox:562
+//line form_file.gox:552
 			__e = __c.Any(full.Bind(f.zone)); if __e != nil { return }
-//line form_file.gox:563
+//line form_file.gox:553
+			__e = __c.Any(f.field.error.RouteBeam(
+			doors.RouteBeamMatch(formShownErr, doors.RouteBind(func(err error) gox.Elem {
+				return gox.Elem(func(__c gox.Cursor) (__e error) {
+					ctx := __c.Context(); _ = ctx
+					__e = __c.Init("p"); if __e != nil { return }
+					{
+//line form_file.gox:555
+						__e = __c.Set("class", "kisland-form-error"); if __e != nil { return }
+//line form_file.gox:555
+						__e = __c.Set("id", f.id + "-e"); if __e != nil { return }
+						__e = __c.Submit(); if __e != nil { return }
+//line form_file.gox:555
+						__e = __c.Any(err.Error()); if __e != nil { return }
+					}
+					__e = __c.Close(); if __e != nil { return }
+//line form_file.gox:555
+				return })
+			})),
+		)); if __e != nil { return }
+//line form_file.gox:558
 			__e = __c.Any(focus); if __e != nil { return }
 			__e = __c.Init("script"); if __e != nil { return }
 			{
-//line form_file.gox:565
+//line form_file.gox:560
 				__e = __c.Modify(doors.AHook[[]formFilePicked]{
 				Name: "pick",
 				Scope: f.field.scope(),
+				Batch: true,
 				On: func(ctx context.Context, r doors.RequestHook[[]formFilePicked]) (any, bool) {
 					return f.pick(ctx, r.Data()), false
 				},
 			}); if __e != nil { return }
-//line form_file.gox:572
+//line form_file.gox:568
 				__e = __c.Modify(doors.AHook[string]{
 				Name: "retry",
 				Scope: f.field.scope(),
@@ -637,7 +648,7 @@ func (f *formWidgetFile) Main() gox.Elem {
 					return f.retry(ctx, r.Data()), false
 				},
 			}); if __e != nil { return }
-//line form_file.gox:579
+//line form_file.gox:575
 				__e = __c.Modify(doors.AHook[string]{
 				Name: "failed",
 				Scope: f.field.scope(),
@@ -646,9 +657,9 @@ func (f *formWidgetFile) Main() gox.Elem {
 					return nil, false
 				},
 			}); if __e != nil { return }
-//line form_file.gox:587
+//line form_file.gox:583
 				__e = __c.Set("data:upload", func() any {
-				url, _ := doors.NewHook(ctx, doors.ResourceHook(f.receive))
+				url, _ := doors.ResourceHook(f.receive).URL(ctx)
 				return url
 			}()); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
@@ -658,16 +669,16 @@ func (f *formWidgetFile) Main() gox.Elem {
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line form_file.gox:745
+//line form_file.gox:741
 }
 
-//line form_file.gox:747
+//line form_file.gox:743
 func (f *formWidgetFile) zone(full bool) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line form_file.gox:748
+//line form_file.gox:744
 		if !full {
-//line form_file.gox:750
+//line form_file.gox:746
 			count, _ := f.count.Read(ctx)
 		label, labelledby := any(nil), any(f.id + "-l")
 		if f.field.item != nil {
@@ -677,46 +688,48 @@ func (f *formWidgetFile) zone(full bool) gox.Elem {
 
 			__e = __c.Init("label"); if __e != nil { return }
 			{
-//line form_file.gox:757
+//line form_file.gox:753
 				__e = __c.Set("class", "kisland-form-file-zone"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.InitVoid("input"); if __e != nil { return }
 				{
-//line form_file.gox:759
+//line form_file.gox:755
 					__e = __c.Modify(&f.empty); if __e != nil { return }
-//line form_file.gox:760
+//line form_file.gox:756
 					__e = __c.Modify(&f.label); if __e != nil { return }
-//line form_file.gox:761
+//line form_file.gox:757
 					__e = __c.Set("class", "kisland-form-file-input"); if __e != nil { return }
-//line form_file.gox:762
+//line form_file.gox:758
 					__e = __c.Set("id", f.id); if __e != nil { return }
-//line form_file.gox:763
+//line form_file.gox:759
 					__e = __c.Set("type", "file"); if __e != nil { return }
-//line form_file.gox:764
+//line form_file.gox:760
 					__e = __c.Set("accept", f.params.Accept); if __e != nil { return }
+//line form_file.gox:761
+					__e = __c.Set("multiple", f.params.Max > 1); if __e != nil { return }
+//line form_file.gox:762
+					__e = __c.Set("aria-required", formAria(f.params.Min > 0)); if __e != nil { return }
+//line form_file.gox:763
+					__e = __c.Set("aria-invalid", formAria(formShownErr(f.field.error.Get()))); if __e != nil { return }
+//line form_file.gox:764
+					__e = __c.Set("data-required-empty", f.params.Min > 0 && count.done == 0); if __e != nil { return }
 //line form_file.gox:765
-					__e = __c.Set("multiple", f.params.Multiple); if __e != nil { return }
-//line form_file.gox:766
-					__e = __c.Set("aria-required", formAria(f.params.Required)); if __e != nil { return }
-//line form_file.gox:767
-					__e = __c.Set("data-required-empty", f.params.Required && count.done == 0); if __e != nil { return }
-//line form_file.gox:768
 					__e = __c.Set("aria-label", label); if __e != nil { return }
-//line form_file.gox:769
+//line form_file.gox:766
 					__e = __c.Set("aria-labelledby", labelledby); if __e != nil { return }
-//line form_file.gox:770
-					__e = __c.Set("aria-describedby", f.id + "-z"); if __e != nil { return }
+//line form_file.gox:767
+					__e = __c.Set("aria-describedby", f.id + "-z " + f.id + "-e"); if __e != nil { return }
 				}
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Init("span"); if __e != nil { return }
 				{
-//line form_file.gox:771
+//line form_file.gox:768
 					__e = __c.Set("class", "kisland-form-file-summary"); if __e != nil { return }
-//line form_file.gox:771
+//line form_file.gox:768
 					__e = __c.Set("id", f.id + "-z"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line form_file.gox:772
-					if f.params.Multiple {
+//line form_file.gox:769
+					if f.params.Max > 1 {
 						__e = __c.Text("Drop files or click to choose"); if __e != nil { return }
 					} else  {
 						__e = __c.Text("Drop a file or click to choose"); if __e != nil { return }
@@ -725,41 +738,41 @@ func (f *formWidgetFile) zone(full bool) gox.Elem {
 				__e = __c.Close(); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line form_file.gox:779
+//line form_file.gox:776
 		} else if f.params.Max > 1 {
 			__e = __c.Init("p"); if __e != nil { return }
 			{
-//line form_file.gox:780
+//line form_file.gox:777
 				__e = __c.Set("class", "kisland-form-search-max"); if __e != nil { return }
-//line form_file.gox:780
+//line form_file.gox:777
 				__e = __c.Set("id", f.id + "-h"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Text("Maximum of "); if __e != nil { return }
-//line form_file.gox:780
+//line form_file.gox:777
 				__e = __c.Any(f.params.Max); if __e != nil { return }
 				__e = __c.Text(" chosen."); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		}
 	return })
-//line form_file.gox:782
+//line form_file.gox:779
 }
 
-//line form_file.gox:784
+//line form_file.gox:781
 func (f *formWidgetFile) chip(e formFileEntry) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("li"); if __e != nil { return }
 		{
-//line form_file.gox:786
+//line form_file.gox:783
 			__e = __c.Set("class", "kisland-form-file-chip"); if __e != nil { return }
-//line form_file.gox:787
+//line form_file.gox:784
 			__e = __c.Set("data-key", e.key); if __e != nil { return }
-//line form_file.gox:788
+//line form_file.gox:785
 			__e = __c.Set("data-uploading", e.status == formFileUploading); if __e != nil { return }
-//line form_file.gox:789
+//line form_file.gox:786
 			__e = __c.Set("data-failed", e.status == formFileFailed); if __e != nil { return }
-//line form_file.gox:790
+//line form_file.gox:787
 			__e = __c.Set("style", func() any {
 			if e.status == formFileUploading {
 				return "--kisland-file-p:0%"
@@ -769,67 +782,67 @@ func (f *formWidgetFile) chip(e formFileEntry) gox.Elem {
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Init("span"); if __e != nil { return }
 			{
-//line form_file.gox:796
+//line form_file.gox:793
 				__e = __c.Set("class", "kisland-form-file-body"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line form_file.gox:797
+//line form_file.gox:794
 				if e.status == formFileDone {
 					__e = __c.Init("a"); if __e != nil { return }
 					{
-//line form_file.gox:799
+//line form_file.gox:796
 						__e = __c.Set("class", "kisland-form-file-link"); if __e != nil { return }
-//line form_file.gox:800
+//line form_file.gox:797
 						__e = __c.Set("href", markdownServe(f.fs, e.path, true)); if __e != nil { return }
-//line form_file.gox:801
+//line form_file.gox:798
 						__e = __c.Set("download", path.Base(e.path)); if __e != nil { return }
-//line form_file.gox:802
+//line form_file.gox:799
 						__e = __c.Set("title", e.name); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line form_file.gox:803
+//line form_file.gox:800
 						__e = __c.Any(e.name); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
-//line form_file.gox:805
+//line form_file.gox:802
 					__e = __c.Any(" "); if __e != nil { return }
 					__e = __c.Init("span"); if __e != nil { return }
 					{
-//line form_file.gox:806
+//line form_file.gox:803
 						__e = __c.Set("class", "kisland-form-file-size"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line form_file.gox:806
+//line form_file.gox:803
 						__e = __c.Any(formFileSize(e.size)); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
-//line form_file.gox:807
+//line form_file.gox:804
 				} else if e.status == formFileUploading {
 					__e = __c.Init("span"); if __e != nil { return }
 					{
-//line form_file.gox:808
+//line form_file.gox:805
 						__e = __c.Set("class", "kisland-form-file-text"); if __e != nil { return }
-//line form_file.gox:808
+//line form_file.gox:805
 						__e = __c.Set("title", e.name); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line form_file.gox:808
+//line form_file.gox:805
 						__e = __c.Any(e.name); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
-//line form_file.gox:809
+//line form_file.gox:806
 					__e = __c.Any(" "); if __e != nil { return }
 					__e = __c.Init("span"); if __e != nil { return }
 					{
-//line form_file.gox:811
+//line form_file.gox:808
 						__e = __c.Set("class", "kisland-form-file-percent"); if __e != nil { return }
-//line form_file.gox:812
+//line form_file.gox:809
 						__e = __c.Set("role", "progressbar"); if __e != nil { return }
-//line form_file.gox:813
+//line form_file.gox:810
 						__e = __c.Set("aria-label", "Uploading " + e.name); if __e != nil { return }
-//line form_file.gox:814
+//line form_file.gox:811
 						__e = __c.Set("aria-valuemin", "0"); if __e != nil { return }
-//line form_file.gox:815
+//line form_file.gox:812
 						__e = __c.Set("aria-valuemax", "100"); if __e != nil { return }
-//line form_file.gox:816
+//line form_file.gox:813
 						__e = __c.Set("aria-valuenow", "0"); if __e != nil { return }
-//line form_file.gox:817
+//line form_file.gox:814
 						__e = __c.Set("aria-valuetext", "0%"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 						__e = __c.Text("0%"); if __e != nil { return }
@@ -838,38 +851,38 @@ func (f *formWidgetFile) chip(e formFileEntry) gox.Elem {
 				} else  {
 					__e = __c.Init("span"); if __e != nil { return }
 					{
-//line form_file.gox:821
+//line form_file.gox:818
 						__e = __c.Set("class", "kisland-form-file-text"); if __e != nil { return }
-//line form_file.gox:821
+//line form_file.gox:818
 						__e = __c.Set("title", e.name); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line form_file.gox:821
+//line form_file.gox:818
 						__e = __c.Any(e.name); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
-//line form_file.gox:822
+//line form_file.gox:819
 					__e = __c.Any(" "); if __e != nil { return }
 					__e = __c.Init("span"); if __e != nil { return }
 					{
-//line form_file.gox:823
+//line form_file.gox:820
 						__e = __c.Set("class", "kisland-form-file-reason"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line form_file.gox:823
+//line form_file.gox:820
 						__e = __c.Any(e.reason); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
 				}
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line form_file.gox:826
+//line form_file.gox:823
 			if e.retry {
 				__e = __c.Init("button"); if __e != nil { return }
 				{
-//line form_file.gox:827
+//line form_file.gox:824
 					__e = __c.Set("type", "button"); if __e != nil { return }
-//line form_file.gox:827
+//line form_file.gox:824
 					__e = __c.Set("class", "kisland-form-file-retry"); if __e != nil { return }
-//line form_file.gox:827
+//line form_file.gox:824
 					__e = __c.Set("data-file-retry", e.key); if __e != nil { return }
 					__e = __c.Set("hidden", true); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
@@ -879,21 +892,22 @@ func (f *formWidgetFile) chip(e formFileEntry) gox.Elem {
 			}
 			__e = __c.Init("button"); if __e != nil { return }
 			{
-//line form_file.gox:830
+//line form_file.gox:827
 				__e = __c.Modify(doors.AClick{
 				Scope: f.field.scope(),
+				Batch: true,
 				On: func(ctx context.Context, r doors.RequestPointer) bool {
 					f.remove(ctx, e.key)
 					return false
 				},
 			}); if __e != nil { return }
-//line form_file.gox:837
+//line form_file.gox:835
 				__e = __c.Set("type", "button"); if __e != nil { return }
-//line form_file.gox:838
+//line form_file.gox:836
 				__e = __c.Set("class", "kisland-form-remove"); if __e != nil { return }
-//line form_file.gox:839
+//line form_file.gox:837
 				__e = __c.Set("id", f.id + "-x" + e.key); if __e != nil { return }
-//line form_file.gox:840
+//line form_file.gox:838
 				__e = __c.Set("aria-label", func() any {
 				switch e.status {
 				case formFileUploading:
@@ -911,5 +925,5 @@ func (f *formWidgetFile) chip(e formFileEntry) gox.Elem {
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line form_file.gox:853
+//line form_file.gox:851
 }

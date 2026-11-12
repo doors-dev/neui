@@ -556,8 +556,9 @@ func TestCovWrongDefaultTypeFailsCreation(t *testing.T) {
 		{"date", `{type: "date", label: "Item", name: "items"}`, `20260101`, "want a string"},
 		{"textarea", `{type: "textarea", label: "Item", name: "items"}`, `["a"]`, "want a string"},
 		{"checkbox in group", `{type: "group", label: "Item", name: "items", fields: [{type: "checkbox", label: "C", name: "c"}]}`, `{c: "yes"}`, "want a boolean"},
-		{"file", `{type: "file", label: "Item", name: "items"}`, `5`, "want a path"},
-		{"file missing", `{type: "file", label: "Item", name: "items"}`, `"island/x/a.txt"`, `default file "island/x/a.txt" not found`},
+		{"file", `{type: "file", label: "Item", name: "items"}`, `5`, "want an array of paths"},
+		{"file path string", `{type: "file", label: "Item", name: "items"}`, `"island/x/a.txt"`, "want an array of paths"},
+		{"file item", `{type: "file", label: "Item", name: "items"}`, `[5]`, "want a path"},
 		{"group member", `{type: "group", label: "Item", name: "items", fields: [{type: "number", label: "N", name: "n"}]}`, `{n: "one"}`, "want a number"},
 		{"group", `{type: "group", label: "Item", name: "items", fields: [{type: "number", label: "N", name: "n"}]}`, `"one"`, "want an object"},
 	} {
@@ -785,8 +786,8 @@ func TestCovFileAccept(t *testing.T) {
 
 func TestCovFileRequired(t *testing.T) {
 	_, f, _, src := covFileApp(t, `
-		{type: "file", label: "Doc", name: "doc", required: true},
-		{type: "file", label: "Docs", name: "docs", required: true, multiple: true}`)
+		{type: "file", label: "Doc", name: "doc", min: 1},
+		{type: "file", label: "Docs", name: "docs", min: 1, max: 10}`)
 	doc := f.Field("Doc")
 	docs := f.Field("Docs")
 	doc.ExpectRequiredMark(true)
@@ -811,7 +812,7 @@ func TestCovFileRequired(t *testing.T) {
 func TestCovFileOptionalEmptyIsAbsent(t *testing.T) {
 	a, f, _, _ := covFileApp(t, `
 		{type: "file", label: "Doc", name: "doc"},
-		{type: "file", label: "Docs", name: "docs", multiple: true}`)
+		{type: "file", label: "Docs", name: "docs", max: 10}`)
 	f.Field("Doc").ExpectValue("")
 	f.Field("Docs").ExpectValue("")
 	f.Field("Doc").Find(".kisland-form-file-summary").WaitText("Drop a file or click to choose")
@@ -820,8 +821,8 @@ func TestCovFileOptionalEmptyIsAbsent(t *testing.T) {
 	stack.ExpectJSON(t, a.Submitted(), `{"data": {}, "submit": ""}`)
 }
 
-func TestCovFileMultiplePaths(t *testing.T) {
-	a, f, dir, src := covFileApp(t, `{type: "file", label: "Docs", name: "docs", multiple: true, accept: ".txt"}`)
+func TestCovFileManyPaths(t *testing.T) {
+	a, f, dir, src := covFileApp(t, `{type: "file", label: "Docs", name: "docs", max: 10, accept: ".txt"}`)
 	docs := f.Field("Docs")
 	docs.Find("input").WaitAttr("multiple", "")
 	docs.SetFiles(filepath.Join(src, "a.txt"))
@@ -871,19 +872,19 @@ func TestCovFileSingleRemoveThenPick(t *testing.T) {
 	doc.ExpectValue("b.txt")
 	f.Submit("Submit")
 	var got struct {
-		Data struct{ Doc string }
+		Data struct{ Doc []string }
 	}
 	if err := json.Unmarshal(a.Submitted(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if filepath.Base(got.Data.Doc) != "b.txt" || filepath.Dir(filepath.Dir(got.Data.Doc)) != "board.island" {
-		t.Fatalf("the file field gave %q, want island/<id>/b.txt", got.Data.Doc)
+	if len(got.Data.Doc) != 1 || filepath.Base(got.Data.Doc[0]) != "b.txt" || filepath.Dir(filepath.Dir(got.Data.Doc[0])) != "board.island" {
+		t.Fatalf("the file field gave %q, want [island/<id>/b.txt]", got.Data.Doc)
 	}
-	saved, err := os.ReadFile(filepath.Join(dir, got.Data.Doc))
+	saved, err := os.ReadFile(filepath.Join(dir, got.Data.Doc[0]))
 	if err != nil || string(saved) != "bbbb" {
 		t.Fatalf("the workspace has %q (%v), want bbbb", saved, err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, filepath.Dir(got.Data.Doc), "a.txt")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dir, filepath.Dir(got.Data.Doc[0]), "a.txt")); !os.IsNotExist(err) {
 		t.Fatalf("the removed a.txt is still in the workspace (%v)", err)
 	}
 }

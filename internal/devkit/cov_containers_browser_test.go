@@ -518,6 +518,38 @@ func TestCovSeriesRequiredMarksLegendUntilComplete(t *testing.T) {
 	stack.ExpectJSON(t, a.Submitted(), `{"data": {"order": {"item": "tea", "size": [{"value": "l", "label": "L"}], "gift": [{"value": false, "label": "No"}]}}, "submit": ""}`)
 }
 
+const covSeriesEndJS = `() => {
+	const ol = document.querySelector("ol.kisland-form-steps")
+	if (!ol) {
+		return "none"
+	}
+	const last = ol.lastElementChild
+	const kind = last.hasAttribute("data-incomplete") ? "ring" : last.hasAttribute("data-complete") ? "completed" : "step"
+	const ends = ol.querySelectorAll(":scope > [data-incomplete], :scope > [data-complete]").length
+	const visible = Array.from(last.querySelectorAll(":scope > *")).filter((n) => n.textContent.trim() !== "" && n.getBoundingClientRect().width > 1).map((n) => n.textContent.trim()).join("|")
+	const status = Array.from(last.querySelectorAll(":scope > .kisland-form-step-status")).map((n) => n.textContent.trim()).join("|")
+	const mark = getComputedStyle(last.querySelector(":scope > .kisland-form-step-mark"))
+	const hollow = kind !== "ring" || (parseFloat(mark.borderTopWidth) >= 1 && mark.borderTopStyle === "solid" && mark.backgroundColor !== mark.borderTopColor)
+	const sizes = new Set(Array.from(ol.querySelectorAll(":scope > li:not([data-complete]) > .kisland-form-step-mark")).map((m) => m.offsetWidth + "x" + m.offsetHeight))
+	return [kind, ends, visible, status, hollow, Array.from(sizes).join(",")].join(" / ")
+}`
+
+func TestCovSeriesEndsWithHollowRingUntilComplete(t *testing.T) {
+	a, f := contForm(t, covSeriesRequiredSpec)
+	order := f.Series("Order")
+	expectEval(t, a, covSeriesEndJS, "ring / 1 /  / Answer to continue. / true / 12x12", "an empty series ends with the hollow ring")
+	order.Step(0).Field("Item").Type("tea")
+	order.Step(1).Field("Size").Choose("L")
+	order.ExpectSteps(3)
+	expectEval(t, a, covSeriesEndJS, "ring / 1 /  / Answer to continue. / true / 12x12", "a partly answered series ends with the hollow ring")
+	order.Step(2).Field("Gift").Choose("No")
+	order.ExpectCompleted(true)
+	expectEval(t, a, covSeriesEndJS, "completed / 1 / Completed. /  / true / 12x12", "a completed series ends with the completed mark")
+	order.Step(1).Field("Size").Choose("S")
+	order.ExpectCompleted(false)
+	expectEval(t, a, covSeriesEndJS, "ring / 1 /  / Answer to continue. / true / 12x12", "changing an earlier step brings the ring back")
+}
+
 func TestCovSeriesRequiredSeriesRequiresEveryStep(t *testing.T) {
 	_, f := contForm(t, covSeriesRequiredSpec)
 	order := f.Series("Order")

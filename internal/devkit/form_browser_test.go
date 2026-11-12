@@ -700,7 +700,7 @@ func TestFormCancelQuietAfterSubmits(t *testing.T) {
 func TestFormFile(t *testing.T) {
 	dir := t.TempDir()
 	a := stack.Island(t, devkit.App{Island: widgets(), Dir: dir, Script: `ui.root.set(ui.form({fields: [
-		{type: "file", label: "Doc", name: "doc", required: true, accept: ".txt"}
+		{type: "file", label: "Doc", name: "doc", min: 1, accept: ".txt"}
 	]})); ui.notify(ui.draw())`})
 	f := a.Form()
 	src := t.TempDir()
@@ -724,15 +724,15 @@ func TestFormFile(t *testing.T) {
 	doc.Find(".kisland-form-file-size").WaitText("5 B")
 	f.Submit("Submit")
 	var got struct {
-		Data struct{ Doc string }
+		Data struct{ Doc []string }
 	}
 	if err := json.Unmarshal(a.Submitted(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if filepath.Base(got.Data.Doc) != "note.txt" || filepath.Dir(filepath.Dir(got.Data.Doc)) != "board.island" {
-		t.Fatalf("the file field gave %q, want island/<id>/note.txt", got.Data.Doc)
+	if len(got.Data.Doc) != 1 || filepath.Base(got.Data.Doc[0]) != "note.txt" || filepath.Dir(filepath.Dir(got.Data.Doc[0])) != "board.island" {
+		t.Fatalf("the file field gave %q, want [island/<id>/note.txt]", got.Data.Doc)
 	}
-	saved, err := os.ReadFile(filepath.Join(dir, got.Data.Doc))
+	saved, err := os.ReadFile(filepath.Join(dir, got.Data.Doc[0]))
 	if err != nil || string(saved) != "hello" {
 		t.Fatalf("the workspace has %q (%v), want hello", saved, err)
 	}

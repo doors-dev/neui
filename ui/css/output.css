@@ -1632,9 +1632,14 @@
     }
   }
   .kisland-table-prose {
+    display: inline-block;
+    width: max-content;
+    max-width: calc(var(--spacing, 0.25rem) * 72);
+    min-width: 100%;
     font-size: inherit;
     --kisland-tw-leading: inherit;
     line-height: inherit;
+    overflow-wrap: break-word;
   }
   .kisland-file {
     display: inline-flex;
@@ -1818,32 +1823,56 @@
     white-space: nowrap;
     border-width: 0;
   }
-  .kisland-table {
+  .kisland-table-card {
     display: flex;
     min-width: 0px;
     flex-direction: column;
-    gap: calc(var(--spacing, 0.25rem) * 1.5);
-  }
-  .kisland-table-box {
-    max-height: var(--kisland-table-max-h,28rem);
-    scroll-padding-top: calc(var(--spacing, 0.25rem) * 8);
-    overflow: auto;
-    border-radius: var(--kisland-radius,0.25rem);
+    border-radius: var(--kisland-radius-lg,0.375rem);
     border-style: var(--kisland-tw-border-style);
     border-width: 1px;
     border-color: currentcolor;
     @supports (color: color-mix(in lab, red, red)) {
       border-color: color-mix(in oklab, currentcolor 16%, transparent);
     }
+    @media (forced-colors: active) {
+      border-color: CanvasText;
+    }
+  }
+  .kisland-table-card-head {
+    display: flex;
+    padding-inline: calc(var(--spacing, 0.25rem) * 3);
+    padding-top: calc(var(--spacing, 0.25rem) * 3);
+    padding-bottom: calc(var(--spacing, 0.25rem) * 2.5);
+  }
+  .kisland-table-card-box {
+    max-height: var(--kisland-table-max-h,28rem);
+    scroll-padding-top: calc(var(--spacing, 0.25rem) * 8);
+    overflow: auto;
+    border-top-left-radius: calc(var(--kisland-radius-lg,0.375rem) - 1px);
+    border-top-right-radius: calc(var(--kisland-radius-lg,0.375rem) - 1px);
+    &:last-child {
+      border-bottom-right-radius: calc(var(--kisland-radius-lg,0.375rem) - 1px);
+      border-bottom-left-radius: calc(var(--kisland-radius-lg,0.375rem) - 1px);
+    }
     &:focus-visible {
       outline-style: var(--kisland-tw-outline-style);
       outline-width: 2px;
     }
     &:focus-visible {
-      outline-offset: 2px;
+      outline-offset: calc(2px * -1);
     }
     &:focus-visible {
       outline-color: var(--kisland-focus,light-dark(var(--color-blue-600,#2563eb),var(--color-blue-400,#60a5fa)));
+    }
+    :where(*:is(.kisland-table-card:has(>.kisland-table-card-head))) & {
+      border-top-left-radius: 0;
+      border-top-right-radius: 0;
+    }
+    & tr>:first-child:not(.kisland-table-check) {
+      padding-left: calc(var(--spacing, 0.25rem) * 3);
+    }
+    & tr>:last-child {
+      padding-right: calc(var(--spacing, 0.25rem) * 3);
     }
   }
   .kisland-table-caption {
@@ -1908,12 +1937,6 @@
       color: color-mix(in oklab, currentcolor 72%, transparent);
     }
     text-transform: uppercase;
-    &[aria-sort="ascending"] {
-      color: currentcolor;
-    }
-    &[aria-sort="descending"] {
-      color: currentcolor;
-    }
   }
   .kisland-table-sort {
     margin-inline: calc(var(--spacing, 0.25rem) * -1);
@@ -1964,12 +1987,6 @@
   :is(.kisland-table-row:last-child > *) {
     border-bottom-style: var(--kisland-tw-border-style);
     border-bottom-width: 0px;
-  }
-  .kisland-table-row:nth-child(even) {
-    background-color: currentcolor;
-    @supports (color: color-mix(in lab, red, red)) {
-      background-color: color-mix(in oklab, currentcolor 4%, transparent);
-    }
   }
   @media (hover: hover) {
     .kisland-table-row:hover {
@@ -2027,6 +2044,8 @@
     margin: 0px;
     display: inline-flex;
     min-height: calc(var(--spacing, 0.25rem) * 6);
+    width: max-content;
+    max-width: calc(var(--spacing, 0.25rem) * 72);
     min-width: calc(var(--spacing, 0.25rem) * 6);
     cursor: pointer;
     align-items: center;
@@ -2040,6 +2059,7 @@
     font-size: inherit;
     --kisland-tw-font-weight: var(--font-weight-medium, 500);
     font-weight: var(--font-weight-medium, 500);
+    overflow-wrap: break-word;
     color: var(--kisland-primary,oklch(54.6% 0.245 262.881));
     @supports (color: color-mix(in lab, red, red)) {
       color: color-mix(in oklab,var(--kisland-primary,var(--color-blue-600,#2563eb)) 62%,currentColor);
@@ -2372,6 +2392,25 @@
     justify-content: space-between;
     column-gap: calc(var(--spacing, 0.25rem) * 3);
     row-gap: calc(var(--spacing, 0.25rem) * 1.5);
+  }
+  .kisland-table-footer-band {
+    border-bottom-right-radius: calc(var(--kisland-radius-lg,0.375rem) - 1px);
+    border-bottom-left-radius: calc(var(--kisland-radius-lg,0.375rem) - 1px);
+    border-top-style: var(--kisland-tw-border-style);
+    border-top-width: 1px;
+    border-color: currentcolor;
+    @supports (color: color-mix(in lab, red, red)) {
+      border-color: color-mix(in oklab, currentcolor 10%, transparent);
+    }
+    background-color: currentcolor;
+    @supports (color: color-mix(in lab, red, red)) {
+      background-color: color-mix(in oklab, currentcolor 3%, transparent);
+    }
+    padding-inline: calc(var(--spacing, 0.25rem) * 3);
+    padding-block: calc(var(--spacing, 0.25rem) * 2);
+    @media (forced-colors: active) {
+      border-color: CanvasText;
+    }
   }
   .kisland-table-status {
     display: flex;
@@ -3438,6 +3477,22 @@
         }
       }
     }
+    &:has(*[aria-invalid="true"]) {
+      border-color: var(--kisland-danger,oklch(57.7% 0.245 27.325));
+      @supports (color: color-mix(in lab, red, red)) {
+        border-color: color-mix(in oklab,var(--kisland-danger,var(--color-red-600,#dc2626)) 70%,currentColor);
+      }
+    }
+    &:has(*[aria-invalid="true"]) {
+      --kisland-tw-inset-ring-shadow: inset 0 0 0 1px var(--kisland-tw-inset-ring-color, currentcolor);
+      box-shadow: var(--kisland-tw-inset-shadow), var(--kisland-tw-inset-ring-shadow), var(--kisland-tw-ring-offset-shadow), var(--kisland-tw-ring-shadow), var(--kisland-tw-shadow);
+    }
+    &:has(*[aria-invalid="true"]) {
+      --kisland-tw-inset-ring-color: var(--kisland-danger,oklch(57.7% 0.245 27.325));
+      @supports (color: color-mix(in lab, red, red)) {
+        --kisland-tw-inset-ring-color: color-mix(in oklab,var(--kisland-danger,var(--color-red-600,#dc2626)) 70%,currentColor);
+      }
+    }
     &:has(*[data-required-empty]) {
       background-color: var(--kisland-danger,oklch(57.7% 0.245 27.325));
       @supports (color: color-mix(in lab, red, red)) {
@@ -4371,6 +4426,9 @@
     &:has(>.kisland-form-help:nth-child(2)) {
       --kisland-form-m: 0.515625rem;
     }
+    &[data-incomplete] {
+      min-height: calc(var(--spacing, 0.25rem) * 4);
+    }
     @media (forced-colors: active) {
       &::before {
         content: var(--kisland-tw-content);
@@ -4389,8 +4447,8 @@
     top: var(--kisland-form-m);
     left: var(--kisland-form-x);
     box-sizing: border-box;
-    width: calc(var(--spacing, 0.25rem) * 2);
-    height: calc(var(--spacing, 0.25rem) * 2);
+    width: calc(var(--spacing, 0.25rem) * 3);
+    height: calc(var(--spacing, 0.25rem) * 3);
     --kisland-tw-translate-x: calc(calc(1 / 2 * 100%) * -1);
     --kisland-tw-translate-y: calc(calc(1 / 2 * 100%) * -1);
     translate: var(--kisland-tw-translate-x) var(--kisland-tw-translate-y);
@@ -4404,10 +4462,6 @@
     }
     @media (forced-colors: active) {
       forced-color-adjust: none;
-    }
-    [aria-current=step]>& {
-      width: calc(var(--spacing, 0.25rem) * 3);
-      height: calc(var(--spacing, 0.25rem) * 3);
     }
     [aria-current=step]>& {
       background-color: var(--kisland-primary,oklch(54.6% 0.245 262.881));
@@ -4486,6 +4540,44 @@
         }
       }
     }
+    [data-incomplete]>& {
+      border-style: var(--kisland-tw-border-style);
+      border-width: 1.5px;
+    }
+    [data-incomplete]>& {
+      --kisland-tw-border-style: solid;
+      border-style: solid;
+    }
+    [data-incomplete]>& {
+      border-color: currentColor;
+      @supports (color: color-mix(in lab, red, red)) {
+        border-color: color-mix(in oklab,currentColor 56%,var(--kisland-bg,Canvas));
+      }
+    }
+    [data-incomplete]>& {
+      background-color: var(--kisland-bg,Canvas);
+    }
+    @media (forced-colors: active) {
+      [data-incomplete]>& {
+        border-color: CanvasText;
+      }
+    }
+    @media (forced-colors: active) {
+      [data-incomplete]>& {
+        background-color: Canvas;
+      }
+    }
+  }
+  .kisland-form-step-status {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border-width: 0;
   }
   .kisland-form-actions {
     margin-top: calc(var(--spacing, 0.25rem) * 2);

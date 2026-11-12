@@ -149,8 +149,6 @@ func (f *formWidgetSeries) setField(ctx context.Context, name string, value any,
 		} else {
 			v.Min = 0
 		}
-	case *fileInput:
-		v.Required = required
 	}
 	widgetField, err := newFormWidgetField(ctx, f, field.v)
 	if err != nil {
@@ -232,6 +230,11 @@ elem (f *formWidgetSeries) Main() {
 				<li class="kisland-form-step" data-complete>
 					<span class="kisland-form-step-mark" aria-hidden="true"></span>
 					<p class="kisland-form-help">Completed.</p>
+				</li>
+			} else {
+				<li class="kisland-form-step" data-incomplete>
+					<span class="kisland-form-step-mark" aria-hidden="true"></span>
+					<span class="kisland-form-step-status">Answer to continue.</span>
 				</li>
 			})
 		}))

@@ -142,7 +142,7 @@ func TestLayoutFormIndentFloorsOnNarrowPage(t *testing.T) {
 		const want = Math.min(28, Math.max(min, width - 192))
 		const got = parseFloat(getComputedStyle(n).paddingLeft)
 		return Math.abs(got - want) < 0.5 && got === min ? "ok" : "off " + got + " want " + want
-	}).join(" ")`, "ok ok ok ok ok", "the indent floors at 1rem, 1.5rem for list items")
+	}).join(" ")`, "ok ok ok ok ok ok", "the indent floors at 1rem, 1.5rem for list items")
 	expectEval(t, a, `() => {
 		const form = document.querySelector(".kisland-form")
 		const s = getComputedStyle(form)

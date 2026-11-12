@@ -153,6 +153,7 @@ elem (f *formWidgetNumber) Main() {
 					(&f.label)
 					(doors.AInput{
 						Scope: f.field.scope().And(&doors.ScopeDebounce{Duration: 250 * time.Millisecond, Limit: time.Second}),
+						Batch: true,
 						On: func(ctx context.Context, r doors.RequestInput) bool {
 							f.update(ctx, r.Event().Value)
 							return false
@@ -179,6 +180,7 @@ elem (f *formWidgetNumber) Main() {
 				(&f.label)
 				(doors.AInput{
 					Scope: f.field.scope().And(&doors.ScopeDebounce{Duration: 250 * time.Millisecond, Limit: time.Second}),
+					Batch: true,
 					On: func(ctx context.Context, r doors.RequestInput) bool {
 						f.update(ctx, r.Event().Value)
 						return false

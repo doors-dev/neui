@@ -102,32 +102,34 @@ func (t tableWidget) Update(ctx context.Context, patch tablePatch) {
 }
 
 elem (t tableWidget) Main() {
-	<div class="kisland-table">
+	<div class="kisland-table-card">
 		~(if t.params.Search {
-			<input
-				type="search"
-				class="kisland-form-search-input kisland-table-search"
-				placeholder="Search"
-				aria-label="Search"
-				maxlength="100"
-				(doors.AInput{
-					Scope: &doors.ScopeDebounce{Duration: 250 * time.Millisecond, Limit: time.Second},
-					Race: doors.RaceStrict,
-					On: func(ctx context.Context, r doors.RequestInput) bool {
-						text := strings.TrimSpace(r.Event().Value)
-						if utf8.RuneCountInString(text) > 100 {
-							text = string([]rune(text)[:100])
-						}
-						t.state.Mutate(ctx, func(s tableState) tableState {
-							if s.search != text {
-								s.search, s.page = text, 1
-								s.seq += 1
+			<div class="kisland-table-card-head">
+				<input
+					type="search"
+					class="kisland-form-search-input kisland-table-search"
+					placeholder="Search"
+					aria-label="Search"
+					maxlength="100"
+					(doors.AInput{
+						Scope: &doors.ScopeDebounce{Duration: 250 * time.Millisecond, Limit: time.Second},
+						Race: doors.RaceStrict,
+						On: func(ctx context.Context, r doors.RequestInput) bool {
+							text := strings.TrimSpace(r.Event().Value)
+							if utf8.RuneCountInString(text) > 100 {
+								text = string([]rune(text)[:100])
 							}
-							return s
-						})
-						return false
-					},
-				})/>
+							t.state.Mutate(ctx, func(s tableState) tableState {
+								if s.search != text {
+									s.search, s.page = text, 1
+									s.seq += 1
+								}
+								return s
+							})
+							return false
+						},
+					})/>
+			</div>
 		})
 		~(t.body.Bind(func(i int) gox.Elem {
 			return t.render()
@@ -178,7 +180,7 @@ elem (t tableWidget) render() {
 	}
 	~~
 	<>
-		<div class="kisland-table-box" tabindex="0" role="region" aria-label="Table">
+		<div class="kisland-table-card-box" tabindex="0" role="region" aria-label="Table">
 			<table class="kisland-table-grid">
 				<thead>
 					<tr>
@@ -295,7 +297,7 @@ elem (t tableWidget) render() {
 				</tbody>
 			</table>
 		</div>
-		<div class="kisland-table-footer">
+		<div class="kisland-table-footer kisland-table-footer-band">
 			<div class="kisland-table-status">
 				~(t.selected.Bind(func(sel map[string]struct{}) gox.Elem {
 					return t.status(sel, content, page, size)

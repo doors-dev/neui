@@ -139,7 +139,7 @@
 		@apply [&_:is(th,td)[align=left]]:text-left [&_:is(th,td)[align=center]]:text-center [&_:is(th,td)[align=right]]:text-right;
 	}
 
-	.kisland-table-prose { @apply text-[length:inherit] leading-[inherit] }
+	.kisland-table-prose { @apply inline-block w-max max-w-72 min-w-full text-[length:inherit] leading-[inherit] wrap-break-word }
 
 	.kisland-file {
 		@apply inline-flex items-baseline gap-1.5 max-w-full px-1.5 rounded-xs border border-solid border-current/24 bg-current/5 no-underline text-inherit font-normal align-baseline leading-[1.45]
@@ -159,17 +159,19 @@
 	.kisland-tone-danger { @apply shadow-[inset_0_3px_0_var(--kisland-danger,var(--color-red-600,#dc2626))] forced-colors:border-t-4 }
 	.kisland-tone-label { @apply sr-only }
 
-	.kisland-table { @apply flex flex-col gap-1.5 min-w-0 }
-	.kisland-table-box {
-		@apply overflow-auto max-h-(--kisland-table-max-h,28rem) scroll-pt-8 rounded-(--kisland-radius,0.25rem) border border-current/16
-			focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--kisland-focus,light-dark(var(--color-blue-600,#2563eb),var(--color-blue-400,#60a5fa)))
+	.kisland-table-card { @apply flex flex-col min-w-0 rounded-(--kisland-radius-lg,0.375rem) border border-current/16 forced-colors:border-[CanvasText] }
+	.kisland-table-card-head { @apply flex px-3 pt-3 pb-2.5 }
+	.kisland-table-card-box {
+		@apply overflow-auto max-h-(--kisland-table-max-h,28rem) scroll-pt-8
+			rounded-t-[calc(var(--kisland-radius-lg,0.375rem)-1px)] last:rounded-b-[calc(var(--kisland-radius-lg,0.375rem)-1px)] in-[.kisland-table-card:has(>.kisland-table-card-head)]:rounded-t-none
+			[&_tr>:first-child:not(.kisland-table-check)]:pl-3 [&_tr>:last-child]:pr-3
+			focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--kisland-focus,light-dark(var(--color-blue-600,#2563eb),var(--color-blue-400,#60a5fa)))
 	}
 	.kisland-table-caption { @apply sr-only }
 	.kisland-table-grid { @apply w-full border-separate border-spacing-0 text-sm/snug text-left tabular-nums }
 	.kisland-table-head-cell {
 		@apply sticky top-0 z-1 px-2.5 py-1.5 whitespace-nowrap text-xs/tight font-semibold uppercase tracking-wider text-current/72
 			bg-(--kisland-bg,Canvas) bg-linear-to-b from-current/6 to-current/6 border-b border-current/24
-			aria-[sort=ascending]:text-current aria-[sort=descending]:text-current
 	}
 	.kisland-table-sort {
 		@apply inline-flex items-center gap-1 min-h-6 -my-1.5 -mx-1 px-1 border-0 bg-transparent cursor-pointer rounded-xs
@@ -178,14 +180,14 @@
 	}
 	.kisland-table-sort-icon { @apply inline-block w-3 text-center font-normal not-italic }
 	.kisland-table-row {
-		@apply even:bg-current/4 hover:bg-(--kisland-primary,var(--color-blue-600,#2563eb))/8 last:*:border-b-0
+		@apply hover:bg-(--kisland-primary,var(--color-blue-600,#2563eb))/8 last:*:border-b-0
 			has-checked:bg-(--kisland-primary,var(--color-blue-600,#2563eb))/14 has-checked:hover:bg-(--kisland-primary,var(--color-blue-600,#2563eb))/20
 	}
 	.kisland-table-message-row { @apply bg-transparent last:*:border-b-0 }
 	.kisland-table-filler { @apply last:*:border-b-0 }
 	.kisland-table-cell { @apply h-8 min-w-22 px-2.5 py-0.5 align-middle border-b border-current/8 }
 	.kisland-table-link {
-		@apply inline-flex items-center min-h-6 min-w-6 p-0 m-0 border-0 bg-transparent cursor-pointer text-left font-[inherit] text-[length:inherit] font-medium rounded-xs
+		@apply inline-flex items-center w-max max-w-72 min-h-6 min-w-6 p-0 m-0 border-0 bg-transparent cursor-pointer text-left font-[inherit] text-[length:inherit] font-medium wrap-break-word rounded-xs
 			text-[color-mix(in_oklab,var(--kisland-primary,var(--color-blue-600,#2563eb))_62%,currentColor)] underline decoration-current/35 underline-offset-2 hover:decoration-current
 			focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--kisland-focus,light-dark(var(--color-blue-600,#2563eb),var(--color-blue-400,#60a5fa)))
 	}
@@ -216,6 +218,7 @@
 			text-[color-mix(in_oklab,var(--kisland-danger,var(--color-red-600,#dc2626))_70%,currentColor)]
 	}
 	.kisland-table-footer { @apply @container flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 min-w-0 }
+	.kisland-table-footer-band { @apply px-3 py-2 rounded-b-[calc(var(--kisland-radius-lg,0.375rem)-1px)] border-t border-current/10 bg-current/3 forced-colors:border-[CanvasText] }
 	.kisland-table-status { @apply flex items-center gap-1.5 h-6 w-52 whitespace-nowrap text-xs text-current/72 }
 	.kisland-table-status-text { @apply tabular-nums }
 	.kisland-table-clear {
@@ -331,6 +334,8 @@
 			bg-[url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='12'%20height='12'%20fill='none'%20stroke='%23767676'%20stroke-width='1.5'%3E%3Cpath%20d='M6%208.5V1.5M3%204.25L6%201.25l3%203M1%208.25v2.5h10v-2.5'/%3E%3C/svg%3E")]
 			has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-offset-2 has-[input:focus-visible]:outline-(--kisland-focus,light-dark(var(--color-blue-600,#2563eb),var(--color-blue-400,#60a5fa)))
 			has-data-required-empty:bg-[color-mix(in_oklab,var(--kisland-danger,var(--color-red-600,#dc2626))_7%,var(--kisland-bg,Canvas))]
+			has-aria-invalid:border-[color-mix(in_oklab,var(--kisland-danger,var(--color-red-600,#dc2626))_70%,currentColor)]
+			has-aria-invalid:inset-ring has-aria-invalid:inset-ring-[color-mix(in_oklab,var(--kisland-danger,var(--color-red-600,#dc2626))_70%,currentColor)]
 			data-dragover:border-[color-mix(in_oklab,var(--kisland-primary,var(--color-blue-600,#2563eb))_62%,currentColor)] data-dragover:bg-[color-mix(in_oklab,var(--kisland-primary,var(--color-blue-600,#2563eb))_9%,var(--kisland-bg,Canvas))] data-dragover:inset-ring data-dragover:inset-ring-[color-mix(in_oklab,var(--kisland-primary,var(--color-blue-600,#2563eb))_62%,currentColor)]
 			has-disabled:opacity-50 has-disabled:cursor-not-allowed has-disabled:bg-current/6 has-disabled:hover:border-current/56
 			forced-colors:data-dragover:border-[Highlight] forced-colors:data-dragover:border-2
@@ -411,16 +416,20 @@
 		@apply relative flex flex-col gap-1 min-w-0 [--kisland-form-indent:clamp(1rem,100cqw-12rem,1.75rem)] [--kisland-form-x:clamp(0.25rem,var(--kisland-form-indent)-1.125rem,0.625rem)] pl-(--kisland-form-indent) [--kisland-form-m:0.625rem] has-[>.kisland-form-help:nth-child(2)]:[--kisland-form-m:0.515625rem]
 			before:absolute before:-top-2.5 before:bottom-0 before:left-[calc(var(--kisland-form-x)-0.5px)] before:w-px before:bg-[color-mix(in_oklab,currentColor_40%,var(--kisland-bg,Canvas))]
 			first:before:top-(--kisland-form-m) last:before:bottom-[calc(100%-var(--kisland-form-m))]
+			data-incomplete:min-h-4
 			forced-colors:before:forced-color-adjust-none forced-colors:before:bg-[CanvasText]
 	}
 	.kisland-form-step-mark {
-		@apply absolute left-(--kisland-form-x) top-(--kisland-form-m) -translate-1/2 box-border size-2 rounded-full bg-[color-mix(in_oklab,currentColor_40%,var(--kisland-bg,Canvas))]
-			[[aria-current=step]>&]:size-3 [[aria-current=step]>&]:bg-[color-mix(in_oklab,var(--kisland-primary,var(--color-blue-600,#2563eb))_62%,currentColor)]
+		@apply absolute left-(--kisland-form-x) top-(--kisland-form-m) -translate-1/2 box-border size-3 rounded-full bg-[color-mix(in_oklab,currentColor_40%,var(--kisland-bg,Canvas))]
+			[[aria-current=step]>&]:bg-[color-mix(in_oklab,var(--kisland-primary,var(--color-blue-600,#2563eb))_62%,currentColor)]
 			[[data-complete]>&]:size-5 [[data-complete]>&]:bg-(--kisland-bg,Canvas) [[data-complete]>&]:border [[data-complete]>&]:border-solid [[data-complete]>&]:border-[color-mix(in_oklab,currentColor_40%,var(--kisland-bg,Canvas))]
 			[[data-complete]>&]:after:absolute [[data-complete]>&]:after:inset-0 [[data-complete]>&]:after:bg-current/72 [[data-complete]>&]:after:[mask:url(data:image/svg+xml,%3Csvg%20xmlns=%27http%3A//www.w3.org/2000/svg%27%20viewBox=%270%200%2010%2010%27%3E%3Cpath%20d=%27M2.2%205.3L4.2%207.2L7.8%203%27%20fill=%27none%27%20stroke=%27black%27%20stroke-width=%271.6%27/%3E%3C/svg%3E)_center/0.625rem_no-repeat]
+			[[data-incomplete]>&]:bg-(--kisland-bg,Canvas) [[data-incomplete]>&]:border-[1.5px] [[data-incomplete]>&]:border-solid [[data-incomplete]>&]:border-[color-mix(in_oklab,currentColor_56%,var(--kisland-bg,Canvas))]
 			forced-colors:forced-color-adjust-none forced-colors:bg-[CanvasText] forced-colors:[[aria-current=step]>&]:bg-[Highlight]
 			forced-colors:[[data-complete]>&]:bg-[Canvas] forced-colors:[[data-complete]>&]:border-[CanvasText] forced-colors:[[data-complete]>&]:after:bg-[CanvasText]
+			forced-colors:[[data-incomplete]>&]:bg-[Canvas] forced-colors:[[data-incomplete]>&]:border-[CanvasText]
 	}
+	.kisland-form-step-status { @apply sr-only }
 	.kisland-form-actions { @apply flex flex-wrap items-center justify-start gap-1.5 mt-2 }
 	.kisland-form-cancel {
 		@apply inline-flex items-center min-h-6 m-0 px-1.5 border-0 rounded-(--kisland-radius,0.25rem) bg-transparent cursor-pointer select-none font-[inherit] text-sm/tight font-medium text-current/82

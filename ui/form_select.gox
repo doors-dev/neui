@@ -169,6 +169,7 @@ elem (f *formWidgetSelect) Main() {
 	f.field.mutex().Unlock()
 	change := doors.A(ctx, doors.AChange{
 		Scope: f.field.scope(),
+		Batch: true,
 		On: func(ctx context.Context, r doors.RequestChange) bool {
 			f.update(ctx, r.Event().Value, r.Event().Checked)
 			return false

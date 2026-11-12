@@ -143,8 +143,8 @@ func TestRequiredEmptyChoiceFields(t *testing.T) {
 
 func TestRequiredEmptyFileFields(t *testing.T) {
 	a, f, _, src := covFileApp(t, `
-		{type: "file", label: "Doc", name: "doc", required: true, accept: ".txt"},
-		{type: "file", label: "Docs", name: "docs", required: true, multiple: true},
+		{type: "file", label: "Doc", name: "doc", min: 1, accept: ".txt"},
+		{type: "file", label: "Docs", name: "docs", min: 1, max: 10},
 		{type: "file", label: "Spare", name: "spare"}`)
 	big := filepath.Join(src, "big.txt")
 	if err := os.WriteFile(big, bytes.Repeat([]byte("x"), 200<<10), 0o644); err != nil {
@@ -346,19 +346,23 @@ func TestRequiredEmptyOptionalSeriesSteps(t *testing.T) {
 	f.ExpectSubmitDisabled(false)
 }
 
-func TestRequiredEmptyCheckboxRejectedAsListTemplateOrSeriesStep(t *testing.T) {
+func TestSchemaRejectsCheckboxListTemplateAndCheckboxOrFileSeriesStep(t *testing.T) {
 	for _, c := range []struct{ name, spec, want string }{
-		{"list template", `{type: "list", field: {type: "checkbox", label: "Flags", name: "flags"}}`, `list "flags": a list's field can't be a checkbox`},
-		{"list template with defaults", `{type: "list", value: [true], field: {type: "checkbox", label: "Flags", name: "flags"}}`, `list "flags": a list's field can't be a checkbox`},
-		{"list template in a list's group", `{type: "list", field: {type: "group", label: "Rows", name: "rows", fields: [{type: "list", field: {type: "checkbox", label: "Flags", name: "flags"}}]}}`, `list "flags": a list's field can't be a checkbox`},
+		{"list template", `{type: "list", field: {type: "checkbox", label: "Flags", name: "flags"}}`, `'anyOf' failed`},
+		{"list template with defaults", `{type: "list", value: [true], field: {type: "checkbox", label: "Flags", name: "flags"}}`, `'anyOf' failed`},
+		{"list template in a list's group", `{type: "list", field: {type: "group", label: "Rows", name: "rows", fields: [{type: "list", field: {type: "checkbox", label: "Flags", name: "flags"}}]}}`, `'anyOf' failed`},
 		{"first series step", `{type: "series", label: "S", name: "s", fields: [
 			"(p) => ({type: 'checkbox', label: 'Sure', name: 'sure'})",
 			"(p) => ({type: 'text', label: 'B', name: 'b'})"
-		]}`, "a series field can't be a checkbox"},
+		]}`, "'anyOf' failed"},
 		{"series step replayed from defaults", `{type: "list", value: [{a: "x"}], field: {type: "series", label: "S", name: "s", fields: [
 			"(p) => ({type: 'text', label: 'A', name: 'a'})",
 			"(p) => ({type: 'checkbox', label: 'Sure', name: 'sure'})"
-		]}}`, "a series field can't be a checkbox"},
+		]}}`, "'anyOf' failed"},
+		{"file series step", `{type: "series", label: "S", name: "s", fields: [
+			"(p) => ({type: 'file', label: 'Doc', name: 'doc'})",
+			"(p) => ({type: 'text', label: 'B', name: 'b'})"
+		]}`, "'anyOf' failed"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			contFails(t, `{fields: [`+c.spec+`]}`, c.want)
@@ -370,8 +374,8 @@ func TestRequiredEmptyCheckboxRejectedAsListTemplateOrSeriesStep(t *testing.T) {
 	]}]}`)
 	s := f.Series("S")
 	s.Step(0).Field("A").Type("x")
-	if got := string(a.ChoiceReport("call_error")); !strings.Contains(got, "a series field can't be a checkbox") {
-		t.Fatalf("the call_error reads %s, want the checkbox step refused", got)
+	if got := string(a.ChoiceReport("call_error")); !strings.Contains(got, "'anyOf' failed") {
+		t.Fatalf("the call_error reads %s, want the checkbox step refused by the schema", got)
 	}
 	s.ExpectSteps(1)
 	f.ExpectSubmitDisabled(true)

@@ -626,7 +626,7 @@ const widgetJS = `function (path, op, arg) {
 			return hit
 		}
 		case "step":
-			return nth(steps(scope).filter((n) => !n.hasAttribute("data-complete")), s.arg, "step")
+			return nth(steps(scope).filter((n) => !n.hasAttribute("data-complete") && !n.hasAttribute("data-incomplete")), s.arg, "step")
 		}
 		throw new Error("unknown step " + s.kind)
 	}
@@ -818,7 +818,7 @@ const widgetJS = `function (path, op, arg) {
 		return ""
 	}
 	case "steps":
-		return String(steps(el).filter((n) => !n.hasAttribute("data-complete")).length)
+		return String(steps(el).filter((n) => !n.hasAttribute("data-complete") && !n.hasAttribute("data-incomplete")).length)
 	case "completed":
 		return String(steps(el).some((n) => n.hasAttribute("data-complete")))
 	case "submit": {

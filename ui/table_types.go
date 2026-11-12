@@ -119,10 +119,10 @@ type table struct {
 	Query      neui.IslandCall[tablePage, tableResult] `json:"query,omitempty" description:"returns the rows for a page, called when the table shows and on every page change; set either query or rows"`
 	Rows       []tableRow                              `json:"rows,omitempty" maxItems:"100" description:"fixed rows; set either query or rows; the table pages, sorts and searches them itself"`
 	Sort       *tableSort                              `json:"sort,omitempty" description:"sort when the table shows; ignored when the column is out of range or not sortable"`
-	Search     bool                                    `json:"search,omitempty" description:"true adds a search input above the table; with query its text goes to every query call, with rows the table shows only rows with a cell containing it, case-insensitive"`
+	Search     bool                                    `json:"search,omitempty" description:"true lets the user search; with query the text goes to every query call, with rows only rows with a cell containing it show, case-insensitive"`
 	PageSize   int                                     `json:"pageSize,omitempty" minimum:"1" maximum:"100" default:"20" description:"rows per page"`
 	Clickable  bool                                    `json:"clickable,omitempty" description:"true makes each row's first cell clickable; a click submits the row id with no value"`
-	Selectable bool                                    `json:"selectable,omitempty" description:"true adds a checkbox to each row and, while rows are selected, a bar with the count, a clear control and a button that submits the selected ids; the selection survives page changes and reloads"`
+	Selectable bool                                    `json:"selectable,omitempty" description:"true lets the user select rows and submit their ids; the selection survives page changes and reloads"`
 	Selected   []string                                `json:"selected,omitempty" maxItems:"1000" uniqueItems:"true" items.maxLength:"200" description:"ids of the rows selected when the table shows"`
 }
 
@@ -153,7 +153,7 @@ func (p *table) state() tableState {
 type tableColumn struct {
 	_     struct{} `additionalProperties:"false"`
 	Title string   `json:"title" required:"true" minLength:"1" maxLength:"80" description:"header text"`
-	Sort  bool     `json:"sort,omitempty" description:"true makes the header a control that sorts by this column: ascending first, then flipping on each click"`
+	Sort  bool     `json:"sort,omitempty" description:"true lets the user sort by this column"`
 }
 
 type tablePage struct {
@@ -173,14 +173,14 @@ type tableSort struct {
 type tableResult struct {
 	_     struct{}   `additionalProperties:"false"`
 	Rows  []tableRow `json:"rows" required:"true" nullable:"false" maxItems:"100" description:"rows from offset on, at most limit of them"`
-	Total *int       `json:"total,omitempty" minimum:"0" description:"number of rows in the whole table; omit when unknown, and the table offers only previous and next"`
+	Total *int       `json:"total,omitempty" minimum:"0" description:"number of rows in the whole table; omit when unknown"`
 }
 
 type tableRow struct {
 	_       struct{}     `additionalProperties:"false"`
 	ID      string       `json:"id" required:"true" minLength:"1" maxLength:"200" description:"identifies the row in what a click submits"`
 	Cells   []cellText   `json:"cells" required:"true" nullable:"false" description:"one text per column, in column order; inline markdown: **bold**, *italic*, ~~strike~~, code in backquotes, [links](https://…) and [name](file:///path) downloads of workspace files, path relative to the workspace root; search and sort use the text as shown"`
-	Actions []cellButton `json:"actions,omitempty" maxItems:"5" description:"buttons shown at the end of the row"`
+	Actions []cellButton `json:"actions,omitempty" maxItems:"5" description:"action buttons of the row"`
 	plain   []string
 }
 
@@ -211,7 +211,7 @@ type cellButton struct {
 type tableSubmit struct {
 	ID    string   `json:"id,omitempty" description:"id of the row the user acted on: alone for a click on the row's first cell, with value for a row action; empty for a selection submit"`
 	Value string   `json:"value,omitempty" description:"value of the row action button clicked; empty for a first-cell click and a selection submit"`
-	IDs   []string `json:"ids,omitempty" maxItems:"1000" description:"ids of the selected rows, sorted; set only when the selection button was clicked"`
+	IDs   []string `json:"ids,omitempty" maxItems:"1000" description:"ids of the selected rows, sorted; set only for a selection submit"`
 }
 
 type tablePatch struct {

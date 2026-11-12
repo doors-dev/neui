@@ -72,7 +72,7 @@ func TestFileUploadsOnPickWithDownloadLink(t *testing.T) {
 		t.Fatalf("the link downloads %q, want aaa", got)
 	}
 	f.Submit("Submit")
-	stack.ExpectJSON(t, a.Submitted(), `{"data": {"doc": "board.island/`+id+`/a.txt"}, "submit": ""}`)
+	stack.ExpectJSON(t, a.Submitted(), `{"data": {"doc": ["board.island/`+id+`/a.txt"]}, "submit": ""}`)
 }
 
 func TestFileProgressBlocksSubmit(t *testing.T) {
@@ -105,9 +105,9 @@ func TestFileProgressBlocksSubmit(t *testing.T) {
 	a.ThrottleUploads(0)
 	doc.ExpectFiles("big.txt")
 	f.Submit("Submit")
-	var got struct{ Data struct{ Doc string } }
+	var got struct{ Data struct{ Doc []string } }
 	raw := a.Submitted()
-	if err := json.Unmarshal(raw, &got); err != nil || path.Base(got.Data.Doc) != "big.txt" {
+	if err := json.Unmarshal(raw, &got); err != nil || len(got.Data.Doc) != 1 || path.Base(got.Data.Doc[0]) != "big.txt" {
 		t.Fatalf("the first submit gave %s, want the uploaded file: the forced one during the upload must be refused", raw)
 	}
 }
@@ -136,7 +136,7 @@ func TestFileCancelDeletesPartial(t *testing.T) {
 }
 
 func TestFileRemoveDeletesAndFocuses(t *testing.T) {
-	a, f, dir, src := fileApp(t, api.FilesConfig{}, `{type: "file", label: "Docs", name: "docs", multiple: true}`)
+	a, f, dir, src := fileApp(t, api.FilesConfig{}, `{type: "file", label: "Docs", name: "docs", max: 10}`)
 	docs := f.Field("Docs")
 	id := *docs.Find("input").Element().MustAttribute("id")
 	docs.SetFiles(filepath.Join(src, "a.txt"), filepath.Join(src, "b.txt"), filepath.Join(src, "pic.png"))
@@ -155,7 +155,7 @@ func TestFileRemoveDeletesAndFocuses(t *testing.T) {
 }
 
 func TestFileInterruptedThenRetry(t *testing.T) {
-	a, f, dir, src := fileApp(t, api.FilesConfig{}, `{type: "file", label: "Doc", name: "doc", required: true}`)
+	a, f, dir, src := fileApp(t, api.FilesConfig{}, `{type: "file", label: "Doc", name: "doc", min: 1}`)
 	doc := f.Field("Doc")
 	id := *doc.Find("input").Element().MustAttribute("id")
 	stop := a.FailUploads()
@@ -173,7 +173,7 @@ func TestFileInterruptedThenRetry(t *testing.T) {
 		t.Fatalf("after the retry the workspace has %q (%v), want aaa", saved, err)
 	}
 	f.Submit("Submit")
-	stack.ExpectJSON(t, a.Submitted(), `{"data": {"doc": "board.island/`+id+`/a.txt"}, "submit": ""}`)
+	stack.ExpectJSON(t, a.Submitted(), `{"data": {"doc": ["board.island/`+id+`/a.txt"]}, "submit": ""}`)
 }
 
 func TestFileRetryInListItem(t *testing.T) {
@@ -189,7 +189,7 @@ func TestFileRetryInListItem(t *testing.T) {
 }
 
 func TestFileRefusedChipsAreNotInTheValue(t *testing.T) {
-	a, f, _, src := fileApp(t, api.FilesConfig{DocumentLimit: 100 << 10}, `{type: "file", label: "Docs", name: "docs", multiple: true, max: 2, accept: ".txt"}`)
+	a, f, _, src := fileApp(t, api.FilesConfig{DocumentLimit: 100 << 10}, `{type: "file", label: "Docs", name: "docs", max: 2, accept: ".txt"}`)
 	docs := f.Field("Docs")
 	docs.SetFiles(filepath.Join(src, "big.txt"), filepath.Join(src, "pic.png"))
 	docs.ExpectFileChips("big.txt failed: larger than 100 KB", "pic.png failed: not .txt")
@@ -218,7 +218,7 @@ func TestFileWorkspaceFull(t *testing.T) {
 }
 
 func TestFileMaxHidesBox(t *testing.T) {
-	a, f, _, src := fileApp(t, api.FilesConfig{}, `{type: "file", label: "Docs", name: "docs", multiple: true, max: 2}`)
+	a, f, _, src := fileApp(t, api.FilesConfig{}, `{type: "file", label: "Docs", name: "docs", max: 2}`)
 	docs := f.Field("Docs")
 	id := *docs.Find("input").Element().MustAttribute("id")
 	list := docs.Find("ul.kisland-form-search-chosen")
@@ -237,8 +237,18 @@ func TestFileMaxHidesBox(t *testing.T) {
 }
 
 func TestFileSingleChipTakesBoxPlace(t *testing.T) {
-	a, f, _, src := fileApp(t, api.FilesConfig{}, `{type: "file", label: "Doc", name: "doc"}`)
+	for _, spec := range []string{`{type: "file", label: "Doc", name: "doc"}`, `{type: "file", label: "Doc", name: "doc", max: 1}`} {
+		t.Run(spec, func(t *testing.T) {
+			fileSingleChipTakesBoxPlace(t, spec)
+		})
+	}
+}
+
+func fileSingleChipTakesBoxPlace(t *testing.T, spec string) {
+	a, f, _, src := fileApp(t, api.FilesConfig{}, spec)
 	doc := f.Field("Doc")
+	doc.Find("input").WaitNoAttr("multiple")
+	doc.Find(".kisland-form-file-summary").WaitText("Drop a file or click to choose")
 	id := *doc.Find("input").Element().MustAttribute("id")
 	tops := func(sel string) string {
 		return a.Page.MustEval(`(sel) => {
@@ -254,9 +264,97 @@ func TestFileSingleChipTakesBoxPlace(t *testing.T) {
 	if chip := tops("li.kisland-form-file-chip"); chip != zone {
 		t.Fatalf("the chip and the actions sit at %s, want the box's %s", chip, zone)
 	}
+	doc.WaitGone(".kisland-form-search-max")
 	doc.RemoveFile("a.txt")
 	doc.WaitCount(".kisland-form-file-zone", 1)
 	expectFileFocus(t, a, id)
+}
+
+func TestFileMinTwoNeedsTwoDone(t *testing.T) {
+	a, f, _, src := fileApp(t, api.FilesConfig{}, `{type: "file", label: "Docs", name: "docs", min: 2, max: 3}`)
+	docs := f.Field("Docs")
+	id := *docs.Find("input").Element().MustAttribute("id")
+	docs.Find("input").WaitAttr("aria-required", "true")
+	docs.ExpectRequiredMark(true)
+	docs.ExpectRequiredEmpty(true)
+	docs.ExpectNoError()
+	f.ExpectSubmitDisabled(true)
+	zoneBorder := `() => getComputedStyle(document.querySelector(".kisland-form-file-zone")).borderColor`
+	empty := a.Page.MustEval(zoneBorder).String()
+	docs.SetFiles(filepath.Join(src, "a.txt"))
+	docs.ExpectError("choose at least 2")
+	docs.ExpectInvalid(true)
+	docs.ExpectRequiredMark(false)
+	docs.ExpectRequiredEmpty(false)
+	if red := a.Page.MustEval(zoneBorder).String(); red == empty {
+		t.Fatalf("the drop box border stays %s with the error shown, want the invalid border", red)
+	}
+	f.ExpectSubmitDisabled(true)
+	stop := a.FailUploads()
+	docs.SetFiles(filepath.Join(src, "b.txt"))
+	docs.ExpectFileFailed("b.txt", "upload interrupted")
+	docs.ExpectError("choose at least 2")
+	f.ExpectSubmitDisabled(true)
+	stop()
+	docs.RetryFile("b.txt")
+	docs.ExpectFiles("a.txt", "b.txt")
+	docs.ExpectNoError()
+	docs.ExpectInvalid(false)
+	f.ExpectSubmitDisabled(false)
+	docs.RemoveFile("a.txt")
+	docs.ExpectError("choose at least 2")
+	f.ExpectSubmitDisabled(true)
+	docs.RemoveFile("b.txt")
+	docs.ExpectNoError()
+	docs.ExpectRequiredEmpty(true)
+	docs.ExpectRequiredMark(true)
+	docs.SetFiles(filepath.Join(src, "a.txt"), filepath.Join(src, "c.txt"))
+	docs.ExpectNoError()
+	f.Submit("Submit")
+	stack.ExpectJSON(t, a.Submitted(), `{"data": {"docs": ["board.island/`+id+`/a.txt", "board.island/`+id+`/c.txt"]}, "submit": ""}`)
+}
+
+func TestFileMinZeroEmptyIsLeftOut(t *testing.T) {
+	a, f, _, _ := fileApp(t, api.FilesConfig{}, `{type: "file", label: "Doc", name: "doc", min: 0, max: 3}, {type: "text", label: "Note", name: "note"}`)
+	doc := f.Field("Doc")
+	doc.Find("input").WaitNoAttr("aria-required")
+	doc.ExpectRequiredMark(false)
+	doc.ExpectRequiredEmpty(false)
+	doc.ExpectNoError()
+	f.ExpectSubmitDisabled(false)
+	f.Submit("Submit")
+	stack.ExpectJSON(t, a.Submitted(), `{"data": {}, "submit": ""}`)
+}
+
+func TestFileDefaultsAreAnArray(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "reports"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, body := range map[string]string{"reports/q3.csv": "a,b\n", "reports/notes.md": "# notes\n"} {
+		if err := os.WriteFile(filepath.Join(dir, filepath.FromSlash(name)), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a := stack.Island(t, devkit.App{Island: widgets(), Dir: dir, Script: `ui.root.set(ui.form({fields: [
+		{type: "file", label: "Chart", name: "chart", value: ["reports/q3.csv"]},
+		{type: "file", label: "Reports", name: "reports", min: 2, max: 2, value: ["reports/q3.csv", "reports/notes.md"]},
+		{type: "list", field: {type: "file", label: "Files", name: "files"}, value: [["reports/notes.md"]]}
+	]})); while (true) ui.notify(ui.draw())`})
+	f := a.Form()
+	chart := f.Field("Chart")
+	chart.ExpectFiles("q3.csv")
+	chart.WaitGone(".kisland-form-file-zone")
+	chart.WaitGone(".kisland-form-search-max")
+	reports := f.Field("Reports")
+	reports.ExpectFiles("q3.csv", "notes.md")
+	reports.WaitGone(".kisland-form-file-zone")
+	reports.Find(".kisland-form-search-max").WaitText("Maximum of 2 chosen.")
+	reports.WaitGone(".kisland-form-error")
+	f.List("Files").Item(0).Control().ExpectFiles("notes.md")
+	f.ExpectSubmitDisabled(false)
+	f.Submit("Submit")
+	stack.ExpectJSON(t, a.Submitted(), `{"data": {"chart": ["reports/q3.csv"], "reports": ["reports/q3.csv", "reports/notes.md"], "files": [["reports/notes.md"]]}, "submit": ""}`)
 }
 
 func TestFileDefaultsRenderAsLinks(t *testing.T) {
@@ -270,7 +368,7 @@ func TestFileDefaultsRenderAsLinks(t *testing.T) {
 		}
 	}
 	a := stack.Island(t, devkit.App{Island: widgets(), Dir: dir, Script: `ui.root.set(ui.form({fields: [
-		{type: "file", label: "Reports", name: "reports", multiple: true, value: ["reports/q3.csv", "./reports/notes.md"]}
+		{type: "file", label: "Reports", name: "reports", max: 2, value: ["reports/q3.csv", "./reports/notes.md"]}
 	]})); while (true) ui.notify(ui.draw())`})
 	f := a.Form()
 	reports := f.Field("Reports")
@@ -281,8 +379,8 @@ func TestFileDefaultsRenderAsLinks(t *testing.T) {
 	}
 	reports.RemoveFile("q3.csv")
 	reports.ExpectValue("notes.md")
-	if _, err := os.Stat(filepath.Join(dir, "reports", "q3.csv")); err != nil {
-		t.Fatalf("removing a default deleted the agent's file: %v", err)
+	if _, err := os.Stat(filepath.Join(dir, "reports", "q3.csv")); !os.IsNotExist(err) {
+		t.Fatalf("removing a default left the file in the workspace: %v", err)
 	}
 	f.Submit("Submit")
 	stack.ExpectJSON(t, a.Submitted(), `{"data": {"reports": ["reports/notes.md"]}, "submit": ""}`)
@@ -290,9 +388,10 @@ func TestFileDefaultsRenderAsLinks(t *testing.T) {
 
 func TestFileDefaultMustExist(t *testing.T) {
 	for _, c := range []struct{ kind, spec, want string }{
-		{"missing", `{type: "file", label: "F", name: "f", value: ["nope.txt"]}`, `default file "nope.txt" not found`},
 		{"too many", `{type: "file", label: "F", name: "f", value: ["a.txt", "b.txt"]}`, "2 default files, most is 1"},
-		{"max without multiple", `{type: "file", label: "F", name: "f", max: 2}`, "max needs multiple"},
+		{"defaults over max", `{type: "file", label: "F", name: "f", max: 2, value: ["a.txt", "b.txt", "c.txt"]}`, "3 default files, most is 2"},
+		{"min over max", `{type: "file", label: "F", name: "f", min: 3, max: 2}`, "max 2 is below min 3"},
+		{"min over default max", `{type: "file", label: "F", name: "f", min: 2}`, "max 1 is below min 2"},
 	} {
 		t.Run(c.kind, func(t *testing.T) {
 			a := stack.Island(t, devkit.App{Island: widgets(), Script: `ui.root.set(ui.form({fields: [` + c.spec + `]})); ui.notify(ui.draw())`})
@@ -303,8 +402,19 @@ func TestFileDefaultMustExist(t *testing.T) {
 	}
 }
 
+func TestFileMissingDefaultShowsAsFailed(t *testing.T) {
+	a, f := formApp(t, `{fields: [{type: "file", label: "F", name: "f", min: 1, max: 2, value: ["nope.txt"]}]}`)
+	field := f.Field("F")
+	field.ExpectFileFailed("nope.txt", "file not found")
+	field.ExpectRequiredEmpty(true)
+	f.ExpectSubmitDisabled(true)
+	field.DismissFile("nope.txt")
+	field.ExpectRequiredEmpty(true)
+	a.Page.MustEval(`() => true`)
+}
+
 func TestFileLongNameTruncates(t *testing.T) {
-	a, f, _, src := fileApp(t, api.FilesConfig{}, `{type: "file", label: "Docs", name: "docs", multiple: true}`)
+	a, f, _, src := fileApp(t, api.FilesConfig{}, `{type: "file", label: "Docs", name: "docs", max: 10}`)
 	long := filepath.Join(src, "a very long file name that keeps going well past the chip width limit.txt")
 	if err := os.WriteFile(long, bytes.Repeat([]byte("z"), 1500), 0o644); err != nil {
 		t.Fatal(err)

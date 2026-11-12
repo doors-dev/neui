@@ -29,7 +29,7 @@ func newFormWidgetList(ctx context.Context, group formGroup, params listInput) (
 	case *searchInput:
 		v.Min = max(v.Min, 1)
 	case *fileInput:
-		v.Required = true
+		v.Min = max(v.Min, 1)
 	case *seriesInput:
 		v.Required = true
 	}
@@ -322,6 +322,7 @@ elem (f *formWidgetList) Main() {
 				(&f.add)
 				(doors.AClick{
 					Scope: f.group.scope(),
+					Batch: true,
 					On: func(ctx context.Context, r doors.RequestPointer) bool {
 						f.appendField(ctx)
 						return false
@@ -385,6 +386,7 @@ elem (f *formWidgetList) item(field *formWidgetListField) {
 			<button
 				(doors.AClick{
 					Scope: f.group.scope(),
+					Batch: true,
 					On: func(ctx context.Context, r doors.RequestPointer) bool {
 						field.remove(ctx, field)
 						return false

@@ -54,7 +54,7 @@ const covSubmitRequiredSpec = `{fields: [
 		"(p) => ({type: 'select', label: 'Kind', name: 'kind', max: 2, options: [{value: 'x', label: 'X'}, {value: 'z', label: 'Z'}]})",
 		"(p) => ({type: 'text', label: 'Why', name: 'why'})"
 	]},
-	{type: "file", label: "Doc", name: "doc", required: true}
+	{type: "file", label: "Doc", name: "doc", min: 1}
 ]}`
 
 func TestSubmitDisabledWhileAnyRequiredFieldIsEmpty(t *testing.T) {
@@ -136,7 +136,7 @@ const covSubmitErrorsSpec = `{fields: [
 	{type: "textarea", label: "Bio", name: "bio", minLength: 4, maxLength: 8, validate: "(s) => s === 'nope' ? 'no nope' : ''"},
 	{type: "select", label: "Toppings", name: "toppings", min: 2, max: 3, value: [{value: "a", label: "A"}, {value: "b", label: "B"}], options: [{value: "a", label: "A"}, {value: "b", label: "B"}, {value: "c", label: "C"}, {value: "d", label: "D"}]},
 	{type: "search", label: "Veg", name: "veg", min: 2, max: 3, value: [{value: "kale", label: "Kale"}, {value: "leek", label: "Leek"}], search: "(q) => [{value: 'kale', label: 'Kale'}, {value: 'leek', label: 'Leek'}]"},
-	{type: "file", label: "Docs", name: "docs", accept: ".txt", multiple: true},
+	{type: "file", label: "Docs", name: "docs", accept: ".txt", max: 10},
 	{type: "list", min: 2, value: ["x", "y"], field: {type: "text", label: "Tags", name: "tags", maxLength: 3}},
 	{type: "group", label: "Geo", name: "geo", fields: [{type: "number", label: "Lat", name: "lat", min: -90, max: 90}]},
 	{type: "series", label: "Pick", name: "pick", fields: [
@@ -402,7 +402,7 @@ const covSubmitShapesSpec = `{fields: [
 	{type: "checkbox", label: "Agree", name: "agree"},
 	{type: "checkbox", label: "Spam", name: "spam", checked: true},
 	{type: "file", label: "Doc", name: "doc"},
-	{type: "file", label: "Pics", name: "pics", multiple: true},
+	{type: "file", label: "Pics", name: "pics", max: 10},
 	{type: "group", label: "Address", name: "address", fields: [
 		{type: "text", label: "City", name: "city"},
 		{type: "group", label: "Geo", name: "geo", fields: [{type: "number", label: "Lat", name: "lat"}]}
@@ -476,12 +476,12 @@ func TestSubmitGivesEveryKindItsShape(t *testing.T) {
 	if got.Submit == nil || *got.Submit != "" {
 		t.Fatalf("submitted %s, want submit \"\"", raw)
 	}
-	var doc string
+	var doc []string
 	var pics []string
 	json.Unmarshal(got.Data["doc"], &doc)
 	json.Unmarshal(got.Data["pics"], &pics)
-	if path.Base(doc) != "note.txt" || len(pics) != 2 || path.Base(pics[0]) != "one.png" || path.Base(pics[1]) != "two.png" {
-		t.Fatalf("the files gave doc %s and pics %s, want a path to note.txt and an array of paths to one.png and two.png", got.Data["doc"], got.Data["pics"])
+	if len(doc) != 1 || path.Base(doc[0]) != "note.txt" || len(pics) != 2 || path.Base(pics[0]) != "one.png" || path.Base(pics[1]) != "two.png" {
+		t.Fatalf("the files gave doc %s and pics %s, want arrays of paths to note.txt and to one.png and two.png", got.Data["doc"], got.Data["pics"])
 	}
 	delete(got.Data, "doc")
 	delete(got.Data, "pics")
@@ -570,7 +570,7 @@ func TestSubmitSavesFilesInTheWorkspace(t *testing.T) {
 	a, f := covSubmitApp(t, dir, `{fields: [
 		{type: "file", label: "Doc", name: "doc"},
 		{type: "file", label: "Copy", name: "copy"},
-		{type: "file", label: "Pics", name: "pics", multiple: true},
+		{type: "file", label: "Pics", name: "pics", max: 10},
 		{type: "group", label: "Box", name: "box", fields: [{type: "file", label: "Inner", name: "inner"}]},
 		{type: "list", field: {type: "file", label: "Files", name: "files"}}
 	]}`)
@@ -597,11 +597,11 @@ func TestSubmitSavesFilesInTheWorkspace(t *testing.T) {
 	f.Submit("Submit")
 	var got struct {
 		Data struct {
-			Doc   string
-			Copy  string
+			Doc   []string
+			Copy  []string
 			Pics  []string
-			Box   struct{ Inner string }
-			Files []string
+			Box   struct{ Inner []string }
+			Files [][]string
 		}
 	}
 	raw := covSubmitted(a)
@@ -609,15 +609,15 @@ func TestSubmitSavesFilesInTheWorkspace(t *testing.T) {
 		t.Fatal(err)
 	}
 	d := got.Data
-	want := map[string]string{d.Doc: "hello", d.Copy: "hello", d.Box.Inner: "first"}
-	if len(d.Pics) != 2 || len(d.Files) != 1 {
-		t.Fatalf("submitted %s, want two pics and one file in the list", raw)
+	if len(d.Doc) != 1 || len(d.Copy) != 1 || len(d.Box.Inner) != 1 || len(d.Pics) != 2 || len(d.Files) != 1 || len(d.Files[0]) != 1 {
+		t.Fatalf("submitted %s, want one path for each single file, two pics and one file in the list", raw)
 	}
+	want := map[string]string{d.Doc[0]: "hello", d.Copy[0]: "hello", d.Box.Inner[0]: "first"}
 	want[d.Pics[0]] = "first"
 	want[d.Pics[1]] = "second"
-	want[d.Files[0]] = "kept"
+	want[d.Files[0][0]] = "kept"
 	dirs := map[string]bool{}
-	for _, p := range []string{d.Doc, d.Copy, d.Pics[0], d.Box.Inner, d.Files[0]} {
+	for _, p := range []string{d.Doc[0], d.Copy[0], d.Pics[0], d.Box.Inner[0], d.Files[0][0]} {
 		dirs[path.Dir(p)] = true
 	}
 	if len(dirs) != 5 || path.Dir(d.Pics[0]) != path.Dir(d.Pics[1]) {
@@ -633,7 +633,7 @@ func TestSubmitSavesFilesInTheWorkspace(t *testing.T) {
 			t.Fatalf("the workspace has %q (%v) at %s, want %q", saved, err, p, content)
 		}
 	}
-	if path.Base(d.Doc) != "note.txt" || path.Base(d.Pics[0]) != "one.txt" || path.Base(d.Pics[1]) != "two.txt" || path.Base(d.Files[0]) != "kept.txt" {
+	if path.Base(d.Doc[0]) != "note.txt" || path.Base(d.Pics[0]) != "one.txt" || path.Base(d.Pics[1]) != "two.txt" || path.Base(d.Files[0][0]) != "kept.txt" {
 		t.Fatalf("submitted %s, want the chosen file names", raw)
 	}
 	matches, _ := filepath.Glob(filepath.Join(dir, "board.island", "*", "gone.txt"))
@@ -655,13 +655,14 @@ func TestSubmitAgainAfterSubmit(t *testing.T) {
 	f.Field("Count").Type("1")
 	f.Field("Doc").SetFiles(note)
 	f.Submit("Save")
-	var first struct{ Data struct{ Doc string } }
+	var first struct{ Data struct{ Doc []string } }
 	raw := covSubmitted(a)
 	json.Unmarshal(raw, &first)
-	if first.Data.Doc == "" {
+	if len(first.Data.Doc) != 1 {
 		t.Fatalf("submitted %s, want the file", raw)
 	}
-	stack.ExpectJSON(t, raw, `{"data": {"title": "One", "count": 1, "doc": "`+first.Data.Doc+`"}, "submit": "save"}`)
+	doc := first.Data.Doc[0]
+	stack.ExpectJSON(t, raw, `{"data": {"title": "One", "count": 1, "doc": ["`+doc+`"]}, "submit": "save"}`)
 
 	f.Field("Title").ExpectValue("One")
 	f.Field("Count").Type("")
@@ -671,8 +672,8 @@ func TestSubmitAgainAfterSubmit(t *testing.T) {
 	f.Field("Doc").RemoveFile("note.txt")
 	f.Field("Doc").SetFiles(note)
 	f.Submit("Publish")
-	stack.ExpectJSON(t, covSubmitted(a), `{"data": {"title": "One", "doc": "`+first.Data.Doc+`"}, "submit": "publish"}`)
-	saved, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(first.Data.Doc)))
+	stack.ExpectJSON(t, covSubmitted(a), `{"data": {"title": "One", "doc": ["`+doc+`"]}, "submit": "publish"}`)
+	saved, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(doc)))
 	if err != nil || string(saved) != "v2" {
 		t.Fatalf("the workspace has %q (%v), want the file chosen last", saved, err)
 	}
@@ -681,5 +682,5 @@ func TestSubmitAgainAfterSubmit(t *testing.T) {
 	f.ExpectSubmitDisabled(true)
 	f.Field("Title").Type("Two")
 	f.Submit("Save")
-	stack.ExpectJSON(t, covSubmitted(a), `{"data": {"title": "Two", "doc": "`+first.Data.Doc+`"}, "submit": "save"}`)
+	stack.ExpectJSON(t, covSubmitted(a), `{"data": {"title": "Two", "doc": ["`+doc+`"]}, "submit": "save"}`)
 }
