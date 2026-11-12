@@ -152,7 +152,7 @@ const textareaSpec = `{fields: [
 func TestFormTextarea(t *testing.T) {
 	a, f := formApp(t, textareaSpec)
 	bio := f.Field("Bio")
-	count := bio.Find(".kisland-form-count")
+	count := bio.Find(".neisland-form-count")
 	count.WaitText("0 / 5 min")
 	bio.Type("abc")
 	count.WaitText("3 / 5 min")
@@ -293,8 +293,8 @@ func TestFormList(t *testing.T) {
 	tags.Add()
 	tags.Add()
 	tags.ExpectCount(2)
-	tags.WaitCount("button.kisland-form-item-remove", 2)
-	tags.Find("button.kisland-form-item-remove").WaitAttr("aria-label", "Remove item 1 of Tags")
+	tags.WaitCount("button.neisland-form-item-remove", 2)
+	tags.Find("button.neisland-form-item-remove").WaitAttr("aria-label", "Remove item 1 of Tags")
 	tags.ExpectRequiredMark(true)
 	tags.ExpectNoError()
 	tags.Item(0).Control().ExpectRequiredEmpty(true)
@@ -323,15 +323,15 @@ func TestFormList(t *testing.T) {
 	tags.Add()
 	tags.ExpectCount(3)
 	tags.ExpectAddDisabled(true)
-	tags.Find(".kisland-form-items-foot .kisland-form-help").WaitText("Maximum of 3 reached.")
+	tags.Find(".neisland-form-items-foot .neisland-form-help").WaitText("Maximum of 3 reached.")
 	tags.Add()
 	tags.ExpectCount(3)
-	tags.WaitCount("button.kisland-form-item-remove", 3)
+	tags.WaitCount("button.neisland-form-item-remove", 3)
 	tags.Item(2).Control().Type("rs")
 	tags.Remove(0)
 	tags.ExpectCount(2)
 	tags.ExpectAddDisabled(false)
-	tags.Find("button.kisland-form-item-remove").WaitAttr("aria-label", "Remove item 1 of Tags")
+	tags.Find("button.neisland-form-item-remove").WaitAttr("aria-label", "Remove item 1 of Tags")
 	tags.Item(0).Control().ExpectValue("js")
 
 	f.Submit("Submit")
@@ -353,13 +353,13 @@ func TestFormListGroups(t *testing.T) {
 	f.ExpectSubmitMessage("form is not completed or contains errors")
 	people.Add()
 	people.ExpectCount(1)
-	people.Find(".kisland-form-items-foot").WaitGone(".kisland-form-help")
+	people.Find(".neisland-form-items-foot").WaitGone(".neisland-form-help")
 	people.Item(0).Field("Name").ExpectRequiredMark(true)
 	people.Item(0).Field("Name").Type("Ada")
 	people.Item(0).Field("Age").Type("36")
 	people.Add()
 	people.ExpectCount(2)
-	people.Item(1).Find(".kisland-form-item-body").WaitAttr("aria-label", "People, item 2")
+	people.Item(1).Find(".neisland-form-item-body").WaitAttr("aria-label", "People, item 2")
 	people.Item(1).Field("Name").ExpectRequiredMark(true)
 	f.ExpectSubmitDisabled(true)
 	people.Item(1).Field("Name").Type("Alan")
@@ -395,7 +395,7 @@ func TestFormListItemNames(t *testing.T) {
 		list.Add()
 		list.Add()
 		list.ExpectCount(2)
-		list.Item(0).WaitGone(".kisland-form-label, legend, label.kisland-form-check > span")
+		list.Item(0).WaitGone(".neisland-form-label, legend, label.neisland-form-check > span")
 		list.Item(0).Control().ExpectName(label + ", item 1")
 		list.Item(1).Control().ExpectName(label + ", item 2")
 		list.Remove(0)
@@ -465,10 +465,10 @@ func TestFormListRemoveShowsCross(t *testing.T) {
 	tags := f.List("Tags")
 	tags.Add()
 	tags.ExpectCount(1)
-	if got := tags.Find("button.kisland-form-item-remove").Element().MustEval(markJS).String(); got != `24 "" 24px 2 turned` {
+	if got := tags.Find("button.neisland-form-item-remove").Element().MustEval(markJS).String(); got != `24 "" 24px 2 turned` {
 		t.Fatalf("the remove button draws %q, want a 24px mark of two turned bars", got)
 	}
-	if got := tags.Find("button.kisland-form-item-add").Element().MustEval(markJS).String(); got != `24 "" 24px 2 straight` {
+	if got := tags.Find("button.neisland-form-item-add").Element().MustEval(markJS).String(); got != `24 "" 24px 2 straight` {
 		t.Fatalf("the add button draws %q, want a 24px mark of two straight bars", got)
 	}
 }
@@ -492,9 +492,9 @@ func TestFormRequiredMarkBesideLegend(t *testing.T) {
 	]}`)
 	f.List("Tags").ExpectRequiredMark(true)
 	f.Series("Pick").ExpectRequiredMark(true)
-	field := f.Field("Name").Find(".kisland-form-required").Element().MustEval(markGapJS).Num()
-	list := f.List("Tags").Find(":scope > legend .kisland-form-required").Element().MustEval(markGapJS).Num()
-	series := f.Series("Pick").Find(":scope > legend .kisland-form-required").Element().MustEval(markGapJS).Num()
+	field := f.Field("Name").Find(".neisland-form-required").Element().MustEval(markGapJS).Num()
+	list := f.List("Tags").Find(":scope > legend .neisland-form-required").Element().MustEval(markGapJS).Num()
+	series := f.Series("Pick").Find(":scope > legend .neisland-form-required").Element().MustEval(markGapJS).Num()
 	if math.Abs(list-field) > 0.5 || math.Abs(series-field) > 0.5 {
 		t.Fatalf("the * sits %.1fpx after a list legend and %.1fpx after a series legend, want %.1fpx as after a field label", list, series, field)
 	}
@@ -658,7 +658,7 @@ const submitsSpec = `{fields: [{type: "text", label: "Title", name: "title"}],
 
 func TestFormSubmits(t *testing.T) {
 	a, f := formApp(t, submitsSpec)
-	f.Find(".kisland-form-actions").WaitCount("button[type=submit]", 2)
+	f.Find(".neisland-form-actions").WaitCount("button[type=submit]", 2)
 	f.Field("Title").Type("Hi")
 	f.Submit("Publish")
 	stack.ExpectJSON(t, a.Submitted(), `{"data": {"title": "Hi"}, "submit": "publish"}`)
@@ -667,7 +667,7 @@ func TestFormSubmits(t *testing.T) {
 func TestFormCancel(t *testing.T) {
 	a, f := formApp(t, `{fields: [{type: "text", label: "Name", name: "name", required: true}], cancel: "Never mind"}`)
 	f.ExpectSubmitDisabled(true)
-	f.Find(".kisland-form-actions button[type=button]").WaitText("Never mind")
+	f.Find(".neisland-form-actions button[type=button]").WaitText("Never mind")
 	f.Cancel()
 	stack.ExpectJSON(t, a.Submitted(), `{"canceled": true}`)
 }
@@ -675,9 +675,9 @@ func TestFormCancel(t *testing.T) {
 func TestFormCancelQuietAfterSubmits(t *testing.T) {
 	_, f := formApp(t, `{fields: [{type: "text", label: "Name", name: "name", required: true}], submits: [{text: "Save", value: "save"}, {text: "Publish", value: "publish"}], cancel: "Never mind"}`)
 	f.ExpectSubmitMessage("form is not completed or contains errors")
-	got := f.Find(".kisland-form-actions").Element().MustEval(`() => {
-		const order = Array.from(this.children).map((c) => c.matches("button[type=submit]") ? "submit" : c.matches("button.kisland-form-cancel") ? "cancel" : c.matches(".kisland-form-help") ? "help" : c.tagName).join(" ")
-		const cancel = this.querySelector(".kisland-form-cancel")
+	got := f.Find(".neisland-form-actions").Element().MustEval(`() => {
+		const order = Array.from(this.children).map((c) => c.matches("button[type=submit]") ? "submit" : c.matches("button.neisland-form-cancel") ? "cancel" : c.matches(".neisland-form-help") ? "help" : c.tagName).join(" ")
+		const cancel = this.querySelector(".neisland-form-cancel")
 		const save = this.querySelector("button[type=submit]")
 		const s = getComputedStyle(cancel)
 		const r = cancel.getBoundingClientRect()
@@ -687,7 +687,7 @@ func TestFormCancelQuietAfterSubmits(t *testing.T) {
 	if want := "submit submit cancel help | rgba(0, 0, 0, 0) | 0px | underline | true | true"; got != want {
 		t.Fatalf("the actions are %q, want %q", got, want)
 	}
-	focus := f.Find(".kisland-form-cancel").Element().MustEval(`() => {
+	focus := f.Find(".neisland-form-cancel").Element().MustEval(`() => {
 		this.focus()
 		const s = getComputedStyle(this)
 		return [this.matches(":focus-visible"), s.outlineStyle, s.outlineWidth].join(" ")
@@ -721,7 +721,7 @@ func TestFormFile(t *testing.T) {
 	f.ExpectSubmitDisabled(true)
 	doc.SetFiles(note)
 	doc.ExpectValue("note.txt")
-	doc.Find(".kisland-form-file-size").WaitText("5 B")
+	doc.Find(".neisland-form-file-size").WaitText("5 B")
 	f.Submit("Submit")
 	var got struct {
 		Data struct{ Doc []string }

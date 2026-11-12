@@ -6,7 +6,7 @@
 // session with Enable(ctx, opts...), typically from an auth hook or handler
 // once the user is known; its Option values add to or take precedence over
 // the app options. A session needs a provider from WithProvider or
-// OptionProvider. Render a chat UI, such as kchat.Kchat, where the user
+// OptionProvider. Render a chat UI, such as nechat.Chat, where the user
 // should talk to the agent.
 //
 // The agent acts through tools. A Module built with NewModule, or a built-in

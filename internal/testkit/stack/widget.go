@@ -84,7 +84,7 @@ func (a *IslandApp) Find(selector string) Locator {
 
 // Form locates the first form widget on the page.
 func (a *IslandApp) Form() Form {
-	return a.FormAt(".kisland-form")
+	return a.FormAt(".neisland-form")
 }
 
 // FormAt locates the form widget matching selector.
@@ -561,13 +561,13 @@ const widgetJS = `function (path, op, arg) {
 	const norm = (s) => s.replace(/\s+/g, " ").trim()
 	const text = (el) => {
 		const c = el.cloneNode(true)
-		c.querySelectorAll(".kisland-form-required, .kisland-form-count, script").forEach((n) => n.remove())
+		c.querySelectorAll(".neisland-form-required, .neisland-form-count, script").forEach((n) => n.remove())
 		return norm(c.textContent)
 	}
-	const box = (el) => el.matches("fieldset.kisland-form-box")
+	const box = (el) => el.matches("fieldset.neisland-form-box")
 	const labelOf = (el) => box(el)
 		? el.querySelector(":scope > legend")
-		: el.querySelector(":scope > .kisland-form-label, :scope > label.kisland-form-check > span")
+		: el.querySelector(":scope > .neisland-form-label, :scope > label.neisland-form-check > span")
 	const find = (scope, sel, kind, label) => {
 		const all = Array.from(scope.querySelectorAll(sel))
 		const hit = all.find((n) => labelOf(n) && text(labelOf(n)) === label)
@@ -576,7 +576,7 @@ const widgetJS = `function (path, op, arg) {
 		}
 		return hit
 	}
-	const boxes = (scope, inner) => Array.from(scope.querySelectorAll("fieldset.kisland-form-box")).filter((n) => n.querySelector(":scope > " + inner))
+	const boxes = (scope, inner) => Array.from(scope.querySelectorAll("fieldset.neisland-form-box")).filter((n) => n.querySelector(":scope > " + inner))
 	const findBox = (scope, inner, kind, label) => {
 		const all = boxes(scope, inner)
 		const hit = all.find((n) => text(labelOf(n)) === label)
@@ -586,12 +586,12 @@ const widgetJS = `function (path, op, arg) {
 		return hit
 	}
 	const items = (list) => {
-		const ol = list.querySelector("ol.kisland-form-items")
-		return Array.from(ol.querySelectorAll("li.kisland-form-item")).filter((n) => n.closest("ol.kisland-form-items") === ol)
+		const ol = list.querySelector("ol.neisland-form-items")
+		return Array.from(ol.querySelectorAll("li.neisland-form-item")).filter((n) => n.closest("ol.neisland-form-items") === ol)
 	}
 	const steps = (series) => {
-		const ol = series.querySelector("ol.kisland-form-steps")
-		return Array.from(ol.querySelectorAll("li.kisland-form-step")).filter((n) => n.closest("ol.kisland-form-steps") === ol)
+		const ol = series.querySelector("ol.neisland-form-steps")
+		return Array.from(ol.querySelectorAll("li.neisland-form-step")).filter((n) => n.closest("ol.neisland-form-steps") === ol)
 	}
 	const nth = (all, i, kind) => {
 		if (i >= all.length) {
@@ -609,17 +609,17 @@ const widgetJS = `function (path, op, arg) {
 			return el
 		}
 		case "field":
-			return find(scope, ".kisland-form-field, fieldset.kisland-form-group", "field", s.arg)
+			return find(scope, ".neisland-form-field, fieldset.neisland-form-group", "field", s.arg)
 		case "group":
-			return findBox(scope, ".kisland-form-rail", "group", s.arg)
+			return findBox(scope, ".neisland-form-rail", "group", s.arg)
 		case "list":
-			return findBox(scope, "ol.kisland-form-items", "list", s.arg)
+			return findBox(scope, "ol.neisland-form-items", "list", s.arg)
 		case "series":
-			return findBox(scope, "ol.kisland-form-steps", "series", s.arg)
+			return findBox(scope, "ol.neisland-form-steps", "series", s.arg)
 		case "item":
 			return nth(items(scope), s.arg, "item")
 		case "control": {
-			const hit = scope.querySelector(":scope > .kisland-form-item-body > .kisland-form-field, :scope > .kisland-form-item-body > fieldset.kisland-form-group")
+			const hit = scope.querySelector(":scope > .neisland-form-item-body > .neisland-form-field, :scope > .neisland-form-item-body > fieldset.neisland-form-group")
 			if (!hit) {
 				throw new Error("the item is not a field")
 			}
@@ -631,8 +631,8 @@ const widgetJS = `function (path, op, arg) {
 		throw new Error("unknown step " + s.kind)
 	}
 	const el = path.reduce(resolve, document)
-	const control = () => el.matches("fieldset") ? el.querySelector(".kisland-form-options") : el.querySelector("input, select, textarea")
-	const options = () => Array.from(el.querySelectorAll("label.kisland-form-check")).map((l) => ({label: text(l), input: l.querySelector("input")}))
+	const control = () => el.matches("fieldset") ? el.querySelector(".neisland-form-options") : el.querySelector("input, select, textarea")
+	const options = () => Array.from(el.querySelectorAll("label.neisland-form-check")).map((l) => ({label: text(l), input: l.querySelector("input")}))
 	const option = (label) => {
 		const o = options().find((o) => o.label === label)
 		if (!o) {
@@ -640,15 +640,15 @@ const widgetJS = `function (path, op, arg) {
 		}
 		return o.input
 	}
-	const fileField = () => el.matches(".kisland-form-field") && !!el.querySelector(":scope > .kisland-form-file-zone, :scope > .kisland-form-search-chosen > .kisland-form-file-chip, :scope > .kisland-form-search-chosen .kisland-form-file-chip")
-	const chips = () => Array.from(el.querySelectorAll("li.kisland-form-file-chip"))
-	const chipName = (li) => norm(li.querySelector(".kisland-form-file-link, .kisland-form-file-text").textContent)
+	const fileField = () => el.matches(".neisland-form-field") && !!el.querySelector(":scope > .neisland-form-file-zone, :scope > .neisland-form-search-chosen > .neisland-form-file-chip, :scope > .neisland-form-search-chosen .neisland-form-file-chip")
+	const chips = () => Array.from(el.querySelectorAll("li.neisland-form-file-chip"))
+	const chipName = (li) => norm(li.querySelector(".neisland-form-file-link, .neisland-form-file-text").textContent)
 	const chipState = (li) => li.hasAttribute("data-uploading")
 		? chipName(li) + " uploading"
 		: li.hasAttribute("data-failed")
-			? chipName(li) + " failed: " + norm(li.querySelector(".kisland-form-file-reason").textContent)
+			? chipName(li) + " failed: " + norm(li.querySelector(".neisland-form-file-reason").textContent)
 			: chipName(li)
-	const actions = () => el.querySelector(".kisland-form-actions")
+	const actions = () => el.querySelector(".neisland-form-actions")
 	const submits = () => Array.from(actions().querySelectorAll("button[type=submit]"))
 	const fire = (c, ...types) => types.forEach((t) => c.dispatchEvent(new Event(t, {bubbles: true})))
 	switch (op) {
@@ -668,11 +668,11 @@ const widgetJS = `function (path, op, arg) {
 	case "error": {
 		const owner = box(el) ? el : control()
 		const ids = (owner.getAttribute("aria-describedby") || "").split(" ").filter(Boolean)
-		const err = ids.map((id) => document.getElementById(id)).find((n) => n && n.classList.contains("kisland-form-error"))
+		const err = ids.map((id) => document.getElementById(id)).find((n) => n && n.classList.contains("neisland-form-error"))
 		return err ? norm(err.textContent) : ""
 	}
 	case "required":
-		return String(!!labelOf(el)?.querySelector(".kisland-form-required"))
+		return String(!!labelOf(el)?.querySelector(".neisland-form-required"))
 	case "name": {
 		const c = el.matches("fieldset") ? el : control()
 		if (c.hasAttribute("aria-label")) {
@@ -780,11 +780,11 @@ const widgetJS = `function (path, op, arg) {
 		return chips().map(chipState).join(", ")
 	case "failed": {
 		const li = chips().find((li) => li.hasAttribute("data-failed") && chipName(li) === arg)
-		return li ? norm(li.querySelector(".kisland-form-file-reason").textContent) : "no failed chip; chips: " + chips().map(chipState).join(", ")
+		return li ? norm(li.querySelector(".neisland-form-file-reason").textContent) : "no failed chip; chips: " + chips().map(chipState).join(", ")
 	}
 	case "retry": {
 		const li = chips().find((li) => li.hasAttribute("data-failed") && chipName(li) === arg)
-		const b = li && li.querySelector("button.kisland-form-file-retry")
+		const b = li && li.querySelector("button.neisland-form-file-retry")
 		if (!b || b.hidden) {
 			throw new Error("no Retry for " + JSON.stringify(arg) + "; chips: " + chips().map(chipState).join(", "))
 		}
@@ -792,7 +792,7 @@ const widgetJS = `function (path, op, arg) {
 		return ""
 	}
 	case "drop": {
-		const zone = el.querySelector(".kisland-form-file-zone")
+		const zone = el.querySelector(".neisland-form-file-zone")
 		if (!zone) {
 			throw new Error("no box to drop on")
 		}
@@ -808,13 +808,13 @@ const widgetJS = `function (path, op, arg) {
 	case "items":
 		return String(items(el).length)
 	case "add":
-		el.querySelector(":scope > .kisland-form-items-foot > .kisland-form-item-add").click()
+		el.querySelector(":scope > .neisland-form-items-foot > .neisland-form-item-add").click()
 		return ""
 	case "adddisabled":
-		return String(el.querySelector(":scope > .kisland-form-items-foot > .kisland-form-item-add").getAttribute("aria-disabled") === "true")
+		return String(el.querySelector(":scope > .neisland-form-items-foot > .neisland-form-item-add").getAttribute("aria-disabled") === "true")
 	case "remove": {
 		const item = nth(items(el), arg, "item")
-		Array.from(item.querySelectorAll("button.kisland-form-item-remove")).find((b) => b.closest("li.kisland-form-item") === item).click()
+		Array.from(item.querySelectorAll("button.neisland-form-item-remove")).find((b) => b.closest("li.neisland-form-item") === item).click()
 		return ""
 	}
 	case "steps":
@@ -827,7 +827,7 @@ const widgetJS = `function (path, op, arg) {
 			throw new Error("no submit button " + JSON.stringify(arg) + "; there are " + JSON.stringify(submits().map((b) => norm(b.textContent))))
 		}
 		if (b.disabled) {
-			const help = actions().querySelector(".kisland-form-help")
+			const help = actions().querySelector(".neisland-form-help")
 			throw new Error("submit " + JSON.stringify(arg) + " is disabled: " + (help ? norm(help.textContent) : "no message"))
 		}
 		b.click()
@@ -846,7 +846,7 @@ const widgetJS = `function (path, op, arg) {
 		return states.every((d) => d) ? "true" : states.every((d) => !d) ? "false" : "mixed " + JSON.stringify(states)
 	}
 	case "submitmessage": {
-		const help = actions().querySelector(".kisland-form-help")
+		const help = actions().querySelector(".neisland-form-help")
 		return help ? norm(help.textContent) : ""
 	}
 	}

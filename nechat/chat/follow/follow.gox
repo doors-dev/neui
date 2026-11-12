@@ -1,0 +1,19 @@
+package follow
+
+import (
+	"github.com/doors-dev/gox"
+)
+
+elem Mark() {
+	<div class="nechat-follow">
+		<script>
+			const mark = document.currentScript.parentElement
+			const log = mark.closest(".nechat-log")
+			if (!log) return
+			const below = mark.getBoundingClientRect().top - log.getBoundingClientRect().bottom
+			mark.remove()
+			if (below > 48) return
+			requestAnimationFrame(() => log.scrollTo({ top: log.scrollHeight, behavior: "smooth" }))
+		</script>
+	</div>
+}

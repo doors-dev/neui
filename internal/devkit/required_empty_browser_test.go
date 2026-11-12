@@ -118,7 +118,7 @@ func TestRequiredEmptyChoiceFields(t *testing.T) {
 	covSubmitPick(find, "ka", "Kale")
 
 	agreeTint := `() => {
-		const row = Array.from(document.querySelectorAll(".kisland-form-check-single")).find((l) => l.textContent.includes("Agree"))
+		const row = Array.from(document.querySelectorAll(".neisland-form-check-single")).find((l) => l.textContent.includes("Agree"))
 		return getComputedStyle(row).backgroundColor
 	}`
 	agree := f.Field("Agree")
@@ -157,7 +157,7 @@ func TestRequiredEmptyFileFields(t *testing.T) {
 	doc.ExpectInvalid(false)
 	doc.ExpectRequiredEmpty(true)
 	doc.SetFiles(filepath.Join(src, "a.txt"))
-	doc.WaitGone(".kisland-form-file-zone")
+	doc.WaitGone(".neisland-form-file-zone")
 	doc.ExpectRequiredMark(false)
 
 	docs := f.Field("Docs")
@@ -317,7 +317,7 @@ func TestRequiredEmptyOptionalSeriesSteps(t *testing.T) {
 	want := extra.Step(0).Field("Want")
 	want.ExpectRequiredEmpty(false)
 	want.ExpectRequiredMark(false)
-	want.Find(".kisland-form-options").WaitNoAttr("aria-required")
+	want.Find(".neisland-form-options").WaitNoAttr("aria-required")
 	want.WaitCount(`input[type="radio"]`, 2)
 	extra.ExpectRequiredMark(false)
 	f.ExpectSubmitDisabled(false)

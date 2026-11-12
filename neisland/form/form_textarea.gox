@@ -1,0 +1,178 @@
+package form
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+	"unicode/utf8"
+
+	"github.com/doors-dev/doors"
+	"github.com/doors-dev/gox"
+)
+
+func newTextareaWidget(ctx context.Context, group group, params textareaParams) (*textareaWidget, error) {
+	field, err := group.newField(params.Name)
+	if err != nil {
+		return nil, err
+	}
+	return &textareaWidget{
+		id: doors.IDRand(),
+		field: field,
+		params: params,
+	}, nil
+}
+
+type textareaWidget struct {
+	id string
+	field groupField
+	params textareaParams
+	value string
+	count doors.Source[int]
+	invalid doors.Setter
+	label doors.Setter
+}
+
+func (f *textareaWidget) name() string {
+	return f.params.Name
+}
+
+func (f *textareaWidget) init(ctx context.Context, value any) error {
+	str := f.params.Value
+	if value != nil {
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("field %q: default value is %T, want a string", f.params.Name, value)
+		}
+		str = v
+	}
+	f.value = str
+	f.count = doors.NewSource(utf8.RuneCountInString(str))
+	f.setLocked(ctx, str, f.validate(ctx, str))
+	return nil
+}
+
+func (f *textareaWidget) destroy(ctx context.Context) {
+	f.field.destroy(ctx)
+}
+
+func (f *textareaWidget) update(ctx context.Context, str string) {
+	err := f.validate(ctx, str)
+	f.field.mutex().Lock()
+	defer f.field.mutex().Unlock()
+	f.setLocked(ctx, str, err)
+	f.count.Update(ctx, utf8.RuneCountInString(str))
+	doors.Call(ctx, f.invalid.Set("aria-invalid", aria(shownErr(err))))
+	doors.Call(ctx, f.invalid.Set("data-required-empty", errors.Is(err, errRequired)))
+}
+
+func (f *textareaWidget) setLocked(ctx context.Context, str string, err error) {
+	if str == "" {
+		f.field.set(ctx, nil, err)
+		return
+	}
+	f.field.set(ctx, str, err)
+}
+
+elem (f *textareaWidget) Main() {
+	~~
+	label := any(nil)
+	if f.field.item != nil {
+		label, _ = f.field.item.ReadAndSub(ctx, func(ctx context.Context, name string) bool {
+			doors.Call(ctx, f.label.Set("aria-label", name))
+			return false
+		})
+	}
+	errLine := f.field.error.RouteBeam(
+		doors.RouteBeamMatch(shownErr, doors.RouteBind(func(err error) gox.Elem {
+			return <p class="neisland-form-error" id=(f.id + "-e")>~(err.Error())</p>
+		})),
+	)
+	~~
+	<div class="neisland-form-field">
+		~(if label == nil {
+			<label class="neisland-form-label" for=(f.id)>
+				~(f.params.Label)
+				~(f.field.error.RouteBeam(
+					doors.RouteBeamMatch(func(err error) bool {
+						return f.params.Required && err != nil
+					}, doors.RouteComp[error](<span class="neisland-form-required" aria-hidden="true">*</span>)),
+				))
+			</label>
+		})
+		<textarea
+			(&f.invalid)
+			(&f.label)
+			(doors.AInput{
+				Scope: f.field.scope().And(&doors.ScopeDebounce{Duration: 250 * time.Millisecond, Limit: time.Second}),
+				Batch: true,
+				On: func(ctx context.Context, r doors.RequestInput) bool {
+					f.update(ctx, r.Event().Value)
+					return false
+				},
+			})
+			class="neisland-form-textarea"
+			id=(f.id)
+			name=(f.params.Name)
+			rows=({
+				if f.params.Rows > 0 {
+					return f.params.Rows
+				}
+				return nil
+			})
+			maxlength=({
+				if f.params.MaxLength > 0 {
+					return f.params.MaxLength
+				}
+				return nil
+			})
+			placeholder=(f.params.Placeholder)
+			aria-required=(aria(f.params.Required))
+			aria-label=(label)
+			aria-invalid=(aria(shownErr(f.field.error.Get())))
+			data-required-empty=(errors.Is(f.field.error.Get(), errRequired))
+			aria-describedby=(f.id + "-e")>~(f.value)</textarea>
+		~(if f.params.MinLength > 0 || f.params.MaxLength > 0 {
+			<div class="neisland-form-foot">
+				~(errLine)
+				~(f.count.Bind(func(n int) gox.Elem {
+					if f.params.MinLength > 0 && n < f.params.MinLength {
+						return <span class="neisland-form-count">~(n, " / ", f.params.MinLength, " min")</span>
+					}
+					if f.params.MaxLength > 0 {
+						return <span class="neisland-form-count">~(n, " / ", f.params.MaxLength)</span>
+					}
+					return nil
+				}))
+			</div>
+		} else {
+			~(errLine)
+		})
+	</div>
+}
+
+func (f *textareaWidget) validate(ctx context.Context, str string) error {
+	if str == "" {
+		if f.params.Required {
+			return errRequired
+		}
+		return nil
+	}
+	length := utf8.RuneCountInString(str)
+	if f.params.MinLength > 0 && length < f.params.MinLength {
+		return fmt.Errorf("use at least %d characters", f.params.MinLength)
+	}
+	if f.params.MaxLength > 0 && length > f.params.MaxLength {
+		return fmt.Errorf("use at most %d characters", f.params.MaxLength)
+	}
+	if f.params.Validate != "" {
+		msg, err := f.params.Validate.Call(ctx, str)
+		if err != nil {
+			return errSystem
+		}
+		if msg != "" {
+			return errors.New(msg)
+		}
+	}
+	return nil
+}

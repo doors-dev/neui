@@ -5,7 +5,6 @@ package devkit_test
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"testing"
 	"time"
 
@@ -14,7 +13,7 @@ import (
 	"neui.dev"
 	"neui.dev/internal/devkit"
 	"neui.dev/internal/testkit/stack"
-	"neui.dev/ui"
+	"neui.dev/neisland"
 )
 
 func TestMain(m *testing.M) { stack.Main(m) }
@@ -26,18 +25,7 @@ func widgets() neui.Island {
 		Template: func(slot gox.Comp) gox.Elem {
 			return func(cur gox.Cursor) error { return cur.Comp(slot) }
 		},
-		Library: func(l neui.Library) error {
-			l.Head(ui.Style())
-			return errors.Join(
-				l.View("text", "a text", ui.NewText),
-				l.Control("form", "a form", ui.NewForm),
-				l.Control("table", "a table", ui.NewTable),
-				l.Control("button", "a button", ui.NewButton),
-				l.Layout("column", ui.ColumnDesc, ui.Column),
-				l.Layout("row", ui.RowDesc, ui.Row),
-				l.Layout("grid", ui.GridDesc, ui.Grid),
-			)
-		},
+		Library: neisland.RegisterAll,
 	}
 }
 
@@ -47,7 +35,7 @@ func TestDevkitTextShows(t *testing.T) {
 		Script: `ui.root.set(ui.text({text: "hello there"})); ui.draw(1); ui.notify("drawn")`,
 	})
 	a.Notified()
-	if text := a.Page.MustElement(".kisland-text").MustText(); text != "hello there" {
+	if text := a.Page.MustElement(".neisland-text").MustText(); text != "hello there" {
 		t.Fatalf("the text shows %q", text)
 	}
 }
@@ -83,9 +71,9 @@ func TestDevkitFormSubmitsSelectedOptions(t *testing.T) {
 	], submits: [{text: "Save", value: "save"}]})); ui.notify(ui.draw())`); err != nil {
 		t.Fatal(err)
 	}
-	a.Page.MustElement(`input.kisland-form-radio[value="1"]`).MustClick()
-	a.Page.MustElement(`input.kisland-form-checkbox[value="2"]`).MustClick()
-	a.Page.MustElement(`input.kisland-form-checkbox[value="1"]`).MustClick()
+	a.Page.MustElement(`input.neisland-form-radio[value="1"]`).MustClick()
+	a.Page.MustElement(`input.neisland-form-checkbox[value="2"]`).MustClick()
+	a.Page.MustElement(`input.neisland-form-checkbox[value="1"]`).MustClick()
 	a.Page.MustElement(`button[data-submit="save"]`).MustWaitEnabled().MustClick()
 	var got []struct {
 		Data struct {
@@ -116,31 +104,31 @@ func TestDevkitFormSearchPicksInOrder(t *testing.T) {
 	], submits: [{text: "Save", value: "save"}]})); ui.notify(ui.draw())`); err != nil {
 		t.Fatal(err)
 	}
-	a.Page.MustElement(`input.kisland-form-search-input`).MustInput("ma")
-	a.Page.MustElementR(`.kisland-form-search-status`, `^4 matches$`)
+	a.Page.MustElement(`input.neisland-form-search-input`).MustInput("ma")
+	a.Page.MustElementR(`.neisland-form-search-status`, `^4 matches$`)
 	a.Page.MustElement(`button[aria-label="Choose Samantha Okafor"]`).MustClick()
 	a.Page.MustElement(`button[aria-label="Remove Samantha Okafor"]`)
-	a.Page.MustWait(`() => document.activeElement?.matches("input.kisland-form-search-input") && document.activeElement.value === ""`)
-	a.Page.MustElement(`input.kisland-form-search-input`).MustInput("ma")
-	a.Page.MustElementR(`.kisland-form-search-status`, `^3 matches$`)
+	a.Page.MustWait(`() => document.activeElement?.matches("input.neisland-form-search-input") && document.activeElement.value === ""`)
+	a.Page.MustElement(`input.neisland-form-search-input`).MustInput("ma")
+	a.Page.MustElementR(`.neisland-form-search-status`, `^3 matches$`)
 	a.Page.Keyboard.MustType(input.Enter)
 	time.Sleep(500 * time.Millisecond)
-	if value := a.Page.MustElement(`input.kisland-form-search-input`).MustProperty("value").String(); value != "ma" {
+	if value := a.Page.MustElement(`input.neisland-form-search-input`).MustProperty("value").String(); value != "ma" {
 		t.Fatalf("enter changed the search to %q", value)
 	}
-	a.Page.MustElementR(`.kisland-form-search-status`, `^3 matches$`)
+	a.Page.MustElementR(`.neisland-form-search-status`, `^3 matches$`)
 	if has, _, err := a.Page.Has(`button[aria-label="Choose Samantha Okafor"]`); err != nil || has {
 		t.Fatalf("the chosen option is still offered: %v", err)
 	}
 	a.Page.MustElement(`button[aria-label="Choose Marta Ortiz"]`).MustClick()
-	if text := a.Page.MustElement(`.kisland-form-search-max`).MustText(); text != "Maximum of 2 chosen." {
+	if text := a.Page.MustElement(`.neisland-form-search-max`).MustText(); text != "Maximum of 2 chosen." {
 		t.Fatalf("the max line shows %q", text)
 	}
-	if has, _, err := a.Page.Has(`input.kisland-form-search-input`); err != nil || has {
+	if has, _, err := a.Page.Has(`input.neisland-form-search-input`); err != nil || has {
 		t.Fatalf("the search input shows at max: %v", err)
 	}
 	a.Page.MustElement(`button[aria-label="Remove Samantha Okafor"]`).MustClick()
-	a.Page.MustElement(`input.kisland-form-search-input`).MustInput("ada")
+	a.Page.MustElement(`input.neisland-form-search-input`).MustInput("ada")
 	a.Page.MustElement(`button[aria-label="Choose Ada Lovelace"]`).MustClick()
 	a.Page.MustElement(`button[aria-label="Remove Ada Lovelace"]`)
 	a.Page.MustElement(`button[data-submit="save"]`).MustWaitEnabled().MustClick()

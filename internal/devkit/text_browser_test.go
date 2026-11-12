@@ -21,26 +21,26 @@ func TestTextStyles(t *testing.T) {
 	`})
 	for i, c := range []struct{ style, class, label, role, rule string }{
 		{"plain", "", "", "", ""},
-		{"card", " kisland-text-card", "", "", ""},
-		{"info", " kisland-text-card kisland-tone-info", "Info:", "status", "rgb(3, 105, 161)"},
-		{"success", " kisland-text-card kisland-tone-success", "Success:", "status", "rgb(21, 128, 61)"},
-		{"warning", " kisland-text-card kisland-tone-warning", "Warning:", "alert", "rgb(180, 83, 9)"},
-		{"danger", " kisland-text-card kisland-tone-danger", "Error:", "alert", "rgb(220, 38, 38)"},
+		{"card", " neisland-text-card", "", "", ""},
+		{"info", " neisland-text-card neisland-tone-info", "Info:", "status", "rgb(3, 105, 161)"},
+		{"success", " neisland-text-card neisland-tone-success", "Success:", "status", "rgb(21, 128, 61)"},
+		{"warning", " neisland-text-card neisland-tone-warning", "Warning:", "alert", "rgb(180, 83, 9)"},
+		{"danger", " neisland-text-card neisland-tone-danger", "Error:", "alert", "rgb(220, 38, 38)"},
 	} {
-		box := a.Find(".kisland-grid-cell:nth-child(" + strconv.Itoa(i+1) + ") .kisland-text")
+		box := a.Find(".neisland-grid-cell:nth-child(" + strconv.Itoa(i+1) + ") .neisland-text")
 		box.Find("p").WaitText("Import " + c.style)
-		box.WaitAttr("class", "kisland-text kisland-prose"+c.class)
+		box.WaitAttr("class", "neisland-text neisland-prose"+c.class)
 		if c.role == "" {
 			box.WaitNoAttr("role")
-			box.WaitCount(".kisland-tone-label", 0)
+			box.WaitCount(".neisland-tone-label", 0)
 		} else {
 			box.WaitAttr("role", c.role)
-			box.WaitCount(".kisland-tone-label", 1)
-			box.Find(".kisland-tone-label:first-child").WaitText(c.label)
+			box.WaitCount(".neisland-tone-label", 1)
+			box.Find(".neisland-tone-label:first-child").WaitText(c.label)
 		}
 		got := box.Element().MustEval(`() => {
 			const s = getComputedStyle(this), b = getComputedStyle(this, "::before"), a = getComputedStyle(this, "::after")
-			const label = this.querySelector(".kisland-tone-label"), first = this.querySelector("p")
+			const label = this.querySelector(".neisland-tone-label"), first = this.querySelector("p")
 			const l = label && getComputedStyle(label)
 			const shadow = s.boxShadow.split(/,(?![^(]*\))/).map((x) => x.trim()).filter((x) => !x.startsWith("rgba(0, 0, 0, 0)")).join(",") || "none"
 			return [s.borderTopWidth + " " + s.borderRightWidth + " " + s.borderBottomWidth + " " + s.borderLeftWidth, s.borderTopLeftRadius, s.padding, s.backgroundColor, shadow, b.content, a.content, getComputedStyle(first).marginTop, l ? l.position + " " + l.width + " " + l.height + " " + l.overflow : "", this.textContent.replace(/\s+/g, " ").trim()].join("|")
@@ -56,7 +56,7 @@ func TestTextStyles(t *testing.T) {
 			t.Fatalf("%s: got %q, want %q", c.style, got, want)
 		}
 	}
-	a.Find(".kisland-grid-cell:nth-child(7) .kisland-text").WaitAttr("class", "kisland-text kisland-prose")
+	a.Find(".neisland-grid-cell:nth-child(7) .neisland-text").WaitAttr("class", "neisland-text neisland-prose")
 }
 
 func TestTextHeadings(t *testing.T) {
@@ -64,7 +64,7 @@ func TestTextHeadings(t *testing.T) {
 		ui.root.set(ui.text({text: "# One\n\n## Two\n\n### Three\n\nBody"}))
 		ui.notify(ui.draw())
 	`})
-	box := a.Find(".kisland-text")
+	box := a.Find(".neisland-text")
 	box.Find("h1").WaitText("One")
 	box.Find("h2").WaitText("Two")
 	box.Find("h3").WaitText("Three")
@@ -86,19 +86,19 @@ func TestTextStyleUpdate(t *testing.T) {
 		}
 		while (true) ui.draw()
 	`})
-	box := a.Find(".kisland-text")
-	box.WaitAttr("class", "kisland-text kisland-prose")
-	a.Find(".kisland-button").Click()
-	box.WaitAttr("class", "kisland-text kisland-prose kisland-text-card kisland-tone-warning")
+	box := a.Find(".neisland-text")
+	box.WaitAttr("class", "neisland-text neisland-prose")
+	a.Find(".neisland-button").Click()
+	box.WaitAttr("class", "neisland-text neisland-prose neisland-text-card neisland-tone-warning")
 	box.WaitAttr("role", "alert")
-	box.Find(".kisland-tone-label").WaitText("Warning:")
+	box.Find(".neisland-tone-label").WaitText("Warning:")
 	box.Find("p").WaitText("Saved with warning")
 	a.Notified()
-	a.Find(".kisland-button").Click()
+	a.Find(".neisland-button").Click()
 	box.Find("p").WaitText("Saved with plain")
-	box.WaitAttr("class", "kisland-text kisland-prose")
+	box.WaitAttr("class", "neisland-text neisland-prose")
 	box.WaitNoAttr("role")
-	box.WaitCount(".kisland-tone-label", 0)
+	box.WaitCount(".neisland-tone-label", 0)
 }
 
 func TestTextSizeRejected(t *testing.T) {

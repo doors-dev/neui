@@ -243,7 +243,7 @@ func TestSubmitMessagePrefersErrorsOverMissingRequired(t *testing.T) {
 func TestSubmitMessageNamesTheButtons(t *testing.T) {
 	_, f := covSubmitApp(t, "", `{fields: [{type: "text", label: "Name", name: "name", required: true}], submits: [{text: "Save", value: "save"}, {text: "Publish", value: "publish"}]}`)
 	f.ExpectSubmitMessage("form is not completed or contains errors")
-	id := f.Find(".kisland-form-help").Element().MustAttribute("id")
+	id := f.Find(".neisland-form-help").Element().MustAttribute("id")
 	for _, b := range []string{"save", "publish"} {
 		f.Find(`button[data-submit="`+b+`"]`).WaitAttr("aria-describedby", *id)
 	}
@@ -278,11 +278,11 @@ func TestSubmitButtonsKeepOrderValuesAndStyles(t *testing.T) {
 	]}`)
 	got := f.SubmitButtons()
 	want := []stack.SubmitButton{
-		{Text: "Draft", Value: "", Class: "kisland-button kisland-button-md kisland-button-primary"},
-		{Text: "Save", Value: "save", Class: "kisland-button kisland-button-md kisland-button-secondary"},
-		{Text: "Delete", Value: "delete", Class: "kisland-button kisland-button-md kisland-button-danger"},
-		{Text: "Ship", Value: "ship", Class: "kisland-button kisland-button-md kisland-button-primary"},
-		{Text: "Keep", Value: "keep", Class: "kisland-button kisland-button-md kisland-button-success"},
+		{Text: "Draft", Value: "", Class: "neisland-button neisland-button-md neisland-button-primary"},
+		{Text: "Save", Value: "save", Class: "neisland-button neisland-button-md neisland-button-secondary"},
+		{Text: "Delete", Value: "delete", Class: "neisland-button neisland-button-md neisland-button-danger"},
+		{Text: "Ship", Value: "ship", Class: "neisland-button neisland-button-md neisland-button-primary"},
+		{Text: "Keep", Value: "keep", Class: "neisland-button neisland-button-md neisland-button-success"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("the submit buttons are %+v, want %+v", got, want)
@@ -296,7 +296,7 @@ func TestSubmitButtonsKeepOrderValuesAndStyles(t *testing.T) {
 func TestSubmitOmittedGivesOnePrimarySubmit(t *testing.T) {
 	a, f := covSubmitApp(t, "", `{fields: [{type: "text", label: "Title", name: "title", value: "Hi"}]}`)
 	got := f.SubmitButtons()
-	want := []stack.SubmitButton{{Text: "Submit", Value: "", Class: "kisland-button kisland-button-md kisland-button-primary"}}
+	want := []stack.SubmitButton{{Text: "Submit", Value: "", Class: "neisland-button neisland-button-md neisland-button-primary"}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("the submit buttons are %+v, want %+v", got, want)
 	}
@@ -361,7 +361,7 @@ func TestCancelSkipsValidation(t *testing.T) {
 	if texts := f.ActionTexts(); !reflect.DeepEqual(texts, []string{"Save", "Publish", "Never mind"}) {
 		t.Fatalf("the actions are %q, want the cancel after the submits", texts)
 	}
-	f.Find(".kisland-form-actions button[type=button]").WaitAttr("class", "kisland-form-cancel")
+	f.Find(".neisland-form-actions button[type=button]").WaitAttr("class", "neisland-form-cancel")
 	f.ExpectSubmitMessage("form is not completed or contains errors")
 	f.ExpectCancelEnabled()
 	f.Cancel()

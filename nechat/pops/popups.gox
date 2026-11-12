@@ -1,0 +1,73 @@
+package pops
+
+import (
+	"context"
+	
+	"github.com/doors-dev/doors"
+	"github.com/doors-dev/gox"
+)
+
+type popState struct {
+	seq int
+	id any
+}
+
+func NewPopups() Popups {
+	return Popups{
+		state: doors.NewSourceEqual(popState{}, func(old, new popState) bool {
+			return old.seq == new.seq
+		}),
+	}
+}
+
+type Popups struct {
+	state doors.Source[popState]
+}
+
+func (p Popups) Script() gox.Elem {
+	return p.state.Bind(elem(s popState) {
+		~(if s.id != nil {
+			~(p.script(s.seq))
+		})
+	})
+}
+
+elem (p Popups) script(seq int) {
+	~>doors.AHook[int]{
+		Name: "hide",
+		Batch: true,
+		On: func(ctx context.Context, r doors.RequestHook[int]) (any, bool) {
+			p.state.Mutate(ctx, func(ps popState) popState {
+				if ps.seq != r.Data() {
+					return ps
+				}
+				ps.id = nil
+				ps.seq += 1
+				return ps
+			})
+			return nil, true
+		},
+	} <script data:seq=(seq)>
+		const root = document.currentScript.closest(".nechat-widget")
+		const seq = $data("seq")
+		const fail = (err) => {
+			if (err instanceof HookErr)
+				root.dispatchEvent(new CustomEvent("nechat_error", { detail: err.kind }))
+		}
+		const hide = (e) => {
+			const pop = e.target.closest?.("[data-nechat-pop]")
+			if (pop && root.contains(pop)) return
+			$hook("hide", seq).catch(fail)
+		}
+		const escape = (e) => {
+			e.preventDefault()
+			$hook("hide", seq).catch(fail)
+		}
+		document.addEventListener("pointerdown", hide)
+		root.addEventListener("nechat_escape", escape)
+		$sys.clean(() => {
+			document.removeEventListener("pointerdown", hide)
+			root.removeEventListener("nechat_escape", escape)
+		})
+	</script>
+}

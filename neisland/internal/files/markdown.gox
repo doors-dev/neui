@@ -1,0 +1,209 @@
+package files
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"path"
+	"strconv"
+	"strings"
+
+	"github.com/doors-dev/doors"
+	"github.com/doors-dev/gox"
+	xhtml "golang.org/x/net/html"
+	"neui.dev/api"
+	"neui.dev/internal/markdown"
+)
+
+func MarkdownBody(fs api.FS, data []byte) gox.Elem {
+	return gox.Elem(func(cur gox.Cursor) error {
+		if !bytes.Contains(data, []byte(markdown.FileScheme)) {
+			return cur.Bytes(data)
+		}
+		z := xhtml.NewTokenizer(bytes.NewReader(data))
+		var pend []byte
+		flush := func() error {
+			if len(pend) == 0 {
+				return nil
+			}
+			err := cur.Bytes(pend)
+			pend = nil
+			return err
+		}
+		for {
+			tt := z.Next()
+			if tt == xhtml.ErrorToken {
+				if err := z.Err(); err != io.EOF {
+					return err
+				}
+				return flush()
+			}
+			if tt != xhtml.StartTagToken && tt != xhtml.SelfClosingTagToken {
+				pend = append(pend, z.Raw()...)
+				continue
+			}
+			raw := append([]byte(nil), z.Raw()...)
+			name, hasAttr := z.TagName()
+			tag := string(name)
+			attrs := map[string]string{}
+			for hasAttr {
+				k, v, more := z.TagAttr()
+				attrs[string(k)] = string(v)
+				hasAttr = more
+			}
+			if file, ok := markdown.FilePath(attrs["href"]); ok && tag == "a" {
+				var text strings.Builder
+			link:
+				for {
+					switch z.Next() {
+					case xhtml.ErrorToken:
+						break link
+					case xhtml.TextToken:
+						text.Write(z.Text())
+					case xhtml.EndTagToken:
+						if t, _ := z.TagName(); string(t) == "a" {
+							break link
+						}
+					}
+				}
+				if err := flush(); err != nil {
+					return err
+				}
+				if err := cur.Comp(markdownFile{fs: fs, name: file, label: markdown.FileLabel(text.String(), attrs["href"], file)}); err != nil {
+					return err
+				}
+				continue
+			}
+			if file, ok := markdown.FilePath(attrs["src"]); ok && tag == "img" {
+				if err := flush(); err != nil {
+					return err
+				}
+				if err := cur.Comp(markdownImage{fs: fs, name: file, alt: attrs["alt"], title: attrs["title"]}); err != nil {
+					return err
+				}
+				continue
+			}
+			pend = append(pend, raw...)
+		}
+	})
+}
+
+type markdownFile struct {
+	fs api.FS
+	name string
+	label string
+}
+
+elem (m markdownFile) Main() {
+	~~
+	entry, err := markdownStat(ctx, m.fs, m.name)
+	~~
+	~(if err != nil {
+		<span class="neisland-file neisland-file-gone not-prose" title=(m.name)>
+			<span class="neisland-file-name">~(m.label)</span>
+			~(" ")
+			<span class="neisland-file-meta">
+				~({
+					if errors.Is(err, api.ErrNotFound) {
+						return "file is gone"
+					}
+					return "file unavailable"
+				})
+			</span>
+		</span>
+	} else {
+		<a class="neisland-file not-prose" href=(MarkdownServe(m.fs, m.name, true)) download=(path.Base(m.name)) title=(m.name)>
+			<svg class="neisland-file-icon" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+				<path d="M6 1.5v6M3.25 5 6 7.75 8.75 5M2 10.5h8"></path>
+			</svg>
+			<span class="neisland-file-name">~(m.label)</span>
+			~(" ")
+			<span class="neisland-file-meta">~(Size(entry.Size))</span>
+		</a>
+	})
+}
+
+type markdownImage struct {
+	fs api.FS
+	name string
+	alt string
+	title string
+}
+
+elem (m markdownImage) Main() {
+	~~
+	_, err := markdownStat(ctx, m.fs, m.name)
+	~~
+	~(if err != nil {
+		~(markdownFile{fs: m.fs, name: m.name, label: markdown.FileLabel(m.alt, "", m.name)})
+	} else {
+		<img
+			src=(MarkdownServe(m.fs, m.name, false))
+			alt=(m.alt)
+			title=({
+				if m.title == "" {
+					return nil
+				}
+				return m.title
+			})>
+	})
+}
+
+func markdownStat(ctx context.Context, fs api.FS, name string) (api.FSEntry, error) {
+	if fs == nil {
+		return api.FSEntry{}, errors.New("no workspace")
+	}
+	entry, err := fs.Stat(ctx, name)
+	if err != nil {
+		if !errors.Is(err, api.ErrNotFound) && !errors.Is(err, api.ErrReserved) && !errors.Is(err, api.ErrInvalidName) {
+			doors.Logger(ctx).Error("ui: markdown file", "name", name, "err", err)
+		}
+		return entry, err
+	}
+	if entry.Dir {
+		return entry, errors.New("a directory")
+	}
+	return entry, nil
+}
+
+func MarkdownServe(fs api.FS, name string, download bool) doors.Resource {
+	return doors.ResourceHandler(func(w http.ResponseWriter, r *http.Request) {
+		e, err := fs.Stat(r.Context(), name)
+		if err != nil || e.Dir {
+			http.NotFound(w, r)
+			return
+		}
+		rc, err := fs.ReadAll(r.Context(), name)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		defer rc.Close()
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Content-Security-Policy", "sandbox")
+		if e.MIME != "" {
+			w.Header().Set("Content-Type", e.MIME)
+		}
+		if e.Size > 0 {
+			w.Header().Set("Content-Length", strconv.FormatInt(e.Size, 10))
+		}
+		if download {
+			w.Header().Set("Content-Disposition", "attachment; filename=" + strconv.Quote(path.Base(name)))
+		}
+		io.Copy(w, rc)
+	})
+}
+
+func Size(size int64) string {
+	switch {
+	case size < 1000:
+		return fmt.Sprintf("%d B", size)
+	case size < 1000 * 1000:
+		return fmt.Sprintf("%d KB", (size + 500) / 1000)
+	default:
+		return fmt.Sprintf("%.1f MB", float64(size) / 1e6)
+	}
+}

@@ -49,29 +49,29 @@ func (a *IslandApp) containerNote(kind string) string {
 // items are.
 func (l List) ExpectItemName(i int, want string) {
 	l.a.t.Helper()
-	l.Item(i).Find(".kisland-form-item-body").WaitAttr("aria-label", want)
+	l.Item(i).Find(".neisland-form-item-body").WaitAttr("aria-label", want)
 }
 
 // ExpectRemoveName waits until the remove button of item i is named want.
 func (l List) ExpectRemoveName(i int, want string) {
 	l.a.t.Helper()
-	l.Item(i).Find(":scope > button.kisland-form-item-remove").WaitAttr("aria-label", want)
+	l.Item(i).Find(":scope > button.neisland-form-item-remove").WaitAttr("aria-label", want)
 }
 
 // ExpectHelp waits until the help line under the list reads text; "" expects
 // none.
 func (l List) ExpectHelp(text string) {
 	l.a.t.Helper()
-	foot := l.Find(":scope > .kisland-form-items-foot")
+	foot := l.Find(":scope > .neisland-form-items-foot")
 	if text == "" {
-		foot.WaitGone(".kisland-form-help")
+		foot.WaitGone(".neisland-form-help")
 		return
 	}
-	foot.Find(".kisland-form-help").WaitText(text)
+	foot.Find(".neisland-form-help").WaitText(text)
 }
 
 // ExpectCompletedText waits until the series' completed row reads text.
 func (s Series) ExpectCompletedText(text string) {
 	s.a.t.Helper()
-	s.Find(":scope > ol.kisland-form-steps > li.kisland-form-step[data-complete]").WaitText(text)
+	s.Find(":scope > ol.neisland-form-steps > li.neisland-form-step[data-complete]").WaitText(text)
 }

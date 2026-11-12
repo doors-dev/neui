@@ -1,0 +1,244 @@
+package form
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"math"
+	"strconv"
+	"time"
+	
+	"github.com/doors-dev/doors"
+	"github.com/doors-dev/gox"
+)
+
+func newNumberWidget(ctx context.Context, group group, params numberParams) (*numberWidget, error) {
+	field, err := group.newField(params.Name)
+	if err != nil {
+		return nil, err
+	}
+	return &numberWidget{
+		id: doors.IDRand(),
+		field: field,
+		params: params,
+	}, nil
+}
+
+type numberWidget struct {
+	id string
+	field groupField
+	params numberParams
+	value string
+	invalid doors.Setter
+	label doors.Setter
+	output doors.Door
+}
+
+func (f *numberWidget) name() string {
+	return f.params.Name
+}
+
+func (f *numberWidget) init(ctx context.Context, value any) error {
+	number := f.params.Value
+	if value != nil {
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("field %q: default value is %T, want a number", f.params.Name, value)
+		}
+		number = &v
+	}
+	if number == nil && f.params.Type == "range" {
+		lo, hi := 0.0, 100.0
+		if f.params.Min != nil {
+			lo = *f.params.Min
+		}
+		if f.params.Max != nil {
+			hi = *f.params.Max
+		}
+		step := 1.0
+		if f.params.Step != nil {
+			step = *f.params.Step
+		}
+		v := lo
+		if hi > lo {
+			v = lo + (hi - lo) / 2
+			v = lo + math.Round((v - lo) / step) * step
+			for v > hi {
+				v -= step
+			}
+		}
+		number = &v
+	}
+	f.value = ""
+	if number != nil {
+		f.value = strconv.FormatFloat(*number, 'f', -1, 64)
+	}
+	f.setLocked(ctx, number, f.validate(ctx, number))
+	return nil
+}
+
+func (f *numberWidget) destroy(ctx context.Context) {
+	f.field.destroy(ctx)
+}
+
+func (f *numberWidget) update(ctx context.Context, str string) {
+	number := (*float64)(nil)
+	err := error(nil)
+	if str != "" {
+		v, parseErr := strconv.ParseFloat(str, 64)
+		if parseErr != nil || math.IsInf(v, 0) || math.IsNaN(v) {
+			err = errors.New("enter a number")
+		} else {
+			number = &v
+		}
+	}
+	if err == nil {
+		err = f.validate(ctx, number)
+	}
+	f.field.mutex().Lock()
+	defer f.field.mutex().Unlock()
+	f.setLocked(ctx, number, err)
+	doors.Call(ctx, f.invalid.Set("aria-invalid", aria(shownErr(err))))
+	doors.Call(ctx, f.invalid.Set("data-required-empty", errors.Is(err, errRequired)))
+	if f.params.Type == "range" {
+		f.output.Inner(ctx, str)
+	}
+}
+
+func (f *numberWidget) setLocked(ctx context.Context, number *float64, err error) {
+	if number == nil {
+		f.field.set(ctx, nil, err)
+		return
+	}
+	f.field.set(ctx, *number, err)
+}
+
+elem (f *numberWidget) Main() {
+	~~
+	label := any(nil)
+	if f.field.item != nil {
+		label, _ = f.field.item.ReadAndSub(ctx, func(ctx context.Context, name string) bool {
+			doors.Call(ctx, f.label.Set("aria-label", name))
+			return false
+		})
+	}
+	min, max, step := any(nil), any(nil), any(nil)
+	if f.params.Min != nil {
+		min = strconv.FormatFloat(*f.params.Min, 'f', -1, 64)
+	}
+	if f.params.Max != nil {
+		max = strconv.FormatFloat(*f.params.Max, 'f', -1, 64)
+	}
+	if f.params.Step != nil {
+		step = strconv.FormatFloat(*f.params.Step, 'f', -1, 64)
+	} else if f.params.Type == "number" {
+		step = "any"
+	}
+	~~
+	<div class="neisland-form-field">
+		~(if label == nil {
+			<label class="neisland-form-label" for=(f.id)>
+				~(f.params.Label)
+				~(f.field.error.RouteBeam(
+					doors.RouteBeamMatch(func(err error) bool {
+						return f.params.Required && err != nil
+					}, doors.RouteComp[error](<span class="neisland-form-required" aria-hidden="true">*</span>)),
+				))
+			</label>
+		})
+		~(if f.params.Type == "range" {
+			<div class="neisland-form-slider">
+				<input
+					(&f.invalid)
+					(&f.label)
+					(doors.AInput{
+						Scope: f.field.scope().And(&doors.ScopeDebounce{Duration: 250 * time.Millisecond, Limit: time.Second}),
+						Batch: true,
+						On: func(ctx context.Context, r doors.RequestInput) bool {
+							f.update(ctx, r.Event().Value)
+							return false
+						},
+					})
+					class="neisland-form-range"
+					id=(f.id)
+					type="range"
+					name=(f.params.Name)
+					value=(f.value)
+					min=(min)
+					max=(max)
+					step=(step)
+					aria-required=(aria(f.params.Required))
+					aria-label=(label)
+					aria-invalid=(aria(shownErr(f.field.error.Get())))
+					data-required-empty=(errors.Is(f.field.error.Get(), errRequired))
+					aria-describedby=(f.id + "-e")/>
+				~>(&f.output) <output class="neisland-form-output" for=(f.id)>~(f.value)</output>
+			</div>
+		} else {
+			<input
+				(&f.invalid)
+				(&f.label)
+				(doors.AInput{
+					Scope: f.field.scope().And(&doors.ScopeDebounce{Duration: 250 * time.Millisecond, Limit: time.Second}),
+					Batch: true,
+					On: func(ctx context.Context, r doors.RequestInput) bool {
+						f.update(ctx, r.Event().Value)
+						return false
+					},
+				})
+				class="neisland-form-input"
+				id=(f.id)
+				type="number"
+				name=(f.params.Name)
+				value=(f.value)
+				min=(min)
+				max=(max)
+				step=(step)
+				aria-required=(aria(f.params.Required))
+				aria-label=(label)
+				aria-invalid=(aria(shownErr(f.field.error.Get())))
+				data-required-empty=(errors.Is(f.field.error.Get(), errRequired))
+				aria-describedby=(f.id + "-e")/>
+		})
+		~(f.field.error.RouteBeam(
+			doors.RouteBeamMatch(shownErr, doors.RouteBind(func(err error) gox.Elem {
+				return <p class="neisland-form-error" id=(f.id + "-e")>~(err.Error())</p>
+			})),
+		))
+	</div>
+}
+
+func (f *numberWidget) validate(ctx context.Context, number *float64) error {
+	if number == nil {
+		if f.params.Required {
+			return errRequired
+		}
+		return nil
+	}
+	if f.params.Min != nil && *number < *f.params.Min {
+		return fmt.Errorf("enter %s or more", strconv.FormatFloat(*f.params.Min, 'f', -1, 64))
+	}
+	if f.params.Max != nil && *number > *f.params.Max {
+		return fmt.Errorf("enter %s or less", strconv.FormatFloat(*f.params.Max, 'f', -1, 64))
+	}
+	if f.params.Step != nil && *f.params.Step > 0 {
+		base := 0.0
+		if f.params.Min != nil {
+			base = *f.params.Min
+		}
+		steps := (*number - base) / *f.params.Step
+		if math.Abs(steps - math.Round(steps)) > 1e-9 {
+			return fmt.Errorf("use steps of %s", strconv.FormatFloat(*f.params.Step, 'f', -1, 64))
+		}
+	}
+	if f.params.Validate != "" {
+		msg, err := f.params.Validate.Call(ctx, *number)
+		if err != nil {
+			return errSystem
+		}
+		if msg != "" {
+			return errors.New(msg)
+		}
+	}
+	return nil
+}

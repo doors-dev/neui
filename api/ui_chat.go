@@ -58,7 +58,7 @@ type InstanceChat struct {
 
 // Chat is one rendered chat view, built by a ChatFactory for one thread link.
 // The instance renders it as a component and then feeds it every change to the
-// thread through Update. Implement it only to replace kchat with a chat UI of
+// thread through Update. Implement it only to replace nechat with a chat UI of
 // your own.
 type Chat interface {
 	// Update applies one event to the view. Events arrive one at a time, in
@@ -68,7 +68,7 @@ type Chat interface {
 	gox.Comp
 }
 
-// ChatFactory builds the views Instance.Render shows. kchat.Kchat is the
+// ChatFactory builds the views Instance.Render shows. nechat.Chat is the
 // ready-made implementation.
 type ChatFactory interface {
 	// Chat builds the view for the thread the instance has linked. It is
@@ -181,7 +181,7 @@ type Instance interface {
 	// Render returns the element that shows this instance's chat. It renders
 	// factory.Placeholder while there is no thread to show and factory.Chat
 	// once there is, and swaps the view in place whenever the instance
-	// switches threads. Render it once per page; kchat.Kchat does this for
+	// switches threads. Render it once per page; nechat.Chat does this for
 	// you.
 	Render(factory ChatFactory) gox.Elem
 }

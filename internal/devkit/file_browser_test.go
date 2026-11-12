@@ -53,7 +53,7 @@ func expectFileFocus(t *testing.T, a *stack.IslandApp, want string) {
 func TestFileUploadsOnPickWithDownloadLink(t *testing.T) {
 	a, f, dir, src := fileApp(t, api.FilesConfig{}, `{type: "file", label: "Doc", name: "doc"}`)
 	doc := f.Field("Doc")
-	list := doc.Find("ul.kisland-form-search-chosen")
+	list := doc.Find("ul.neisland-form-search-chosen")
 	list.WaitAttr("aria-live", "polite")
 	list.WaitAttr("aria-relevant", "additions")
 	id := *doc.Find("input").Element().MustAttribute("id")
@@ -63,12 +63,12 @@ func TestFileUploadsOnPickWithDownloadLink(t *testing.T) {
 	if err != nil || string(saved) != "aaa" {
 		t.Fatalf("before the submit the workspace has %q (%v) at board.island/%s/a.txt, want aaa", saved, err, id)
 	}
-	link := doc.Find(".kisland-form-file-link")
+	link := doc.Find(".neisland-form-file-link")
 	link.WaitAttr("download", "a.txt")
 	link.WaitAttr("title", "a.txt")
-	doc.Find(".kisland-form-file-size").WaitText("3 B")
-	doc.Find("li.kisland-form-file-chip > .kisland-form-remove").WaitAttr("aria-label", "Remove a.txt")
-	if got := a.Page.MustEval(`() => fetch(document.querySelector(".kisland-form-file-link").href).then((r) => r.text())`).String(); got != "aaa" {
+	doc.Find(".neisland-form-file-size").WaitText("3 B")
+	doc.Find("li.neisland-form-file-chip > .neisland-form-remove").WaitAttr("aria-label", "Remove a.txt")
+	if got := a.Page.MustEval(`() => fetch(document.querySelector(".neisland-form-file-link").href).then((r) => r.text())`).String(); got != "aaa" {
 		t.Fatalf("the link downloads %q, want aaa", got)
 	}
 	f.Submit("Submit")
@@ -83,7 +83,7 @@ func TestFileProgressBlocksSubmit(t *testing.T) {
 	doc.PickFiles(filepath.Join(src, "big.txt"))
 	doc.ExpectFileChips("big.txt uploading")
 	doc.Find(`[role="progressbar"]`).WaitAttr("aria-label", "Uploading big.txt")
-	doc.Find("li.kisland-form-file-chip > .kisland-form-remove").WaitAttr("aria-label", "Cancel upload of big.txt")
+	doc.Find("li.neisland-form-file-chip > .neisland-form-remove").WaitAttr("aria-label", "Cancel upload of big.txt")
 	f.ExpectSubmitDisabled(true)
 	f.ExpectSubmitMessage("form is not completed or contains errors")
 	doc.WaitGone("[aria-invalid]")
@@ -91,14 +91,14 @@ func TestFileProgressBlocksSubmit(t *testing.T) {
 		got := a.Page.MustEval(`() => {
 			const bar = document.querySelector('[role="progressbar"]')
 			const chip = bar && bar.closest("li")
-			return bar ? bar.getAttribute("aria-valuenow") + " " + bar.textContent.trim() + " " + chip.style.getPropertyValue("--kisland-file-p") + " " + bar.getAttribute("aria-valuetext") : "none"
+			return bar ? bar.getAttribute("aria-valuenow") + " " + bar.textContent.trim() + " " + chip.style.getPropertyValue("--neisland-file-p") + " " + bar.getAttribute("aria-valuetext") : "none"
 		}`).String()
 		parts := strings.Fields(got)
 		n, _ := strconv.Atoi(parts[0])
 		return n > 0 && n < 100 && parts[1] == parts[0]+"%" && parts[2] == parts[0]+"%" && strings.Contains(got, "KB of 307 KB"), got
 	}, "progress shown")
 	a.Page.MustEval(`() => {
-		const b = document.querySelector(".kisland-form button[type=submit]")
+		const b = document.querySelector(".neisland-form button[type=submit]")
 		b.disabled = false
 		b.click()
 	}`)
@@ -125,7 +125,7 @@ func TestFileCancelDeletesPartial(t *testing.T) {
 		return err == nil && info.Size() > 0, "no partial file yet"
 	}, "the upload writes the partial file")
 	doc.CancelFile("big.txt")
-	doc.WaitGone("li.kisland-form-file-chip")
+	doc.WaitGone("li.neisland-form-file-chip")
 	stack.Eventually(t, stack.WaitTimeout, func() (bool, string) {
 		_, err := os.Stat(partial)
 		return os.IsNotExist(err), "still there"
@@ -164,7 +164,7 @@ func TestFileInterruptedThenRetry(t *testing.T) {
 	doc.ExpectInvalid(false)
 	doc.ExpectRequiredMark(true)
 	f.ExpectSubmitMessage("form is not completed or contains errors")
-	doc.Find("li.kisland-form-file-chip > .kisland-form-remove").WaitAttr("aria-label", "Dismiss a.txt")
+	doc.Find("li.neisland-form-file-chip > .neisland-form-remove").WaitAttr("aria-label", "Dismiss a.txt")
 	stop()
 	doc.RetryFile("a.txt")
 	doc.ExpectFiles("a.txt")
@@ -185,7 +185,7 @@ func TestFileRetryInListItem(t *testing.T) {
 	item.SetFiles(filepath.Join(src, "a.txt"))
 	item.ExpectFileFailed("a.txt", "upload interrupted")
 	stop()
-	item.Find("button.kisland-form-file-retry").WaitNoAttr("hidden")
+	item.Find("button.neisland-form-file-retry").WaitNoAttr("hidden")
 }
 
 func TestFileRefusedChipsAreNotInTheValue(t *testing.T) {
@@ -199,8 +199,8 @@ func TestFileRefusedChipsAreNotInTheValue(t *testing.T) {
 	docs.DropFiles("a.txt", "aaa", "b.txt", "bbbb", "c.txt", "c")
 	docs.ExpectFileChips("big.txt failed: larger than 100 KB", "pic.png failed: not .txt", "a.txt", "b.txt", "c.txt failed: at most 2 files")
 	docs.ExpectValue("a.txt, b.txt")
-	docs.WaitGone(".kisland-form-file-zone")
-	docs.Find(".kisland-form-search-max").WaitText("Maximum of 2 chosen.")
+	docs.WaitGone(".neisland-form-file-zone")
+	docs.Find(".neisland-form-search-max").WaitText("Maximum of 2 chosen.")
 	f.Submit("Submit")
 	var got struct{ Data struct{ Docs []string } }
 	raw := a.Submitted()
@@ -221,17 +221,17 @@ func TestFileMaxHidesBox(t *testing.T) {
 	a, f, _, src := fileApp(t, api.FilesConfig{}, `{type: "file", label: "Docs", name: "docs", max: 2}`)
 	docs := f.Field("Docs")
 	id := *docs.Find("input").Element().MustAttribute("id")
-	list := docs.Find("ul.kisland-form-search-chosen")
+	list := docs.Find("ul.neisland-form-search-chosen")
 	list.WaitNoAttr("aria-describedby")
 	docs.SetFiles(filepath.Join(src, "a.txt"), filepath.Join(src, "b.txt"))
-	docs.WaitGone(".kisland-form-file-zone")
+	docs.WaitGone(".neisland-form-file-zone")
 	docs.WaitGone("input")
-	max := docs.Find(".kisland-form-search-max")
+	max := docs.Find(".neisland-form-search-max")
 	max.WaitText("Maximum of 2 chosen.")
 	list.WaitAttr("aria-describedby", *max.Element().MustAttribute("id"))
 	docs.RemoveFile("a.txt")
-	docs.WaitCount(".kisland-form-file-zone", 1)
-	docs.WaitGone(".kisland-form-search-max")
+	docs.WaitCount(".neisland-form-file-zone", 1)
+	docs.WaitGone(".neisland-form-search-max")
 	list.WaitNoAttr("aria-describedby")
 	expectFileFocus(t, a, id)
 }
@@ -248,25 +248,25 @@ func fileSingleChipTakesBoxPlace(t *testing.T, spec string) {
 	a, f, _, src := fileApp(t, api.FilesConfig{}, spec)
 	doc := f.Field("Doc")
 	doc.Find("input").WaitNoAttr("multiple")
-	doc.Find(".kisland-form-file-summary").WaitText("Drop a file or click to choose")
+	doc.Find(".neisland-form-file-summary").WaitText("Drop a file or click to choose")
 	id := *doc.Find("input").Element().MustAttribute("id")
 	tops := func(sel string) string {
 		return a.Page.MustEval(`(sel) => {
 			const el = document.querySelector(sel)
-			const actions = document.querySelector(".kisland-form-actions")
+			const actions = document.querySelector(".neisland-form-actions")
 			return el ? Math.round(el.getBoundingClientRect().top) + " " + Math.round(actions.getBoundingClientRect().top) : "none"
 		}`, sel).String()
 	}
-	doc.Find(".kisland-form-file-zone").Element()
-	zone := tops(".kisland-form-file-zone")
+	doc.Find(".neisland-form-file-zone").Element()
+	zone := tops(".neisland-form-file-zone")
 	doc.SetFiles(filepath.Join(src, "a.txt"))
-	doc.WaitGone(".kisland-form-file-zone")
-	if chip := tops("li.kisland-form-file-chip"); chip != zone {
+	doc.WaitGone(".neisland-form-file-zone")
+	if chip := tops("li.neisland-form-file-chip"); chip != zone {
 		t.Fatalf("the chip and the actions sit at %s, want the box's %s", chip, zone)
 	}
-	doc.WaitGone(".kisland-form-search-max")
+	doc.WaitGone(".neisland-form-search-max")
 	doc.RemoveFile("a.txt")
-	doc.WaitCount(".kisland-form-file-zone", 1)
+	doc.WaitCount(".neisland-form-file-zone", 1)
 	expectFileFocus(t, a, id)
 }
 
@@ -279,7 +279,7 @@ func TestFileMinTwoNeedsTwoDone(t *testing.T) {
 	docs.ExpectRequiredEmpty(true)
 	docs.ExpectNoError()
 	f.ExpectSubmitDisabled(true)
-	zoneBorder := `() => getComputedStyle(document.querySelector(".kisland-form-file-zone")).borderColor`
+	zoneBorder := `() => getComputedStyle(document.querySelector(".neisland-form-file-zone")).borderColor`
 	empty := a.Page.MustEval(zoneBorder).String()
 	docs.SetFiles(filepath.Join(src, "a.txt"))
 	docs.ExpectError("choose at least 2")
@@ -344,13 +344,13 @@ func TestFileDefaultsAreAnArray(t *testing.T) {
 	f := a.Form()
 	chart := f.Field("Chart")
 	chart.ExpectFiles("q3.csv")
-	chart.WaitGone(".kisland-form-file-zone")
-	chart.WaitGone(".kisland-form-search-max")
+	chart.WaitGone(".neisland-form-file-zone")
+	chart.WaitGone(".neisland-form-search-max")
 	reports := f.Field("Reports")
 	reports.ExpectFiles("q3.csv", "notes.md")
-	reports.WaitGone(".kisland-form-file-zone")
-	reports.Find(".kisland-form-search-max").WaitText("Maximum of 2 chosen.")
-	reports.WaitGone(".kisland-form-error")
+	reports.WaitGone(".neisland-form-file-zone")
+	reports.Find(".neisland-form-search-max").WaitText("Maximum of 2 chosen.")
+	reports.WaitGone(".neisland-form-error")
 	f.List("Files").Item(0).Control().ExpectFiles("notes.md")
 	f.ExpectSubmitDisabled(false)
 	f.Submit("Submit")
@@ -373,8 +373,8 @@ func TestFileDefaultsRenderAsLinks(t *testing.T) {
 	f := a.Form()
 	reports := f.Field("Reports")
 	reports.ExpectFiles("q3.csv", "notes.md")
-	reports.Find(".kisland-form-file-link").WaitAttr("download", "q3.csv")
-	if got := a.Page.MustEval(`() => fetch(document.querySelector(".kisland-form-file-link").href).then((r) => r.text())`).String(); got != "a,b\n1,2\n" {
+	reports.Find(".neisland-form-file-link").WaitAttr("download", "q3.csv")
+	if got := a.Page.MustEval(`() => fetch(document.querySelector(".neisland-form-file-link").href).then((r) => r.text())`).String(); got != "a,b\n1,2\n" {
 		t.Fatalf("the default's link downloads %q, want its content", got)
 	}
 	reports.RemoveFile("q3.csv")
@@ -421,13 +421,13 @@ func TestFileLongNameTruncates(t *testing.T) {
 	}
 	docs := f.Field("Docs")
 	docs.SetFiles(long)
-	docs.Find(".kisland-form-file-link").WaitAttr("title", filepath.Base(long))
+	docs.Find(".neisland-form-file-link").WaitAttr("title", filepath.Base(long))
 	got := a.Page.MustEval(`() => {
-		const chip = document.querySelector("li.kisland-form-file-chip")
-		const field = chip.closest(".kisland-form-field").getBoundingClientRect()
+		const chip = document.querySelector("li.neisland-form-file-chip")
+		const field = chip.closest(".neisland-form-field").getBoundingClientRect()
 		const rem = parseFloat(getComputedStyle(document.documentElement).fontSize)
 		const box = chip.getBoundingClientRect()
-		const link = chip.querySelector(".kisland-form-file-link")
+		const link = chip.querySelector(".neisland-form-file-link")
 		const inside = (el) => {
 			const r = el.getBoundingClientRect()
 			return r.width > 0 && r.left >= box.left - 0.5 && r.right <= box.right + 0.5
@@ -435,8 +435,8 @@ func TestFileLongNameTruncates(t *testing.T) {
 		return JSON.stringify({
 			narrow: box.width <= Math.min(16 * rem, field.width) + 0.5,
 			ellipsis: getComputedStyle(link).textOverflow === "ellipsis" && link.scrollWidth > link.clientWidth,
-			size: inside(chip.querySelector(".kisland-form-file-size")),
-			remove: inside(chip.querySelector(".kisland-form-remove")),
+			size: inside(chip.querySelector(".neisland-form-file-size")),
+			remove: inside(chip.querySelector(".neisland-form-remove")),
 			oneLine: box.height <= 2.25 * rem,
 		})
 	}`).String()
@@ -444,10 +444,10 @@ func TestFileLongNameTruncates(t *testing.T) {
 		t.Fatalf("the long name's chip measures %s, want it capped, the name cut with an ellipsis and size and × in view", got)
 	}
 	a.Page.MustSetViewport(240, 800, 1, false)
-	docs.Find(".kisland-form-file-link").Element()
+	docs.Find(".neisland-form-file-link").Element()
 	narrow := a.Page.MustEval(`() => {
-		const chip = document.querySelector("li.kisland-form-file-chip")
-		const field = chip.closest(".kisland-form-field").getBoundingClientRect()
+		const chip = document.querySelector("li.neisland-form-file-chip")
+		const field = chip.closest(".neisland-form-field").getBoundingClientRect()
 		return chip.getBoundingClientRect().right <= field.right + 0.5
 	}`).Bool()
 	if !narrow {

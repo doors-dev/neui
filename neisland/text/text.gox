@@ -1,0 +1,83 @@
+package text
+
+import (
+	"context"
+	
+	"github.com/doors-dev/doors"
+	"github.com/doors-dev/gox"
+	"neui.dev"
+	"neui.dev/api"
+	"neui.dev/internal/markdown"
+	"neui.dev/neisland/internal/files"
+)
+
+type patch struct {
+	_ struct{} `additionalProperties:"false"`
+	Text string `json:"text,omitempty" minLength:"1" maxLength:"4000" description:"new text, markdown as the text param; omit to keep the current one"`
+	Style string `json:"style,omitempty" enum:"plain,card,info,success,warning,danger" description:"new style; plain drops the box; omit to keep the current one"`
+}
+
+type params struct {
+	_ struct{} `additionalProperties:"false"`
+	Text string `json:"text" maxLength:"4000" required:"true" minLength:"1" description:"markdown: # ## ### headings, the only way to make text larger, **bold**, *italic*, ~~strike~~, code in backquotes, - and 1. lists, - [ ] task lists, > quotes, fenced code blocks, | tables |, [links](https://…); a line break is kept; [name](file:///path) to a file in the workspace, path relative to its root, shows a download of it, ![alt](file:///path) shows the image; raw HTML is dropped"`
+	Style string `json:"style,omitempty" enum:"plain,card,info,success,warning,danger" default:"plain" description:"plain for titles and short lines; card frames content such as a report or a file list; info, success, warning and danger are a card marked in that tone, for outcomes that must stand out; the tone is only a mark, so the text must still say the outcome in words"`
+}
+
+var toneLabels = map[string]string{"info": "Info:", "success": "Success:", "warning": "Warning:", "danger": "Error:"}
+
+// New builds a text widget for Library.View: markdown, framed in
+// a card when its style param is not plain, the card marked in a tone
+// for info, success, warning and danger.
+func New(ctx context.Context, p params) (api.Widget[patch], error) {
+	if p.Style == "" {
+		p.Style = "plain"
+	}
+	return widget{state: doors.NewSource(p)}, nil
+}
+
+type widget struct {
+	state doors.Source[params]
+}
+
+func (t widget) Update(ctx context.Context, patch patch) {
+	t.state.Mutate(ctx, func(p params) params {
+		if patch.Text != "" {
+			p.Text = patch.Text
+		}
+		if patch.Style != "" {
+			p.Style = patch.Style
+		}
+		return p
+	})
+}
+
+elem (t widget) Main() {
+	~(t.state.Bind(t.render))
+}
+
+elem (t widget) render(p params) {
+	<div
+		class=({
+			switch p.Style {
+			case "plain":
+				return "neisland-text neisland-prose"
+			case "card":
+				return "neisland-text neisland-prose neisland-text-card"
+			}
+			return "neisland-text neisland-prose neisland-text-card neisland-tone-" + p.Style
+		})
+		role=({
+			switch p.Style {
+			case "warning", "danger":
+				return "alert"
+			case "info", "success":
+				return "status"
+			}
+			return nil
+		})>
+		~(if label := toneLabels[p.Style]; label != "" {
+			<span class="neisland-tone-label">~(label)</span>
+		})
+		~(files.MarkdownBody(neui.IslandFS(ctx), markdown.Block(p.Text)))
+	</div>
+}

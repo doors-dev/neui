@@ -1,0 +1,90 @@
+package notify
+
+import (
+	"context"
+	"errors"
+	
+	"github.com/doors-dev/doors"
+	"github.com/doors-dev/gox"
+	"neui.dev/nechat/icons"
+)
+
+const event = "nechat_error"
+
+var OnError doors.Actions = doors.ActionEmit[any]{Name: event}
+
+type rootKey struct{}
+
+func Root(ctx context.Context) context.Context {
+	return context.WithValue(ctx, rootKey{}, doors.DetachedContext(ctx))
+}
+
+func Error(ctx context.Context, err error) {
+	root, ok := ctx.Value(rootKey{}).(context.Context)
+	k := kind(err)
+	if !ok || k == "" {
+		return
+	}
+	doors.Call(root, doors.ActionEmit[any]{Name: event, Arg: k})
+}
+
+func kind(err error) string {
+	if err == nil || errors.Is(err, context.Canceled) {
+		return ""
+	}
+	return "server"
+}
+
+elem Script() {
+	<script>
+		const root = document.currentScript.closest(".nechat-widget")
+		const show = (kind) => {
+			let key = ""
+			if (kind === "network") key = "network"
+			else if (kind === "server" || kind === "other" || kind === "bad_request")
+				key = "error"
+			if (!key) return
+			const box = root.querySelector(".nechat-toasts")
+			if (!box) return
+			const shown = box.querySelector(`.nechat-toast[data-key="${key}"]`)
+			if (shown) {
+				for (const el of [shown, ...shown.querySelectorAll(".nechat-file-fill")]) {
+					el.style.animation = "none"
+					void el.offsetWidth
+					el.style.animation = ""
+				}
+				return
+			}
+			const toast = box
+				.querySelector(`template[data-key="${key}"]`)
+				.content.firstElementChild.cloneNode(true)
+			toast.addEventListener("animationend", (e) => {
+				if (e.target === toast) toast.remove()
+			})
+			box.append(toast)
+		}
+		const listen = (e) => show(e.detail)
+		root.addEventListener("nechat_error", listen)
+		$sys.clean(() => root.removeEventListener("nechat_error", listen))
+		$on("nechat_error", (arg, err) => show(err ? err.kind : arg))
+	</script>
+}
+
+elem Toasts() {
+	<div class="nechat-toasts" role="status" aria-live="polite">
+		<template data-key="network">
+			<div class="nechat-toast" data-key="network">
+				<span class="nechat-toast-lead">~>(doors.Class("nechat-ic")) ~(icons.Prohibit())</span>
+				<span class="nechat-toast-text">Network error occurred</span>
+				<i class="nechat-file-fill" aria-hidden="true"></i>
+			</div>
+		</template>
+		<template data-key="error">
+			<div class="nechat-toast" data-key="error" role="alert">
+				<span class="nechat-toast-lead">~>(doors.Class("nechat-ic")) ~(icons.WarningFill())</span>
+				<span class="nechat-toast-text">Something went wrong</span>
+				<i class="nechat-file-fill" aria-hidden="true"></i>
+			</div>
+		</template>
+	</div>
+}

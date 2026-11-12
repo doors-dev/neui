@@ -1,0 +1,54 @@
+package layout
+
+import (
+	"strconv"
+	
+	"github.com/doors-dev/gox"
+)
+
+// Column stacks children top to bottom, for Library.Layout.
+func Column(p columnParams, children []gox.Comp) gox.Comp {
+	gap := p.Gap
+	if gap == "" {
+		gap = "md"
+	}
+	class := "neisland-column neisland-gap-" + gap
+	if p.Fill > 0 {
+		class += " neisland-fill-" + strconv.Itoa(p.Fill)
+	}
+	return <div class=(class)>~(children)</div>
+}
+
+// Row places children side by side and wraps them, for Library.Layout.
+func Row(p rowParams, children []gox.Comp) gox.Comp {
+	gap := p.Gap
+	if gap == "" {
+		gap = "md"
+	}
+	align := p.Align
+	if align == "" {
+		align = "start"
+	}
+	justify := p.Justify
+	if justify == "" {
+		justify = "start"
+	}
+	return <div class=("neisland-row neisland-gap-" + gap + " neisland-align-" + align + " neisland-justify-" + justify)>~(children)</div>
+}
+
+// Grid lays children out in equal-width cells, for Library.Layout.
+func Grid(p gridParams, children []gox.Comp) gox.Comp {
+	gap := p.Gap
+	if gap == "" {
+		gap = "md"
+	}
+	item := p.Item
+	if item == "" {
+		item = "md"
+	}
+	return <div class=("neisland-grid neisland-gap-" + gap + " neisland-item-" + item)>
+		~(for _, c := range children {
+			<div class="neisland-grid-cell">~(c)</div>
+		})
+	</div>
+}

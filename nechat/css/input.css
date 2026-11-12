@@ -1,0 +1,1661 @@
+@reference "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+@keyframes nechat-blink {
+	0%, 49% { opacity: 1 }
+	50%, 100% { opacity: 0 }
+}
+
+@keyframes nechat-breathe {
+	0%, 100% { opacity: 1 }
+	50% { opacity: .6 }
+}
+
+@keyframes nechat-beam {
+	0% { opacity: 0 }
+	12.5%, 100% { opacity: 1 }
+}
+
+@keyframes nechat-build {
+	0% { opacity: 0 }
+	12%, 80% { opacity: 1 }
+	100% { opacity: 0 }
+}
+
+@keyframes nechat-auto-fill {
+	0% { width: 0 }
+	100% { width: 100% }
+}
+
+@keyframes nechat-toast {
+	0% { opacity: 0; transform: translateY(-4px) }
+	3%, 94% { opacity: 1; transform: none }
+	100% { opacity: 0; transform: translateY(-4px) }
+}
+
+@keyframes nechat-toast-hold {
+	0% { visibility: visible }
+	100% { visibility: hidden }
+}
+
+@layer nechat {
+	.nechat-widget {
+		--app-bg: var(--nechat-dark-app-bg, --theme(--color-zinc-950 inline));
+		--app-border: var(--nechat-dark-app-border, --theme(--color-zinc-700 inline));
+		--app-ink: var(--nechat-dark-app-ink, --theme(--color-zinc-100 inline));
+		--app-ink-quiet: var(--nechat-dark-app-ink-quiet, --theme(--color-zinc-400 inline));
+		--panel-bg: var(--nechat-dark-panel-bg, --theme(--color-zinc-800 inline));
+		--panel-border: var(--app-border);
+		--panel-border-focus: var(--nechat-dark-panel-border-focus, --theme(--color-zinc-500 inline));
+		--button-border: var(--nechat-dark-button-border, --theme(--color-zinc-600 inline));
+		--button-ink: var(--nechat-dark-button-ink, --theme(--color-zinc-300 inline));
+		--button-bg-hover: var(--secondary-bg-hover);
+		--button-ink-hover: var(--app-ink);
+		--button-bg-active: var(--panel-border-focus);
+		--button-border-off: var(--app-border);
+		--button-ink-off: var(--nechat-dark-button-ink-off, --theme(--color-zinc-500 inline));
+		--secondary-bg: var(--nechat-dark-secondary-bg, --theme(--color-zinc-900 inline));
+		--secondary-ink: var(--app-ink-quiet);
+		--secondary-bg-hover: var(--app-border);
+		--secondary-ink-hover: var(--app-ink);
+		--secondary-bg-active: var(--button-border);
+		--secondary-bg-selected: var(--secondary-bg-hover);
+		--secondary-ink-off: var(--button-ink-off);
+		--danger-ink: var(--nechat-dark-danger-ink, --theme(--color-red-500 inline));
+		--danger-bg-active: var(--nechat-dark-danger-bg-active, --theme(--color-red-600 inline));
+		--danger-ink-on-fill: var(--nechat-dark-danger-ink-on-fill, --theme(--color-white inline));
+		--figure-value: var(--app-ink);
+		--figure-track: color-mix(in srgb, transparent, currentColor 35%);
+		accent-color: var(--app-ink-quiet);
+
+		@apply scheme-dark
+	}
+	@media (prefers-color-scheme: light) {
+		.nechat-widget:not([data-theme="dark"], [data-theme="dark"] *) {
+			--app-bg: var(--nechat-light-app-bg, --theme(--color-zinc-50 inline));
+			--app-border: var(--nechat-light-app-border, --theme(--color-zinc-300 inline));
+			--app-ink: var(--nechat-light-app-ink, --theme(--color-zinc-900 inline));
+			--app-ink-quiet: var(--nechat-light-app-ink-quiet, --theme(--color-zinc-600 inline));
+			--panel-bg: var(--nechat-light-panel-bg, --theme(--color-zinc-100 inline));
+			--panel-border: var(--app-border);
+			--panel-border-focus: var(--nechat-light-panel-border-focus, --theme(--color-zinc-500 inline));
+			--button-border: var(--nechat-light-button-border, --theme(--color-zinc-400 inline));
+			--button-ink: var(--nechat-light-button-ink, --theme(--color-zinc-700 inline));
+			--button-bg-hover: var(--secondary-bg-hover);
+			--button-ink-hover: var(--app-ink);
+			--button-bg-active: var(--panel-border-focus);
+			--button-border-off: var(--app-border);
+			--button-ink-off: var(--nechat-light-button-ink-off, --theme(--color-zinc-500 inline));
+			--secondary-bg: var(--nechat-light-secondary-bg, --theme(--color-zinc-200 inline));
+			--secondary-ink: var(--app-ink-quiet);
+			--secondary-bg-hover: var(--app-border);
+			--secondary-ink-hover: var(--app-ink);
+			--secondary-bg-active: var(--button-border);
+			--secondary-bg-selected: var(--secondary-bg-hover);
+			--secondary-ink-off: var(--button-ink-off);
+			--danger-ink: var(--nechat-light-danger-ink, --theme(--color-red-600 inline));
+			--danger-bg-active: var(--nechat-light-danger-bg-active, --theme(--color-red-700 inline));
+			--danger-ink-on-fill: var(--nechat-light-danger-ink-on-fill, --theme(--color-white inline));
+			--figure-value: var(--app-ink);
+			--figure-track: color-mix(in srgb, transparent, currentColor 35%);
+			accent-color: var(--app-ink-quiet);
+
+			@apply scheme-light
+		}
+	}
+	[data-theme="light"] .nechat-widget:not([data-theme="dark"]),
+	.nechat-widget[data-theme="light"] {
+		--app-bg: var(--nechat-light-app-bg, --theme(--color-zinc-50 inline));
+		--app-border: var(--nechat-light-app-border, --theme(--color-zinc-300 inline));
+		--app-ink: var(--nechat-light-app-ink, --theme(--color-zinc-900 inline));
+		--app-ink-quiet: var(--nechat-light-app-ink-quiet, --theme(--color-zinc-600 inline));
+		--panel-bg: var(--nechat-light-panel-bg, --theme(--color-zinc-100 inline));
+		--panel-border: var(--app-border);
+		--panel-border-focus: var(--nechat-light-panel-border-focus, --theme(--color-zinc-500 inline));
+		--button-border: var(--nechat-light-button-border, --theme(--color-zinc-400 inline));
+		--button-ink: var(--nechat-light-button-ink, --theme(--color-zinc-700 inline));
+		--button-bg-hover: var(--secondary-bg-hover);
+		--button-ink-hover: var(--app-ink);
+		--button-bg-active: var(--panel-border-focus);
+		--button-border-off: var(--app-border);
+		--button-ink-off: var(--nechat-light-button-ink-off, --theme(--color-zinc-500 inline));
+		--secondary-bg: var(--nechat-light-secondary-bg, --theme(--color-zinc-200 inline));
+		--secondary-ink: var(--app-ink-quiet);
+		--secondary-bg-hover: var(--app-border);
+		--secondary-ink-hover: var(--app-ink);
+		--secondary-bg-active: var(--button-border);
+		--secondary-bg-selected: var(--secondary-bg-hover);
+		--secondary-ink-off: var(--button-ink-off);
+		--danger-ink: var(--nechat-light-danger-ink, --theme(--color-red-600 inline));
+		--danger-bg-active: var(--nechat-light-danger-bg-active, --theme(--color-red-700 inline));
+		--danger-ink-on-fill: var(--nechat-light-danger-ink-on-fill, --theme(--color-white inline));
+		--figure-value: var(--app-ink);
+		--figure-track: color-mix(in srgb, transparent, currentColor 35%);
+		accent-color: var(--app-ink-quiet);
+
+		@apply scheme-light
+	}
+
+	.nechat-widget {
+		--_nechat-radius-sm: var(--nechat-radius-sm, 0.25rem);
+		--_nechat-radius-control: var(--nechat-radius-control, 0.375rem);
+		--_nechat-radius-surface: var(--nechat-radius-surface, 0.5rem);
+		@apply
+		relative
+		[container-type:inline-size]
+		flex
+		flex-col
+		h-full
+		bg-(--app-bg)
+		text-(--app-ink)
+		overflow-hidden
+		min-w-0
+	}
+	.nechat-widget_frame { @apply border border-(--panel-border) rounded-(--_nechat-radius-surface) }
+
+	.nechat-widget_split {
+		@apply
+		flex-row
+	}
+
+	.nechat-widget.nechat-widget_aside-right {
+		@apply
+		flex-row-reverse
+	}
+
+	.nechat-pane {
+		@apply
+		relative
+		flex
+		flex-col
+		flex-1
+		min-w-0
+	}
+
+	.nechat-pane .nechat-log {
+		@apply
+		flex-1
+		min-h-0
+	}
+
+	.nechat-closed-area {
+		@apply
+		flex
+		flex-1
+		min-h-0
+		items-center
+		justify-center
+		pt-4
+		px-3
+		pb-12
+	}
+
+	.nechat-closed-card {
+		@apply
+		flex
+		flex-col
+		items-center
+		gap-1.5
+		p-4
+		text-center
+	}
+
+	.nechat-closed-card > .nechat-closed-ic {
+		@apply
+		flex-none
+		w-5
+		h-5
+		text-(--danger-ink)
+	}
+
+	.nechat-closed-title {
+		@apply
+		mt-1
+		mb-0
+		mx-0
+		text-[0.9375rem]
+		font-semibold
+		text-(--app-ink)
+		text-balance
+	}
+
+	.nechat-closed-text {
+		@apply
+		m-0
+		min-w-0
+		max-w-[30ch]
+		text-sm
+		leading-normal
+		text-(--app-ink-quiet)
+		text-balance
+	}
+
+	.nechat-closed-acts {
+		@apply
+		flex
+		flex-none
+		items-center
+		gap-2
+		mt-2
+	}
+
+	.nechat-toasts {
+		@apply
+		absolute
+		top-11
+		inset-x-3
+		z-15
+		flex
+		flex-col
+		items-center
+		gap-1.5
+		pointer-events-none
+	}
+
+	@container (width < 36rem) {
+		.nechat-toasts {
+			@apply
+			items-stretch
+		}
+	}
+
+	.nechat-toast {
+		@apply
+		relative
+		isolate
+		overflow-hidden
+		pointer-events-auto
+		flex
+		items-center
+		gap-2
+		box-border
+		max-w-full
+		min-h-7
+		py-1
+		ps-2.5
+		pe-3
+		border
+		border-(--danger-ink)
+		rounded-(--_nechat-radius-control)
+		bg-(--app-bg)
+		text-(--app-ink)
+		text-sm
+		leading-tight
+		shadow-[0_4px_14px_color-mix(in_srgb,var(--app-ink)_10%,transparent)]
+		animate-[nechat-toast_4.25s_ease-out_forwards]
+	}
+
+	.nechat-toast-lead {
+		@apply
+		flex
+		flex-none
+		text-(--danger-ink)
+	}
+
+	.nechat-toast-text {
+		@apply
+		flex-1
+		min-w-0
+		overflow-hidden
+		text-ellipsis
+		whitespace-nowrap
+		py-0.5
+	}
+
+	.nechat-toast > .nechat-file-fill {
+		@apply
+		w-0
+		animate-[nechat-auto-fill_4s_linear_forwards]
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.nechat-toast {
+			@apply
+			animate-[nechat-toast-hold_4s_steps(1,end)_forwards]
+		}
+
+		.nechat-toast > .nechat-file-fill {
+			@apply
+			hidden
+		}
+	}
+
+	.nechat-widget_off .nechat-composer {
+		@apply
+		opacity-50
+		pointer-events-none
+	}
+
+	.nechat-top {
+		@apply
+		flex
+		items-center
+		flex-none
+		pt-3
+		ps-10
+		pe-3
+		gap-2
+	}
+
+	.nechat-widget_aside-right .nechat-top {
+		@apply
+		flex-row-reverse
+		ps-3
+		pe-10
+	}
+
+	.nechat-widget_noside .nechat-top { @apply ps-3 }
+
+	.nechat-aside > .nechat-top {
+		@apply
+		ps-9
+		pe-0
+		py-3
+	}
+
+	.nechat-widget_aside-right .nechat-aside > .nechat-top {
+		@apply
+		ps-0
+		pe-9
+	}
+
+	.nechat-top-title {
+		@apply
+		flex-1
+		min-w-0
+		text-sm
+		font-medium
+		text-(--app-ink)
+		text-center
+		truncate
+		px-1
+	}
+
+	.nechat-ic {
+		@apply
+		w-4
+		h-4
+		fill-current
+	}
+
+	.nechat-ic-sm {
+		@apply
+		w-3
+		h-3
+		fill-current
+	}
+
+	.nechat-ring {
+		@apply
+		w-4
+		h-4
+		fill-none
+		[stroke-width:2]
+	}
+
+	.nechat-ring-track { @apply stroke-(--figure-track) }
+	.nechat-ring-fill { @apply stroke-(--figure-value) }
+	.nechat-ring[data-compacting] .nechat-ring-fill { @apply animate-[nechat-breathe_1.4s_ease-in-out_infinite] }
+
+	.nechat-ic_line {
+		@apply
+		w-4
+		h-4
+		fill-none
+	}
+
+	.nechat-blink {
+		@apply
+		grid
+		w-4
+		h-4
+	}
+
+	.nechat-blink > * { @apply [grid-area:1/1] }
+	.nechat-blink > :last-child { @apply animate-[nechat-blink_1.2s_steps(1)_infinite] }
+	.nechat-pulse > .line:last-of-type { @apply animate-[nechat-blink_1.2s_steps(1)_infinite] }
+	.nechat-build > line { @apply animate-[nechat-build_1.6s_ease-out_infinite] }
+	.nechat-build > line:nth-child(2) { @apply [animation-delay:0.15s] }
+	.nechat-build > line:nth-child(3) { @apply [animation-delay:0.3s] }
+	.nechat-build > line:nth-child(4) { @apply [animation-delay:0.45s] }
+	.nechat-ic_beams > line { @apply animate-[nechat-beam_2s_steps(1,end)_infinite] }
+	.nechat-ic_beams > line:nth-child(2) { @apply [animation-delay:0.25s] }
+	.nechat-ic_beams > line:nth-child(3) { @apply [animation-delay:0.5s] }
+	.nechat-ic_beams > line:nth-child(4) { @apply [animation-delay:0.75s] }
+	.nechat-ic_beams > line:nth-child(5) { @apply [animation-delay:1s] }
+	.nechat-ic_beams > line:nth-child(6) { @apply [animation-delay:1.25s] }
+	.nechat-ic_beams > line:nth-child(7) { @apply [animation-delay:1.5s] }
+	.nechat-ic_beams > line:nth-child(8) { @apply [animation-delay:1.75s] }
+	.nechat-ic_spin { @apply animate-spin }
+	.nechat-icon_busy { @apply hidden animate-spin }
+	[aria-busy="true"] > .nechat-icon_idle { @apply hidden }
+	[aria-busy="true"] > .nechat-icon_busy { @apply block }
+	.nechat-icon_breathe { @apply animate-[nechat-breathe_1.4s_ease-in-out_infinite] }
+
+	.nechat-btn {
+		@apply
+		inline-flex
+		items-center
+		justify-center
+		flex-none
+		box-border
+		h-7
+		px-3
+		appearance-none
+		border
+		border-(--button-border)
+		rounded-(--_nechat-radius-control)
+		bg-transparent;
+		font: inherit;
+		@apply
+		text-sm
+		font-medium
+		leading-none
+		whitespace-nowrap
+		text-(--button-ink)
+		cursor-pointer
+		outline-none
+	}
+
+	.nechat-iconbtn {
+		@apply
+		inline-flex
+		items-center
+		justify-center
+		flex-none
+		box-border
+		w-7
+		h-7
+		p-0
+		appearance-none
+		border
+		border-(--button-border)
+		rounded-(--_nechat-radius-control)
+		bg-transparent
+		[font:inherit]
+		text-(--button-ink)
+		cursor-pointer
+		outline-none
+	}
+
+	.nechat-btn:hover, .nechat-iconbtn:hover {
+		@apply
+		bg-(--button-bg-hover)
+		border-(--panel-border-focus)
+		text-(--button-ink-hover)
+	}
+
+	.nechat-btn:active, .nechat-iconbtn:active {
+		@apply
+		bg-(--button-bg-active)
+		border-(--panel-border-focus)
+		text-(--button-ink-hover)
+	}
+
+	.nechat-iconbtn_open { @apply bg-(--secondary-bg-selected) text-(--secondary-ink-hover) }
+
+	.nechat-btn:focus-visible, .nechat-iconbtn:focus-visible {
+		@apply
+		border-(--panel-border-focus)
+	}
+
+	.nechat-btn_del {
+		@apply
+		border-(--danger-ink)
+		text-(--danger-ink)
+	}
+
+	.nechat-btn_del:hover {
+		@apply
+		bg-(--danger-ink)
+		border-(--danger-ink)
+		text-(--danger-ink-on-fill)
+	}
+
+	.nechat-btn_del:active {
+		@apply
+		bg-(--danger-bg-active)
+		border-(--danger-bg-active)
+		text-(--danger-ink-on-fill)
+	}
+
+	.nechat-btn_del:focus-visible {
+		@apply
+		border-(--danger-bg-active)
+		text-(--danger-bg-active)
+	}
+
+	.nechat-btn_2nd {
+		@apply
+		bg-(--secondary-bg)
+		border-transparent
+		text-(--secondary-ink)
+	}
+
+	.nechat-btn_2nd:hover {
+		@apply
+		bg-(--secondary-bg-hover)
+		border-transparent
+		text-(--secondary-ink-hover)
+	}
+
+	.nechat-btn_2nd:active {
+		@apply
+		bg-(--secondary-bg-active)
+		border-transparent
+		text-(--secondary-ink-hover)
+	}
+
+	.nechat-btn_2nd:focus-visible {
+		@apply
+		border-(--panel-border-focus)
+	}
+
+	.nechat-btn_auto {
+		@apply
+		relative
+		isolate
+		overflow-hidden
+		min-w-18
+		border-(--secondary-bg)
+	}
+
+	.nechat-btn_auto > .nechat-file-fill {
+		@apply
+		w-0
+		animate-[nechat-auto-fill_10s_linear_forwards]
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.nechat-btn_auto {
+			@apply
+			border-(--button-border)
+		}
+
+		.nechat-btn_auto > .nechat-file-fill {
+			@apply
+			hidden
+		}
+	}
+
+	.nechat-btn:disabled, .nechat-iconbtn:disabled {
+		@apply
+		bg-transparent
+		border-(--button-border-off)
+		text-(--button-ink-off)
+		cursor-default
+	}
+
+	.nechat-ctl {
+		@apply
+		inline-flex
+		items-center
+		justify-center
+		flex-none
+		box-border
+		w-5
+		h-5
+		p-0
+		appearance-none
+		border
+		border-transparent
+		bg-transparent
+		[font:inherit]
+		text-(--app-ink-quiet)
+		rounded-(--_nechat-radius-sm)
+		cursor-pointer
+		outline-none
+	}
+
+	.nechat-ctl > .nechat-ic {
+		@apply
+		w-3
+		h-3
+	}
+
+	.nechat-file .nechat-ctl {
+		@apply
+		w-4
+		h-4
+	}
+
+	.nechat-ctl:hover {
+		@apply
+		bg-(--secondary-bg-hover)
+		text-(--secondary-ink-hover)
+	}
+
+	.nechat-ctl:active {
+		@apply
+		bg-(--secondary-bg-active)
+		text-(--secondary-ink-hover)
+	}
+
+	.nechat-ctl:focus-visible {
+		@apply
+		border-(--panel-border-focus)
+	}
+
+	.nechat-gauge-lead > .nechat-ctl:hover > .nechat-ic { @apply animate-none }
+
+	.nechat-act {
+		@apply
+		flex
+		items-center
+		gap-2
+		w-full
+		h-7
+		px-2
+		box-border
+		appearance-none
+		border
+		border-transparent
+		bg-transparent;
+		font: inherit;
+		@apply
+		text-sm
+		font-medium
+		text-left
+		text-(--secondary-ink)
+		rounded-(--_nechat-radius-control)
+		cursor-pointer
+		outline-none
+	}
+
+	.nechat-act:hover { @apply bg-(--secondary-bg-hover) text-(--secondary-ink-hover) }
+	.nechat-act:active { @apply bg-(--secondary-bg-active) text-(--secondary-ink-hover) }
+	.nechat-act:focus-visible { @apply border-(--panel-border-focus) }
+
+	.nechat-field {
+		@apply
+		flex
+		items-center
+		gap-1.5
+		h-7
+		px-2
+		box-border
+		cursor-text
+		w-full
+		flex-auto
+		min-w-0
+		bg-(--panel-bg)
+		border
+		border-(--panel-border)
+		rounded-(--_nechat-radius-control)
+	}
+
+	.nechat-text {
+		@apply
+		flex-1
+		min-w-0
+		appearance-none
+		border-0
+		border-current
+		p-0
+		m-0
+		[&::-webkit-search-cancel-button]:hidden
+		bg-transparent
+		[font-family:inherit]
+		text-sm
+		font-medium
+		leading-none
+		text-(--app-ink)
+		caret-current
+		outline-none
+	}
+
+	.nechat-text::placeholder { @apply text-(--app-ink-quiet) font-normal opacity-100 }
+	.nechat-field:focus-within { @apply border-(--panel-border-focus) }
+	.nechat-field > .nechat-ic-sm { @apply text-(--app-ink-quiet) }
+
+	.nechat-form {
+		@apply
+		flex
+		flex-col
+		gap-1
+		pt-2
+		px-1
+		pb-1
+		w-full
+		box-border
+		bg-(--panel-bg)
+		border
+		border-(--panel-border)
+		rounded-(--_nechat-radius-surface)
+	}
+
+	.nechat-popbody .nechat-form { @apply border-0 }
+
+	.nechat-form-field {
+		@apply
+		flex
+		items-center
+		gap-1.5
+		h-7
+		px-2
+		box-border
+		bg-transparent
+		border-0
+	}
+
+	.nechat-form:focus-within { @apply border-(--panel-border-focus) }
+
+	.nechat-form-text {
+		@apply
+		h-7
+		px-2
+		text-sm
+		leading-7
+		text-(--app-ink-quiet)
+		overflow-hidden
+		whitespace-nowrap
+		text-ellipsis
+	}
+
+	.nechat-form-text b { @apply font-medium text-(--app-ink) }
+	.nechat-form-actions { @apply flex items-center justify-end gap-1 h-7 }
+
+	.nechat-rule { @apply flex-auto h-px bg-(--app-border) }
+
+	.nechat-aside {
+		@apply
+		flex
+		flex-col
+		flex-none
+		w-60
+		max-w-[45%]
+		box-border
+		min-w-0
+		bg-(--app-bg)
+		border-e
+		border-e-(--panel-border)
+		pt-0
+		px-3
+		pb-3
+	}
+
+	.nechat-widget_aside-right > .nechat-aside { @apply border-e-0 border-s border-s-(--panel-border) }
+
+	@container (width < 36rem) {
+		.nechat-aside,
+		.nechat-widget_aside-right .nechat-aside {
+			@apply
+			absolute
+			inset-0
+			z-10
+			w-full
+			max-w-full;
+			border-inline: 0;
+		}
+	}
+
+	.nechat-side-body { @apply flex flex-col flex-1 min-h-0 gap-0.5 overflow-y-auto overscroll-y-contain }
+	.nechat-day { @apply flex flex-col flex-none gap-0.5 }
+	.nechat-day[data-pending] { @apply hidden }
+
+	.nechat-side-label {
+		@apply
+		flex
+		items-center
+		flex-none
+		h-7;
+		margin-block-start:0.75rem;
+		@apply
+		px-2
+		text-(--app-ink-quiet)
+	}
+
+	.nechat-side-empty {
+		@apply
+		flex
+		flex-col
+		items-center
+		gap-1
+		m-auto
+		py-6
+		px-4
+		text-center
+		text-(--app-ink)
+	}
+
+	.nechat-side-empty-hint { @apply text-xs text-(--app-ink-quiet) }
+
+	.nechat-side-retry {
+		@apply
+		flex
+		items-center
+		justify-between
+		gap-2
+		flex-none
+		min-h-7
+		mt-3
+		ps-2
+		text-(--app-ink-quiet)
+	}
+
+	.nechat-row {
+		@apply
+		relative
+		flex
+		items-center
+		gap-1
+		min-w-0
+	}
+
+	.nechat-rowmenu {
+		@apply
+		absolute
+		end-0;
+		inset-block-start:calc(100% + 0.25rem);
+		@apply
+		z-20
+	}
+
+	.nechat-thread {
+		@apply
+		flex
+		items-center
+		gap-2
+		grow
+		w-full
+		min-w-0
+		h-7
+		px-2
+		box-border
+		appearance-none
+		border
+		border-transparent
+		bg-transparent;
+		font: inherit;
+		@apply
+		text-sm
+		text-left
+		text-(--app-ink-quiet)
+		rounded-(--_nechat-radius-control)
+		cursor-pointer
+		outline-none
+	}
+
+	.nechat-thread-name { @apply min-w-0 overflow-hidden whitespace-nowrap text-ellipsis }
+	.nechat-thread:hover { @apply bg-(--secondary-bg-hover) text-(--secondary-ink-hover) }
+	.nechat-thread:focus-visible { @apply border-(--panel-border-focus) }
+	.nechat-thread_active { @apply bg-(--secondary-bg-selected) text-(--secondary-ink-hover) cursor-default }
+	.nechat-thread_new { @apply text-(--secondary-ink-off) }
+	.nechat-thread_new:hover { @apply bg-transparent text-(--app-ink-quiet) }
+	.nechat-dot { @apply flex items-center justify-center w-4 h-4 flex-none text-(--app-ink-quiet) }
+	.nechat-dot::before { @apply content-[''] w-1.5 h-1.5 rounded-full bg-current }
+	.nechat-dot_off::before { @apply bg-transparent inset-ring inset-ring-current }
+	.nechat-thread_active > .nechat-dot { @apply text-(--secondary-ink-hover) }
+	.nechat-row > .nechat-iconbtn { @apply hidden }
+	.nechat-row:hover > .nechat-iconbtn, .nechat-row:focus-within > .nechat-iconbtn { @apply inline-flex }
+	.nechat-row:has(.nechat-form) > :is(.nechat-thread, .nechat-iconbtn) { @apply hidden }
+
+	.nechat-burger {
+		@apply
+		absolute
+		z-20
+		top-3
+		left-3
+	}
+
+	.nechat-widget_aside-right .nechat-burger {
+		@apply
+		left-auto
+		right-3
+	}
+
+	.nechat-hit {
+		@apply
+		relative
+		block
+		box-border
+		flex-none
+		w-full
+		mt-1.5
+		py-2.5
+		px-3
+		appearance-none
+		border
+		border-transparent
+		rounded-(--_nechat-radius-control)
+		bg-transparent;
+		font: inherit;
+		@apply
+		leading-snug
+		text-left
+		text-(--secondary-ink)
+		cursor-pointer
+		outline-none
+	}
+
+	.nechat-hit:hover { @apply bg-(--secondary-bg-hover) }
+	.nechat-hit:focus-visible { @apply border-(--panel-border-focus) }
+	.nechat-hit-head { @apply flex items-baseline min-w-0 }
+
+	.nechat-hit-name {
+		-webkit-mask-image: linear-gradient(to right, #000 calc(100% - 1.75rem), transparent);
+		mask-image: linear-gradient(to right, #000 calc(100% - 1.75rem), transparent);
+		@apply
+		flex-1
+		min-w-0
+		overflow-hidden
+		whitespace-nowrap
+		font-medium
+		mb-0.5
+		text-(--app-ink-quiet)
+	}
+
+	.nechat-hit-snippet { @apply line-clamp-3 mt-0.5 text-(--app-ink) }
+	.nechat-hit-snippet_under { @apply mt-0 }
+	.nechat-date { @apply flex-none ms-auto tabular-nums text-(--app-ink-quiet) }
+
+	.nechat-date_over {
+		background: linear-gradient(to right, transparent, var(--app-bg) 1.5rem);
+		@apply
+		absolute
+		top-2.5
+		right-3
+		pl-6
+	}
+
+	.nechat-hit:hover .nechat-date,
+	.nechat-thread:hover .nechat-date {
+		@apply
+		hidden
+	}
+
+	.nechat-composer {
+		@apply
+		relative
+		[container-type:inline-size]
+		mx-3
+		mb-3
+		box-border
+		bg-(--panel-bg)
+		rounded-(--_nechat-radius-surface)
+		border
+		border-(--panel-border)
+		flex
+		flex-col
+	}
+
+	.nechat-composer:focus-within { @apply border-(--panel-border-focus) }
+	.nechat-composer[aria-busy="true"] { @apply pointer-events-none }
+	.nechat-tray { @apply flex flex-wrap items-center gap-2 pt-2 px-2 pb-0 }
+	.nechat-tray:not(:has(.nechat-file)) { @apply hidden }
+
+	.nechat-panel {
+		@apply
+		flex-auto
+		min-w-0
+		min-h-0
+		box-border
+		overflow-y-auto
+		overscroll-y-contain
+		bg-transparent
+	}
+
+	.nechat-draft {
+		@apply
+		pt-2
+		px-3
+		pb-0.5
+		text-base
+		leading-[1.6]
+		text-(--app-ink)
+		whitespace-pre-wrap
+	}
+
+	textarea.nechat-draft {
+		@apply
+		block
+		box-border
+		w-full
+		resize-none
+		appearance-none
+		border-0
+		border-current
+		rounded-none
+		bg-transparent
+		text-(--app-ink)
+		[font-family:inherit]
+		text-base
+		leading-[1.6]
+		caret-(--app-ink)
+		outline-none
+		field-sizing-content
+		overscroll-y-contain
+		min-h-[1lh]
+		max-h-[10lh]
+	}
+
+	textarea.nechat-draft::placeholder { @apply text-(--app-ink-quiet) }
+	textarea.nechat-draft[readonly] { @apply cursor-default }
+	textarea.nechat-draft[aria-busy="true"] { @apply text-(--app-ink-quiet) }
+
+	.nechat-ask {
+		@apply
+		flex
+		flex-col
+		pt-2
+		px-1
+		pb-1
+	}
+
+	.nechat-ask-q {
+		@apply
+		m-0
+		pt-0
+		px-2
+		pb-2
+		text-base
+		font-semibold
+		text-(--app-ink)
+	}
+
+	.nechat-pick + .nechat-pick { @apply mt-1 }
+
+	.nechat-pick {
+		@apply
+		flex
+		items-start
+		gap-2
+		w-full
+		box-border
+		p-2
+		border
+		border-transparent
+		rounded-(--_nechat-radius-control)
+		bg-transparent;
+		font: inherit;
+		@apply
+		text-sm
+		text-left
+		text-(--app-ink)
+		cursor-pointer
+		outline-none
+	}
+
+	.nechat-pick > input { @apply absolute w-px h-px opacity-0 pointer-events-none }
+	.nechat-pick:hover { @apply bg-(--secondary-bg-hover) }
+	.nechat-pick:active { @apply bg-(--secondary-bg-active) }
+	.nechat-pick:focus-within { @apply border-(--panel-border-focus) }
+	.nechat-pick:has(> input:checked) { @apply bg-(--secondary-bg-selected) }
+
+	.nechat-mark {
+		@apply
+		flex
+		items-center
+		justify-center
+		flex-none
+		box-border
+		w-4
+		h-4;
+		margin-block-start: calc((1lh - 1rem) / 2);
+		@apply
+		border
+		border-(--button-border)
+		text-transparent
+	}
+
+	.nechat-mark_radio { @apply rounded-full }
+	.nechat-mark_check { @apply rounded-(--_nechat-radius-sm) }
+	.nechat-mark > svg { @apply w-2.5 h-2.5 fill-current }
+	.nechat-mark_radio > span { @apply w-2 h-2 rounded-full bg-current }
+	.nechat-pick:hover > .nechat-mark { @apply border-(--app-ink-quiet) }
+	.nechat-pick:has(> input:checked) > .nechat-mark { @apply border-(--app-ink) text-(--app-ink) }
+
+	.nechat-pick-label { @apply flex flex-col gap-0.5 min-w-0 }
+	.nechat-pick-name { @apply font-medium }
+	.nechat-pick-desc { @apply font-normal text-(--app-ink-quiet) }
+
+	.nechat-pick_own textarea {
+		@apply
+		flex-1
+		min-w-0
+		resize-none
+		appearance-none
+		border-0
+		p-0
+		m-0
+		bg-transparent
+		text-(--app-ink);
+		font: inherit;
+		@apply
+		outline-none
+		field-sizing-content
+		min-h-[1lh]
+		max-h-[6lh]
+	}
+
+	.nechat-pick_own textarea::placeholder { @apply text-(--app-ink-quiet) }
+
+	.nechat-barrow { @apply relative flex items-center justify-between gap-2 p-2 }
+	.nechat-barrow-left, .nechat-barrow-right { @apply flex items-center gap-2 flex-none }
+
+	.nechat-barrow-center {
+		@apply
+		flex-1
+		min-w-0
+		flex
+		flex-wrap
+		items-center
+		justify-center
+		gap-2
+		px-2
+	}
+
+	.nechat-gauge {
+		@apply
+		relative
+		isolate
+		inline-flex
+		items-center
+		min-w-0
+		max-w-full
+		box-border
+		gap-1.5
+		h-7
+		px-3
+		border
+		border-transparent
+		rounded-(--_nechat-radius-control)
+		bg-(--secondary-bg)
+		text-(--app-ink-quiet);
+		font: inherit;
+		@apply
+		text-sm
+		leading-none
+		tabular-nums
+		whitespace-nowrap
+		overflow-hidden
+		text-left
+		appearance-none
+		outline-none
+	}
+
+	.nechat-gauge-lead, .nechat-gauge-trail { @apply flex items-center flex-none }
+	.nechat-gauge-body { @apply flex items-center gap-1.5 min-w-0 overflow-hidden }
+	.nechat-gauge-val { @apply text-(--app-ink) min-w-0 overflow-hidden text-ellipsis }
+	.nechat-gauge-meta, .nechat-gauge-sep { @apply text-(--app-ink-quiet) }
+	.nechat-gauge:has(> .nechat-gauge-trail), .nechat-gauge_opens { @apply pe-1 }
+	.nechat-gauge:has(> .nechat-gauge-lead > .nechat-ctl) { @apply ps-1 }
+	.nechat-gauge_opens { @apply cursor-pointer }
+	.nechat-gauge_opens:hover { @apply bg-(--secondary-bg-hover) }
+	.nechat-gauge_opens:active { @apply bg-(--secondary-bg-active) }
+	.nechat-gauge_opens.nechat-gauge_open { @apply bg-(--secondary-bg-selected) text-(--secondary-ink-hover) }
+	.nechat-gauge:focus-visible { @apply border-(--panel-border-focus) }
+
+	.nechat-gauge_opens > .nechat-gauge-body::after {
+		content: "";
+		border-inline: 0.25rem solid transparent; border-block-end: 0.25rem solid currentColor;
+		transition: transform 120ms ease, opacity 120ms ease;
+		@apply
+		flex-none
+		w-0
+		h-0
+		mx-1.5
+		opacity-55
+	}
+
+	.nechat-gauge_open > .nechat-gauge-body::after { transform: rotate(180deg); @apply opacity-90 }
+	.nechat-gauge_err > .nechat-gauge-lead { @apply text-(--danger-ink) }
+
+	.nechat-pop {
+		@apply
+		absolute
+		box-border
+		flex
+		flex-col
+		p-1
+		border
+		border-(--panel-border)
+		rounded-(--_nechat-radius-control)
+		bg-(--panel-bg)
+		text-sm
+		text-(--app-ink)
+		bottom-full
+		mb-0.5
+		start-1/2
+		-translate-x-1/2
+		w-60
+		max-w-[100cqw]
+		z-10
+	}
+
+	.nechat-popbody {
+		@apply
+		flex
+		flex-col
+		w-fit
+		min-w-44
+		box-border
+		p-1
+		bg-(--panel-bg)
+		border
+		border-(--panel-border)
+		rounded-(--_nechat-radius-control)
+		text-sm
+		text-(--app-ink)
+	}
+
+	.nechat-pop-group { @apply flex flex-col }
+
+	.nechat-pop-group + .nechat-pop-group {
+		@apply
+		mt-2
+		pt-2
+		border-t
+		border-t-(--panel-border)
+	}
+
+	.nechat-pop-foot { @apply mt-2 flex justify-center px-1 }
+	.nechat-pop-foot > .nechat-btn:disabled { @apply animate-[nechat-breathe_1.4s_ease-in-out_infinite] }
+
+	.nechat-task {
+		@apply
+		flex
+		items-center
+		gap-2
+		min-w-0
+		py-1.5
+		ps-2
+		pe-1
+		box-border
+	}
+
+	.nechat-task + .nechat-task { @apply border-t border-(--panel-border) }
+	.nechat-task-body { @apply flex flex-col flex-1 min-w-0 leading-tight }
+	.nechat-task-comment { @apply line-clamp-2 wrap-anywhere text-(--app-ink) }
+	.nechat-task-detail { @apply truncate tabular-nums text-(--app-ink-quiet) }
+	.nechat-pop-stat { @apply flex items-baseline gap-3 py-1 px-2 tabular-nums whitespace-nowrap }
+	.nechat-pop-label { @apply me-auto min-w-0 overflow-hidden text-ellipsis text-(--app-ink-quiet) }
+	.nechat-pops { @apply static inline-flex }
+
+	@supports (justify-self: anchor-center) {
+		.nechat-pops { @apply [anchor-scope:--nechat-gauge] }
+		.nechat-pops > .nechat-gauge { @apply [anchor-name:--nechat-gauge] }
+		.nechat-pop {
+			@apply
+			[position-anchor:--nechat-gauge]
+			[justify-self:anchor-center]
+			inset-x-2
+			translate-none
+			max-w-[calc(100cqw-1rem)]
+		}
+	}
+
+	.nechat-file {
+		@apply
+		relative
+		isolate
+		inline-flex
+		items-center
+		min-w-0
+		max-w-64
+		box-border
+		gap-1.5
+		h-6
+		px-2
+		border
+		border-(--secondary-bg)
+		bg-transparent
+		rounded-(--_nechat-radius-control)
+		text-(--app-ink);
+		font: inherit;
+		@apply
+		text-xs
+		font-normal
+		leading-none
+		tabular-nums
+		whitespace-nowrap
+		overflow-hidden
+		no-underline
+		outline-none
+	}
+
+	.nechat-file > .nechat-ic { @apply w-3 h-3 flex-none }
+	.nechat-file-fill { @apply absolute inset-y-0 start-0 -z-1 bg-(--secondary-bg) }
+	.nechat-file-name { @apply min-w-0 overflow-hidden text-ellipsis }
+	.nechat-file-meta { @apply text-(--app-ink-quiet) flex-none }
+	.nechat-file-trail { @apply flex items-center flex-none }
+	.nechat-file:has(> .nechat-file-trail) { @apply pe-1 }
+	.nechat-file_done { @apply bg-(--secondary-bg) border-transparent }
+	a.nechat-file_done:hover { @apply bg-(--secondary-bg-hover) }
+	.nechat-file:focus-visible { @apply border-(--panel-border-focus) }
+	.nechat-file_err { @apply border-(--danger-ink) bg-transparent }
+	.nechat-file_err > .nechat-ic, .nechat-file_err .nechat-file-meta { @apply text-(--danger-ink) }
+
+	.nechat-top_menu { @apply relative }
+	.nechat-top_menu > .nechat-rowmenu { @apply end-3 max-w-[calc(100%-1.5rem)] }
+	.nechat-files { @apply w-72 }
+
+	.nechat-entry {
+		@apply
+		flex
+		items-center
+		gap-2
+		min-w-0
+		py-1.5
+		px-2
+		box-border
+		border
+		border-transparent
+		rounded-(--_nechat-radius-control)
+		bg-transparent
+		whitespace-nowrap
+		cursor-pointer
+		relative
+		text-(--secondary-ink)
+	}
+
+	.nechat-entry > .nechat-ic { @apply flex-none }
+	.nechat-entry > .nechat-ctl { @apply relative }
+
+	.nechat-entry-name::after {
+		content: "";
+		@apply absolute inset-0
+	}
+
+	.nechat-entry:hover:not(:has(.nechat-ctl:hover)) {
+		@apply
+		bg-(--secondary-bg-hover)
+		text-(--secondary-ink-hover)
+	}
+
+	.nechat-entry:has(.nechat-entry-name:focus-visible) {
+		@apply
+		border-(--panel-border-focus)
+	}
+
+	.nechat-entry-body {
+		@apply
+		flex
+		flex-col
+		flex-1
+		min-w-0
+		leading-tight
+	}
+
+	.nechat-entry-name {
+		@apply
+		min-w-0
+		overflow-hidden
+		text-ellipsis
+		text-(--app-ink)
+		no-underline
+		outline-none
+	}
+
+	.nechat-entry-detail { @apply tabular-nums text-(--app-ink-quiet) }
+
+	.nechat-log {
+		@apply
+		text-base
+		leading-[1.6]
+		pt-0
+		px-3
+		pb-4
+		rounded-(--_nechat-radius-surface)
+		wrap-anywhere
+		scroll-smooth
+		bg-(--app-bg)
+		text-(--app-ink)
+		min-w-0
+	}
+
+	.nechat-log[data-seeding] { @apply invisible }
+
+	.nechat-log_scroll {
+		-webkit-mask-image: linear-gradient(to bottom, transparent, rgba(0,0,0,0.5) 0.5rem, #000 1.25rem, #000 calc(100% - 1.25rem), rgba(0,0,0,0.5) calc(100% - 0.5rem), transparent);
+		@apply
+		overflow-y-auto
+		overflow-x-hidden
+		overscroll-y-contain
+		[container-type:size]
+		mask-[linear-gradient(to_bottom,_transparent,_rgba(0,0,0,0.5)_0.5rem,_#000_1.25rem,_#000_calc(100%_-_1.25rem),_rgba(0,0,0,0.5)_calc(100%_-_0.5rem),_transparent)]
+	}
+
+	.nechat-section[data-pending] { @apply hidden }
+	.nechat-span { @apply h-[100cqh] absolute top-0 -z-10 w-full pointer-events-none }
+	.nechat-follow { @apply h-0 }
+	.nechat-turn { @apply min-w-0 }
+
+	.nechat-blk {
+		@apply
+		grid
+		grid-cols-[1rem_minmax(0,1fr)]
+		gap-x-2
+		min-w-0
+		mt-2
+	}
+
+	.nechat-user { @apply relative flex justify-end items-center gap-2 min-w-0 mt-5 mb-3 }
+
+	.nechat-user > .nechat-gut {
+		@apply
+		-order-1
+		flex-none
+		self-center
+		h-auto
+	}
+
+	.nechat-gut {
+		@apply
+		col-1
+		row-1
+		[align-self:start]
+		flex
+		items-center
+		justify-start
+		h-[1.6em]
+		text-(--app-ink-quiet)
+	}
+
+	.nechat-col {
+		@apply
+		col-2
+		row-1
+		min-w-0
+	}
+
+	.nechat-bubble {
+		@apply
+		max-w-[80%]
+		min-w-0
+		box-border
+		flex
+		flex-col
+		gap-2
+		py-2
+		px-3
+		rounded-(--_nechat-radius-surface)
+		bg-(--panel-bg)
+		border
+		border-(--panel-border)
+	}
+
+	.nechat-bubble-text { @apply whitespace-pre-wrap }
+	.nechat-bubble-files { @apply flex flex-wrap justify-end gap-1.5 min-w-0 }
+	.nechat-agent { @apply font-serif min-w-0 }
+	.nechat-turn > .nechat-blk { @apply font-serif }
+	.nechat-records, .nechat-summary { @apply text-(--app-ink-quiet) }
+
+	.nechat-seam {
+		@apply
+		flex
+		items-center
+		gap-2.5
+		mt-5
+		mb-1
+		text-(--app-ink-quiet)
+		text-[0.875em]
+	}
+
+	.nechat-seam::before, .nechat-seam::after {
+		content: "";
+		@apply
+		flex-1
+		h-px
+		bg-(--app-border)
+	}
+
+	.nechat-seam > span {
+		@apply
+		min-w-0
+		overflow-hidden
+		whitespace-nowrap
+		text-ellipsis
+	}
+
+	.nechat-turn:is([data-state="abort"],[data-state="error"],[data-state="refuse"]) > .nechat-user,
+	.nechat-turn:is([data-state="abort"],[data-state="error"],[data-state="refuse"]) > .nechat-agent { @apply blur-[1px] opacity-70 }
+	.nechat-turn[data-rewind="target"] > .nechat-user > .nechat-bubble { @apply bg-(--secondary-bg-hover) }
+	.nechat-turn[data-rewind="target"] > .nechat-agent,
+	.nechat-turn[data-rewind="after"] > .nechat-user, .nechat-turn[data-rewind="after"] > .nechat-agent { @apply blur-[1px] opacity-70 }
+	.nechat-turn:hover > .nechat-user, .nechat-turn:hover > .nechat-agent { @apply filter-none opacity-100 }
+
+	.nechat-status {
+		@apply
+		flex
+		items-center
+		gap-2
+		min-w-0
+		text-(--app-ink-quiet)
+	}
+
+	.nechat-status > span {
+		@apply
+		flex-initial
+		min-w-0
+		overflow-hidden
+		whitespace-nowrap
+		text-ellipsis
+	}
+
+	.nechat-tools-flat {
+		@apply
+		flex
+		flex-wrap
+		gap-x-3
+		text-(--app-ink-quiet)
+	}
+
+	.nechat-tool-flat { @apply inline-flex gap-1 }
+	.nechat-tool-flat:not(:last-child)::after { @apply content-[','] }
+	.nechat-tool-count { @apply text-(--app-ink-quiet) tabular-nums }
+
+	.nechat-think {
+		@apply
+		relative
+		min-w-0
+		text-(--app-ink-quiet)
+	}
+
+	.nechat-think-head {
+		@apply
+		inline
+		list-none
+		appearance-none
+		p-0
+		m-0;
+		border: 0;
+		@apply
+		bg-transparent
+		[font:inherit]
+		text-left
+		text-(--app-ink-quiet)
+		cursor-pointer
+		select-none
+		outline-none
+		[&::-webkit-details-marker]:hidden
+	}
+
+	.nechat-think-head:hover { @apply text-(--app-ink) }
+
+	.nechat-think-head:focus-visible {
+		@apply
+		text-(--app-ink)
+		underline
+		decoration-1
+		underline-offset-2
+	}
+
+	.nechat-think[open] > .nechat-think-head { @apply absolute inset-0 opacity-0 }
+
+	.nechat-think[open]:has(> .nechat-think-head:focus-visible) {
+		@apply
+		outline-1
+		outline-offset-2
+		outline-(--panel-border-focus)
+	}
+
+	.nechat-think-body .nechat-prose { @apply text-sm }
+
+	.nechat-prose {
+		--_nechat-radius-sm: var(--nechat-radius-sm, 0.25rem);
+		--_nechat-radius-control: var(--nechat-radius-control, 0.375rem);
+		--_nechat-radius-surface: var(--nechat-radius-surface, 0.5rem);
+		--_nechat-prose-rule: var(--nechat-prose-rule, var(--app-border));
+		--_nechat-prose-border: var(--nechat-prose-border, var(--button-border));
+		--_nechat-prose-muted: var(--nechat-prose-muted, var(--app-ink-quiet));
+		--_nechat-prose-link: var(--nechat-prose-link, currentColor);
+		--_nechat-prose-code-bg: var(--nechat-prose-code-bg, var(--panel-bg));
+		--_nechat-space: var(--nechat-space, 0.75em);
+
+		@apply prose prose-sm max-w-none text-base min-w-0;
+
+		--tw-prose-body: currentColor;
+		--tw-prose-headings: currentColor;
+		--tw-prose-lead: currentColor;
+		--tw-prose-links: var(--_nechat-prose-link);
+		--tw-prose-bold: currentColor;
+		--tw-prose-counters: var(--_nechat-prose-muted);
+		--tw-prose-bullets: var(--_nechat-prose-muted);
+		--tw-prose-hr: var(--_nechat-prose-rule);
+		--tw-prose-quotes: var(--_nechat-prose-muted);
+		--tw-prose-quote-borders: var(--_nechat-prose-border);
+		--tw-prose-captions: var(--_nechat-prose-muted);
+		--tw-prose-kbd: currentColor;
+		--tw-prose-kbd-shadows: currentColor;
+		--tw-prose-code: currentColor;
+		--tw-prose-pre-code: currentColor;
+		--tw-prose-pre-bg: var(--_nechat-prose-code-bg);
+		--tw-prose-th-borders: var(--_nechat-prose-border);
+		--tw-prose-td-borders: var(--_nechat-prose-rule);
+
+		blockquote { @apply mx-0 [border-left-style:solid] not-italic font-normal [quotes:none]; }
+		hr { @apply [border-top-style:solid] text-inherit; }
+		img { @apply max-w-full; }
+		figure { @apply mx-0; }
+		table { @apply block w-max max-w-full overflow-x-auto border-collapse; }
+		:is(th, td) { @apply border border-(--_nechat-prose-border) px-(--_nechat-space) py-[calc(var(--_nechat-space)*0.6)]; }
+
+		:not(pre) > code { @apply text-[0.9em] font-normal px-[0.4em] py-[0.2em] rounded-(--_nechat-radius-control) bg-(--_nechat-prose-code-bg) whitespace-break-spaces; }
+		code::before, code::after { @apply content-none; }
+		pre { @apply whitespace-pre tab-4 rounded-(--_nechat-radius-surface) py-2.5 px-3 text-[0.9em] leading-[1.5] overflow-x-auto bg-(--_nechat-prose-code-bg); }
+
+		li:has(> input[type=checkbox], > p > input[type=checkbox]) { @apply list-none; }
+		li input[type=checkbox] { @apply align-middle m-[0_0.2em_0.25em_-1.4em]; }
+		summary { @apply cursor-pointer; }
+
+		:is(h1, h2, h3, h4, h5, h6) { @apply text-[1em] font-semibold leading-[1.4] tracking-[-0.005em]; }
+		h1 { @apply text-[1.125em]; }
+		:is(h5, h6) { @apply text-(--app-ink-quiet); }
+		a { @apply text-inherit font-medium underline decoration-1 underline-offset-2 decoration-current; }
+		a:hover { @apply decoration-2; }
+
+		@apply leading-[1.6];
+		:is(p, ul, ol, pre, table, blockquote, img, figure, details) { @apply my-(--_nechat-space); }
+		:is(h1, h2, h3, h4, h5, h6) { @apply mt-[calc(var(--_nechat-space)*2)] mb-[calc(var(--_nechat-space)*0.5)]; }
+		hr { @apply my-[calc(var(--_nechat-space)*1.5)]; }
+		li { @apply my-[calc(var(--_nechat-space)*0.25)]; }
+		li p, li > p:first-child, li > p:last-child { @apply my-[calc(var(--_nechat-space)*0.5)]; }
+		li > :is(ul, ol) { @apply my-[calc(var(--_nechat-space)*0.25)]; }
+		blockquote > :first-child { @apply mt-0; }
+		blockquote > :last-child { @apply mb-0; }
+
+		> :is(:first-child, d0-r:first-child + *), > :is(d0-r:first-child, d0-r:first-child + d0-r) > :first-child { @apply mt-0; }
+		> :is(:nth-last-child(1 of :not(d0-r:empty))), > :is(d0-r:nth-last-child(1 of :not(d0-r:empty))) > :last-child { @apply mb-0; }
+	}
+}

@@ -14,7 +14,7 @@ import (
 	"neui.dev/api"
 	"neui.dev/internal/testkit"
 	"neui.dev/internal/testkit/stack"
-	"neui.dev/ui"
+	"neui.dev/neisland"
 )
 
 type tree struct {
@@ -107,16 +107,10 @@ func board(marks chan<- int, shown chan<- string) gox.Elem {
 				return func(cur gox.Cursor) error { return cur.Comp(slot) }
 			},
 			Library: func(l neui.Library) error {
-				if err := l.Layout("column", ui.ColumnDesc, ui.Column); err != nil {
+				if err := neisland.RegisterLayout(l); err != nil {
 					return err
 				}
-				if err := l.Layout("row", ui.RowDesc, ui.Row); err != nil {
-					return err
-				}
-				if err := l.Layout("grid", ui.GridDesc, ui.Grid); err != nil {
-					return err
-				}
-				l.Head(ui.Style())
+				l.Head(neisland.Style())
 				if err := l.Tool("mark", "marks a number", func(ctx context.Context, in struct{ N int }) (int, error) {
 					marks <- in.N
 					return in.N, nil

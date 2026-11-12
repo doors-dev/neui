@@ -85,7 +85,7 @@ const choiceNormJS = `const norm = (s) => s.replace(/\s+/g, " ").trim();`
 // "checkbox".
 func (f Field) ExpectLook(want string) {
 	f.a.t.Helper()
-	f.choiceExpect(`(el) => el.querySelector("select") ? "dropdown" : el.querySelector("input.kisland-form-radio") ? "radio" : el.querySelector("input.kisland-form-checkbox") ? "checkbox" : "none"`, want, "look")
+	f.choiceExpect(`(el) => el.querySelector("select") ? "dropdown" : el.querySelector("input.neisland-form-radio") ? "radio" : el.querySelector("input.neisland-form-checkbox") ? "checkbox" : "none"`, want, "look")
 }
 
 // ExpectOptions waits until a select offers exactly these option texts in
@@ -94,7 +94,7 @@ func (f Field) ExpectOptions(want ...string) {
 	f.a.t.Helper()
 	f.choiceExpect(`(el) => { `+choiceNormJS+`
 		const s = el.querySelector("select")
-		const all = s ? Array.from(s.options).map((o) => norm(o.textContent)) : Array.from(el.querySelectorAll("label.kisland-form-check")).map((l) => norm(l.textContent))
+		const all = s ? Array.from(s.options).map((o) => norm(o.textContent)) : Array.from(el.querySelectorAll("label.neisland-form-check")).map((l) => norm(l.textContent))
 		return JSON.stringify(all)
 	}`, choiceJSON(append([]string{}, want...)), "options")
 }
@@ -104,7 +104,7 @@ func (f Field) ExpectOptions(want ...string) {
 func (f Field) ExpectChips(want ...string) {
 	f.a.t.Helper()
 	f.choiceExpect(`(el) => { `+choiceNormJS+`
-		return JSON.stringify(Array.from(el.querySelectorAll(".kisland-form-search-chip")).map((c) => { const n = c.cloneNode(true); n.querySelectorAll("button").forEach((b) => b.remove()); return norm(n.textContent) }))
+		return JSON.stringify(Array.from(el.querySelectorAll(".neisland-form-search-chip")).map((c) => { const n = c.cloneNode(true); n.querySelectorAll("button").forEach((b) => b.remove()); return norm(n.textContent) }))
 	}`, choiceJSON(append([]string{}, want...)), "chips")
 }
 
@@ -113,33 +113,33 @@ func (f Field) ExpectChips(want ...string) {
 func (f Field) ExpectResults(want ...string) {
 	f.a.t.Helper()
 	f.choiceExpect(`(el) => { `+choiceNormJS+`
-		return JSON.stringify(Array.from(el.querySelectorAll(".kisland-form-search-result")).map((b) => norm(b.textContent)))
+		return JSON.stringify(Array.from(el.querySelectorAll(".neisland-form-search-result")).map((b) => norm(b.textContent)))
 	}`, choiceJSON(append([]string{}, want...)), "results")
 }
 
 // ExpectSearchStatus waits until a search's status line reads want.
 func (f Field) ExpectSearchStatus(want string) {
 	f.a.t.Helper()
-	f.choiceExpect(`(el) => { `+choiceNormJS+` return norm(el.querySelector(".kisland-form-search-status").textContent) }`, want, "status")
+	f.choiceExpect(`(el) => { `+choiceNormJS+` return norm(el.querySelector(".neisland-form-search-status").textContent) }`, want, "status")
 }
 
 // ExpectSearchInput waits until a search shows its input, or hides it.
 func (f Field) ExpectSearchInput(shown bool) {
 	f.a.t.Helper()
-	f.choiceExpect(`(el) => String(!!el.querySelector("input.kisland-form-search-input"))`, fmt.Sprint(shown), "search input shown")
+	f.choiceExpect(`(el) => String(!!el.querySelector("input.neisland-form-search-input"))`, fmt.Sprint(shown), "search input shown")
 }
 
 // ExpectMaxLine waits until a search's max line reads want; "" expects none.
 func (f Field) ExpectMaxLine(want string) {
 	f.a.t.Helper()
-	f.choiceExpect(`(el) => { `+choiceNormJS+` const m = el.querySelector(".kisland-form-search-max"); return m ? norm(m.textContent) : "" }`, want, "max line")
+	f.choiceExpect(`(el) => { `+choiceNormJS+` const m = el.querySelector(".neisland-form-search-max"); return m ? norm(m.textContent) : "" }`, want, "max line")
 }
 
 // SearchFor types q into a search's input and fires input.
 func (f Field) SearchFor(q string) {
 	f.a.t.Helper()
 	f.choiceDo(`(el) => {
-		const c = el.querySelector("input.kisland-form-search-input")
+		const c = el.querySelector("input.neisland-form-search-input")
 		if (!c) {
 			throw new Error("no search input")
 		}

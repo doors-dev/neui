@@ -13,8 +13,8 @@
 //				Name:     "board",
 //				Template: func(slot gox.Comp) gox.Elem { return func(cur gox.Cursor) error { return cur.Comp(slot) } },
 //				Library: func(l neui.Library) error {
-//					l.Head(ui.Style())
-//					return l.Control("form", "a form", ui.NewForm)
+//					l.Head(neisland.Style())
+//					return neisland.RegisterForm(l)
 //				},
 //			},
 //			Script: `ui.root.set(ui.form({fields: [{type: "text", label: "Name", name: "name"}]})); while (true) ui.notify(ui.draw())`,

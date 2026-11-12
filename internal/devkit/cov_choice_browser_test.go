@@ -451,7 +451,7 @@ func TestSearchSingleSwapsAfterRemove(t *testing.T) {
 	a, f := formApp(t, `{fields: [{type: "search", label: "Owner", name: "owner", search: `+people+`}]}`)
 	owner := f.Field("Owner")
 	owner.ExpectRequiredMark(false)
-	owner.Find("input.kisland-form-search-input").WaitAttr("placeholder", "Search…")
+	owner.Find("input.neisland-form-search-input").WaitAttr("placeholder", "Search…")
 	owner.SearchFor("mar")
 	owner.ExpectResults("Marta Ortiz", "Mark de Vries")
 	owner.PickResult("Mark de Vries")
@@ -470,7 +470,7 @@ func TestSearchSingleSwapsAfterRemove(t *testing.T) {
 
 func TestSearchCustomPlaceholder(t *testing.T) {
 	_, f := formApp(t, `{fields: [{type: "search", label: "Owner", name: "owner", placeholder: "Name or email", search: `+people+`}]}`)
-	f.Field("Owner").Find("input.kisland-form-search-input").WaitAttr("placeholder", "Name or email")
+	f.Field("Owner").Find("input.neisland-form-search-input").WaitAttr("placeholder", "Name or email")
 }
 
 func TestSearchMultiChipsInPickOrderHideInputAtMax(t *testing.T) {
@@ -593,7 +593,7 @@ func TestSearchMinErrorAfterRemoveAtMax(t *testing.T) {
 	pair.SearchFor("sam")
 	pair.PickResult("Samantha Okafor")
 	pair.ExpectSearchInput(false)
-	pair.WaitGone(".kisland-form-error")
+	pair.WaitGone(".neisland-form-error")
 	pair.DropChip("Samantha Okafor")
 	pair.ExpectSearchInput(true)
 	pair.ExpectError("choose at least 2")

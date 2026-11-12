@@ -184,7 +184,7 @@ func TestCovListRemovesAtAnyCount(t *testing.T) {
 	tags.Add()
 	tags.Add()
 	tags.ExpectCount(2)
-	tags.WaitCount("button.kisland-form-item-remove", 2)
+	tags.WaitCount("button.neisland-form-item-remove", 2)
 	tags.Item(0).Control().Type("a")
 	tags.ExpectRequiredMark(true)
 	tags.ExpectNoError()
@@ -192,7 +192,7 @@ func TestCovListRemovesAtAnyCount(t *testing.T) {
 	f.ExpectSubmitMessage("form is not completed or contains errors")
 	tags.Remove(1)
 	tags.ExpectCount(1)
-	tags.WaitCount("button.kisland-form-item-remove", 1)
+	tags.WaitCount("button.neisland-form-item-remove", 1)
 	tags.ExpectError("add at least 2")
 	f.ExpectSubmitDisabled(true)
 	f.ExpectSubmitMessage("form is not completed or contains errors")
@@ -337,8 +337,8 @@ func TestCovListMaxDisablesAddWithReason(t *testing.T) {
 	tags.ExpectCount(2)
 	tags.ExpectAddDisabled(true)
 	tags.ExpectHelp("Maximum of 2 reached.")
-	add := tags.Find(":scope > .kisland-form-items-foot > .kisland-form-item-add")
-	help := tags.Find(":scope > .kisland-form-items-foot .kisland-form-help")
+	add := tags.Find(":scope > .neisland-form-items-foot > .neisland-form-item-add")
+	help := tags.Find(":scope > .neisland-form-items-foot .neisland-form-help")
 	add.WaitAttr("aria-describedby", *help.Element().MustAttribute("id"))
 	tags.Add()
 	tags.ExpectCount(2)
@@ -405,7 +405,7 @@ func TestCovListKeyLabelAndNamesFromTemplate(t *testing.T) {
 	tags.Add()
 	tags.Add()
 	tags.ExpectCount(2)
-	tags.Find(":scope > .kisland-form-items-foot > .kisland-form-item-add").WaitAttr("aria-label", "Add to Tag words")
+	tags.Find(":scope > .neisland-form-items-foot > .neisland-form-item-add").WaitAttr("aria-label", "Add to Tag words")
 	tags.ExpectRemoveName(0, "Remove item 1 of Tag words")
 	tags.ExpectRemoveName(1, "Remove item 2 of Tag words")
 	tags.Item(0).Control().ExpectName("Tag words, item 1")
@@ -421,7 +421,7 @@ func TestCovListKeyLabelAndNamesFromTemplate(t *testing.T) {
 	people.Add()
 	people.ExpectItemName(0, "People, item 1")
 	people.ExpectItemName(1, "People, item 2")
-	people.Item(0).Find(".kisland-form-item-body").WaitAttr("role", "group")
+	people.Item(0).Find(".neisland-form-item-body").WaitAttr("role", "group")
 	people.Item(1).Field("Name").Type("Bob")
 	people.Remove(0)
 	people.ExpectCount(1)
@@ -519,7 +519,7 @@ func TestCovSeriesRequiredMarksLegendUntilComplete(t *testing.T) {
 }
 
 const covSeriesEndJS = `() => {
-	const ol = document.querySelector("ol.kisland-form-steps")
+	const ol = document.querySelector("ol.neisland-form-steps")
 	if (!ol) {
 		return "none"
 	}
@@ -527,10 +527,10 @@ const covSeriesEndJS = `() => {
 	const kind = last.hasAttribute("data-incomplete") ? "ring" : last.hasAttribute("data-complete") ? "completed" : "step"
 	const ends = ol.querySelectorAll(":scope > [data-incomplete], :scope > [data-complete]").length
 	const visible = Array.from(last.querySelectorAll(":scope > *")).filter((n) => n.textContent.trim() !== "" && n.getBoundingClientRect().width > 1).map((n) => n.textContent.trim()).join("|")
-	const status = Array.from(last.querySelectorAll(":scope > .kisland-form-step-status")).map((n) => n.textContent.trim()).join("|")
-	const mark = getComputedStyle(last.querySelector(":scope > .kisland-form-step-mark"))
+	const status = Array.from(last.querySelectorAll(":scope > .neisland-form-step-status")).map((n) => n.textContent.trim()).join("|")
+	const mark = getComputedStyle(last.querySelector(":scope > .neisland-form-step-mark"))
 	const hollow = kind !== "ring" || (parseFloat(mark.borderTopWidth) >= 1 && mark.borderTopStyle === "solid" && mark.backgroundColor !== mark.borderTopColor)
-	const sizes = new Set(Array.from(ol.querySelectorAll(":scope > li:not([data-complete]) > .kisland-form-step-mark")).map((m) => m.offsetWidth + "x" + m.offsetHeight))
+	const sizes = new Set(Array.from(ol.querySelectorAll(":scope > li:not([data-complete]) > .neisland-form-step-mark")).map((m) => m.offsetWidth + "x" + m.offsetHeight))
 	return [kind, ends, visible, status, hollow, Array.from(sizes).join(",")].join(" / ")
 }`
 
@@ -844,11 +844,11 @@ func TestCovListCountHiddenWhenEmpty(t *testing.T) {
 	_, f := contForm(t, covListBoundsSpec)
 	tags := f.List("Tags")
 	tags.ExpectCount(0)
-	tags.Find(".kisland-form-count").WaitText("")
+	tags.Find(".neisland-form-count").WaitText("")
 	tags.Add()
-	tags.Find(".kisland-form-count").WaitText("1 of 2–3")
+	tags.Find(".neisland-form-count").WaitText("1 of 2–3")
 	tags.Remove(0)
-	tags.Find(".kisland-form-count").WaitText("")
+	tags.Find(".neisland-form-count").WaitText("")
 }
 
 func TestCovListMarkWhileAnyItemError(t *testing.T) {
