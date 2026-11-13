@@ -449,10 +449,10 @@ func (l Library) Layout[I any](name string, desc string, f func(i I, children []
 	return l.inner.Layout(name, desc, f)
 }
 
-// Head adds an element, such as a stylesheet, rendered ahead of every app
-// the island runs.
-func (l Library) Head(e gox.Elem) {
-	l.inner.Head(e)
+// Head adds elements, such as stylesheets, rendered ahead of every app the
+// island runs.
+func (l Library) Head(e ...gox.Elem) {
+	l.inner.Head(e...)
 }
 
 // Control adds a widget like View that also hands the script a value O the

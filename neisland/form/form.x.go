@@ -1,4 +1,4 @@
-// Managed by GoX v0.3.4
+// Managed by GoX v0.3.6-0.20261113082228-02db5fed593a
 
 //line form.gox:1
 package form
@@ -20,7 +20,7 @@ import (
 // {"data": values, "submit": button value} to the script waiting in
 // ui.draw(). Files upload into the island dir as they are picked, each under
 // <field id>/. The cancel button sends {"canceled": true}.
-func New(ctx context.Context, p params, submit func(ctx context.Context, s map[string]any) bool) (api.Widget[struct{}], error) {
+func New(ctx context.Context, p Params, submit func(ctx context.Context, s map[string]any) bool) (api.Widget[struct{}], error) {
 	if len(p.Submits) == 0 {
 		p.Submits = []submitParams{{Text: "Submit"}}
 	}
@@ -100,7 +100,7 @@ func newFieldWidget(ctx context.Context, group group, field anyParams) (fieldWid
 
 type widget struct {
 	id string
-	params params
+	params Params
 	root *root
 	group *groupBase
 	fields []fieldWidget

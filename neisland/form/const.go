@@ -1,0 +1,4 @@
+package form
+
+// Desc describes the form control to the agent, for Library.Control.
+const Desc = "Form the user fills and submits; a submit gives {\"data\": object, \"submit\": string}, where data has each filled field's value under its name and leaves empty fields out. Every rule declared in params is enforced by the server before a submit reaches you: required, min and max, minLength and maxLength, pattern, number bounds and step, date ranges, accepted file types and sizes, and your validate functions; chosen select and search options are exactly the {value, label} objects your options or search function returned, and file paths point to uploaded files in the workspace; so data always matches the declaration and needs no checks of its own: a field with min 1 and max 1 has exactly one item, read [0], and only an optional field can be missing."

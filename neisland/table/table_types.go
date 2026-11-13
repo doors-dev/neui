@@ -113,20 +113,21 @@ func stateEqual(old state, new state) bool {
 	return true
 }
 
-type params struct {
+// Params is what a script passes to ui.table.
+type Params struct {
 	_          struct{}                      `additionalProperties:"false"`
 	Columns    []column                      `json:"columns" required:"true" nullable:"false" minItems:"1" maxItems:"12" description:"column headers, in order"`
-	Query      neui.IslandCall[page, result] `json:"query,omitempty" description:"returns the rows for a page, called when the table shows and on every page change; set either query or rows"`
-	Rows       []row                         `json:"rows,omitempty" maxItems:"100" description:"fixed rows; set either query or rows; the table pages, sorts and searches them itself"`
+	Query      neui.IslandCall[page, result] `json:"query,omitempty" description:"returns the rows for a page, called when the table shows and on every page change"`
+	Rows       []row                         `json:"rows,omitempty" maxItems:"100" description:"fixed rows; the table pages, sorts and searches them itself"`
 	Sort       *sortSpec                     `json:"sort,omitempty" description:"sort when the table shows; ignored when the column is out of range or not sortable"`
-	Search     bool                          `json:"search,omitempty" description:"true lets the user search; with query the text goes to every query call, with rows only rows with a cell containing it show, case-insensitive"`
+	Search     bool                          `json:"search,omitempty" description:"true lets the user search; with rows, only rows with a cell containing the text show, case-insensitive"`
 	PageSize   int                           `json:"pageSize,omitempty" minimum:"1" maximum:"100" default:"20" description:"rows per page"`
-	Clickable  bool                          `json:"clickable,omitempty" description:"true makes each row's first cell clickable; a click submits the row id with no value"`
-	Selectable bool                          `json:"selectable,omitempty" description:"true lets the user select rows and submit their ids; the selection survives page changes and reloads"`
+	Clickable  bool                          `json:"clickable,omitempty" description:"true makes each row's first cell clickable"`
+	Selectable bool                          `json:"selectable,omitempty" description:"true lets the user select rows and submit the selection; the selection survives page changes and reloads"`
 	Selected   []string                      `json:"selected,omitempty" maxItems:"1000" uniqueItems:"true" items.maxLength:"200" description:"ids of the rows selected when the table shows"`
 }
 
-func (p *params) initDefault() {
+func (p *Params) initDefault() {
 	if p.PageSize == 0 {
 		p.PageSize = 20
 	}
@@ -135,7 +136,7 @@ func (p *params) initDefault() {
 	}
 }
 
-func (p *params) state() state {
+func (p *Params) state() state {
 	selected := make(map[string]struct{}, len(p.Selected))
 	for _, id := range p.Selected {
 		selected[id] = struct{}{}
@@ -208,13 +209,15 @@ type cellButton struct {
 	Text  string   `json:"text" required:"true" minLength:"1" maxLength:"80" description:"label shown on the button"`
 }
 
-type submitResult struct {
+// Submit is what a table hands the script waiting in ui.draw().
+type Submit struct {
 	ID    string   `json:"id,omitempty" description:"id of the row the user acted on: alone for a click on the row's first cell, with value for a row action; empty for a selection submit"`
 	Value string   `json:"value,omitempty" description:"value of the row action button clicked; empty for a first-cell click and a selection submit"`
 	IDs   []string `json:"ids,omitempty" maxItems:"1000" description:"ids of the selected rows, sorted; set only for a selection submit"`
 }
 
-type patch struct {
+// Patch is what a script passes to update a table.
+type Patch struct {
 	_        struct{}                      `additionalProperties:"false" description:"an empty patch reloads the rows: the current page of query, or the rows as they are"`
 	Query    neui.IslandCall[page, result] `json:"query,omitempty" description:"new function that returns the rows; replaces rows, and the table reloads from the first page with the sort and search kept"`
 	Rows     []row                         `json:"rows,omitempty" maxItems:"100" description:"new fixed rows; replaces query, and the table goes back to the first page"`

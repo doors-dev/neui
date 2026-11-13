@@ -110,7 +110,6 @@ func board(marks chan<- int, shown chan<- string) gox.Elem {
 				if err := neisland.RegisterLayout(l); err != nil {
 					return err
 				}
-				l.Head(neisland.Style())
 				if err := l.Tool("mark", "marks a number", func(ctx context.Context, in struct{ N int }) (int, error) {
 					marks <- in.N
 					return in.N, nil

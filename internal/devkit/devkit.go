@@ -13,7 +13,6 @@
 //				Name:     "board",
 //				Template: func(slot gox.Comp) gox.Elem { return func(cur gox.Cursor) error { return cur.Comp(slot) } },
 //				Library: func(l neui.Library) error {
-//					l.Head(neisland.Style())
 //					return neisland.RegisterForm(l)
 //				},
 //			},

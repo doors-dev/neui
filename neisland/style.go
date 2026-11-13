@@ -5,18 +5,32 @@ import (
 
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
+	"neui.dev"
 )
 
 //go:embed css/output.css
 var style []byte
 
-// Style is the stylesheet of the layouts and widgets, for Library.Head.
+// Style is the stylesheet of the layouts and widgets. Every Register function
+// adds it to Library.Head, and it renders once per island app.
 // Spacing and grid cell widths read --neisland-gap-sm, -md, -lg and
 // --neisland-item-sm, -md, -lg, so a host can override them in CSS; a fill
 // column wraps onto the next line rather than get narrower than
 // --neisland-item-md.
+type styleKey struct{}
+
 func Style() gox.Elem {
 	return func(cur gox.Cursor) error {
+		if store := neui.IslandStore(cur.Context()); store != nil {
+			first := false
+			store.Init(styleKey{}, func() any {
+				first = true
+				return struct{}{}
+			})
+			if !first {
+				return nil
+			}
+		}
 		if err := cur.InitVoid("link"); err != nil {
 			return err
 		}

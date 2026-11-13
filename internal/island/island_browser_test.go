@@ -310,7 +310,6 @@ func buttons(drawn chan<- struct{}) gox.Elem {
 				if err := l.Layout("column", neisland.ColumnDesc, neisland.Column); err != nil {
 					return err
 				}
-				l.Head(neisland.Style())
 				return neisland.RegisterButton(l)
 			},
 		})

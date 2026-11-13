@@ -41,8 +41,8 @@ type library struct {
 	head    []gox.Elem
 }
 
-func (l Library) Head(e gox.Elem) {
-	l.head = append(l.head, e)
+func (l Library) Head(e ...gox.Elem) {
+	l.head = append(l.head, e...)
 }
 
 func (l *library) RegisterApp(ctx func() context.Context, vm *quickjs.VM) error {

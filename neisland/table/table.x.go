@@ -1,4 +1,4 @@
-// Managed by GoX v0.3.4
+// Managed by GoX v0.3.6-0.20261113082228-02db5fed593a
 
 //line table.gox:1
 package table
@@ -29,11 +29,11 @@ const (
 )
 
 type widget struct {
-	params params
+	params Params
 	state doors.Source[state]
 	body doors.Beam[int]
 	selected doors.Source[map[string]struct{}]
-	submit func(ctx context.Context, s submitResult) bool
+	submit func(ctx context.Context, s Submit) bool
 }
 
 // New builds a table widget for Library.Control. Its rows are either fixed
@@ -49,7 +49,7 @@ type widget struct {
 // get checkboxes; the selection, at most 1000 ids, survives page changes and
 // reloads, and its button submits the selected ids, sorted. An
 // empty patch reloads the rows.
-func New(ctx context.Context, p params, submit func(ctx context.Context, s submitResult) bool) (api.Widget[patch], error) {
+func New(ctx context.Context, p Params, submit func(ctx context.Context, s Submit) bool) (api.Widget[Patch], error) {
 	p.initDefault()
 	source := doors.NewSourceEqual(p.state(), stateEqual)
 	return widget{
@@ -68,7 +68,7 @@ func New(ctx context.Context, p params, submit func(ctx context.Context, s submi
 	}, nil
 }
 
-func (t widget) Update(ctx context.Context, patch patch) {
+func (t widget) Update(ctx context.Context, patch Patch) {
 	t.state.Mutate(ctx, func(s state) state {
 		s.seq++
 		if patch.Query != "" {
@@ -402,7 +402,7 @@ func (t widget) render() gox.Elem {
 													__e = __c.Modify(doors.AClick{
 													Scope: neui.IslandScope(ctx),
 													On: func(ctx context.Context, _ doors.RequestPointer) bool {
-														t.submit(ctx, submitResult{ID: r.ID})
+														t.submit(ctx, Submit{ID: r.ID})
 														return false
 													},
 												}); if __e != nil { return }
@@ -445,7 +445,7 @@ func (t widget) render() gox.Elem {
 													__e = __c.Modify(doors.AClick{
 													Scope: neui.IslandScope(ctx),
 													On: func(ctx context.Context, _ doors.RequestPointer) bool {
-														t.submit(ctx, submitResult{ID: r.ID, Value: a.Value})
+														t.submit(ctx, Submit{ID: r.ID, Value: a.Value})
 														return false
 													},
 												}); if __e != nil { return }
@@ -787,7 +787,7 @@ func (t widget) status(sel map[string]struct{}, content result, page int, size i
 				__e = __c.Modify(doors.AClick{
 				Scope: neui.IslandScope(ctx),
 				On: func(ctx context.Context, _ doors.RequestPointer) bool {
-					t.submit(ctx, submitResult{IDs: slices.Sorted(maps.Keys(sel))})
+					t.submit(ctx, Submit{IDs: slices.Sorted(maps.Keys(sel))})
 					return false
 				},
 			}); if __e != nil { return }

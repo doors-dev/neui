@@ -32,7 +32,7 @@ func widgets() neui.Island {
 func TestDevkitTextShows(t *testing.T) {
 	a := stack.Island(t, devkit.App{
 		Island: widgets(),
-		Script: `ui.root.set(ui.text({text: "hello there"})); ui.draw(1); ui.notify("drawn")`,
+		Script: `ui.root.set(ui.markdown({text: "hello there"})); ui.draw(1); ui.notify("drawn")`,
 	})
 	a.Notified()
 	if text := a.Page.MustElement(".neisland-text").MustText(); text != "hello there" {

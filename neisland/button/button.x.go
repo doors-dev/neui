@@ -1,26 +1,28 @@
-// Managed by GoX v0.3.4
+// Managed by GoX v0.3.6-0.20261113082228-02db5fed593a
 
 //line button.gox:1
 package button
 
 import (
 	"context"
-	
+
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
-	neui "neui.dev"
+	"neui.dev"
 	"neui.dev/api"
 )
 
-type patch struct {
+// Patch is what a script passes to update a button.
+type Patch struct {
 	_ struct{} `additionalProperties:"false"`
 	Text string `json:"text,omitempty" minLength:"1" maxLength:"80" description:"new label; omit to keep the current one"`
 	Disabled *bool `json:"disabled,omitempty" description:"true disables the button, false enables it; omit to keep the current state"`
 }
 
-type params struct {
+// Params is what a script passes to ui.button.
+type Params struct {
 	_ struct{} `additionalProperties:"false"`
-	Size string `json:"size,omitempty" enum:"sm,md,lg" default:"md" description:"button size"`
+	Size string `json:"size,omitempty" enum:"sm,md,lg" default:"md"`
 	Style string `json:"style,omitempty" enum:"primary,secondary,success,danger" default:"secondary" description:"visual weight: primary for the main action, danger for destructive ones"`
 	Text string `json:"text" maxLength:"80" required:"true" minLength:"1" description:"label shown on the button"`
 	Disabled bool `json:"disabled,omitempty" description:"true shows the button disabled"`
@@ -31,7 +33,7 @@ type params struct {
 // New builds a button widget for Library.Control: a click submits the
 // button's value param to the script waiting in ui.draw(). With agent set, the
 // button is also an Input of the enclosing space, so the agent can click it.
-func New(ctx context.Context, p params, submit func(ctx context.Context, value string) bool) (api.Widget[patch], error) {
+func New(ctx context.Context, p Params, submit func(ctx context.Context, value string) bool) (api.Widget[Patch], error) {
 	if p.Size == "" {
 		p.Size = "md"
 	}
@@ -45,12 +47,12 @@ func New(ctx context.Context, p params, submit func(ctx context.Context, value s
 }
 
 type widget struct {
-	state doors.Source[params]
+	state doors.Source[Params]
 	submit func(ctx context.Context, value string) bool
 }
 
-func (b widget) Update(ctx context.Context, patch patch) {
-	b.state.Mutate(ctx, func(p params) params {
+func (b widget) Update(ctx context.Context, patch Patch) {
+	b.state.Mutate(ctx, func(p Params) Params {
 		if patch.Text != "" {
 			p.Text = patch.Text
 		}
@@ -61,17 +63,18 @@ func (b widget) Update(ctx context.Context, patch patch) {
 	})
 }
 
-//line button.gox:61
+
+//line button.gox:64
 func (b widget) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line button.gox:62
+//line button.gox:65
 		__e = __c.Any(b.state.Bind(b.render)); if __e != nil { return }
 	return })
-//line button.gox:63
+//line button.gox:66
 }
 
-func (p params) input() gox.Proxy {
+func (p Params) input() gox.Proxy {
 	if p.Agent == "" {
 		return gox.ProxyFunc(func(cur gox.Cursor, el gox.Elem) error {
 			return el(cur)
@@ -80,14 +83,14 @@ func (p params) input() gox.Proxy {
 	return neui.Input{Desc: p.Agent}
 }
 
-//line button.gox:74
-func (b widget) render(p params) gox.Elem {
+//line button.gox:77
+func (b widget) render(p Params) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line button.gox:75
+//line button.gox:78
 		__e = (p.input()).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
-//line button.gox:75
+//line button.gox:78
 			__e = (doors.AClick{
 		Scope: neui.IslandScope(ctx),
 		On: func(ctx context.Context, rp doors.RequestPointer) bool {
@@ -98,19 +101,19 @@ func (b widget) render(p params) gox.Elem {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.Init("button"); if __e != nil { return }
 				{
-//line button.gox:82
+//line button.gox:85
 					__e = __c.Set("type", "button"); if __e != nil { return }
-//line button.gox:83
+//line button.gox:86
 					__e = __c.Set("class", "neisland-button neisland-button-" + p.Size + " neisland-button-" + p.Style); if __e != nil { return }
-//line button.gox:84
+//line button.gox:87
 					__e = __c.Set("disabled", p.Disabled); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line button.gox:85
+//line button.gox:88
 					__e = __c.Any(p.Text); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
 			return })); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
-//line button.gox:87
+//line button.gox:90
 }

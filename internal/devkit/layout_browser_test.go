@@ -63,8 +63,8 @@ const fillJS = `() => Array.from(document.querySelectorAll(".neisland-row")).map
 
 func TestLayoutFillColumnsWrapOnNarrowPage(t *testing.T) {
 	a := layoutApp(t, 390, `ui.column({},
-		ui.row({}, ui.column({fill: 1}, ui.text({text: "fill 1"})), ui.column({fill: 2}, ui.text({text: "fill 2"})), ui.column({fill: 3}, ui.text({text: "fill 3"})), ui.button({text: "fixed"})),
-		ui.row({}, ui.column({fill: 6}, ui.text({text: "fill 6"})), ui.column({fill: 1}, ui.text({text: "fill 1"}))),
+		ui.row({}, ui.column({fill: 1}, ui.markdown({text: "fill 1"})), ui.column({fill: 2}, ui.markdown({text: "fill 2"})), ui.column({fill: 3}, ui.markdown({text: "fill 3"})), ui.button({text: "fixed"})),
+		ui.row({}, ui.column({fill: 6}, ui.markdown({text: "fill 6"})), ui.column({fill: 1}, ui.markdown({text: "fill 1"}))),
 		ui.row({}, ui.column({fill: 1}, ui.form({fields: [{type: "date", label: "When", name: "when"}]})), ui.column({fill: 2}, ui.form({fields: [{type: "text", label: "Note", name: "note"}]})))
 	)`)
 	expectEval(t, a, fillJS, "ok,ok,ok | ok,ok | ok,ok", "fill columns at least 12rem wide or wrapped")
@@ -72,7 +72,7 @@ func TestLayoutFillColumnsWrapOnNarrowPage(t *testing.T) {
 }
 
 func TestLayoutFillColumnsKeepWeightsWithRoom(t *testing.T) {
-	a := layoutApp(t, 1280, `ui.row({}, ui.column({fill: 1}, ui.text({text: "fill 1"})), ui.column({fill: 2}, ui.text({text: "fill 2"})))`)
+	a := layoutApp(t, 1280, `ui.row({}, ui.column({fill: 1}, ui.markdown({text: "fill 1"})), ui.column({fill: 2}, ui.markdown({text: "fill 2"})))`)
 	expectEval(t, a, `() => {
 		const [one, two] = Array.from(document.querySelectorAll(".neisland-row > .neisland-column")).map((c) => c.getBoundingClientRect())
 		return String(Math.abs(two.width - 2 * one.width) < 1 && one.top === two.top)

@@ -14,8 +14,8 @@ import (
 func TestTextStyles(t *testing.T) {
 	a := stack.Island(t, devkit.App{Island: widgets(), Script: `
 		var styles = ["plain", "card", "info", "success", "warning", "danger"]
-		var texts = styles.map((s) => ui.text({text: "Import " + s + "\n\nRows were read.", style: s}))
-		texts.push(ui.text({text: "Default style"}))
+		var texts = styles.map((s) => ui.markdown({text: "Import " + s + "\n\nRows were read.", style: s}))
+		texts.push(ui.markdown({text: "Default style"}))
 		ui.root.set(ui.grid({}, ...texts))
 		ui.notify(ui.draw())
 	`})
@@ -61,7 +61,7 @@ func TestTextStyles(t *testing.T) {
 
 func TestTextHeadings(t *testing.T) {
 	a := stack.Island(t, devkit.App{Island: widgets(), Script: `
-		ui.root.set(ui.text({text: "# One\n\n## Two\n\n### Three\n\nBody"}))
+		ui.root.set(ui.markdown({text: "# One\n\n## Two\n\n### Three\n\nBody"}))
 		ui.notify(ui.draw())
 	`})
 	box := a.Find(".neisland-text")
@@ -76,7 +76,7 @@ func TestTextHeadings(t *testing.T) {
 
 func TestTextStyleUpdate(t *testing.T) {
 	a := stack.Island(t, devkit.App{Island: widgets(), Script: `
-		var tx = ui.text({text: "Saving"})
+		var tx = ui.markdown({text: "Saving"})
 		ui.root.set(ui.column({}, tx, ui.button({text: "Next", value: "next"})))
 		var styles = ["warning", "plain"]
 		for (var s of styles) {
@@ -102,7 +102,7 @@ func TestTextStyleUpdate(t *testing.T) {
 }
 
 func TestTextSizeRejected(t *testing.T) {
-	a := stack.Island(t, devkit.App{Island: widgets(), Script: `ui.root.set(ui.text({text: "Title", size: "lg"})); ui.notify(ui.draw())`})
+	a := stack.Island(t, devkit.App{Island: widgets(), Script: `ui.root.set(ui.markdown({text: "Title", size: "lg"})); ui.notify(ui.draw())`})
 	if got := a.ContainerScriptError(); !strings.Contains(got, "size") {
 		t.Fatalf("got %q, want an error naming size", got)
 	}

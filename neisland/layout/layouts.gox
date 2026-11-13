@@ -7,7 +7,7 @@ import (
 )
 
 // Column stacks children top to bottom, for Library.Layout.
-func Column(p columnParams, children []gox.Comp) gox.Comp {
+func Column(p ColumnParams, children []gox.Comp) gox.Comp {
 	gap := p.Gap
 	if gap == "" {
 		gap = "md"
@@ -20,7 +20,7 @@ func Column(p columnParams, children []gox.Comp) gox.Comp {
 }
 
 // Row places children side by side and wraps them, for Library.Layout.
-func Row(p rowParams, children []gox.Comp) gox.Comp {
+func Row(p RowParams, children []gox.Comp) gox.Comp {
 	gap := p.Gap
 	if gap == "" {
 		gap = "md"
@@ -37,7 +37,7 @@ func Row(p rowParams, children []gox.Comp) gox.Comp {
 }
 
 // Grid lays children out in equal-width cells, for Library.Layout.
-func Grid(p gridParams, children []gox.Comp) gox.Comp {
+func Grid(p GridParams, children []gox.Comp) gox.Comp {
 	gap := p.Gap
 	if gap == "" {
 		gap = "md"

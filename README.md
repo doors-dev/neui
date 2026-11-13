@@ -9,7 +9,6 @@ Every feature you build for users is instantly usable by the agent, with a work 
 - [Why Neui](#why-neui)
 - [What you get](#what-you-get)
 - [How it works](#how-it-works)
-- [Agentic Apps](#agentic-apps)
 - [Compared with CopilotKit and Vercel AI SDK](#compared-with-copilotkit-and-vercel-ai-sdk)
 - [Use cases](#use-cases)
 - [Getting started](#getting-started)
@@ -43,11 +42,9 @@ A new capability is instantly available to the agent, its scripts and the live U
 
 The agent gets its own file workspace, scripts that run bulk UI work in one step, spreadsheets, web search, MCP connectors, background tasks, and automatic handling of long conversations. One script can call every tool and work across the whole UI in a single step.
 
-### Agentic apps without a model call per click
+### Agent-built screens without a model call per click
 
-When chat is not enough, the agent builds the user a small app in an island, a region of the page you declare. It writes a short program from your own components, so the app stays in your design system. The program runs on your server inside the app, handles any number of clicks and reads your data with no model turn and no extra API, and calls the model only when a step needs judgment. Forms enforce their rules on the server, so what comes back can be trusted.
-
-A ready widget set comes with it: forms with every common field kind, paged tables with search, sort and selection, markdown text with file downloads, buttons and responsive layouts. See [Agentic Apps](#agentic-apps).
+The agent writes a small program from your own components, so the screen stays in your design. The program runs on your server inside the app, handles clicks and data itself with no extra API, and calls the model only when a step needs judgment.
 
 ### Chat features, built in
 
@@ -68,75 +65,9 @@ Doors is a server-driven framework: the UI lives on the server, and the browser 
 - **The screen is the agent's interface.** Because the server holds the live UI, the agent can read it and act on it directly, with the app's own logic running underneath. Developers mark regions, actions, context and elements of what the user sees in the page template, and the agent sees exactly those.
 - **Tools are Go functions.** A module serves tools to every thread. Built-in modules cover the file workspace, scripts, spreadsheets, web access, MCP connectors and time; your own tools are ordinary Go functions registered the same way.
 - **Permissions follow the screen.** The agent runs inside the signed-in user's session. What a developer draws for a user, and marks for the agent, is what the agent can use, and it updates as the page updates.
-- **Agent-built apps are programs from your components.** When the agent needs a screen of its own, it writes a small program into an island, built from your components and run on the server inside the app. [Agentic Apps](#agentic-apps) covers how.
+- **Agent-built screens are programs from your components.** When the agent needs a screen of its own, it is given a region of the page and composes a small program from your components. The program runs on the server inside the app and handles clicks and data itself.
 - **The prompt stays stable.** System prompt and tool list are fixed; page state arrives as tool results. The provider's cache keeps hitting across the conversation.
 - **The chat is a widget.** A ready-made chat widget renders on any Doors page and shows threads, search, rewind and clone. Storage and model provider are pluggable; Claude, GPT and DeepSeek providers are included.
-
-## Agentic Apps
-
-Some work fits neither chat nor the screens the app already has: reviewing fifty records one by one, a form with a dozen fields, an overview nobody built. For these the agent writes its own small app and runs it on the page.
-
-**An island is where it runs.** Developers declare an island in the page template and give it a library of Go components: views that show something, controls the user acts on, layouts, and app functions with typed access to the app's data. The agent can build only from that library, and a page can have several islands, each with its own.
-
-```gox
-~neui.Island{
-	Name:     "workbench",
-	Desc:     "Panel beside the invoice list for apps you build for the user",
-	Template: func(slot gox.Comp) gox.Elem { return <div>~(slot)</div> },
-	Library: func(l neui.Library) error {
-		if err := l.Tool("overdue", "overdue invoices, one page", overdue); err != nil {
-			return err
-		}
-		if err := l.Tool("remind", "email a payment reminder", remind); err != nil {
-			return err
-		}
-		return neisland.RegisterAll(l)
-	},
-}
-```
-
-**The agent writes a script.** It reads the island's spec, then sends synchronous JavaScript that runs on the server in a sandboxed QuickJS VM. The script creates widgets with `ui.<widget>(params)`, arranges them in slots, and calls `ui.draw()`, which puts the frame on screen and blocks until the user acts, returning what they did. The script answers with ordinary code, app functions and the agent's other tools, then draws again. When a step needs judgment it calls `ui.notify(value)`, and the value reaches the model. The model changes a running app with `island_continue`: queued behind the current script, or with `interrupt` to stop a loop at its current or next draw and carry on with the same widgets and variables. Widgets can also take functions the agent writes, which they call on their own, for example to validate a field as the user types, find options for a search field, or load a table page.
-
-```js
-var head = ui.text({text: "## Overdue invoices"})
-var invoices = ui.table({
-  columns: [{title: "Invoice"}, {title: "Customer"}, {title: "Amount"}],
-  search: true,
-  pageSize: 10,
-  query: "(p) => { var r = app.overdue(p); return {total: r.total, rows: r.items.map(i => ({id: i.id, cells: [i.number, i.customer, String(i.amount)], actions: [{value: 'remind', text: 'Send reminder', style: 'primary'}, {value: 'dispute', text: 'Disputed'}]}))} }"
-})
-ui.root.set(ui.column({}, head, invoices))
-while (true) {
-  var ev = ui.draw()
-  if (ev.data.value === "remind") {
-    app.remind({id: ev.data.id})
-    head.update({text: "Reminder sent for " + ev.data.id, style: "success"})
-    invoices.update({})
-  } else if (ev.data.value === "dispute") {
-    ui.notify({disputed: ev.data.id})
-  }
-}
-```
-
-The user can page, search and send any number of reminders without a model turn. Only a disputed invoice goes to the model, which can then read it and interrupt the loop with a script that shows a reply form.
-
-**Why it works well:**
-
-- **No model call per click.** Model turns grow with the decisions that need judgment, not with the user's clicks. A click costs one server round trip.
-- **Data stays in code.** The script moves rows from app functions into widgets; they reach the model only if the script notifies them. Context stays small, and text from tickets or emails shown in the app cannot steer the agent unless it is sent to the model.
-- **Your design system.** Only your components render. The agent cannot emit HTML, CSS or script, and each island's catalog is loaded on demand, so the prompt stays stable.
-- **Results you can trust.** Widget params are checked against schemas when the script creates them, and a form enforces every rule it declares on the server before a submit reaches the script: required fields, lengths, patterns, bounds, file types and the agent's own validate functions.
-- **A contained sandbox.** Each app gets its own VM with memory, time and size limits, no `require`, `fetch`, timers, filesystem or DOM, and reach only through the app functions and tools the developer gave the session. A script error does not end the app; the model gets the stack and fixes it against the state that survived.
-
-Declarative generative UI such as A2UI, and CopilotKit's component mode, has the model describe the screen, and a user action goes back to the model as a new turn. That is simpler for a one-shot surface like a confirmation, it streams while generating, and it reaches more platforms. Islands pay off in flows with many actions or much data, which run as code instead of model turns.
-
-**Ready widgets.** The `neisland` package (`neui.dev/neisland`) is a widget set for islands; `neisland.RegisterAll` adds it to a library, and `RegisterWidgets`, `RegisterLayout`, `RegisterForm` and the rest add parts of it.
-
-- **form**: text, email, phone, URL, password, number, range, date and time, textarea, select, search, checkbox and file fields; groups, repeatable lists and step-by-step series; several submit buttons and a cancel button.
-- **table**: fixed rows or a query function, paging, search, sorting, row selection, row actions and markdown cells with file links.
-- **text**: markdown with headings, lists, tables, code, images and workspace file downloads, plain or as a card, info, success, warning or danger box.
-- **button**: sizes, styles and a disabled state.
-- **column, row and grid**: layouts that wrap and collapse on narrow screens, tuned through CSS variables.
 
 ## Compared with CopilotKit and Vercel AI SDK
 
@@ -175,6 +106,6 @@ Neui is for Go teams that want React-class web apps with the agent built into th
 
 ## Getting started
 
-Neui is a Go module (`neui.dev`) that plugs into a Doors app: you configure the agent once with options on the Doors app, turn it on per session once the user is known, render the chat widget from the `nechat` package on the pages where the user should talk to the agent, and declare islands with the `neisland` widgets where it may build apps.
+Neui is a Go module (`neui.dev`) that plugs into a Doors app: you configure the agent once with options on the Doors app, turn it on per session once the user is known, and render the chat widget from the `nechat` package on the pages where the user should talk to the agent.
 
-Installation and a runnable walkthrough are being written alongside the public release. Until then, see the package documentation in [`doc.go`](doc.go), [`api/doc.go`](api/doc.go) and [`nechat/doc.go`](nechat/doc.go), [`neisland/neisland.go`](neisland/neisland.go), and the Doors documentation for building the app itself.
+Installation and a runnable walkthrough are being written alongside the public release. Until then, see the package documentation in [`doc.go`](doc.go), [`api/doc.go`](api/doc.go) and [`nechat/doc.go`](nechat/doc.go), and the Doors documentation for building the app itself.

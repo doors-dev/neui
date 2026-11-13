@@ -311,8 +311,9 @@ func (f *seriesStep) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-type params struct {
-	_       struct{}       `additionalProperties:"false" description:"form the user fills and submits; a submit gives {\"data\": object, \"submit\": the pressed button's value}, where data has each filled field's value under its name and leaves empty fields out; every rule declared here is enforced by the server before a submit reaches you: required, min and max, minLength and maxLength, pattern, number bounds and step, date ranges, accepted file types and sizes, and your validate functions; chosen select and search options are exactly the {value, label} objects your options or search function returned, and file paths point to uploaded files in the workspace; so data always matches the declaration and needs no checks of its own: a field with min 1 and max 1 has exactly one item, read [0], and only an optional field can be missing."`
+// Params is what a script passes to ui.form.
+type Params struct {
+	_       struct{}       `additionalProperties:"false"`
 	Fields  []fieldParams  `json:"fields" required:"true" nullable:"false" minItems:"1" maxItems:"50" description:"fields in display order, each with a name unique within the form"`
 	Submits []submitParams `json:"submits,omitempty" maxItems:"5" description:"submit buttons in display order; omitted gives one Submit button"`
 	Cancel  string         `json:"cancel,omitempty" minLength:"1" maxLength:"80" description:"label of a cancel button; pressing it gives {\"canceled\": true}; omit for no cancel button"`

@@ -31,7 +31,7 @@ func markdownWorkspace(t *testing.T) string {
 
 func TestMarkdownText(t *testing.T) {
 	a := stack.Island(t, devkit.App{Island: widgets(), Script: `
-		ui.root.set(ui.text({text: "# Review\n\nLate fell to **9%**,\nsee [site](https://example.com) and [rel](notes.md).\n\n- [x] done\n\n| Region | Late |\n|:--|--:|\n| North | 8% |\n\n` + "```" + `\ncode <b>\n` + "```" + `\n\n<script>window.bad = 1</script><b>raw</b>"}))
+		ui.root.set(ui.markdown({text: "# Review\n\nLate fell to **9%**,\nsee [site](https://example.com) and [rel](notes.md).\n\n- [x] done\n\n| Region | Late |\n|:--|--:|\n| North | 8% |\n\n` + "```" + `\ncode <b>\n` + "```" + `\n\n<script>window.bad = 1</script><b>raw</b>"}))
 		ui.notify(ui.draw())`})
 	box := a.Find(".neisland-text.neisland-prose")
 	box.Find("h1").WaitText("Review")
@@ -56,7 +56,7 @@ func TestMarkdownText(t *testing.T) {
 
 func TestMarkdownFileLinks(t *testing.T) {
 	a := stack.Island(t, devkit.App{Island: widgets(), Dir: markdownWorkspace(t), Script: `
-		ui.root.set(ui.text({text: "Get [the export](file:///reports/q3%20final.csv), [file:///notes.txt](file:///notes.txt) or [old](file:///reports/q2.csv)."}))
+		ui.root.set(ui.markdown({text: "Get [the export](file:///reports/q3%20final.csv), [file:///notes.txt](file:///notes.txt) or [old](file:///reports/q2.csv)."}))
 		ui.notify(ui.draw())`})
 	box := a.Find(".neisland-text")
 	chip := box.Find("a.neisland-file")
