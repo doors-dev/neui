@@ -8,11 +8,13 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"testing"
 	"time"
 	"unicode/utf8"
 
+	"code.dny.dev/ssrf"
 	"github.com/JohannesKaufmann/html-to-markdown/v2/converter"
 	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/base"
 	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/commonmark"
@@ -478,6 +480,38 @@ func TestGuardPolicy(t *testing.T) {
 		var port badPorted
 		if err := guard("tcp", address, nil); !errors.As(err, &port) {
 			t.Errorf("%s not refused as a bad port: %v", address, err)
+		}
+	}
+}
+
+func TestGuardRefusesOwnAddresses(t *testing.T) {
+	defer func(g *ssrf.Guardian) { guardian = g }(guardian)
+	guardian = ssrf.New(ssrf.WithAnyPort(), ssrf.WithAllowedV4Prefixes(netip.MustParsePrefix("0.0.0.0/0")), ssrf.WithAllowedV6Prefixes(netip.MustParsePrefix("::/0")))
+	if err := guard("tcp", "8.8.8.8:443", nil); err != nil {
+		t.Errorf("8.8.8.8:443 refused: %v", err)
+	}
+	locals, err := net.InterfaceAddrs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, local := range locals {
+		network, ok := local.(*net.IPNet)
+		if !ok {
+			continue
+		}
+		own, ok := netip.AddrFromSlice(network.IP)
+		if !ok {
+			continue
+		}
+		addresses := []string{netip.AddrPortFrom(own.Unmap(), 443).String()}
+		if own.Unmap().Is4() {
+			addresses = append(addresses, netip.AddrPortFrom(netip.AddrFrom16(own.Unmap().As16()), 443).String())
+		}
+		for _, address := range addresses {
+			var refused blocked
+			if err := guard("tcp", address, nil); !errors.As(err, &refused) {
+				t.Errorf("%s, an address of this host, allowed: %v", address, err)
+			}
 		}
 	}
 }

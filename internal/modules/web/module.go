@@ -146,6 +146,22 @@ func guard(_ string, address string, _ syscall.RawConn) error {
 	if guardian.SafeAddrPort(netip.AddrPortFrom(a, ap.Port())) != nil {
 		return blocked{addr: a.String()}
 	}
+	locals, err := net.InterfaceAddrs()
+	if err != nil {
+		return err
+	}
+	for _, local := range locals {
+		var ip net.IP
+		switch l := local.(type) {
+		case *net.IPNet:
+			ip = l.IP
+		case *net.IPAddr:
+			ip = l.IP
+		}
+		if own, ok := netip.AddrFromSlice(ip); ok && own.Unmap() == a {
+			return blocked{addr: a.String()}
+		}
+	}
 	return nil
 }
 

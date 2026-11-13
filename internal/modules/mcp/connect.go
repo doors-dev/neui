@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	neturl "net/url"
 	"time"
@@ -19,7 +20,10 @@ type transport struct {
 
 func (t transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if req.URL.Scheme != t.scheme || req.URL.Host != t.host {
-		return t.base.RoundTrip(req)
+		if req.Body != nil {
+			req.Body.Close()
+		}
+		return nil, fmt.Errorf("%s://%s is not the MCP server at %s://%s, so the request was refused", req.URL.Scheme, req.URL.Host, t.scheme, t.host)
 	}
 	req = req.Clone(req.Context())
 	for k, v := range t.headers {

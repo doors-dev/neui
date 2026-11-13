@@ -287,11 +287,12 @@ type WebConfig struct {
 	// at connect time and on every redirect hop, any address IANA marks not
 	// globally reachable (loopback, private, link-local including cloud
 	// metadata, CGNAT, documentation, benchmarking, multicast, reserved,
-	// IPv6 outside 2000::/3, 6to4, Teredo), judges NAT64 64:ff9b::/96 by the
-	// IPv4 address inside it, refuses the ports the WHATWG Fetch standard
-	// bars, ignores HTTP_PROXY/HTTPS_PROXY because a proxy hides the real
-	// destination, caps redirects at 10, allows only http/https per hop and
-	// strips credentials. Passing a client replaces all of it; behind a
+	// IPv6 outside 2000::/3, 6to4, Teredo) and any address of the host's own
+	// network interfaces, judges NAT64 64:ff9b::/96 by the IPv4 address
+	// inside it, refuses the ports the WHATWG Fetch standard bars, ignores
+	// HTTP_PROXY/HTTPS_PROXY because a proxy hides the real destination, caps
+	// redirects at 10, allows only http/https per hop and strips
+	// credentials. Passing a client replaces all of it; behind a
 	// mandatory proxy, pass a client that uses it and let that proxy enforce
 	// destination policy. Leave Timeout at zero: the module bounds each fetch
 	// with a context deadline.

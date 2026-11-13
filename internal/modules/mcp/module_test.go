@@ -539,13 +539,10 @@ func TestConnectClearsStaleDesc(t *testing.T) {
 	}
 }
 
-func TestHeadersNotSentAcrossRedirect(t *testing.T) {
-	var leaked, reached atomic.Int64
+func TestRedirectToOtherHostRefused(t *testing.T) {
+	var reached atomic.Int64
 	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		reached.Add(1)
-		if r.Header.Get("Authorization") != "" || r.Header.Get("X-Secret") != "" {
-			leaked.Add(1)
-		}
 		http.Error(w, "no", http.StatusNotFound)
 	}))
 	t.Cleanup(other.Close)
@@ -559,18 +556,48 @@ func TestHeadersNotSentAcrossRedirect(t *testing.T) {
 	t.Cleanup(origin.Close)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	s, err := connect(ctx, origin.URL, map[string]string{"Authorization": "Bearer secret", "X-Secret": "x"}, time.Minute, func() {})
+	s, err := connect(ctx, origin.URL, map[string]string{"Authorization": "Bearer secret"}, time.Minute, func() {})
 	if err == nil {
 		s.Close()
+		t.Fatal("connected through a redirect to another host")
 	}
 	if authed.Load() == 0 {
 		t.Fatal("configured headers never reached the configured server")
 	}
-	if reached.Load() == 0 {
-		t.Fatal("redirect target never reached")
+	if reached.Load() != 0 {
+		t.Fatal("request reached the redirect target")
 	}
-	if leaked.Load() != 0 {
-		t.Fatal("configured headers sent to the redirect target")
+}
+
+func TestSameHostRedirectFollowed(t *testing.T) {
+	srv := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1"}, nil)
+	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
+		return srv
+	}, nil)
+	var authed atomic.Int64
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/mcp" {
+			http.Redirect(w, r, "/mcp", http.StatusTemporaryRedirect)
+			return
+		}
+		if r.Header.Get("Authorization") == "Bearer secret" {
+			authed.Add(1)
+		}
+		handler.ServeHTTP(w, r)
+	}))
+	t.Cleanup(ts.Close)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	s, err := connect(ctx, ts.URL+"/old", map[string]string{"Authorization": "Bearer secret"}, time.Minute, func() {})
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer s.Close()
+	if err := s.Ping(ctx, nil); err != nil {
+		t.Fatalf("ping: %v", err)
+	}
+	if authed.Load() == 0 {
+		t.Fatal("configured headers never reached the redirect target")
 	}
 }
 
