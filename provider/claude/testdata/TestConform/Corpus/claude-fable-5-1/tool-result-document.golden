@@ -58,8 +58,13 @@
           "tool_use_id": "call_1",
           "content": [
             {
-              "type": "text",
-              "text": "[document omitted]"
+              "type": "document",
+              "source": {
+                "type": "base64",
+                "media_type": "application/pdf",
+                "data": "JVBERi0xLjQKJeLjz9MK"
+              },
+              "title": "cat.pdf"
             }
           ],
           "is_error": false

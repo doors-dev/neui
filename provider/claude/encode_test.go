@@ -363,10 +363,11 @@ func TestDiscardedArgumentsNeedTheirResult(t *testing.T) {
 	}, "discarded arguments")
 }
 
-// A result takes text and images here, and a block it cannot carry leaves the
-// note every other unsendable block leaves. Refusing the request would not
-// deliver the document either, and it would take the rest of the result with it,
-// leaving the model waiting on a call nothing answered.
+// A result takes text, images and the documents a message takes here, and a
+// block it cannot carry leaves the note every other unsendable block leaves.
+// Refusing the request would not deliver the document either, and it would take
+// the rest of the result with it, leaving the model waiting on a call nothing
+// answered.
 func TestToolResultNotesWhatItCannotCarry(t *testing.T) {
 	got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{
 		Messages: []api.Message{
@@ -378,12 +379,16 @@ func TestToolResultNotesWhatItCannotCarry(t *testing.T) {
 				api.ContentToolResult{ID: "toolu_1", Content: api.UserContents{
 					api.ContentText{Text: "the report"},
 					api.ContentDocument{Data: []byte("%PDF-1.4"), Mime: "application/pdf", Name: "r.pdf"},
+					api.ContentDocument{Data: []byte("15 degrees"), Mime: string(api.DocumentMarkdown)},
+					api.ContentDocument{Data: []byte("PK"), Mime: string(api.DocumentDOCX), Name: "r.docx"},
 				}},
 			}},
 		},
 	})
 	want := `{"type":"tool_result","tool_use_id":"toolu_1","content":[` +
 		`{"type":"text","text":"the report"},` +
+		`{"type":"document","source":{"type":"base64","media_type":"application/pdf","data":"JVBERi0xLjQ="},"title":"r.pdf"},` +
+		`{"type":"document","source":{"type":"text","media_type":"text/plain","data":"15 degrees"}},` +
 		`{"type":"text","text":"[document omitted]"}],"is_error":false}`
 	if !strings.Contains(string(got["messages"]), want) {
 		t.Fatalf("messages =\n%s\nwant to contain\n%s", got["messages"], want)

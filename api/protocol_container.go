@@ -90,11 +90,11 @@ func (m ImageMime) IsValid() bool {
 }
 
 // DocumentMime is a document type at least one provider accepts. The GPT
-// adapter takes them all. The Claude adapter, in a message, sends DocumentPDF
-// as a PDF, sends the text types (DocumentText, DocumentMarkdown, DocumentCSV,
-// DocumentHTML, DocumentXML, DocumentJSON, DocumentYAML, DocumentRTF) as plain
-// text, and leaves a note in place of the binary Office types, of text that is
-// not UTF-8 and of every document in a tool result. The DeepSeek adapter takes
+// adapter takes them all. The Claude adapter, in a user message or a tool
+// result, sends DocumentPDF as a PDF, sends the text types (DocumentText,
+// DocumentMarkdown, DocumentCSV, DocumentHTML, DocumentXML, DocumentJSON,
+// DocumentYAML, DocumentRTF) as plain text, and leaves a note in place of the
+// binary Office types and of text that is not UTF-8. The DeepSeek adapter takes
 // no documents and leaves a note in place of each.
 type DocumentMime string
 

@@ -202,12 +202,11 @@ func (e DiscardedArgumentsError) Error() string {
 // inexpressible.
 //
 // Not every provider accepts the whole subset everywhere: some take only text
-// in a tool result, and one takes a document in a message but not in a result.
-// An adapter leaves a note in place of a block it cannot carry, including one
-// whose media type its API does not accept, and logs nothing, so a result
-// always answers the call it is matched to and the request still goes out. The
-// one refusal left is a discarded call whose result lacks ToolErrJSON; see
-// ContentToolUse.
+// in a tool result. An adapter leaves a note in place of a block it cannot
+// carry, including one whose media type its API does not accept, and logs
+// nothing, so a result always answers the call it is matched to and the request
+// still goes out. The one refusal left is a discarded call whose result lacks
+// ToolErrJSON; see ContentToolUse.
 type UserContent interface {
 	Content
 	userContent()

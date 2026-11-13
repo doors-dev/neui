@@ -362,11 +362,12 @@ func encodeDocument(c api.ContentDocument) (any, *cached, error) {
 	return b, &b.cached, nil
 }
 
-// encodeToolResult carries the text and images this API takes in a result, and
-// leaves the note omitted returns in place of anything else: a text block with
-// no non whitespace content in it, an image that arrived with no bytes in it or
-// with a type this API does not take, a document today, and whatever kind a
-// later version of this protocol adds to the subset. The substitution is the
+// encodeToolResult carries the text, images and documents this API takes in a
+// result, and leaves the note omitted returns in place of anything else: a text
+// block with no non whitespace content in it, an image or a document that
+// arrived with no bytes in it, an image of a type this API does not take, a
+// document encodeDocument cannot send, and whatever kind a later version of
+// this protocol adds to the subset. The substitution is the
 // one every other block gets, for the same reason. Refusing the block costs the whole request and still does not deliver
 // it, where the note leaves the call answered and the drop reported.
 //
@@ -402,8 +403,17 @@ func encodeToolResult(c api.ContentToolResult) (*toolResultBlock, error) {
 				break
 			}
 			block = &imageBlock{Type: "image", Source: base64Source{Type: "base64", MediaType: rc.Mime, Data: rc.Data}}
+		case api.ContentDocument:
+			if len(rc.Data) == 0 {
+				block, _, _ = omitted(rc, "a document source with no bytes in it is refused by this API, and the result is stored, so it would be refused again on every later turn of the thread")
+				break
+			}
+			var err error
+			if block, _, err = encodeDocument(rc); err != nil {
+				return nil, err
+			}
 		default:
-			block, _, _ = omitted(rc, "a result on this API takes text and images and carries nothing else")
+			block, _, _ = omitted(rc, "a result on this API takes text, images and documents and carries nothing else")
 		}
 		content = append(content, block)
 	}
