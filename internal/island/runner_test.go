@@ -95,28 +95,104 @@ func TestCallSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 	raw := string(s.Raw())
-	if strings.Contains(raw, "$ref") || strings.Contains(raw, "definitions") || strings.Contains(raw, "$defs") {
-		t.Fatalf("not inlined: %s", raw)
+	if strings.Contains(raw, "$ref") || strings.Contains(raw, "x-neui-call") || strings.Contains(raw, "allOf") || strings.Contains(raw, "function") {
+		t.Fatalf("call schema in raw: %s", raw)
 	}
 	var doc struct {
-		Properties map[string]struct {
-			Type        string `json:"type"`
-			Title       string `json:"title"`
-			Description string `json:"description"`
-		} `json:"properties"`
+		Properties map[string]map[string]any `json:"properties"`
 	}
 	if err := json.Unmarshal(s.Raw(), &doc); err != nil {
 		t.Fatal(err)
 	}
 	total := doc.Properties["total"]
-	in, _ := schema.NewSchema[callTestRow]()
-	out, _ := schema.NewSchema[float64]()
-	want := "function as JS source: (arg: " + string(in.Raw()) + ") => " + string(out.Raw())
-	if total.Type != "string" || total.Title != want || total.Description != "the row's total" {
-		t.Fatalf("total: %+v\nraw: %s", total, raw)
+	if len(total) != 2 || total["type"] != "string" || total["description"] != "the row's total" {
+		t.Fatalf("total: %v\nraw: %s", total, raw)
 	}
-	if !strings.Contains(total.Title, `"sku"`) || !strings.Contains(total.Title, `"number"`) {
-		t.Fatalf("title: %s", total.Title)
+}
+
+type callTestStep struct {
+	Search Call[string, []callTestRow] `json:"search" description:"finds rows"`
+}
+
+type callTestSeries struct {
+	Steps []Call[any, callTestStep]  `json:"steps"`
+	Total Call[callTestRow, float64] `json:"total" description:"the row's total"`
+}
+
+func TestCallSpec(t *testing.T) {
+	s, err := schema.NewSchema[callTestSeries]()
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec, defs := s.Root(), s.Defs()
+	type function struct {
+		Arg     json.RawMessage `json:"arg"`
+		Returns json.RawMessage `json:"returns"`
+	}
+	type call struct {
+		Type        string   `json:"type"`
+		Description string   `json:"description"`
+		Function    function `json:"function"`
+	}
+	var doc struct {
+		Properties struct {
+			Steps struct {
+				Items call `json:"items"`
+			} `json:"steps"`
+			Total call `json:"total"`
+		} `json:"properties"`
+		Definitions json.RawMessage `json:"definitions"`
+	}
+	if err := json.Unmarshal(spec, &doc); err != nil {
+		t.Fatal(err)
+	}
+	total := doc.Properties.Total
+	if doc.Definitions != nil || total.Type != "string" || total.Description != "the row's total" ||
+		string(total.Function.Arg) != `{"$ref":"#/definitions/IslandCallTestRow"}` || string(total.Function.Returns) != `{"type":"number"}` {
+		t.Fatalf("total: %s", spec)
+	}
+	step := doc.Properties.Steps.Items
+	if step.Type != "string" || string(step.Function.Arg) != `{"description":"any JSON value"}` || string(step.Function.Returns) != `{"$ref":"#/definitions/IslandCallTestStep"}` {
+		t.Fatalf("steps: %s", spec)
+	}
+	var stepDef struct {
+		Properties struct {
+			Search call `json:"search"`
+		} `json:"properties"`
+	}
+	if err := json.Unmarshal(defs["IslandCallTestStep"], &stepDef); err != nil {
+		t.Fatal(err)
+	}
+	search := stepDef.Properties.Search
+	if search.Description != "finds rows" || string(search.Function.Arg) != `{"type":"string"}` || string(search.Function.Returns) != `{"items":{"$ref":"#/definitions/IslandCallTestRow"},"type":"array"}` {
+		t.Fatalf("search: %s", defs["IslandCallTestStep"])
+	}
+	if len(defs) != 2 || !strings.Contains(string(defs["IslandCallTestRow"]), `"sku"`) {
+		t.Fatalf("defs: %v", defs)
+	}
+	if strings.Contains(string(s.Raw()), "function") {
+		t.Fatalf("validation schema: %s", s.Raw())
+	}
+	if _, err := s.DecodeString(`{"steps":["() => ({search: (q) => []})"],"total":"(row) => row.qty"}`); err != nil {
+		t.Fatalf("valid: %v", err)
+	}
+	if _, err := s.DecodeString(`{"steps":[{}],"total":"(row) => row.qty"}`); err == nil {
+		t.Fatal("object accepted as source")
+	}
+}
+
+type callTestPointers struct {
+	List  []*Call[int, int]          `json:"list"`
+	Named map[string]*Call[int, int] `json:"named"`
+}
+
+func TestCallSpecNilPointer(t *testing.T) {
+	s, err := schema.NewSchema[callTestPointers]()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if spec := s.Root(); strings.Count(string(spec), `"function":{"arg":{"type":"integer"},"returns":{"type":"integer"}}`) != 2 {
+		t.Fatalf("spec: %s", spec)
 	}
 }
 
@@ -272,6 +348,21 @@ func TestCallFailures(t *testing.T) {
 		if n.Meta["kind"] != "call_error" {
 			t.Fatalf("note: %v", n)
 		}
+	}
+}
+
+func TestCallAppErrorReachesFunctionInFull(t *testing.T) {
+	long := strings.Repeat("x", 300) + "END"
+	lib := NewLibrary()
+	if err := fetch(lib, "fail", func(ctx context.Context, _ struct{}) (int, error) {
+		return 0, errors.New(long)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_, _, ctx := newCallTestRun(t, api.IslandConfig{}, lib)
+	seen := callFrom[int, string](t, "(a) => { try { app.fail({}) } catch (e) { return e.name + ' ' + e.message } }")
+	if got, err := seen.Call(ctx, 1); err != nil || got != "TypeError fail: "+long {
+		t.Fatalf("got %q, %v", got, err)
 	}
 }
 

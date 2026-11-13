@@ -49,8 +49,8 @@ func TestDevkitFormSubmitsTypedText(t *testing.T) {
 	button := a.Page.MustElement(`button[data-submit="save"]`)
 	button.MustWaitEnabled().MustClick()
 	var got []struct {
-		ID   uint
-		Data struct {
+		ID     uint
+		Output struct {
 			Data   map[string]any
 			Submit string
 		}
@@ -58,7 +58,7 @@ func TestDevkitFormSubmitsTypedText(t *testing.T) {
 	if err := json.Unmarshal(a.Notified().Data, &got); err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 1 || got[0].Data.Data["name"] != "Ada" || got[0].Data.Submit != "save" {
+	if len(got) != 1 || got[0].Output.Data["name"] != "Ada" || got[0].Output.Submit != "save" {
 		t.Fatalf("the form submitted %+v, want name Ada by save", got)
 	}
 }
@@ -76,7 +76,7 @@ func TestDevkitFormSubmitsSelectedOptions(t *testing.T) {
 	a.Page.MustElement(`input.neisland-form-checkbox[value="1"]`).MustClick()
 	a.Page.MustElement(`button[data-submit="save"]`).MustWaitEnabled().MustClick()
 	var got []struct {
-		Data struct {
+		Output struct {
 			Data   map[string]any
 			Submit string
 		}
@@ -87,13 +87,13 @@ func TestDevkitFormSubmitsSelectedOptions(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("got %d notifications, want 1", len(got))
 	}
-	data, err := json.Marshal(got[0].Data.Data)
+	data, err := json.Marshal(got[0].Output.Data)
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := `{"extras":[{"label":"Yes","value":true},{"label":"Pair","value":[1,2]}],"plan":[{"label":"Pro","value":{"seats":5,"tier":"pro"}}]}`
-	if string(data) != want || got[0].Data.Submit != "save" {
-		t.Fatalf("the form submitted %s by %q, want %s by save", data, got[0].Data.Submit, want)
+	if string(data) != want || got[0].Output.Submit != "save" {
+		t.Fatalf("the form submitted %s by %q, want %s by save", data, got[0].Output.Submit, want)
 	}
 }
 
@@ -133,7 +133,7 @@ func TestDevkitFormSearchPicksInOrder(t *testing.T) {
 	a.Page.MustElement(`button[aria-label="Remove Ada Lovelace"]`)
 	a.Page.MustElement(`button[data-submit="save"]`).MustWaitEnabled().MustClick()
 	var got []struct {
-		Data struct {
+		Output struct {
 			Data   map[string]any
 			Submit string
 		}
@@ -144,12 +144,12 @@ func TestDevkitFormSearchPicksInOrder(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("got %d notifications, want 1", len(got))
 	}
-	data, err := json.Marshal(got[0].Data.Data)
+	data, err := json.Marshal(got[0].Output.Data)
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := `{"approvers":[{"label":"Marta Ortiz","value":{"code":"C-7","id":7}},{"label":"Ada Lovelace","value":"c5"}]}`
-	if string(data) != want || got[0].Data.Submit != "save" {
-		t.Fatalf("the form submitted %s by %q, want %s by save", data, got[0].Data.Submit, want)
+	if string(data) != want || got[0].Output.Submit != "save" {
+		t.Fatalf("the form submitted %s by %q, want %s by save", data, got[0].Output.Submit, want)
 	}
 }

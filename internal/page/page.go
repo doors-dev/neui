@@ -12,6 +12,7 @@ import (
 
 	"neui.dev/internal/common"
 	"neui.dev/internal/island"
+	"neui.dev/internal/replay"
 	"neui.dev/internal/schema"
 	"neui.dev/internal/tools"
 )
@@ -155,18 +156,52 @@ func (s *page) Module(ctx context.Context) common.Module {
 	if err != nil {
 		panic(err)
 	}
-	_, err = pageModule.Add(islandSpecName, islandSpecDesc, func(ctx context.Context, arg islandSpecArg) (islandSpecResult, error) {
+	_, err = pageModule.Add(islandSpecName, islandSpecDesc, func(ctx context.Context, arg islandSpecArg) (string, error) {
 		if tools.FromJS(ctx) {
-			return islandSpecResult{}, errIslandFromJS
+			return "", errIslandFromJS
 		}
 		if !synced.Load() {
-			return islandSpecResult{}, errSync
+			return "", errSync
 		}
 		island, seq, path, err := s.island(ctx, arg.Path)
 		if err != nil {
-			return islandSpecResult{}, err
+			return "", err
 		}
-		return islandSpecResult{Seq: seq, Spec: island.Spec(ctx, path)}, nil
+		spec, ends, items := island.Spec(ctx, path)
+		ctrl := common.GetController(ctx)
+		limit := replay.ResultTextCap(ctrl.Config(), ctrl.Model())
+		part := max(arg.Part, 1)
+		whole := fmt.Sprintf("seq %d\n\n", seq)
+		if limit <= 0 || len(whole)+len(spec) <= limit {
+			if part > 1 {
+				return "", fmt.Errorf("part %d, the spec has 1 in all: %w", part, errIslandSpecPart)
+			}
+			return whole + spec, nil
+		}
+		head := func(i int, n int) string {
+			if i < n {
+				return fmt.Sprintf("seq %d\npart %d of %d: call island_spec with part %d for the rest\n\n", seq, i, n, i+1)
+			}
+			return fmt.Sprintf("seq %d\npart %d of %d\n\n", seq, i, n)
+		}
+		room := limit - len(head(len(ends)-1, len(ends)))
+		cuts := []int{0}
+		prev := 0
+		for i, end := range ends {
+			if end-prev > room {
+				return "", fmt.Errorf("%s takes %d bytes, a part holds %d: %w", items[i], end-prev, room, errIslandSpecItem)
+			}
+			if end-cuts[len(cuts)-1] > room {
+				cuts = append(cuts, prev)
+			}
+			prev = end
+		}
+		cuts = append(cuts, len(spec))
+		parts := len(cuts) - 1
+		if part > uint(parts) {
+			return "", fmt.Errorf("part %d, the spec has %d in all: %w", part, parts, errIslandSpecPart)
+		}
+		return head(int(part), parts) + spec[cuts[part-1]:cuts[part]], nil
 	})
 	if err != nil {
 		panic(err)

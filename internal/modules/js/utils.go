@@ -84,7 +84,15 @@ func RegisterTools(vm *quickjs.VM, ctx func() context.Context, prefix string, to
 	for _, t := range tools {
 		name := prefix + t.Name()
 		host := "__" + name
-		if err := vm.RegisterHostFunc(host, func(args []any) (any, error) { return t.JS(ctx())(args) }); err != nil {
+		if err := vm.RegisterHostFunc(host, func(args []any) (any, error) {
+			out, err := t.JS(ctx())(args)
+			if err != nil {
+				return struct {
+					Error string `json:"error"`
+				}{err.Error()}, nil
+			}
+			return out, nil
+		}); err != nil {
 			return fmt.Errorf("registering %s: %w", host, err)
 		}
 		missing := "null"
@@ -96,9 +104,9 @@ func RegisterTools(vm *quickjs.VM, ctx func() context.Context, prefix string, to
 		}
 		b.WriteString("Object.defineProperty(globalThis, \"")
 		b.WriteString(name)
-		b.WriteString("\", {value: (f => arg => f(JSON.stringify(arg ?? ")
+		b.WriteString("\", {value: (f => arg => { const r = f(JSON.stringify(arg ?? ")
 		b.WriteString(missing)
-		b.WriteString(")).value)(")
+		b.WriteString(")); if (\"error\" in r) throw new TypeError(r.error); return r.value })(")
 		b.WriteString(host)
 		b.WriteString("), enumerable: true, configurable: true})\ndelete globalThis.")
 		b.WriteString(host)

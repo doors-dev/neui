@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"strings"
 
 	"github.com/doors-dev/gox"
 	"modernc.org/quickjs"
@@ -39,6 +38,9 @@ type library struct {
 	layouts map[string]anyLayoutFactory
 	fetch   tools.Module
 	head    []gox.Elem
+	spec    string
+	ends    []int
+	items   []string
 }
 
 func (l Library) Head(e ...gox.Elem) {
@@ -143,6 +145,7 @@ func (l Library) View[I any, U any](name string, desc string, f func(ctx context
 		desc:         desc,
 		updateSchema: updateSchema,
 		inputSchema:  inputSchema,
+		specs:        []specSchema{{"params", inputSchema.Root(), inputSchema.Defs()}, {"patch", updateSchema.Root(), updateSchema.Defs()}},
 		factory: func(ctx context.Context, i I, _ func(context.Context, struct{}) bool) (api.Widget[U], error) {
 			return f(ctx, i)
 		},
@@ -161,6 +164,7 @@ func (l Library) Layout[I any](name string, desc string, f func(i I, children []
 	l.layouts[name] = layoutFactory[I]{
 		desc:        desc,
 		inputSchema: inputSchema,
+		specs:       []specSchema{{"params", inputSchema.Root(), inputSchema.Defs()}},
 		factory:     f,
 	}
 	return nil
@@ -187,6 +191,7 @@ func (l Library) Control[I any, U any, O any](name string, desc string, f func(c
 		updateSchema: updateSchema,
 		inputSchema:  inputSchema,
 		outputSchema: &outputSchema,
+		specs:        []specSchema{{"params", inputSchema.Root(), inputSchema.Defs()}, {"patch", updateSchema.Root(), updateSchema.Defs()}, {"output", outputSchema.Root(), outputSchema.Defs()}},
 		factory:      f,
 	}
 	return nil
@@ -195,7 +200,7 @@ func (l Library) Control[I any, U any, O any](name string, desc string, f func(c
 type anyWidgetFactory interface {
 	new(ctx context.Context, params json.RawMessage, submit func(context.Context, any) bool) (anyWidget, error)
 	control() bool
-	writeSpec(b *strings.Builder, name string)
+	spec() (string, []specSchema)
 }
 
 type widgetFactory[I, U, O any] struct {
@@ -203,6 +208,7 @@ type widgetFactory[I, U, O any] struct {
 	updateSchema schema.Schema[U]
 	inputSchema  schema.Schema[I]
 	outputSchema *schema.Schema[O]
+	specs        []specSchema
 	factory      func(ctx context.Context, i I, submit func(ctx context.Context, o O) bool) (api.Widget[U], error)
 }
 
@@ -227,24 +233,20 @@ func (w widgetFactory[I, U, O]) control() bool {
 	return w.outputSchema != nil
 }
 
-func (w widgetFactory[I, U, O]) writeSpec(b *strings.Builder, name string) {
-	writeItem(b, "ui."+name, w.desc)
-	writeSchema(b, "params", w.inputSchema.Raw())
-	writeSchema(b, "patch", w.updateSchema.Raw())
-	if w.outputSchema != nil {
-		writeSchema(b, "data", w.outputSchema.Raw())
-	}
+func (w widgetFactory[I, U, O]) spec() (string, []specSchema) {
+	return w.desc, w.specs
 }
 
 type anyLayoutFactory interface {
 	new(params json.RawMessage, children []gox.Comp) (gox.Comp, error)
 	validate(params json.RawMessage) error
-	writeSpec(b *strings.Builder, name string)
+	spec() (string, []specSchema)
 }
 
 type layoutFactory[I any] struct {
 	desc        string
 	inputSchema schema.Schema[I]
+	specs       []specSchema
 	factory     func(i I, children []gox.Comp) gox.Comp
 }
 
@@ -261,9 +263,8 @@ func (l layoutFactory[I]) validate(params json.RawMessage) error {
 	return err
 }
 
-func (l layoutFactory[I]) writeSpec(b *strings.Builder, name string) {
-	writeItem(b, "ui."+name, l.desc)
-	writeSchema(b, "params", l.inputSchema.Raw())
+func (l layoutFactory[I]) spec() (string, []specSchema) {
+	return l.desc, l.specs
 }
 
 type widget[I, U, O any] struct {

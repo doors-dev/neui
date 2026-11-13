@@ -306,12 +306,16 @@ type Island struct {
 }
 
 // Main renders the island and adds its space. When Library returns an error,
+// or two different types in the library's schemas share a definition name,
 // the error is logged and Placeholder renders with no island space. A running
 // app ends when the island unmounts.
 func (i Island) Main() gox.Elem {
 	return func(cur gox.Cursor) error {
 		lib := island.NewLibrary()
 		err := i.Library(Library{lib})
+		if err == nil {
+			err = lib.Build()
+		}
 		if err != nil {
 			doors.Logger(cur.Context()).Error("neui: island library failed", "island", i.Name, "err", err)
 			return cur.Any(i.Placeholder)

@@ -14,6 +14,7 @@ const nameMessage = "a library name must be a JS identifier"
 const nameReservedMessage = "a library name cannot be slot, draw, notify or root"
 const nameTakenMessage = "a library name is already taken by another view, control, layout or fetch"
 const widgetKindNotFoundMessage = "no such widget in this island: island_spec lists its views and controls"
+const definitionClashMessage = "two different types share this schema definition name even with its content hash appended: rename one of them"
 
 var errSlotNotFound = errors.New(slotNotFoundMessage)
 var errWidgetNotFound = errors.New(widgetNotFoundMessage)
@@ -27,3 +28,4 @@ var errName = errors.New(nameMessage)
 var errNameReserved = errors.New(nameReservedMessage)
 var errNameTaken = errors.New(nameTakenMessage)
 var errWidgetKindNotFound = errors.New(widgetKindNotFoundMessage)
+var errDefinitionClash = errors.New(definitionClashMessage)

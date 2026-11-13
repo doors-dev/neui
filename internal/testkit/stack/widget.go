@@ -66,7 +66,7 @@ func (a *IslandApp) Submitted() json.RawMessage {
 		a.t.Fatalf("got %v, want a notifications_list", r)
 	}
 	var list []struct {
-		Data json.RawMessage `json:"data"`
+		Output json.RawMessage `json:"output"`
 	}
 	if err := json.Unmarshal(r.Data, &list); err != nil {
 		a.t.Fatalf("notification %s: %v", r.Data, err)
@@ -74,7 +74,7 @@ func (a *IslandApp) Submitted() json.RawMessage {
 	if len(list) != 1 {
 		a.t.Fatalf("got %d notifications %s, want 1", len(list), r.Data)
 	}
-	return list[0].Data
+	return list[0].Output
 }
 
 // Find locates the first element matching selector on the page.

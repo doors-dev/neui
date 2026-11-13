@@ -305,7 +305,7 @@ func (s *state) toolUpdate(ctx context.Context, arg updateArg) (struct{}, error)
 
 type Result struct {
 	ID        uint `json:"id"`
-	Data      any  `json:"data"`
+	Output    any  `json:"output"`
 	Interrupt bool `json:"interrupt,omitempty"`
 }
 
@@ -384,8 +384,8 @@ func (s *state) collect() (*Result, error) {
 	s.hook = nil
 	if s.stash != nil {
 		r := &Result{
-			ID:   s.stash.id,
-			Data: s.stash.data,
+			ID:     s.stash.id,
+			Output: s.stash.data,
 		}
 		s.stash.data = nil
 		s.mu.Unlock()

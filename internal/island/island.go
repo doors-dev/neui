@@ -59,7 +59,7 @@ type island struct {
 	seq         uint
 }
 
-func (i *island) Spec(ctx context.Context, space string) string {
+func (i *island) Spec(ctx context.Context, space string) (string, []int, []string) {
 	c := common.AppIslandConfig(ctx)
 	b := strings.Builder{}
 	b.WriteString(specNotation)
@@ -69,8 +69,14 @@ func (i *island) Spec(ctx context.Context, space string) string {
 	fmt.Fprintf(&b, "- Widgets keep their files, such as form uploads, under the workspace dir %s, emptied when an app starts; copy the files you want to keep elsewhere in the workspace.\n", islandDir(space))
 	ctrl := common.GetController(ctx)
 	fmt.Fprintf(&b, "- Limits: %d slots, views, controls and layouts alive at once; %d set, update and notify calls between ui.draw calls; %d bytes of ui.notify values between ui.draw calls; %s between ui.draw calls, app function and tool calls included; %d MiB memory; call depth %d; %d scripts queued; %s and %d MiB per function call.\n", c.MaxItems, c.MaxOps, notificationsCap(ctrl.Config(), ctrl.Model()), c.TurnTime, c.Memory>>20, c.MaxCallDepth, c.MaxQueue, c.FnTime, c.FnMemory>>20)
-	i.lib.WriteSpec(&b)
-	return b.String()
+	spec, ends, items := i.lib.Spec()
+	start := b.Len()
+	b.WriteString(spec)
+	all := []int{start}
+	for _, end := range ends {
+		all = append(all, start+end)
+	}
+	return b.String(), all, append([]string{"intro"}, items...)
 }
 
 func (i *island) Unmount() {

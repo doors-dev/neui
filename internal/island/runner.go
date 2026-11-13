@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/doors-dev/doors"
+	"github.com/swaggest/jsonschema-go"
 	"modernc.org/quickjs"
 	"neui.dev/internal/common"
 	"neui.dev/internal/modules/js"
@@ -33,19 +34,16 @@ func (c *Call[I, O]) UnmarshalJSON(data []byte) error {
 
 func (Call[I, O]) InlineJSONSchema() {}
 
-func (Call[I, O]) JSONSchemaBytes() ([]byte, error) {
-	in, err := schema.NewSchema[I]()
-	if err != nil {
-		return nil, err
-	}
-	out, err := schema.NewSchema[O]()
-	if err != nil {
-		return nil, err
-	}
-	return json.Marshal(map[string]string{
-		"type":  "string",
-		"title": "function as JS source: (arg: " + string(in.Raw()) + ") => " + string(out.Raw()),
-	})
+func (Call[I, O]) JSONSchemaAllOf() []any {
+	return []any{struct {
+		Arg     I `json:"arg"`
+		Returns O `json:"returns,omitempty"`
+	}{}}
+}
+
+func (Call[I, O]) PrepareJSONSchema(s *jsonschema.Schema) error {
+	s.WithExtraPropertiesItem("x-neui-call", true)
+	return nil
 }
 
 type runnerKey struct{}

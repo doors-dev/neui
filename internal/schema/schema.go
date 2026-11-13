@@ -5,11 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"reflect"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
 	jsonvalid "github.com/santhosh-tekuri/jsonschema/v6"
+	"github.com/santhosh-tekuri/jsonschema/v6/kind"
 	jsonreflect "github.com/swaggest/jsonschema-go"
 	"github.com/zeebo/xxh3"
 )
@@ -17,6 +21,7 @@ import (
 var (
 	ErrInvalidInput     = errors.New("invalid input: argument is not valid JSON")
 	ErrInvalidArguments = errors.New("invalid input: argument do not match the schema")
+	errCallShape        = errors.New("schema: x-neui-call without allOf[0].properties arg and returns")
 )
 
 var schemas sync.Map
@@ -36,13 +41,16 @@ func newSchema[T any](raw []byte, doc any, defaultDraft *jsonvalid.Draft) (Schem
 	}
 	schema := Schema[T]{
 		raw:    raw,
+		root:   raw,
 		Schema: validSchema,
 	}
 	return schema, nil
 }
 
 type Schema[T any] struct {
-	raw []byte
+	raw  []byte
+	root []byte
+	defs map[string]json.RawMessage
 	*jsonvalid.Schema
 }
 
@@ -52,9 +60,53 @@ func (s Schema[T]) DecodeString(str string) (T, error) {
 
 func (s Schema[T]) Validate(v any) error {
 	if err := s.Schema.Validate(v); err != nil {
+		if verr, ok := err.(*jsonvalid.ValidationError); ok {
+			verr.Causes = pruneAnyOf(verr.Causes)
+		}
 		return fmt.Errorf("%w: %v", ErrInvalidArguments, err)
 	}
 	return nil
+}
+
+func pruneAnyOf(causes []*jsonvalid.ValidationError) []*jsonvalid.ValidationError {
+	var pruned []*jsonvalid.ValidationError
+	for _, cause := range causes {
+		if _, ok := cause.ErrorKind.(*kind.AnyOf); ok {
+			typeLoc := append(slices.Clip(cause.InstanceLocation), "type")
+			var match *jsonvalid.ValidationError
+			matches := 0
+			for _, branch := range cause.Causes {
+				mismatched := false
+				stack := []*jsonvalid.ValidationError{branch}
+				for len(stack) > 0 && !mismatched {
+					e := stack[len(stack)-1]
+					stack = append(stack[:len(stack)-1], e.Causes...)
+					wrongValue := false
+					switch e.ErrorKind.(type) {
+					case *kind.Type, *kind.Const, *kind.Enum:
+						wrongValue = true
+					}
+					mismatched = slices.Equal(e.InstanceLocation, typeLoc) || wrongValue && slices.Equal(e.InstanceLocation, cause.InstanceLocation)
+				}
+				if !mismatched {
+					match = branch
+					matches++
+				}
+			}
+			if matches == 1 {
+				branch := []*jsonvalid.ValidationError{match}
+				switch match.ErrorKind.(type) {
+				case *kind.Group, *kind.Reference:
+					branch = match.Causes
+				}
+				pruned = append(pruned, pruneAnyOf(branch)...)
+				continue
+			}
+		}
+		cause.Causes = pruneAnyOf(cause.Causes)
+		pruned = append(pruned, cause)
+	}
+	return pruned
 }
 
 func (s Schema[T]) ValidateString(str string) error {
@@ -82,6 +134,14 @@ func (s Schema[T]) Decode(raw []byte) (T, error) {
 
 func (s Schema[T]) Raw() []byte {
 	return s.raw
+}
+
+func (s Schema[T]) Root() []byte {
+	return s.root
+}
+
+func (s Schema[T]) Defs() map[string]json.RawMessage {
+	return s.defs
 }
 
 func (s Schema[T]) MarshalJSON() ([]byte, error) {
@@ -158,16 +218,77 @@ func NewSchema[T any]() (Schema[T], error) {
 	}
 	var sample T
 	ref := jsonreflect.Reflector{}
-	reflectedSchema, err := ref.Reflect(sample, jsonreflect.ProcessWithoutTags)
+	reflectedSchema, err := ref.Reflect(sample, jsonreflect.ProcessWithoutTags, jsonreflect.RootRef)
 	if err != nil {
 		return Schema[T]{}, err
 	}
-	raw, err := reflectedSchema.JSONSchemaBytes()
+	reflected, err := reflectedSchema.JSONSchemaBytes()
 	if err != nil {
 		return Schema[T]{}, err
+	}
+	var top, defs map[string]json.RawMessage
+	if err := json.Unmarshal(reflected, &top); err != nil {
+		return Schema[T]{}, err
+	}
+	root := reflected
+	if definitions, ok := top["definitions"]; ok {
+		if err := json.Unmarshal(definitions, &defs); err != nil {
+			return Schema[T]{}, err
+		}
+		delete(top, "definitions")
+		if root, err = json.Marshal(top); err != nil {
+			return Schema[T]{}, err
+		}
+	}
+	raw, root, err := splitCalls(root)
+	if err != nil {
+		return Schema[T]{}, err
+	}
+	rawDefs := map[string]json.RawMessage{}
+	for name, def := range defs {
+		if rawDefs[name], defs[name], err = splitCalls(def); err != nil {
+			return Schema[T]{}, err
+		}
+	}
+	var target string
+	if len(top) == 1 && top["$ref"] != nil {
+		if err := json.Unmarshal(top["$ref"], &target); err != nil {
+			return Schema[T]{}, err
+		}
+	}
+	if name, ok := strings.CutPrefix(target, "#/definitions/"); ok && defs[name] != nil {
+		root = defs[name]
+		quoted, err := json.Marshal(target)
+		if err != nil {
+			return Schema[T]{}, err
+		}
+		raw = bytes.ReplaceAll(rawDefs[name], quoted, []byte(`"#"`))
+		delete(rawDefs, name)
+		referenced := false
+		for n, def := range defs {
+			referenced = referenced || bytes.Contains(def, quoted)
+			if n != name {
+				rawDefs[n] = bytes.ReplaceAll(rawDefs[n], quoted, []byte(`"#"`))
+			}
+		}
+		if !referenced {
+			delete(defs, name)
+		}
+	}
+	if len(rawDefs) > 0 {
+		var doc map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &doc); err != nil {
+			return Schema[T]{}, err
+		}
+		if doc["definitions"], err = json.Marshal(rawDefs); err != nil {
+			return Schema[T]{}, err
+		}
+		if raw, err = json.Marshal(doc); err != nil {
+			return Schema[T]{}, err
+		}
 	}
 	if bytes.Equal(raw, []byte("{}")) {
-		raw = anySchema
+		root, raw, defs = anySchema, anySchema, nil
 	}
 	doc, err := jsonvalid.UnmarshalJSON(bytes.NewReader(raw))
 	if err != nil {
@@ -177,6 +298,84 @@ func NewSchema[T any]() (Schema[T], error) {
 	if err != nil {
 		return Schema[T]{}, err
 	}
+	schema.root = root
+	schema.defs = defs
 	schemas.Store(t, schema)
 	return schema, nil
+}
+
+func splitCalls(doc []byte) ([]byte, []byte, error) {
+	dec := json.NewDecoder(bytes.NewReader(doc))
+	dec.UseNumber()
+	var v any
+	if err := dec.Decode(&v); err != nil {
+		return nil, nil, err
+	}
+	rawValue, specValue, err := calls(v)
+	if err != nil {
+		return nil, nil, err
+	}
+	raw, err := json.Marshal(rawValue)
+	if err != nil {
+		return nil, nil, err
+	}
+	spec, err := json.Marshal(specValue)
+	if err != nil {
+		return nil, nil, err
+	}
+	return raw, spec, nil
+}
+
+func calls(v any) (any, any, error) {
+	switch v := v.(type) {
+	case []any:
+		raw, spec := make([]any, len(v)), make([]any, len(v))
+		for i, item := range v {
+			var err error
+			if raw[i], spec[i], err = calls(item); err != nil {
+				return nil, nil, err
+			}
+		}
+		return raw, spec, nil
+	case map[string]any:
+		if _, ok := v["x-neui-call"]; !ok {
+			raw, spec := make(map[string]any, len(v)), make(map[string]any, len(v))
+			for key, item := range v {
+				var err error
+				if raw[key], spec[key], err = calls(item); err != nil {
+					return nil, nil, err
+				}
+			}
+			return raw, spec, nil
+		}
+		var props map[string]any
+		if allOf, ok := v["allOf"].([]any); ok && len(allOf) > 0 {
+			first, _ := allOf[0].(map[string]any)
+			props, _ = first["properties"].(map[string]any)
+		}
+		arg, hasArg := props["arg"]
+		returns, hasReturns := props["returns"]
+		if !hasArg || !hasReturns {
+			return nil, nil, errCallShape
+		}
+		raw := map[string]any{"type": v["type"]}
+		if desc, ok := v["description"]; ok {
+			raw["description"] = desc
+		}
+		function := map[string]any{}
+		for key, schema := range map[string]any{"arg": arg, "returns": returns} {
+			_, spec, err := calls(schema)
+			if err != nil {
+				return nil, nil, err
+			}
+			if m, ok := spec.(map[string]any); ok && len(m) == 0 {
+				spec = map[string]any{"description": "any JSON value"}
+			}
+			function[key] = spec
+		}
+		spec := maps.Clone(raw)
+		spec["function"] = function
+		return raw, spec, nil
+	}
+	return v, v, nil
 }

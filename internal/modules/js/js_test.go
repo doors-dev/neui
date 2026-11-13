@@ -125,6 +125,29 @@ func TestRunTimeoutCancelsTool(t *testing.T) {
 	}
 }
 
+func TestRunToolErrorReachesScriptInFull(t *testing.T) {
+	long := strings.Repeat("x", 300) + "END"
+	fail := tools.NewModule("fail", "")
+	if _, err := fail.Add("long", "", func(ctx context.Context, _ struct{}) (struct{}, error) {
+		return struct{}{}, errors.New(long)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ctx := testkit.NewController(t, testkit.Setup{Modules: []common.Module{fail}}).Ctx()
+	m := &module{runtime: getRuntime(context.Background())}
+	res, err := m.run(ctx, RunArg{Code: "try { fail__long({}); } catch (e) { return [e instanceof TypeError, e.message]; }"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []any
+	if err := json.Unmarshal(res.Output, &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0] != true || got[1] != "long: "+long {
+		t.Fatalf("output = %s", res.Output)
+	}
+}
+
 func TestRunMissing(t *testing.T) {
 	ctx := testkit.NewController(t, testkit.Setup{}).Ctx()
 	m := &module{runtime: getRuntime(context.Background())}

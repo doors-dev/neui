@@ -11,11 +11,7 @@ type toolArg struct {
 
 type islandSpecArg struct {
 	Path string `json:"path" required:"true" description:"space path exactly as the latest sync reported it"`
-}
-
-type islandSpecResult struct {
-	Seq  uint   `json:"seq" description:"the island space's seq, the same one sync reports; pass it to island_start"`
-	Spec string `json:"spec"`
+	Part uint   `json:"part,omitempty" description:"the part to read, from 1, when the spec comes in parts; absent reads part 1"`
 }
 
 type syncArg struct {

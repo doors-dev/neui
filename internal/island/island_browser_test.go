@@ -109,7 +109,7 @@ func TestIslandSubmitAnswersDraw(t *testing.T) {
 	if n := <-marks; n != 21 {
 		t.Fatalf("value called app.mark with %d, want 21", n)
 	}
-	carries(t, lastText(p.Request(t, 4)), `<task_notify `, `script="1"`, `[{"id":1,"data":42}]`)
+	carries(t, lastText(p.Request(t, 4)), `<task_notify `, `script="1"`, `[{"id":1,"output":42}]`)
 }
 
 func TestIslandControlClickSubmits(t *testing.T) {
@@ -129,7 +129,7 @@ func TestIslandControlClickSubmits(t *testing.T) {
 	if n := <-marks; n != 21 {
 		t.Fatalf("value called app.mark with %d, want 21", n)
 	}
-	carries(t, lastText(p.Request(t, 4)), `<task_notify `, `script="1"`, `[{"id":1,"data":42}]`)
+	carries(t, lastText(p.Request(t, 4)), `<task_notify `, `script="1"`, `[{"id":1,"output":42}]`)
 }
 
 func TestIslandInterruptHandsOverTheUI(t *testing.T) {
@@ -351,5 +351,5 @@ func TestIslandButtonWithAgentIsClickableAndSubmitsItsValue(t *testing.T) {
 	if clicked.Hooks != 1 {
 		t.Fatalf("the click triggered %d hooks, want the button's handler", clicked.Hooks)
 	}
-	carries(t, lastText(p.Request(t, 4)), `<task_notify `, `script="1"`, `[{"id":1,"data":"v1"}]`)
+	carries(t, lastText(p.Request(t, 4)), `<task_notify `, `script="1"`, `[{"id":1,"output":"v1"}]`)
 }

@@ -28,6 +28,7 @@ func NewTool[I any, O any](name string, desc string, f func(ctx context.Context,
 		return tool{}, err
 	}
 	output := outputSchema.Raw()
+	outputSpec, outputDefs := outputSchema.Root(), outputSchema.Defs()
 	var hint string
 	{
 		var o O
@@ -36,6 +37,7 @@ func NewTool[I any, O any](name string, desc string, f func(ctx context.Context,
 			hint = o.ContentType()
 		case api.MultiContainer:
 			output = schema.BlocksRawSchema.Raw()
+			outputSpec, outputDefs = output, nil
 			hint = "array of content blocks"
 		case string, fmt.Stringer:
 			hint = "text"
@@ -69,6 +71,10 @@ func NewTool[I any, O any](name string, desc string, f func(ctx context.Context,
 		summary:     b.String(),
 		inputSchema: inputSchema.Raw(),
 		output:      output,
+		inputSpec:   inputSchema.Root(),
+		inputDefs:   inputSchema.Defs(),
+		outputSpec:  outputSpec,
+		outputDefs:  outputDefs,
 		rawCall:     rawCall,
 		stringCall:  stringCall,
 	}, nil
@@ -104,6 +110,8 @@ func NewRawTool(
 		summary:     b.String(),
 		inputSchema: inputSchema.Raw(),
 		output:      outputSchema.Raw(),
+		inputSpec:   inputSchema.Raw(),
+		outputSpec:  outputSchema.Raw(),
 		rawCall:     rawCall,
 		stringCall:  stringCall,
 	}, nil
@@ -115,6 +123,10 @@ type tool struct {
 	summary     string
 	inputSchema []byte
 	output      []byte
+	inputSpec   []byte
+	inputDefs   map[string]json.RawMessage
+	outputSpec  []byte
+	outputDefs  map[string]json.RawMessage
 	rawCall     func(ctx context.Context, input json.RawMessage) (any, error)
 	stringCall  func(ctx context.Context, input string) (any, error)
 }
@@ -129,6 +141,14 @@ func (c tool) Summary() string {
 
 func (c tool) Output() []byte {
 	return c.output
+}
+
+func (c tool) ParamsSpec() ([]byte, map[string]json.RawMessage) {
+	return c.inputSpec, c.inputDefs
+}
+
+func (c tool) OutputSpec() ([]byte, map[string]json.RawMessage) {
+	return c.outputSpec, c.outputDefs
 }
 
 func (c tool) Name() string {
