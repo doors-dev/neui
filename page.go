@@ -395,8 +395,9 @@ func IslandDir(ctx context.Context) string {
 }
 
 // IslandScope returns a blocking doors scope shared by all widgets of the
-// island app: put it on their event hooks so a new event is rejected while an
-// earlier one is still being handled. It is nil outside an island.
+// island app: put it on their submit hooks so a new submit is rejected while
+// an earlier one is still being handled. Leave it off hooks that only update
+// the widget itself. It is nil outside an island.
 func IslandScope(ctx context.Context) doors.Scopes {
 	store := IslandStore(ctx)
 	if store == nil {

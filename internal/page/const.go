@@ -118,14 +118,14 @@ Example (placeholder names: the real views, controls and app functions come from
 task_notify from script 1 brings [{"picked": "A-17"}], and the script has ended. You decide what to show next, then send a plain island_continue:
 
     // island_continue, loop style: same app, list still exists
-    var details = ui.text({ md: app.order({ id: picked }).summary })
-    var ship = ui.button({ label: "Ship" })
+    var details = ui.markdown({ text: app.order({ id: picked }).summary })
+    var ship = ui.button({ text: "Ship" })
     ui.root.set(ui.column({}, list, details, ship))
     while (true) {
       var ev = ui.draw()
       if (ev.id === list.id) {
         picked = ev.data
-        details.update({ md: app.order({ id: picked }).summary })
+        details.update({ text: app.order({ id: picked }).summary })
       }
       if (ev.id === ship.id) ui.notify({ action: "ship", id: picked })
     }
