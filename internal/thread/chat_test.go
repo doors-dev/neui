@@ -298,7 +298,7 @@ func TestRoundItemBudgetRunsCallsUntilTheirTextCrossesIt(t *testing.T) {
 
 func TestRoundItemBudgetOmitsAResultOverIt(t *testing.T) {
 	var ran atomic.Int64
-	p := testkit.NewProvider(budgetModel, sizedCalls(1000, 10), testkit.Say("done"))
+	p := testkit.NewProvider(budgetModel, sizedCalls(1468006, 10), testkit.Say("done"))
 	c := stack.Headless(t, stack.Host{Provider: p, Options: []common.Option{sizedProbe(t, &ran)}})
 	c.Send("call")
 	c.Wait()
@@ -309,9 +309,9 @@ func TestRoundItemBudgetOmitsAResultOverIt(t *testing.T) {
 	if len(results) != 2 {
 		t.Fatalf("2 calls got %d results", len(results))
 	}
-	want := "Result omitted: it was 1000 bytes, more than a turn's tool results can hold. Ask for less, or process it in a script."
+	want := "Result omitted: it was 1.4 MB, more than a turn's tool results can hold. Ask for less, or process it in a script."
 	if text, ok := results[0].Content[0].(api.ContentText); !ok || len(results[0].Content) != 1 || results[0].Error != api.ToolOk || text.Text != want {
-		t.Fatalf("the 1000-byte result came back as %q with %#v, want ok with %q", results[0].Error, results[0].Content, want)
+		t.Fatalf("the 1.4 MB result came back as %q with %#v, want ok with %q", results[0].Error, results[0].Content, want)
 	}
 	if text, ok := results[1].Content[0].(api.ContentText); !ok || results[1].Error != api.ToolOk || len(text.Text) != 10 {
 		t.Fatalf("the call after the omitted result came back as %q with %#v, want its 10 bytes", results[1].Error, results[1].Content)

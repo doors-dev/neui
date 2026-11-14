@@ -141,7 +141,13 @@ func (l *link) useTools(roundID api.RoundID, tools []api.ContentToolUse) (<-chan
 				}
 			}
 			if size > budget {
-				note := fmt.Sprintf("Result omitted: it was %d bytes, more than a turn's tool results can hold. Ask for less, or process it in a script.", size)
+				human := fmt.Sprintf("%d bytes", size)
+				if size >= 1<<20 {
+					human = fmt.Sprintf("%.1f MB", float64(size)/(1<<20))
+				} else if size >= 1<<10 {
+					human = fmt.Sprintf("%.1f KB", float64(size)/(1<<10))
+				}
+				note := fmt.Sprintf("Result omitted: it was %s, more than a turn's tool results can hold. Ask for less, or process it in a script.", human)
 				res = api.ContentToolResult{ID: res.ID, Content: api.UserContents{api.ContentText{Text: note}}, Error: res.Error}
 				size = len(note)
 			}
