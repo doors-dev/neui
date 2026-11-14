@@ -247,9 +247,9 @@ func (s *messages) applyCompaction(c Compaction, record api.Compaction) {
 	s.compaction = record
 }
 
-func (s *messages) prepeareCompaction() (Compaction, []api.Message) {
+func (s *messages) prepeareCompaction(force bool, chunk int) (Compaction, []api.Message) {
 	last := len(s.rounds) - 1
-	if last < 1 || s.rounds[last].id <= s.compaction.Tail || s.rounds[last-1].id <= s.compaction.Tail {
+	if last < 1 || !force && (s.rounds[last].id <= s.compaction.Tail || s.rounds[last-1].id <= s.compaction.Tail) {
 		return Compaction{
 			Target: api.NoRoundID,
 			Tail:   api.NoRoundID,
@@ -270,6 +270,9 @@ func (s *messages) prepeareCompaction() (Compaction, []api.Message) {
 			break
 		}
 		target = i + 1
+	}
+	if force && chunk > 0 {
+		target = min(target, chunk)
 	}
 	replay := s.messages(target)
 	user := s.rounds[target].user

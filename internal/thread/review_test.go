@@ -114,7 +114,7 @@ func TestCancelledCompactionReportsNothing(t *testing.T) {
 		}
 	}
 	captureEvents(th)
-	started, err := th.compact()
+	started, err := th.compact(false)
 	if err != nil || !started {
 		t.Fatalf("compact: %v, %v", started, err)
 	}

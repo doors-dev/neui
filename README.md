@@ -164,7 +164,7 @@ Each row was checked against neui's code and the competitors' current docs and s
 | Prompt-cache stability | **Yes.** Fixed tools and system prompt; page state arrives in tool results | **No.** The system prompt is rebuilt from app state every run | **Yes.** Server owns tools and prompt; history is only appended |
 | Traffic per message | **Tiny.** Only the new message; history stays on the server, minimal delays | **Grows with the conversation.** Full history on every run and every tool call | **Grows with the conversation by default.** Full history on every request and tool call; trimming needs your own server-side store |
 | Advanced chat features | **Built in.** Thread list, full-text search, rewind, clone | **Partial.** Thread list needs the paid tier; other features require own wiring and backend support | **No.** No thread list; thread features are yours to build |
-| Auto-compaction | **Yes.** Rolling, in the background, seamless for the user, or manual | **No** | **Partial.** Manual recipe in the docs |
+| Auto-compaction | **Yes.** Rolling, in the background, seamless for the user, or manual, and recovers when the history outgrows the model's window, for example after a switch to a smaller model | **No** | **Partial.** Manual recipe in the docs |
 | Supported platforms | **One.** Web apps built with Go and Doors | **Many.** React-first web frontends | **Many.** Most JavaScript frameworks |
 
 ## Getting started

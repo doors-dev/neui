@@ -264,7 +264,7 @@ func TestNeedCompactionUnavailable(t *testing.T) {
 	if got := r.NeedCompaction(); got != CompactionTokens {
 		t.Fatalf("two rounds over the trigger: got %v, want %v", got, CompactionTokens)
 	}
-	c, _, err := r.PrepareCompaction()
+	c, _, err := r.PrepareCompaction(false)
 	if err != nil {
 		t.Fatalf("PrepareCompaction: %v", err)
 	}
@@ -313,7 +313,7 @@ func TestCanCompact(t *testing.T) {
 	if !r.CanCompact() {
 		t.Fatalf("rounds at CompactionAllowed: CanCompact is false")
 	}
-	c, _, err := r.PrepareCompaction()
+	c, _, err := r.PrepareCompaction(false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -369,7 +369,7 @@ func TestFailedCompactionWaitsForTheHistoryToGrow(t *testing.T) {
 		t.Fatalf("history grew past 25%%: got %v, want %v", got, CompactionTokens)
 	}
 	r.CompactionFailed()
-	c, _, err := r.PrepareCompaction()
+	c, _, err := r.PrepareCompaction(false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -564,7 +564,7 @@ func TestCompactionUsageEstimate(t *testing.T) {
 	mustCreate(t, r)
 	ids := growingRounds(t, r, 100, 200, 300, 400)
 
-	c, messages, err := r.PrepareCompaction()
+	c, messages, err := r.PrepareCompaction(false)
 	if err != nil {
 		t.Fatalf("PrepareCompaction: %v", err)
 	}
@@ -592,7 +592,7 @@ func TestCompactionWalkBackOverAnAnomalousRound(t *testing.T) {
 	// provider counting differently can do
 	ids := growingRounds(t, r, 100, 200, 5000, 320, 400)
 
-	c, messages, err := r.PrepareCompaction()
+	c, messages, err := r.PrepareCompaction(false)
 	if err != nil {
 		t.Fatalf("PrepareCompaction: %v", err)
 	}
@@ -611,7 +611,7 @@ func TestCompactionTailAtApply(t *testing.T) {
 	mustCreate(t, r)
 	ids := growingRounds(t, r, 100, 200, 300, 400)
 
-	c, messages, err := r.PrepareCompaction()
+	c, messages, err := r.PrepareCompaction(false)
 	if err != nil {
 		t.Fatalf("PrepareCompaction: %v", err)
 	}
@@ -666,7 +666,7 @@ func TestCompactionBaseInsidePreviousTail(t *testing.T) {
 	mustCreate(t, r)
 	ids := growingRounds(t, r, 100, 200, 300, 400)
 
-	c, _, err := r.PrepareCompaction()
+	c, _, err := r.PrepareCompaction(false)
 	if err != nil {
 		t.Fatalf("PrepareCompaction: %v", err)
 	}
@@ -699,6 +699,107 @@ func TestCompactionBaseInsidePreviousTail(t *testing.T) {
 	}
 	if reloaded.Usage() != r.Usage() {
 		t.Fatalf("Usage after a reload: got %+v, want %+v", reloaded.Usage(), r.Usage())
+	}
+}
+
+func TestForcedCompactionSkipsTheTailGate(t *testing.T) {
+	r := NewReplay(context.Background(), "a", local.NewMessageStorage(), compactionConfig, api.Model{})
+	mustCreate(t, r)
+	growingRounds(t, r, 100, 200, 300, 400)
+	c, _, err := r.PrepareCompaction(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.ApplyCompaction(c, api.Indexed[api.Content]{0: api.ContentText{Text: "the summary"}}, api.EventUsage{Output: 50}); err != nil {
+		t.Fatal(err)
+	}
+	next := okRound(t, r, "next", 500)
+	if c, m, _ := r.PrepareCompaction(false); len(m) != 0 {
+		t.Fatalf("one round past the tail: prepared %+v", c)
+	}
+	if c, m, _ := r.PrepareCompaction(true); len(m) == 0 || c.Target != next || c.index != 1 {
+		t.Fatalf("forced: prepared %+v (%d messages), want target %d at index 1", c, len(m), next)
+	}
+}
+
+func TestHalvedChunkCapsForcedCompactionsUntilARoundSucceeds(t *testing.T) {
+	r := NewReplay(context.Background(), "a", local.NewMessageStorage(), api.ThreadConfig{CompactionPreserve: 0.1}, api.Model{})
+	mustCreate(t, r)
+	totals := make([]int, 20)
+	for i := range totals {
+		totals[i] = (i + 1) * 100
+	}
+	growingRounds(t, r, totals...)
+	c, _, _ := r.PrepareCompaction(true)
+	if c.index != 18 {
+		t.Fatalf("preserve target index %d, want 18", c.index)
+	}
+	for _, want := range []int{9, 4, 2, 1} {
+		if !r.HalveCompaction(c) {
+			t.Fatalf("HalveCompaction(%d) refused", c.index)
+		}
+		c, _, _ = r.PrepareCompaction(true)
+		if c.index != want {
+			t.Fatalf("after halving: index %d, want %d", c.index, want)
+		}
+		if c, _, _ := r.PrepareCompaction(false); c.index != 18 {
+			t.Fatalf("a normal pass is capped at index %d, want 18", c.index)
+		}
+	}
+	if r.HalveCompaction(c) {
+		t.Fatalf("a one-round chunk was halved")
+	}
+	if !r.HalveCompaction(Compaction{index: 18}) || r.chunk != 1 {
+		t.Fatalf("a longer failed pass grew the chunk to %d", r.chunk)
+	}
+	okRound(t, r, "fits", 2100)
+	if c, _, _ := r.PrepareCompaction(true); c.index != 19 {
+		t.Fatalf("after an ok round: forced index %d, want the uncapped 19", c.index)
+	}
+}
+
+func TestChainedCompactionOnTheSameTail(t *testing.T) {
+	r := NewReplay(context.Background(), "a", local.NewMessageStorage(), api.ThreadConfig{CompactionPreserve: 0.1}, api.Model{})
+	mustCreate(t, r)
+	growingRounds(t, r, 100, 200, 300, 400, 500, 600)
+	r.HalveCompaction(Compaction{index: 4})
+	c, _, _ := r.PrepareCompaction(true)
+	if c.index != 2 {
+		t.Fatalf("pass 1 index %d, want 2", c.index)
+	}
+	if err := r.ApplyCompaction(c, api.Indexed[api.Content]{0: api.ContentText{Text: "first summary"}}, api.EventUsage{Output: 50}); err != nil {
+		t.Fatal(err)
+	}
+	if want := (api.EventUsage{Input: 50 + 600 - 200}); r.Usage() != want {
+		t.Fatalf("after pass 1: %+v, want %+v", r.Usage(), want)
+	}
+	c, _, _ = r.PrepareCompaction(true)
+	if c.index != 2 {
+		t.Fatalf("pass 2 index %d, want 2", c.index)
+	}
+	if err := r.ApplyCompaction(c, api.Indexed[api.Content]{0: api.ContentText{Text: "second summary"}}, api.EventUsage{Output: 70}); err != nil {
+		t.Fatal(err)
+	}
+	if want := (api.EventUsage{Input: 70 + 600 - 400}); r.Usage() != want {
+		t.Fatalf("after pass 2 on the same tail: %+v, want %+v", r.Usage(), want)
+	}
+}
+
+func TestContextFullBlocksCompactionUntilRewind(t *testing.T) {
+	config := api.ThreadConfig{CompactionTrigger: 0.5, CompactionAllowed: 0.2, CompactionPreserve: 0.25}
+	r := NewReplay(context.Background(), "a", local.NewMessageStorage(), config, api.Model{Context: 1000})
+	mustCreate(t, r)
+	ids := growingRounds(t, r, 900, 900, 900)
+	r.HalveCompaction(Compaction{index: 2})
+	r.ContextFull()
+	if r.NeedCompaction() != CompactionNone || r.CanCompact() || !r.IsContextFull() {
+		t.Fatalf("full: NeedCompaction %v CanCompact %v", r.NeedCompaction(), r.CanCompact())
+	}
+	if _, _, _, err := r.Rewind(ids[2], api.Input{Text: "again"}); err != nil {
+		t.Fatal(err)
+	}
+	if r.IsContextFull() || r.NeedCompaction() != CompactionTokens || r.chunk != 0 {
+		t.Fatalf("after Rewind: full %v NeedCompaction %v chunk %d, want not full, tokens and no chunk", r.IsContextFull(), r.NeedCompaction(), r.chunk)
 	}
 }
 
@@ -1310,7 +1411,7 @@ func TestCompactionInstructionHasMarker(t *testing.T) {
 	r := NewReplay(context.Background(), "a", s, compactionConfig, api.Model{})
 	mustCreate(t, r)
 	growingRounds(t, r, 100, 200, 300, 400)
-	_, compaction, err := r.PrepareCompaction()
+	_, compaction, err := r.PrepareCompaction(false)
 	if err != nil {
 		t.Fatalf("PrepareCompaction: %v", err)
 	}
@@ -1517,4 +1618,27 @@ func TestEmptyRewindNeedsSomethingPending(t *testing.T) {
 			t.Fatalf("an empty rewind over a record of an earlier round: %v", err)
 		}
 	})
+}
+
+func TestAnEndedRoundForgetsTheChunk(t *testing.T) {
+	config := api.ThreadConfig{CompactionTrigger: 0.5, CompactionAllowed: 0.2, CompactionPreserve: 0.25}
+	r := NewReplay(context.Background(), "a", local.NewMessageStorage(), config, api.Model{Context: 1000})
+	mustCreate(t, r)
+	growingRounds(t, r, 900, 900, 900)
+	for name, end := range map[string]func() error{
+		"error":  func() error { return r.RoundError(errors.New("context_length"), api.EventUsage{}, nil) },
+		"abort":  func() error { return r.RoundAbort(api.EventUsage{}, nil) },
+		"refuse": func() error { return r.RoundRefuse(api.EventUsage{}, nil) },
+	} {
+		if _, _, err := r.RoundInit(api.Input{Text: name}); err != nil {
+			t.Fatal(err)
+		}
+		r.HalveCompaction(Compaction{index: 4})
+		if err := end(); err != nil {
+			t.Fatal(err)
+		}
+		if r.chunk != 0 {
+			t.Fatalf("%s: chunk %d after the round ended, want 0", name, r.chunk)
+		}
+	}
 }

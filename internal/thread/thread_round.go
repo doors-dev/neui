@@ -187,7 +187,7 @@ func (s *threadRound) ok(code api.OkCode, content api.Indexed[api.Content], usag
 	}
 	cause := s.thread.replay.NeedCompaction()
 	if cause != replay.CompactionNone {
-		if _, err := s.thread.compact(); err != nil {
+		if _, err := s.thread.compact(false); err != nil {
 			doors.Logger(s.thread.link.backend.Context()).Error("thread: compaction", "thread", s.thread.id, "err", err)
 		}
 	}
@@ -256,13 +256,14 @@ func (s *threadRound) err(code api.ErrCode, cause error, content api.Indexed[api
 			s.thread.switchStateCompact(s.round, usage, content).on(*held)
 			return
 		}
-		if _, err := s.thread.compact(); err != nil {
+		if _, err := s.thread.compact(true); err != nil {
 			doors.Logger(s.thread.link.backend.Context()).Error("thread: compaction", "thread", s.thread.id, "err", err)
 		}
 		if s.thread.compaction.isActive() {
 			s.thread.switchStateCompact(s.round, usage, content)
 			return
 		}
+		s.thread.replay.ContextFull()
 		if err := s.thread.replay.RoundError(errors.New(string(code)), usage, content); err != nil {
 			s.thread.criticalErr(nil, err)
 			return

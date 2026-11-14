@@ -57,6 +57,13 @@ var ErrMeasuredTooLarge = errors.New("provider refused a request measured as fit
 // tells the user to split it or attach the content as a file.
 var ErrInputTooLarge = errors.New("message is too large to send, split it into smaller messages or attach the content as a file")
 
+// ErrContextFull reports a Send or Retry refused because the conversation no
+// longer fits the model's context window even after compaction: compacting
+// the oldest round alone is still too long, or only the latest round is left
+// and it does not fit. Nothing is sent. It lasts until Rewind or until the
+// thread is opened again, for example on a model with a larger window.
+var ErrContextFull = errors.New("this conversation no longer fits the model's context window; rewind to an earlier message or switch to a model with a larger window")
+
 // ErrToolNotFound reports a tool call naming no registered tool.
 var ErrToolNotFound = errors.New("tool not found")
 

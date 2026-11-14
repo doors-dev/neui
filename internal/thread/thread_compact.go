@@ -132,7 +132,7 @@ func (s *threadCompact) on(cmd any) {
 			return
 		}
 		applied := s.thread.applyCompaction(cmd)
-		if s.thread.replay == nil {
+		if s.thread.replay == nil || s.thread.compaction.isActive() {
 			return
 		}
 		if !s.thread.replay.IsRetriable() {
@@ -149,6 +149,9 @@ func (s *threadCompact) on(cmd any) {
 			return
 		}
 		if !applied {
+			if code, _ := cmd.resp.Err(); code == api.CodeContextLength {
+				s.thread.replay.ContextFull()
+			}
 			if err := s.thread.replay.RoundError(errors.New(string(api.CodeContextLength)), s.usage, s.content); err != nil {
 				s.thread.criticalErr(nil, err)
 				return

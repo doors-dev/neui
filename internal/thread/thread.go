@@ -378,7 +378,7 @@ func (t *thread) on(cmd any) {
 			cmd.Err(api.ErrWrongState)
 			return
 		}
-		if _, err := t.compact(); err != nil {
+		if _, err := t.compact(false); err != nil {
 			cmd.Err(err)
 			return
 		}
@@ -507,6 +507,15 @@ func (t *thread) applyCompaction(cmd commandApplyCompaction) bool {
 		return false
 	}
 	if code, isErr := cmd.resp.Err(); isErr && code != api.CodeCapped {
+		if code == api.CodeContextLength && t.replay.HalveCompaction(compaction) {
+			if _, err := t.compact(true); err != nil {
+				t.criticalErr(nil, err)
+				return false
+			}
+			if t.compaction.isActive() {
+				return false
+			}
+		}
 		t.replay.CompactionFailed()
 		t.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}, Final: false, CanCompact: t.canCompact()}))
 		switch code {
@@ -543,11 +552,11 @@ func (t *thread) canCompact() bool {
 	return !t.compaction.isActive() && t.replay.CanCompact()
 }
 
-func (t *thread) compact() (bool, error) {
+func (t *thread) compact(force bool) (bool, error) {
 	if t.compaction.isActive() {
 		return false, nil
 	}
-	c, m, err := t.replay.PrepareCompaction()
+	c, m, err := t.replay.PrepareCompaction(force)
 	if err != nil {
 		return false, err
 	}

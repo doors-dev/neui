@@ -41,6 +41,8 @@ type replay struct {
 	failed       bool
 	failedWeight int64
 	failedTokens int
+	chunk        int
+	full         bool
 }
 
 func (r Replay) Tighten() bool {
@@ -89,7 +91,7 @@ const (
 )
 
 func (r Replay) NeedCompaction() CompactionCause {
-	if !r.IsLoaded() {
+	if !r.IsLoaded() || r.full {
 		return CompactionNone
 	}
 	rounds := r.messages.rounds
@@ -112,7 +114,7 @@ func (r Replay) NeedCompaction() CompactionCause {
 }
 
 func (r Replay) CanCompact() bool {
-	if !r.IsLoaded() {
+	if !r.IsLoaded() || r.full {
 		return false
 	}
 	rounds := r.messages.rounds
@@ -133,11 +135,29 @@ func (r Replay) CompactionFailed() {
 	r.failedTokens = r.Usage().Total()
 }
 
-func (r Replay) PrepareCompaction() (Compaction, []api.Message, error) {
+func (r Replay) HalveCompaction(c Compaction) bool {
+	if c.index <= 1 {
+		return false
+	}
+	if r.chunk == 0 || r.chunk > c.index/2 {
+		r.chunk = c.index / 2
+	}
+	return true
+}
+
+func (r Replay) ContextFull() {
+	r.full = true
+}
+
+func (r Replay) IsContextFull() bool {
+	return r.full
+}
+
+func (r Replay) PrepareCompaction(force bool) (Compaction, []api.Message, error) {
 	if !r.IsLoaded() {
 		return Compaction{}, nil, errors.New("state missmatch")
 	}
-	c, m := r.messages.prepeareCompaction()
+	c, m := r.messages.prepeareCompaction(force, r.chunk)
 	return c, m, nil
 }
 
@@ -163,7 +183,7 @@ func (r Replay) ApplyCompaction(c Compaction, content api.Indexed[api.Content], 
 	}
 	previous := rounds[c.index-1]
 	base := previous.usage.Total()
-	if previous.id <= r.messages.compaction.Tail {
+	if previous.id <= r.messages.compaction.Tail && rounds[len(rounds)-1].id > r.messages.compaction.Tail {
 		base = r.messages.compaction.Output + base - r.messages.compaction.Base
 	}
 	record := api.Compaction{
@@ -256,6 +276,8 @@ func (r Replay) Rewind(end api.RoundID, input api.Input) (api.Round, []api.Messa
 		return api.Round{}, nil, nil, err
 	}
 	r.messages = nil
+	r.full = false
+	r.chunk = 0
 	if err := r.Load(); err != nil {
 		return api.Round{}, nil, nil, err
 	}
@@ -318,6 +340,7 @@ func (r Replay) RoundOk(usage api.EventUsage, content api.Indexed[api.Content]) 
 		r.updateSeq(seq)
 	}
 	r.lastRound.state = api.RoundOk
+	r.chunk = 0
 	r.messages.appendRound(api.Round{
 		ID:            r.lastRound.id,
 		Thread:        r.id,
@@ -340,6 +363,7 @@ func (r Replay) RoundError(err error, usage api.EventUsage, content api.Indexed[
 	}
 	r.updateSeq(seq)
 	r.lastRound.state = api.RoundError
+	r.chunk = 0
 	if len(r.lastRound.records) != 0 {
 		r.messages.restoreRecords(r.lastRound.records)
 		r.lastRound.records = nil
@@ -365,6 +389,7 @@ func (r Replay) RoundAbort(usage api.EventUsage, content api.Indexed[api.Content
 	}
 	r.updateSeq(seq)
 	r.lastRound.state = api.RoundAbort
+	r.chunk = 0
 	if len(r.lastRound.records) != 0 {
 		r.messages.restoreRecords(r.lastRound.records)
 		r.lastRound.records = nil
@@ -390,6 +415,7 @@ func (r Replay) RoundRefuse(usage api.EventUsage, content api.Indexed[api.Conten
 	}
 	r.updateSeq(seq)
 	r.lastRound.state = api.RoundRefuse
+	r.chunk = 0
 	if len(r.lastRound.records) != 0 {
 		r.messages.restoreRecords(r.lastRound.records)
 		r.lastRound.records = nil

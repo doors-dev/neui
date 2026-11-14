@@ -18,7 +18,8 @@ type ThreadConfig struct {
 	// share is not checked. Default 0.2.
 	CompactionAllowed float32
 	// CompactionPreserve is the share of the conversation kept verbatim after
-	// the summary. Default 0.1.
+	// the summary; when the model rejects the compaction as too long, the rest
+	// is compacted in smaller passes. Default 0.1.
 	CompactionPreserve float32
 	// ReplayItemShare sets the round item budget, Model.Context * 4 *
 	// ReplayItemShare bytes (four bytes per token), assuming a 200,000-token

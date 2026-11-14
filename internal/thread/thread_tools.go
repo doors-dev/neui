@@ -191,7 +191,7 @@ func (s *threadTools) finalize() {
 		return
 	}
 	if s.thread.replay.NeedCompaction() == replay.CompactionBytes {
-		if _, err := s.thread.compact(); err != nil {
+		if _, err := s.thread.compact(false); err != nil {
 			doors.Logger(s.thread.link.backend.Context()).Error("thread: compaction", "thread", s.thread.id, "err", err)
 		}
 		if s.thread.compaction.isActive() {
