@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"reflect"
 	"strings"
@@ -135,7 +136,7 @@ func TestRunToolErrorReachesScriptInFull(t *testing.T) {
 	}
 	ctx := testkit.NewController(t, testkit.Setup{Modules: []common.Module{fail}}).Ctx()
 	m := &module{runtime: getRuntime(context.Background())}
-	res, err := m.run(ctx, RunArg{Code: "try { fail__long({}); } catch (e) { return [e instanceof TypeError, e.message]; }"})
+	res, err := m.run(ctx, RunArg{Code: `try { fail__long({}); } catch (e) { return [e instanceof TypeError, e.message, "value" in e]; }`})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,8 +144,68 @@ func TestRunToolErrorReachesScriptInFull(t *testing.T) {
 	if err := json.Unmarshal(res.Output, &got); err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 2 || got[0] != true || got[1] != "long: "+long {
+	if len(got) != 3 || got[0] != true || got[1] != "long: "+long || got[2] != false {
 		t.Fatalf("output = %s", res.Output)
+	}
+}
+
+type imageError struct{ api.Image }
+
+func (imageError) Error() string { return "render failed" }
+
+type blocksError []api.UserContent
+
+func (blocksError) Error() string { return "render failed" }
+
+func (b blocksError) Contents() []api.UserContent { return b }
+
+func TestRunToolContentErrorReachesScript(t *testing.T) {
+	image := imageError{api.Image{Data: []byte{1, 2}, Mime: api.ImagePNG}}
+	blocks := blocksError{api.ContentText{Text: "a"}, api.ContentText{Text: "b"}}
+	fail := tools.NewModule("fail", "")
+	if _, err := fail.Add("image", "", func(ctx context.Context, _ struct{}) (struct{}, error) {
+		return struct{}{}, fmt.Errorf("x: %w", image)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fail.Add("blocks", "", func(ctx context.Context, _ struct{}) (struct{}, error) {
+		return struct{}{}, blocks
+	}); err != nil {
+		t.Fatal(err)
+	}
+	inner, _ := fail.Get("image")
+	if _, err := fail.Add("nested", "", func(ctx context.Context, _ struct{}) (any, error) {
+		return inner.Dispatched(ctx, json.RawMessage(`{}`))
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fail.Add("nil", "", func(ctx context.Context, _ struct{}) (any, error) {
+		return nil, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ctx := testkit.NewController(t, testkit.Setup{Modules: []common.Module{fail}}).Ctx()
+	m := &module{runtime: getRuntime(context.Background())}
+	res, err := m.run(ctx, RunArg{Code: `const caught = (f) => { try { f({}); } catch (e) { return [e instanceof TypeError, e.message, e.stack.length > 0, e.value]; } };
+return [caught(fail__image), caught(fail__blocks), caught(fail__nested), fail__nil({}) === null];`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, _ := json.Marshal([]any{
+		[]any{true, "image: x: render failed", true, image},
+		[]any{true, "blocks: render failed", true, blocks},
+		[]any{true, "nested: image: x: render failed", true, image},
+		true,
+	})
+	var got, wanted any
+	if err := json.Unmarshal(res.Output, &got); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(want, &wanted); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, wanted) {
+		t.Fatalf("output = %s, want %s", res.Output, want)
 	}
 }
 

@@ -13,9 +13,7 @@ import (
 	"neui.dev/internal/utils"
 )
 
-type Value struct {
-	Value any `json:"value"`
-}
+type Value struct{ Value any }
 
 func NewTool[I any, O any](name string, desc string, f func(ctx context.Context, input I) (O, error)) (common.Tool, error) {
 	name = utils.SanitizeName(name)
@@ -176,31 +174,7 @@ func (c tool) Agent(ctx context.Context, input json.RawMessage) (api.UserContent
 	if err != nil {
 		return nil, err
 	}
-	switch output := output.(type) {
-	case api.UserContents:
-		return output, nil
-	case api.UserContent:
-		return api.UserContents{output}, nil
-	case api.Container:
-		return api.UserContents{output.Content()}, nil
-	case api.MultiContainer:
-		return output.Contents(), nil
-	case string:
-		return api.UserContents{api.ContentText{
-			Text: output,
-		}}, nil
-	case fmt.Stringer:
-		return api.UserContents{api.ContentText{
-			Text: output.String(),
-		}}, nil
-	}
-	json, err := json.Marshal(output)
-	if err != nil {
-		return nil, err
-	}
-	return api.UserContents{api.ContentText{
-		Text: string(json),
-	}}, nil
+	return api.NewToolContents(output)
 }
 
 func (c tool) JS(ctx context.Context) quickjs.HostFunc {

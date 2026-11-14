@@ -62,10 +62,13 @@ type Tool[I any, O any] struct {
 	// agent call to a module tool, a string or fmt.Stringer result reaches
 	// the agent as text, an api content value as itself and anything else as
 	// JSON; a script receives the value as JSON, and a page tool's output is
-	// wrapped with the space's new seq and changes. An error is reported to the agent as the
-	// call's failure. ctx works with the Tool* functions; for a tool rendered
-	// on a page it is also a doors context of that render, so the handler
-	// can update the page, and it runs once the page has settled.
+	// wrapped with the space's new seq and changes. An error is reported to
+	// the agent as the call's failure; one that is or wraps an api.Container
+	// or api.MultiContainer carries that content, which a script finds as
+	// JSON in the thrown error's value property. ctx works with the Tool*
+	// functions; for a tool rendered on a page it is also a doors context of
+	// that render, so the handler can update the page, and it runs once the
+	// page has settled.
 	Handler func(ctx context.Context, i I) (O, error)
 }
 

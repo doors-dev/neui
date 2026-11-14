@@ -24,7 +24,8 @@ const scriptRejectedMessage = "the script was not queued and nothing ran: fix it
 
 const specNotation = `Schemas are JSON Schema. Pass an object even when nothing is needed: {}. What update(patch) does is up to each view or control: see the descriptions in its patch schema. A {"$ref":"#/definitions/X"} refers to X under Definitions at the end. A field with "function" takes the JavaScript source of a one-argument function: arg is what it receives, returns what it must return.`
 const specRuntime = `- A control reports only while a script is inside ui.draw(), one action per draw; actions taken at other times, while a script runs or after it has ended, are dropped.
-- A value that doesn't match its schema throws at the call; a failing app function throws its error.
+- A value that doesn't match its schema throws at the call; a failing app function throws its error, which may carry a value in e.value.
+- Your other tools are globals here too, named <module>__<tool>(args), such as files__read or page__tool; they run synchronously and return their result.
 `
 
 var errUnmounted = errors.New(unmountedMessage)

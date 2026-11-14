@@ -15,6 +15,7 @@ import (
 	"modernc.org/quickjs"
 	"neui.dev/api"
 	"neui.dev/internal/common"
+	"neui.dev/internal/tools"
 )
 
 const (
@@ -79,19 +80,30 @@ const loggers = `(function () {
 	globalThis.print = (...a) => __log('INFO', join(a));
 })();`
 
-func RegisterTools(vm *quickjs.VM, ctx func() context.Context, prefix string, tools []common.Tool) error {
+type hostResult struct {
+	Value any    `json:"value,omitempty"`
+	Error string `json:"error,omitempty"`
+}
+
+func RegisterTools(vm *quickjs.VM, ctx func() context.Context, prefix string, list []common.Tool) error {
 	b := strings.Builder{}
-	for _, t := range tools {
+	for _, t := range list {
 		name := prefix + t.Name()
 		host := "__" + name
 		if err := vm.RegisterHostFunc(host, func(args []any) (any, error) {
 			out, err := t.JS(ctx())(args)
-			if err != nil {
-				return struct {
-					Error string `json:"error"`
-				}{err.Error()}, nil
+			if err == nil {
+				return hostResult{Value: out.(tools.Value).Value}, nil
 			}
-			return out, nil
+			var container api.Container
+			var multi api.MultiContainer
+			if errors.As(err, &container) {
+				return hostResult{Value: container, Error: err.Error()}, nil
+			}
+			if errors.As(err, &multi) {
+				return hostResult{Value: multi, Error: err.Error()}, nil
+			}
+			return hostResult{Error: err.Error()}, nil
 		}); err != nil {
 			return fmt.Errorf("registering %s: %w", host, err)
 		}
@@ -106,7 +118,7 @@ func RegisterTools(vm *quickjs.VM, ctx func() context.Context, prefix string, to
 		b.WriteString(name)
 		b.WriteString("\", {value: (f => arg => { const r = f(JSON.stringify(arg ?? ")
 		b.WriteString(missing)
-		b.WriteString(")); if (\"error\" in r) throw new TypeError(r.error); return r.value })(")
+		b.WriteString(")); if (\"error\" in r) throw \"value\" in r ? Object.assign(new TypeError(r.error), {value: r.value}) : new TypeError(r.error); return r.value ?? null })(")
 		b.WriteString(host)
 		b.WriteString("), enumerable: true, configurable: true})\ndelete globalThis.")
 		b.WriteString(host)
