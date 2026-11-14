@@ -173,10 +173,11 @@ type Instance interface {
 	// its body: a string is escaped text, json.RawMessage is passed as is,
 	// anything else is encoded as JSON. The event is stored in the thread,
 	// creating a New thread in storage. An idle agent starts a turn at once; a
-	// busy one reads it in its next turn. Returns ErrUnlinked when the
-	// instance has no thread open or switched threads before the event
-	// landed; a storage failure is returned and also ends the link with
-	// ChatEventCriticalError.
+	// busy one reads it in its next turn, or a later one while the records
+	// ahead of it fill a turn's ThreadConfig.ReplayItemShare budget. Returns
+	// ErrUnlinked when the instance has no thread open or switched threads
+	// before the event landed; a storage failure is returned and also ends the
+	// link with ChatEventCriticalError.
 	Emit(ctx context.Context, name string, attrs map[string]string, data any) error
 	// Render returns the element that shows this instance's chat. It renders
 	// factory.Placeholder while there is no thread to show and factory.Chat
@@ -200,15 +201,15 @@ type ChatThread interface {
 	// Input stages input as the thread's draft without sending it, so a
 	// reload or another tab on the thread picks it up as ChatState.Input.
 	// ErrWrongState while an input is pending; ErrInputTooLarge when its text
-	// is over ThreadConfig.InputBytes.
+	// is over the ThreadConfig.ReplayItemShare budget.
 	Input(ctx context.Context, input Input) error
 	// Send submits input. An idle thread starts a round with it at once
 	// (ChatEventRoundStart); a busy one queues it as pending
 	// (ChatEventInputPending) and runs it after the current activity.
 	// ErrWrongState when an input is already pending or input is empty (an
 	// idle thread with unanswered tool results accepts an empty Send and
-	// resumes); ErrInputTooLarge when its text is over
-	// ThreadConfig.InputBytes.
+	// resumes); ErrInputTooLarge when its text is over the
+	// ThreadConfig.ReplayItemShare budget.
 	Send(ctx context.Context, input Input) error
 	// Stop aborts the running round, cancels the running tool calls with
 	// ErrCanceledByUser, or cancels a compaction the turn waits on (results
@@ -231,11 +232,11 @@ type ChatThread interface {
 	// Rewind deletes round and every round after it, then starts a new round
 	// with input in its place; it works in any state and stops whatever is
 	// running first. The ChatEventRoundStart it causes carries round in
-	// Truncate. ErrInputTooLarge when the text is over
-	// ThreadConfig.InputBytes. An empty input resumes from the cut, and
-	// returns ErrWrongState with nothing changed when the cut would leave
-	// nothing for the model to answer: no tool calls from the last successful
-	// round before it and no records. A storage failure arrives as
+	// Truncate. ErrInputTooLarge when the text is over the
+	// ThreadConfig.ReplayItemShare budget. An empty input resumes from the
+	// cut, and returns ErrWrongState with nothing changed when the cut would
+	// leave nothing for the model to answer: no tool calls from the last
+	// successful round before it and no records. A storage failure arrives as
 	// ChatEventCriticalError instead of an error.
 	Rewind(ctx context.Context, round RoundID, input Input) error
 	// Reload re-renders the chat from scratch: the ChatFactory builds a new

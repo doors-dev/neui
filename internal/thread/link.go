@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"neui.dev/internal/common"
 	"neui.dev/internal/filesystem"
 	"neui.dev/internal/page"
+	"neui.dev/internal/replay"
 	"neui.dev/internal/thread/toolkit"
 )
 
@@ -85,8 +87,10 @@ func (l *link) useTools(roundID api.RoundID, tools []api.ContentToolUse) (<-chan
 	var mu sync.Mutex
 	var running context.CancelCauseFunc
 	limit := l.backend.Config().ToolCallLimit
+	budget := replay.RoundItemBudget(l.backend.Config(), l.backend.Provider().Model())
 	go func() {
 		defer close(ch)
+		total := 0
 		for i, tool := range tools {
 			if stop.Err() != nil {
 				ch <- api.NewContentToolResult(tool.ID, nil, context.Cause(stop))
@@ -105,6 +109,10 @@ func (l *link) useTools(roundID api.RoundID, tools []api.ContentToolUse) (<-chan
 				ch <- api.NewContentToolResult(tool.ID, nil, api.DiscardedArgumentsError{})
 				continue
 			}
+			if total >= budget {
+				ch <- api.NewContentToolResult(tool.ID, nil, errors.New("Not run: this turn's tool results reached their size limit. Call it again next turn."))
+				continue
+			}
 			input := tool.Input
 			if len(input) == 0 {
 				input = json.RawMessage("{}")
@@ -117,7 +125,7 @@ func (l *link) useTools(roundID api.RoundID, tools []api.ContentToolUse) (<-chan
 				cancel(context.Cause(stop))
 			}
 			mu.Unlock()
-			ch <- func() (res api.ContentToolResult) {
+			res := func() (res api.ContentToolResult) {
 				defer func() {
 					if r := recover(); r != nil {
 						res = api.NewContentToolResult(tool.ID, nil, fmt.Errorf("%q: tool panicked: %v", tool.Name, r))
@@ -126,6 +134,19 @@ func (l *link) useTools(roundID api.RoundID, tools []api.ContentToolUse) (<-chan
 				content, err := t.Func(ctx, input)
 				return api.NewContentToolResult(tool.ID, content, err)
 			}()
+			size := 0
+			for _, c := range res.Content {
+				if text, ok := c.(api.ContentText); ok {
+					size += len(text.Text)
+				}
+			}
+			if size > budget {
+				note := fmt.Sprintf("Result omitted: it was %d bytes, more than a turn's tool results can hold. Ask for less, or process it in a script.", size)
+				res = api.ContentToolResult{ID: res.ID, Content: api.UserContents{api.ContentText{Text: note}}, Error: res.Error}
+				size = len(note)
+			}
+			total += size
+			ch <- res
 			cancel(nil)
 		}
 	}()

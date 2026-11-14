@@ -12,17 +12,23 @@ import (
 
 type fakeThread struct {
 	api.ChatThread
-	inputBytes int
-	sent       []api.Input
-	rewound    []api.Input
-	inputs     []api.Input
+	context int
+	sent    []api.Input
+	rewound []api.Input
+	inputs  []api.Input
 }
 
+const inputLimit = 1000
+
 func (f *fakeThread) Config() api.ThreadConfig {
-	if f.inputBytes == 0 {
-		return api.ThreadConfig{InputBytes: inputLimit}
+	return api.ThreadConfig{ReplayItemShare: 0.1}
+}
+
+func (f *fakeThread) Model() api.Model {
+	if f.context == 0 {
+		return api.Model{Context: inputLimit * 10 / 4}
 	}
-	return api.ThreadConfig{InputBytes: f.inputBytes}
+	return api.Model{Context: f.context}
 }
 
 func (f *fakeThread) Send(ctx context.Context, input api.Input) error {
@@ -227,24 +233,17 @@ func TestVisibleInputResetsSizes(t *testing.T) {
 	}
 }
 
-func TestLimitFollowsThreadInputBytes(t *testing.T) {
+func TestLimitFollowsTheRoundItemBudget(t *testing.T) {
 	ctx := context.Background()
-	thread := &fakeThread{inputBytes: 1000}
+	thread := &fakeThread{context: 5000}
 	c := newTestController(thread)
-	c.UpdateInputText(ctx, strings.Repeat("a", 1001))
+	c.UpdateInputText(ctx, strings.Repeat("a", 2001))
 	if got := c.ExcessBytes().Get(); got != 1 {
-		t.Fatalf("1001 bytes over a 1000-byte thread limit: want 1 excess byte, got %d", got)
+		t.Fatalf("2001 bytes over the 2000-byte round item budget: want 1 excess byte, got %d", got)
 	}
 	c.Send(ctx)
 	if len(thread.sent) != 0 {
-		t.Fatalf("over the thread limit: want no send, got %d", len(thread.sent))
-	}
-
-	wide := &fakeThread{inputBytes: 4 * inputLimit}
-	c = newTestController(wide)
-	c.UpdateInputText(ctx, strings.Repeat("a", inputLimit+1))
-	if got := c.ExcessBytes().Get(); got != 1 {
-		t.Fatalf("thread limit above the UI ceiling: want the ceiling to apply, got %d excess bytes", got)
+		t.Fatalf("over the round item budget: want no send, got %d", len(thread.sent))
 	}
 }
 

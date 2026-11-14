@@ -19,6 +19,7 @@ import (
 
 	"neui.dev/api"
 	"neui.dev/internal/common"
+	"neui.dev/internal/modules/js"
 	"neui.dev/internal/schema"
 	"neui.dev/internal/storage/local"
 	"neui.dev/internal/testkit"
@@ -244,6 +245,239 @@ func TestDiscardedArgumentsAnswerWithoutRunning(t *testing.T) {
 	}
 }
 
+const notRun = "Not run: this turn's tool results reached their size limit. Call it again next turn."
+
+var budgetModel = api.Model{Name: "stub", Context: 1000}
+
+func sizedProbe(t *testing.T, ran *atomic.Int64) common.Option {
+	t.Helper()
+	return probe(t, func(ctx context.Context, input json.RawMessage) (any, error) {
+		ran.Add(1)
+		var arg struct{ Size int }
+		if err := json.Unmarshal(input, &arg); err != nil {
+			return nil, err
+		}
+		return strings.Repeat("x", arg.Size), nil
+	})
+}
+
+func sizedCalls(sizes ...int) testkit.Turn {
+	events := []api.Event{api.EventStart{ID: "sized", Model: "stub"}}
+	for i, size := range sizes {
+		events = append(events, api.EventTool{Index: i, ID: fmt.Sprintf("c%d", i), Name: "probe__run", Args: fmt.Sprintf(`{"size":%d}`, size)}, api.EventClose{Index: i})
+	}
+	return testkit.Events(append(events, api.EventOk{Code: api.CodeTurn})...)
+}
+
+func TestRoundItemBudgetRunsCallsUntilTheirTextCrossesIt(t *testing.T) {
+	var ran atomic.Int64
+	p := testkit.NewProvider(budgetModel, sizedCalls(150, 150, 150, 150), testkit.Say("done"))
+	c := stack.Headless(t, stack.Host{Provider: p, Options: []common.Option{sizedProbe(t, &ran)}})
+	c.Send("call")
+	c.Wait()
+	if got := ran.Load(); got != 3 {
+		t.Fatalf("the tool ran %d times, want 3: the third result crosses the 400-byte budget and the call after it must not run", got)
+	}
+	results := testkit.Results(p.Request(t, 1))
+	if len(results) != 4 {
+		t.Fatalf("4 calls got %d results: every tool_use needs a matching tool_result", len(results))
+	}
+	for i, r := range results {
+		if r.ID != fmt.Sprintf("c%d", i) {
+			t.Fatalf("result %d answers %q", i, r.ID)
+		}
+		text, _ := r.Content[0].(api.ContentText)
+		if i < 3 && (r.Error != api.ToolOk || len(text.Text) != 150) {
+			t.Fatalf("call %d ran and came back as %q with %d bytes, want its whole 150", i, r.Error, len(text.Text))
+		}
+		if i == 3 && (r.Error != api.ToolErrRuntime || text.Text != notRun) {
+			t.Fatalf("the call after the budget was spent came back as %q with %#v, want %q", r.Error, r.Content, notRun)
+		}
+	}
+}
+
+func TestRoundItemBudgetOmitsAResultOverIt(t *testing.T) {
+	var ran atomic.Int64
+	p := testkit.NewProvider(budgetModel, sizedCalls(1000, 10), testkit.Say("done"))
+	c := stack.Headless(t, stack.Host{Provider: p, Options: []common.Option{sizedProbe(t, &ran)}})
+	c.Send("call")
+	c.Wait()
+	if got := ran.Load(); got != 2 {
+		t.Fatalf("the tool ran %d times, want 2: an omitted result leaves the budget to the calls after it", got)
+	}
+	results := testkit.Results(p.Request(t, 1))
+	if len(results) != 2 {
+		t.Fatalf("2 calls got %d results", len(results))
+	}
+	want := "Result omitted: it was 1000 bytes, more than a turn's tool results can hold. Ask for less, or process it in a script."
+	if text, ok := results[0].Content[0].(api.ContentText); !ok || len(results[0].Content) != 1 || results[0].Error != api.ToolOk || text.Text != want {
+		t.Fatalf("the 1000-byte result came back as %q with %#v, want ok with %q", results[0].Error, results[0].Content, want)
+	}
+	if text, ok := results[1].Content[0].(api.ContentText); !ok || results[1].Error != api.ToolOk || len(text.Text) != 10 {
+		t.Fatalf("the call after the omitted result came back as %q with %#v, want its 10 bytes", results[1].Error, results[1].Content)
+	}
+}
+
+func TestRoundItemBudgetDoesNotCountMedia(t *testing.T) {
+	run := probe(t, func(context.Context, json.RawMessage) (any, error) {
+		return api.UserContents{api.ContentImage{Data: make([]byte, 20<<10), Mime: "image/png"}, api.ContentText{Text: "ok"}}, nil
+	})
+	p := testkit.NewProvider(budgetModel, sizedCalls(0, 0), testkit.Say("done"))
+	c := stack.Headless(t, stack.Host{Provider: p, Options: []common.Option{run}})
+	c.Send("call")
+	c.Wait()
+	results := testkit.Results(p.Request(t, 1))
+	if len(results) != 2 {
+		t.Fatalf("2 calls got %d results", len(results))
+	}
+	for _, r := range results {
+		if _, ok := r.Content[0].(api.ContentImage); !ok || len(r.Content) != 2 || r.Error != api.ToolOk {
+			t.Fatalf("call %s came back as %q with %d blocks, want the 20 KiB image and its text: media does not count toward the budget", r.ID, r.Error, len(r.Content))
+		}
+	}
+}
+
+func TestRoundItemBudgetNotesReplayAsSent(t *testing.T) {
+	var ran atomic.Int64
+	p := testkit.NewProvider(budgetModel, sizedCalls(1000, 150, 150, 150), testkit.Say("done"), testkit.Say("next"), testkit.Say("again"))
+	c := stack.Headless(t, stack.Host{Provider: p, Options: []common.Option{sizedProbe(t, &ran)}})
+	c.Send("call")
+	c.Wait()
+	c.Send("next")
+	next := c.Wait()[0].(api.ChatEventRoundStart).Round.ID
+	c.Rewind(next, "again")
+	c.Wait()
+	results := func(req api.Request) []api.ContentToolResult {
+		var results []api.ContentToolResult
+		for _, m := range req.Messages {
+			for _, block := range m.Content {
+				if r, ok := block.(api.ContentToolResult); ok {
+					results = append(results, r)
+				}
+			}
+		}
+		return results
+	}
+	sent := results(p.Request(t, 1))
+	if len(sent) != 4 {
+		t.Fatalf("4 calls got %d results", len(sent))
+	}
+	if text, ok := sent[0].Content[0].(api.ContentText); !ok || !strings.HasPrefix(text.Text, "Result omitted") {
+		t.Fatalf("the 1000-byte result went out as %#v, want the omission note", sent[0].Content)
+	}
+	if text, ok := sent[3].Content[0].(api.ContentText); !ok || text.Text != notRun {
+		t.Fatalf("the call after the budget was spent went out as %#v, want %q", sent[3].Content, notRun)
+	}
+	for i := 2; i <= 3; i++ {
+		if got := results(p.Request(t, i)); !reflect.DeepEqual(got, sent) {
+			t.Fatalf("request %d replays the tool results as\n%+v\nwant them as first sent\n%+v", i, got, sent)
+		}
+	}
+}
+
+func TestToolCallLimitAnswersBeforeTheRoundItemBudget(t *testing.T) {
+	var ran atomic.Int64
+	p := testkit.NewProvider(budgetModel, sizedCalls(300, 300, 300), testkit.Say("done"))
+	c := stack.Headless(t, stack.Host{Provider: p, Config: api.ThreadConfig{ToolCallLimit: 2}, Options: []common.Option{sizedProbe(t, &ran)}})
+	c.Send("call")
+	c.Wait()
+	results := testkit.Results(p.Request(t, 1))
+	if len(results) != 3 {
+		t.Fatalf("3 calls got %d results", len(results))
+	}
+	if text, ok := results[2].Content[0].(api.ContentText); !ok || !strings.Contains(text.Text, "at most 2 tool calls") {
+		t.Fatalf("the call past both the limit and the budget came back as %#v, want the limit named", results[2].Content)
+	}
+}
+
+func TestRoundItemBudgetSkipsAnAskWithoutShowingIt(t *testing.T) {
+	var ran atomic.Int64
+	asker := tools.NewModule("asker", "")
+	if _, err := asker.Ask("ask", "asks the user", func(struct{}, common.Answer[string]) api.ChatAsk { return api.ChatAsk{} }); err != nil {
+		t.Fatal(err)
+	}
+	p := testkit.NewProvider(budgetModel,
+		testkit.Events(
+			api.EventStart{ID: "ask", Model: "stub"},
+			api.EventTool{Index: 0, ID: "spend", Name: "probe__run", Args: `{"size":400}`},
+			api.EventClose{Index: 0},
+			api.EventTool{Index: 1, ID: "ask", Name: "asker__ask", Args: "{}"},
+			api.EventClose{Index: 1},
+			api.EventOk{Code: api.CodeTurn},
+		),
+		testkit.Say("done"),
+	)
+	c := stack.Headless(t, stack.Host{Provider: p, Options: []common.Option{
+		sizedProbe(t, &ran),
+		common.OptionModule(func(context.Context) common.Module { return asker }),
+	}})
+	c.Send("call")
+	for _, e := range c.Wait() {
+		if _, ok := e.(api.ChatEventAsk); ok {
+			t.Fatalf("the ask after the budget was spent was shown to the user")
+		}
+	}
+	results := testkit.Results(p.Request(t, 1))
+	if len(results) != 2 {
+		t.Fatalf("2 calls got %d results", len(results))
+	}
+	if text, ok := results[1].Content[0].(api.ContentText); !ok || results[1].Error != api.ToolErrRuntime || text.Text != notRun {
+		t.Fatalf("the ask after the budget was spent came back as %q with %#v, want %q", results[1].Error, results[1].Content, notRun)
+	}
+}
+
+func TestRoundItemBudgetDoesNotCountScriptCalls(t *testing.T) {
+	var ran atomic.Int64
+	p := testkit.NewProvider(budgetModel,
+		testkit.Events(
+			api.EventStart{ID: "script", Model: "stub"},
+			api.EventTool{Index: 0, ID: "script", Name: "js__run", Args: `{"code":"probe__run({size: 300}); probe__run({size: 300}); probe__run({size: 300}); return 'done'","comment":"three probes"}`},
+			api.EventClose{Index: 0},
+			api.EventTool{Index: 1, ID: "direct", Name: "probe__run", Args: `{"size":300}`},
+			api.EventClose{Index: 1},
+			api.EventOk{Code: api.CodeTurn},
+		),
+		testkit.Say("done"),
+	)
+	c := stack.Headless(t, stack.Host{Provider: p, Options: []common.Option{sizedProbe(t, &ran), common.OptionModule(js.Module)}})
+	c.Send("call")
+	c.Wait()
+	if got := ran.Load(); got != 4 {
+		t.Fatalf("the tool ran %d times, want 3 from the script and 1 direct", got)
+	}
+	results := testkit.Results(p.Request(t, 1))
+	if len(results) != 2 || results[0].Error != api.ToolOk {
+		t.Fatalf("the round answered with %+v, want the script's result and the direct call's", results)
+	}
+	if text, ok := results[1].Content[0].(api.ContentText); !ok || results[1].Error != api.ToolOk || len(text.Text) != 300 {
+		t.Fatalf("the direct call after the script came back as %q with %#v, want its 300 bytes: a script's tool calls do not count toward the budget", results[1].Error, results[1].Content)
+	}
+}
+
+func TestRecordsOverTheRoundItemBudgetStartAnotherTurn(t *testing.T) {
+	release := make(chan struct{})
+	p := testkit.NewProvider(budgetModel, held(release, testkit.Say("busy")), testkit.Say("first"), testkit.Say("second"))
+	c := stack.Headless(t, stack.Host{Provider: p})
+	c.Send("go")
+	for _, data := range []string{strings.Repeat("a", 300), strings.Repeat("b", 200)} {
+		if err := c.Do(func(l thread.Link, op thread.Operation) thread.Command { return l.Record(op, "app_event", nil, data) }); err != nil {
+			t.Fatalf("Record: %v", err)
+		}
+	}
+	close(release)
+	expectTrace(t, c.Wait(),
+		"ThreadCreated", "RoundStart", "Indexed", "Indexed", "RoundUsage", "RoundEnd(ok)",
+		"RoundStart", "Indexed", "Indexed", "RoundUsage", "RoundEnd(ok)",
+		"RoundStart", "Indexed", "Indexed", "RoundUsage", "RoundEnd(ok,final)")
+	for i, body := range []string{strings.Repeat("a", 300), strings.Repeat("b", 200)} {
+		messages := p.Request(t, i+1).Messages
+		content := messages[len(messages)-1].Content
+		if text, ok := content[0].(api.ContentText); len(content) != 1 || !ok || text.Text != "<app_event>"+body+"</app_event>" {
+			t.Fatalf("request %d carries %#v, want the %d-byte event alone: the two together are over the 400-byte budget", i+1, content, len(body))
+		}
+	}
+}
+
 func TestToolRoundEndWipesScratch(t *testing.T) {
 	var fs api.FS
 	var scratch string
@@ -318,13 +552,13 @@ func TestProviderRefusalOfMeasuredBytesIsTerminal(t *testing.T) {
 }
 
 func TestOversizedInputIsRefusedWhereItIsSubmitted(t *testing.T) {
-	const limit = 4096
+	const limit = 400
 	ctx := context.Background()
 	oversized := api.Input{Text: strings.Repeat("x", limit+1)}
-	open := func(t *testing.T, config api.ThreadConfig, turns ...testkit.Turn) (*stack.Chat, api.MessageStorage) {
+	open := func(t *testing.T, turns ...testkit.Turn) (*stack.Chat, api.MessageStorage) {
 		t.Helper()
 		s := local.NewMessageStorage()
-		c := stack.Headless(t, stack.Host{Provider: testkit.NewProvider(api.Model{}, turns...), Config: config, Options: []common.Option{common.OptionMessageStorage(s)}})
+		c := stack.Headless(t, stack.Host{Provider: testkit.NewProvider(budgetModel, turns...), Options: []common.Option{common.OptionMessageStorage(s)}})
 		return c, s
 	}
 	rounds := func(t *testing.T, c *stack.Chat, s api.MessageStorage) []api.Round {
@@ -338,10 +572,9 @@ func TestOversizedInputIsRefusedWhereItIsSubmitted(t *testing.T) {
 	input := func(c *stack.Chat, in api.Input) error {
 		return c.Do(func(l thread.Link, op thread.Operation) thread.Command { return l.Input(op, in) })
 	}
-	config := api.ThreadConfig{InputBytes: limit}
 
 	t.Run("draft", func(t *testing.T) {
-		c, s := open(t, config)
+		c, s := open(t)
 		if err := input(c, oversized); !errors.Is(err, api.ErrInputTooLarge) {
 			t.Fatalf("a %d-byte draft under a %d limit answered %v, want ErrInputTooLarge", len(oversized.Text), limit, err)
 		}
@@ -354,7 +587,7 @@ func TestOversizedInputIsRefusedWhereItIsSubmitted(t *testing.T) {
 	})
 
 	t.Run("send", func(t *testing.T) {
-		c, s := open(t, config)
+		c, s := open(t)
 		err := c.Do(func(l thread.Link, op thread.Operation) thread.Command { return l.Send(op, oversized) })
 		if !errors.Is(err, api.ErrInputTooLarge) {
 			t.Fatalf("a %d-byte send under a %d limit answered %v, want ErrInputTooLarge", len(oversized.Text), limit, err)
@@ -375,7 +608,7 @@ func TestOversizedInputIsRefusedWhereItIsSubmitted(t *testing.T) {
 	})
 
 	t.Run("rewind", func(t *testing.T) {
-		c, s := open(t, config, testkit.Say("ok"), testkit.Say("ok"))
+		c, s := open(t, testkit.Say("ok"), testkit.Say("ok"))
 		c.Send("one")
 		c.Wait()
 		c.Send("two")
@@ -394,7 +627,7 @@ func TestOversizedInputIsRefusedWhereItIsSubmitted(t *testing.T) {
 	})
 
 	t.Run("rewind during a round", func(t *testing.T) {
-		c, s := open(t, config, testkit.Say("ok"), testkit.Hang(api.EventStart{ID: "hang", Model: "fake"}))
+		c, s := open(t, testkit.Say("ok"), testkit.Hang(api.EventStart{ID: "hang", Model: "fake"}))
 		c.Send("one")
 		c.Wait()
 		c.Send("two")
@@ -415,7 +648,7 @@ func TestOversizedInputIsRefusedWhereItIsSubmitted(t *testing.T) {
 	})
 
 	t.Run("at the limit", func(t *testing.T) {
-		c, _ := open(t, config)
+		c, _ := open(t)
 		fits := api.Input{Text: strings.Repeat("x", limit)}
 		if err := input(c, fits); err != nil {
 			t.Fatalf("an input of exactly the %d-byte limit answered %v, want it accepted", limit, err)
@@ -426,7 +659,7 @@ func TestOversizedInputIsRefusedWhereItIsSubmitted(t *testing.T) {
 	})
 
 	t.Run("attachments count toward the limit", func(t *testing.T) {
-		c, _ := open(t, config)
+		c, _ := open(t)
 		text := strings.Repeat("x", limit-10)
 		if err := input(c, api.Input{Text: text}); err != nil {
 			t.Fatalf("a %d-byte text under a %d limit answered %v: the text alone has to fit for this test to say anything", len(text), limit, err)
@@ -436,19 +669,6 @@ func TestOversizedInputIsRefusedWhereItIsSubmitted(t *testing.T) {
 		}
 		if draft := c.State().Input; len(draft.Attachments) != 0 {
 			t.Fatalf("the refused draft was stored as %+v", draft)
-		}
-	})
-
-	t.Run("non-positive takes the default", func(t *testing.T) {
-		c, _ := open(t, api.ThreadConfig{InputBytes: -1})
-		if err := input(c, api.Input{Text: strings.Repeat("x", 256<<10+1)}); !errors.Is(err, api.ErrInputTooLarge) {
-			t.Fatalf("a %d-byte draft under a negative InputBytes answered %v, want ErrInputTooLarge: the input ceiling has no off switch", 256<<10+1, err)
-		}
-		if draft := c.State().Input; draft.Text != "" {
-			t.Fatalf("the refused draft was stored under a negative InputBytes: %d bytes", len(draft.Text))
-		}
-		if err := input(c, api.Input{Text: strings.Repeat("x", 256<<10)}); err != nil {
-			t.Fatalf("a draft of exactly 256 KiB under a negative InputBytes answered %v, want it accepted", err)
 		}
 	})
 }

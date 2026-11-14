@@ -6,6 +6,7 @@ import (
 	"github.com/doors-dev/doors"
 
 	"neui.dev/api"
+	"neui.dev/internal/replay"
 )
 
 type threadCompact struct {
@@ -96,7 +97,7 @@ func (s *threadCompact) on(cmd any) {
 				inputBytes += len(text.Text)
 			}
 		}
-		if inputBytes > cmd.link.backend.Config().InputBytes {
+		if inputBytes > replay.RoundItemBudget(cmd.link.backend.Config(), cmd.link.backend.Provider().Model()) {
 			cmd.Err(api.ErrInputTooLarge)
 			return
 		}

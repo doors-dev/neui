@@ -255,33 +255,39 @@ func TestIslandSpecComesInParts(t *testing.T) {
 	c.Send("open the board")
 	c.Wait()
 	_, _, whole := specText(t, testkit.Results(full.Request(t, 2))[0])
-	model := api.Model{Name: "fake", Context: 200_000}
-	limit := replay.ResultTextCap(common.ConfigDefaults(api.ThreadConfig{}), model)
+	model := api.Model{Name: "fake", Context: 31_250}
+	limit := replay.RoundItemBudget(common.ConfigDefaults(api.ThreadConfig{}), model) / 2
 	parts := 0
-	p := testkit.NewProvider(model,
+	var p *testkit.Provider
+	p = testkit.NewProvider(model,
 		testkit.Call("page__sync", map[string]any{"path": "", "depth": 1}),
 		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
 		testkit.Then(func(r api.Request) testkit.Turn {
 			_, head, _ := specText(t, testkit.Results(r)[0])
 			fmt.Sscanf(head, "seq %d\npart 1 of %d", new(uint), &parts)
-			events := []api.Event{api.EventStart{ID: "parts", Model: "fake"}}
+			turns := make([]testkit.Turn, 0, parts+1)
 			for part := 2; part <= parts+1; part++ {
-				events = append(events,
-					api.EventTool{Index: part - 2, ID: fmt.Sprint("spec-part-", part), Name: "page__island_spec", Args: fmt.Sprintf(`{"path":"board","part":%d}`, part)},
-					api.EventClose{Index: part - 2},
-				)
+				turns = append(turns, testkit.Events(
+					api.EventStart{ID: "parts", Model: "fake"},
+					api.EventTool{Index: 0, ID: fmt.Sprint("spec-part-", part), Name: "page__island_spec", Args: fmt.Sprintf(`{"path":"board","part":%d}`, part)},
+					api.EventClose{Index: 0},
+					api.EventOk{Code: api.CodeTurn},
+				))
 			}
-			return testkit.Events(append(events, api.EventOk{Code: api.CodeTurn})...)
+			p.Push(append(turns[1:], testkit.Say("done"))...)
+			return turns[0]
 		}),
-		testkit.Say("done"),
 	)
 	c = stack.Page(t, stack.Host{Provider: p, Page: fullBoard()})
 	c.Send("open the board")
 	c.Wait()
 	if parts < 3 {
-		t.Fatalf("a %d-byte spec under a %d-byte result cap came in %d parts, want 3 or more", len(whole), limit, parts)
+		t.Fatalf("a %d-byte spec under a %d-byte part size came in %d parts, want 3 or more", len(whole), limit, parts)
 	}
-	results := append(testkit.Results(p.Request(t, 2)), testkit.Results(p.Request(t, 3))...)
+	var results []api.ContentToolResult
+	for i := 2; i <= parts+2; i++ {
+		results = append(results, testkit.Results(p.Request(t, i))...)
+	}
 	if len(results) != parts+1 {
 		t.Fatalf("%d parts read, want %d and one past the end", len(results), parts+1)
 	}
@@ -297,7 +303,7 @@ func TestIslandSpecComesInParts(t *testing.T) {
 			t.Fatalf("part %d opens with %q, want %q", i+1, head, want)
 		}
 		if size := len(head) + 2 + len(body); size > limit || strings.Contains(body, "<truncated>") {
-			t.Fatalf("part %d takes %d bytes, over the %d-byte result cap", i+1, size, limit)
+			t.Fatalf("part %d takes %d bytes, over the %d-byte part size", i+1, size, limit)
 		}
 		if !strings.HasSuffix(body, "\n") {
 			t.Fatalf("part %d ends inside a line:\n%s", i+1, body)
@@ -311,12 +317,12 @@ func TestIslandSpecComesInParts(t *testing.T) {
 }
 
 func TestIslandSpecItemOverPartRefused(t *testing.T) {
-	p := testkit.NewProvider(api.Model{Name: "fake", Context: 200_000},
+	p := testkit.NewProvider(api.Model{Name: "fake", Context: 1_000},
 		testkit.Call("page__sync", map[string]any{"path": "", "depth": 1}),
 		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
 		testkit.Say("done"),
 	)
-	c := stack.Page(t, stack.Host{Provider: p, Config: api.ThreadConfig{ToolCallLimit: 1000}, Page: board(make(chan int, 1), nil)})
+	c := stack.Page(t, stack.Host{Provider: p, Page: board(make(chan int, 1), nil)})
 	c.Send("open the board")
 	c.Wait()
 	refused(t, testkit.Results(p.Request(t, 2))[0], "intro takes")

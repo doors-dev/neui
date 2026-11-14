@@ -169,10 +169,10 @@ func (s *page) Module(ctx context.Context) common.Module {
 		}
 		spec, ends, items := island.Spec(ctx, path)
 		ctrl := common.GetController(ctx)
-		limit := replay.ResultTextCap(ctrl.Config(), ctrl.Model())
+		limit := replay.RoundItemBudget(ctrl.Config(), ctrl.Model()) / 2
 		part := max(arg.Part, 1)
 		whole := fmt.Sprintf("seq %d\n\n", seq)
-		if limit <= 0 || len(whole)+len(spec) <= limit {
+		if len(whole)+len(spec) <= limit {
 			if part > 1 {
 				return "", fmt.Errorf("part %d, the spec has 1 in all: %w", part, errIslandSpecPart)
 			}

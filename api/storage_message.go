@@ -277,6 +277,6 @@ type MessageStorage interface {
 	// RecordPin pins the records to the round whose user message renders
 	// them on replay. An unknown record id is ErrNotFound and pins nothing.
 	RecordPin(ctx context.Context, thread ThreadID, seq Seq, pin RoundID, records []RecordID) (Seq, error)
-	// RecordList returns the unpinned records.
+	// RecordList returns the unpinned records in id order.
 	RecordList(ctx context.Context, thread ThreadID) ([]Record, error)
 }

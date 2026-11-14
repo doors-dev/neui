@@ -1,4 +1,4 @@
-// Managed by GoX v0.3.4
+// Managed by GoX v0.4.0
 
 //line controller.gox:1
 package controller
@@ -11,6 +11,7 @@ import (
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
 	"neui.dev/api"
+	"neui.dev/internal/replay"
 )
 
 type InputState struct {
@@ -21,10 +22,8 @@ type InputState struct {
 	Ask *api.ChatAsk
 }
 
-const inputLimit = 256 * 1024
-
 func New(thread api.ChatThread, input api.ChatInput, active bool, settled api.EventUsage, tasks []api.Task, compaction bool, canCompact bool, ask *api.ChatAsk) Controller {
-	limit := min(thread.Config().InputBytes, inputLimit)
+	limit := replay.RoundItemBudget(thread.Config(), thread.Model())
 	origin := doors.NewSourceEqual(state{
 		input: input.Input,
 		textBytes: len(input.Input.Text),

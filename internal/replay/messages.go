@@ -46,14 +46,16 @@ func (s *messages) lastRound() (api.RoundID, error) {
 }
 
 func (s *messages) pendingContent(input api.Input) []api.Content {
-	resultsCap := ResultTextCap(s.config, s.model)
-	content := make([]api.Content, 0, len(s.resultStash)+len(s.recordStash)+input.Len())
+	budget := RoundItemBudget(s.config, s.model)
+	records := s.pendingRecords()
+	content := make([]api.Content, 0, len(s.resultStash)+len(records)+input.Len())
 	for _, res := range s.resultStash {
-		content = append(content, capText(res, resultsCap))
+		content = append(content, capText(res, budget))
 	}
-	for _, rec := range s.recordStash {
-		content = append(content, recordContent(rec, resultsCap))
+	for _, rec := range records {
+		content = append(content, recordContent(rec, budget))
 	}
+	input.Text = trimText(api.ContentText{Text: input.Text}, budget).Text
 	content = append(content, input.Content()...)
 	return omitOversizedMedia(content, s.model, memoryLimit(s.config, s.model, s.factor))
 }
@@ -171,10 +173,10 @@ func (s *messages) appendRound(r api.Round) {
 	if r.State != api.RoundOk {
 		return
 	}
-	resultsCap := ResultTextCap(s.config, s.model)
+	budget := RoundItemBudget(s.config, s.model)
 	userContent := make([]api.Content, 0, len(s.resultStash)+len(r.PinnedRecords)+r.Input.Len()+1)
 	for _, res := range s.resultStash {
-		userContent = append(userContent, capText(res, resultsCap))
+		userContent = append(userContent, capText(res, budget))
 	}
 	s.resultStash = nil
 	if s.first == api.NoRoundID {
@@ -184,8 +186,9 @@ func (s *messages) appendRound(r api.Round) {
 		}
 	}
 	for _, rec := range r.PinnedRecords {
-		userContent = append(userContent, recordContent(rec, resultsCap))
+		userContent = append(userContent, recordContent(rec, budget))
 	}
+	r.Input.Text = trimText(api.ContentText{Text: r.Input.Text}, budget).Text
 	userContent = append(userContent, r.Input.Content()...)
 	response := r.Response.Ordered()
 	for _, content := range response {
@@ -315,9 +318,22 @@ func (s *messages) restoreRecords(records []api.Record) {
 	s.recordStash = append(records, s.recordStash...)
 }
 
+func (s *messages) pendingRecords() []api.Record {
+	budget := RoundItemBudget(s.config, s.model)
+	n, total := len(s.recordStash), 0
+	for i, rec := range s.recordStash {
+		total += len(recordBody(rec))
+		if total > budget {
+			n = max(i, 1)
+			break
+		}
+	}
+	return slices.Clip(s.recordStash[:n])
+}
+
 func (s *messages) unstashRecords() []api.Record {
-	records := s.recordStash
-	s.recordStash = nil
+	records := s.pendingRecords()
+	s.recordStash = s.recordStash[len(records):]
 	return records
 }
 

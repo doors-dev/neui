@@ -391,7 +391,7 @@ func TestDisposedLinkRunsNoMoreTools(t *testing.T) {
 	ctx, cancel := context.WithCancel(base)
 	cancel()
 	l := &link{
-		backend:     common.NewBackend(base, nil, nil, nil, nil),
+		backend:     common.NewBackend(base, nil, nil, nil, []common.Option{common.OptionProvider(testkit.NewProvider(api.Model{}))}),
 		ctx:         ctx,
 		linkToolkit: toolkit.NewToolkit(base, func(context.Context) common.Module { return probe }),
 	}

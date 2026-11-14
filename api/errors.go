@@ -49,12 +49,12 @@ var ErrCanceledByUser = errors.New("canceled by user")
 // the error names both the size measured and the limit it was measured against.
 var ErrMeasuredTooLarge = errors.New("provider refused a request measured as fitting")
 
-// ErrInputTooLarge reports an input over ThreadConfig.InputBytes, counting its
-// text and the file links its attachments turn into. It is refused where it is
-// submitted, drafted or rewound to, and nothing of it is drafted, stored or
-// sent. Compaction keeps the latest input whole, so it cannot shrink such a
-// message; the error text tells the user to split it or attach the content as
-// a file.
+// ErrInputTooLarge reports an input over the round item budget
+// (ThreadConfig.ReplayItemShare), counting its text and the file links its
+// attachments turn into. It is refused where it is submitted, drafted or
+// rewound to, and nothing of it is drafted, stored or sent. Compaction keeps
+// the latest input whole, so it cannot shrink such a message; the error text
+// tells the user to split it or attach the content as a file.
 var ErrInputTooLarge = errors.New("message is too large to send, split it into smaller messages or attach the content as a file")
 
 // ErrToolNotFound reports a tool call naming no registered tool.

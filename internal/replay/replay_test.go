@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -457,7 +459,7 @@ func TestImageEvictionKeepsMediaItCannotShed(t *testing.T) {
 
 func TestNarrowRequestLimitKeepsTheByteRemedies(t *testing.T) {
 	const blob = 2 << 20
-	config := api.ThreadConfig{CompactionTrigger: 2, CompactionPreserve: 0.25, ThreadMemoryLimit: 18 << 20}
+	config := api.ThreadConfig{CompactionTrigger: 2, CompactionPreserve: 0.25, ReplayItemShare: 0.1, ThreadMemoryLimit: 18 << 20}
 	model := api.Model{Context: 100_000, RequestBytes: 1 << 20}
 	r := NewReplay(context.Background(), "a", local.NewMessageStorage(), config, model)
 	mustCreate(t, r)
@@ -489,7 +491,7 @@ func TestNarrowRequestLimitKeepsTheByteRemedies(t *testing.T) {
 
 func TestEvictionNeverGrowsTheThread(t *testing.T) {
 	const limit = 30_000
-	r := NewReplay(context.Background(), "a", local.NewMessageStorage(), api.ThreadConfig{ThreadMemoryLimit: limit}, api.Model{})
+	r := NewReplay(context.Background(), "a", local.NewMessageStorage(), api.ThreadConfig{ThreadMemoryLimit: limit, ReplayItemShare: 0.1}, api.Model{})
 	mustCreate(t, r)
 	for i := range 10 {
 		text := ""
@@ -700,10 +702,10 @@ func TestCompactionBaseInsidePreviousTail(t *testing.T) {
 	}
 }
 
-var unboundedConfig = api.ThreadConfig{ThreadMemoryLimit: -1, ReplayResultsShare: -1}
+var unboundedConfig = api.ThreadConfig{ThreadMemoryLimit: -1, ReplayItemShare: 0.25}
 
 func budgetConfig(limit int64) api.ThreadConfig {
-	return api.ThreadConfig{ThreadMemoryLimit: limit, ReplayResultsShare: -1}
+	return api.ThreadConfig{ThreadMemoryLimit: limit, ReplayItemShare: 0.25}
 }
 
 func mediaRounds(t *testing.T, s api.MessageStorage, rounds int, blocks ...api.UserContent) {
@@ -936,12 +938,11 @@ func TestCappedResultTextDoesNotAskForACompaction(t *testing.T) {
 	const limit, text = 100_000, 200 << 10
 	config := api.ThreadConfig{
 		ThreadMemoryLimit:  limit,
-		ReplayResultsShare: 0.25,
-		ToolCallLimit:      32,
+		ReplayItemShare:    0.25,
 		CompactionTrigger:  10,
 		CompactionPreserve: 0.25,
 	}
-	model := api.Model{Context: 200_000}
+	model := api.Model{Context: 50_000}
 	r := NewReplay(context.Background(), "a", local.NewMessageStorage(), config, model)
 	mustCreate(t, r)
 	okRound(t, r, "one", 10)
@@ -951,7 +952,7 @@ func TestCappedResultTextDoesNotAskForACompaction(t *testing.T) {
 		t.Fatalf("the stashed result weighs %d bytes uncapped: it has to sit over the %d limit before the cap for this test to say anything", charge, limit)
 	}
 	if got := r.NeedCompaction(); got != CompactionNone {
-		t.Fatalf("a result the request carries capped to %d bytes: got %v, the thread parks and spends a summarization for a request that fits", ResultTextCap(config, model), got)
+		t.Fatalf("a result the request carries capped to %d bytes: got %v, the thread parks and spends a summarization for a request that fits", RoundItemBudget(config, model), got)
 	}
 	_, messages, err := r.RoundInit(api.Input{})
 	if err != nil {
@@ -966,12 +967,11 @@ func TestCappedRecordTextDoesNotAskForACompaction(t *testing.T) {
 	const limit, text = 100_000, 200 << 10
 	config := api.ThreadConfig{
 		ThreadMemoryLimit:  limit,
-		ReplayResultsShare: 0.25,
-		ToolCallLimit:      32,
+		ReplayItemShare:    0.25,
 		CompactionTrigger:  10,
 		CompactionPreserve: 0.25,
 	}
-	model := api.Model{Context: 200_000}
+	model := api.Model{Context: 50_000}
 	r := NewReplay(context.Background(), "a", local.NewMessageStorage(), config, model)
 	mustCreate(t, r)
 	okRound(t, r, "one", 10)
@@ -979,11 +979,11 @@ func TestCappedRecordTextDoesNotAskForACompaction(t *testing.T) {
 	if err := r.Record(api.NoRoundID, "task_result", map[string]any{"name": "big"}, strings.Repeat("x", text)); err != nil {
 		t.Fatalf("Record: %v", err)
 	}
-	if charge := weigh(recordContent(r.messages.recordStash[0], 0)); charge <= limit {
+	if charge := len(recordBody(r.messages.recordStash[0])); charge <= limit {
 		t.Fatalf("the stashed record weighs %d bytes uncapped: it has to sit over the %d limit before the cap for this test to say anything", charge, limit)
 	}
 	if got := r.NeedCompaction(); got != CompactionNone {
-		t.Fatalf("a record the request carries capped to %d bytes: got %v, the thread parks and spends a summarization for a request that fits", ResultTextCap(config, model), got)
+		t.Fatalf("a record the request carries capped to %d bytes: got %v, the thread parks and spends a summarization for a request that fits", RoundItemBudget(config, model), got)
 	}
 	round, messages, err := r.RoundInit(api.Input{})
 	if err != nil {
@@ -998,7 +998,189 @@ func TestCappedRecordTextDoesNotAskForACompaction(t *testing.T) {
 	}
 	body, ok := content[0].(api.ContentText)
 	if !ok || !strings.Contains(body.Text, "<truncated>") {
-		t.Fatalf("the record the request carries reads %#v, want it trimmed to the %d bytes the result cap allows", content[0], ResultTextCap(config, model))
+		t.Fatalf("the record the request carries reads %#v, want it trimmed to the %d bytes the record cap allows", content[0], RoundItemBudget(config, model))
+	}
+}
+
+func TestRoundItemBudgetFitsReplayedItems(t *testing.T) {
+	config := api.ThreadConfig{ThreadMemoryLimit: -1, ReplayItemShare: 0.1}
+	r := NewReplay(context.Background(), "a", local.NewMessageStorage(), config, api.Model{Context: 1000})
+	mustCreate(t, r)
+	if err := r.Rename("budget"); err != nil {
+		t.Fatalf("Rename: %v", err)
+	}
+	if _, _, err := r.RoundInit(api.Input{Text: "call"}); err != nil {
+		t.Fatalf("RoundInit: %v", err)
+	}
+	calls := api.Indexed[api.Content]{
+		0: api.ContentToolUse{ID: "over", Name: "attach", Input: json.RawMessage(`{}`)},
+		1: api.ContentToolUse{ID: "at", Name: "attach", Input: json.RawMessage(`{}`)},
+	}
+	if _, err := r.RoundOk(api.EventUsage{Input: 10}, calls); err != nil {
+		t.Fatalf("RoundOk: %v", err)
+	}
+	if err := r.RoundResult(map[string]api.ContentToolResult{
+		"over": {ID: "over", Content: api.UserContents{api.ContentText{Text: strings.Repeat("x", 800)}}},
+		"at":   {ID: "at", Content: api.UserContents{api.ContentText{Text: strings.Repeat("x", 400)}}},
+	}); err != nil {
+		t.Fatalf("RoundResult: %v", err)
+	}
+	if err := r.Record(api.NoRoundID, "task_result", nil, strings.Repeat("y", 300)); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+	var sent []api.Contents
+	for _, text := range []string{strings.Repeat("z", 600), strings.Repeat("w", 400)} {
+		_, messages, err := r.RoundInit(api.Input{Text: text})
+		if err != nil {
+			t.Fatalf("RoundInit: %v", err)
+		}
+		sent = append(sent, messages[len(messages)-1].Content)
+		if _, err := r.RoundOk(api.EventUsage{Input: 10}, api.Indexed[api.Content]{0: api.ContentText{Text: "answer"}}); err != nil {
+			t.Fatalf("RoundOk: %v", err)
+		}
+	}
+	_, messages, err := r.RoundInit(api.Input{Text: "next"})
+	if err != nil {
+		t.Fatalf("RoundInit: %v", err)
+	}
+	for i, content := range sent {
+		if history := messages[len(messages)-5+2*i].Content; !reflect.DeepEqual(history, content) {
+			t.Fatalf("round %d replays as\n%#v\nwant it as first sent\n%#v", i+2, history, content)
+		}
+	}
+	first := sent[0]
+	if len(first) != 4 {
+		t.Fatalf("the request carries %d blocks, want the 2 results, the record and the input", len(first))
+	}
+	over, _ := first[0].(api.ContentToolResult)
+	if text, ok := over.Content[0].(api.ContentText); !ok || !strings.Contains(text.Text, "<truncated>") {
+		t.Fatalf("the 800-byte result reads %#v, want it cut to the 400-byte budget", over.Content)
+	}
+	at, _ := first[1].(api.ContentToolResult)
+	if text, ok := at.Content[0].(api.ContentText); !ok || text.Text != strings.Repeat("x", 400) {
+		t.Fatalf("the 400-byte result reads %#v, want it byte for byte", at.Content)
+	}
+	if text, ok := first[2].(api.ContentText); !ok || strings.Contains(text.Text, "<truncated>") || !strings.Contains(text.Text, strings.Repeat("y", 300)) {
+		t.Fatalf("the 300-byte record reads %#v, want it whole", first[2])
+	}
+	if text, ok := first[3].(api.ContentText); !ok || !strings.Contains(text.Text, "<truncated>") || len(text.Text) >= 600 {
+		t.Fatalf("the 600-byte input reads %#v, want it cut to the 400-byte budget", first[3])
+	}
+	if text, ok := sent[1][0].(api.ContentText); len(sent[1]) != 1 || !ok || text.Text != strings.Repeat("w", 400) {
+		t.Fatalf("the 400-byte input reads %#v, want it byte for byte", sent[1])
+	}
+}
+
+func recordIDs(records []api.Record) []api.RecordID {
+	ids := make([]api.RecordID, len(records))
+	for i, rec := range records {
+		ids[i] = rec.ID
+	}
+	return ids
+}
+
+func TestRoundItemBudgetHoldsRecordsForTheNextRound(t *testing.T) {
+	config := api.ThreadConfig{ThreadMemoryLimit: -1, ReplayItemShare: 0.1}
+	s := local.NewMessageStorage()
+	r := NewReplay(context.Background(), "a", s, config, api.Model{Context: 1000})
+	mustCreate(t, r)
+	for _, size := range []int{300, 200, 50} {
+		if err := r.Record(api.NoRoundID, "task_result", nil, strings.Repeat("y", size)); err != nil {
+			t.Fatalf("Record: %v", err)
+		}
+	}
+	stashed := recordIDs(r.messages.recordStash)
+	round, messages, err := r.RoundInit(api.Input{})
+	if err != nil {
+		t.Fatalf("RoundInit: %v", err)
+	}
+	if got := recordIDs(round.PinnedRecords); !slices.Equal(got, stashed[:1]) {
+		t.Fatalf("the first round takes records %v, want only %v: the 200 after the 300 is over the 400-byte budget, and the 50 waits behind it", got, stashed[:1])
+	}
+	content := messages[len(messages)-1].Content
+	if text, ok := content[0].(api.ContentText); len(content) != 1 || !ok || strings.Contains(text.Text, "<truncated>") || !strings.Contains(text.Text, strings.Repeat("y", 300)) {
+		t.Fatalf("the first request carries %#v, want the 300-byte record whole and nothing else", content)
+	}
+	if !r.IsPending() {
+		t.Fatalf("records wait for the next round, but the replay reports nothing pending")
+	}
+	if _, err := r.RoundOk(api.EventUsage{Input: 10}, api.Indexed[api.Content]{0: api.ContentText{Text: "answer"}}); err != nil {
+		t.Fatalf("RoundOk: %v", err)
+	}
+	unpinned, err := s.RecordList(context.Background(), "a")
+	if err != nil {
+		t.Fatalf("RecordList: %v", err)
+	}
+	if got := recordIDs(unpinned); !slices.Equal(got, stashed[1:]) {
+		t.Fatalf("after the first round records %v are unpinned, want %v", got, stashed[1:])
+	}
+	round, _, err = r.RoundInit(api.Input{})
+	if err != nil {
+		t.Fatalf("RoundInit: %v", err)
+	}
+	if got := recordIDs(round.PinnedRecords); !slices.Equal(got, stashed[1:]) {
+		t.Fatalf("the second round takes records %v, want %v", got, stashed[1:])
+	}
+	if r.IsPending() {
+		t.Fatalf("every record went out, but the replay reports something pending")
+	}
+}
+
+func TestRoundItemBudgetCutsAFirstRecordOverIt(t *testing.T) {
+	config := api.ThreadConfig{ThreadMemoryLimit: -1, ReplayItemShare: 0.1}
+	r := NewReplay(context.Background(), "a", local.NewMessageStorage(), config, api.Model{Context: 1000})
+	mustCreate(t, r)
+	for _, size := range []int{1000, 10} {
+		if err := r.Record(api.NoRoundID, "task_result", nil, strings.Repeat("y", size)); err != nil {
+			t.Fatalf("Record: %v", err)
+		}
+	}
+	round, messages, err := r.RoundInit(api.Input{})
+	if err != nil {
+		t.Fatalf("RoundInit: %v", err)
+	}
+	if len(round.PinnedRecords) != 1 {
+		t.Fatalf("the round takes %d records, want the 1000-byte one alone", len(round.PinnedRecords))
+	}
+	content := messages[len(messages)-1].Content
+	if text, ok := content[0].(api.ContentText); len(content) != 1 || !ok || !strings.Contains(text.Text, "<truncated>") {
+		t.Fatalf("the request carries %#v, want the 1000-byte record cut to the 400-byte budget", content)
+	}
+	if !r.IsPending() {
+		t.Fatalf("the 10-byte record waits for the next round, but the replay reports nothing pending")
+	}
+}
+
+func TestChosenRecordsSurviveErrorAndReload(t *testing.T) {
+	config := api.ThreadConfig{ThreadMemoryLimit: -1, ReplayItemShare: 0.1}
+	s := local.NewMessageStorage()
+	r := NewReplay(context.Background(), "a", s, config, api.Model{Context: 1000})
+	mustCreate(t, r)
+	for _, size := range []int{300, 200} {
+		if err := r.Record(api.NoRoundID, "task_result", nil, strings.Repeat("y", size)); err != nil {
+			t.Fatalf("Record: %v", err)
+		}
+	}
+	round, _, err := r.RoundInit(api.Input{})
+	if err != nil {
+		t.Fatalf("RoundInit: %v", err)
+	}
+	chosen := recordIDs(round.PinnedRecords)
+	if err := r.RoundError(errors.New("down"), api.EventUsage{}, nil); err != nil {
+		t.Fatalf("RoundError: %v", err)
+	}
+	if round, _, err = r.RoundInit(api.Input{}); err != nil {
+		t.Fatalf("RoundInit: %v", err)
+	}
+	if got := recordIDs(round.PinnedRecords); !slices.Equal(got, chosen) {
+		t.Fatalf("the round after the error takes records %v, want %v as before", got, chosen)
+	}
+	reloaded := NewReplay(context.Background(), "a", s, config, api.Model{Context: 1000})
+	if err := reloaded.Load(); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := recordIDs(reloaded.messages.pendingRecords()); !slices.Equal(got, chosen) {
+		t.Fatalf("a reload mid-round chooses records %v, want %v", got, chosen)
 	}
 }
 
@@ -1013,7 +1195,7 @@ func TestRecordBodyCannotCloseItsOwnElement(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			rec := api.Record{Kind: "task_result", Attrs: map[string]any{"name": "report.js"}, Data: c.data}
-			rendered := recordContent(rec, 0).(api.ContentText).Text
+			rendered := recordContent(rec, len(recordBody(rec))).(api.ContentText).Text
 			body := strings.TrimSuffix(strings.SplitN(rendered, ">", 2)[1], "</task_result>")
 			if strings.Contains(body, "<") {
 				t.Fatalf("the record body renders %q: a payload carrying markup closes the element it is nested in, and everything after it reads as the harness, not as task data", body)

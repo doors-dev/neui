@@ -20,14 +20,26 @@ type ThreadConfig struct {
 	// CompactionPreserve is the share of the conversation kept verbatim after
 	// the summary. Default 0.1.
 	CompactionPreserve float32
-	// ReplayResultsShare sets how much text each tool result keeps on replay:
-	// its text blocks together are cut to
-	// Model.Context * 4 * ReplayResultsShare / ToolCallLimit bytes (four bytes
-	// per token; a non-positive ToolCallLimit divides by 1), or to 32 KiB when
-	// Model.Context is zero. Media blocks are not cut. Negative replays every
-	// result whole. The same cap bounds an island's ui.notify values between
-	// draws, where a negative value counts as 1. Default 0.25.
-	ReplayResultsShare float32
+	// ReplayItemShare sets the round item budget, Model.Context * 4 *
+	// ReplayItemShare bytes (four bytes per token), assuming a 200,000-token
+	// context when Model.Context is zero. Input: an Input whose text blocks,
+	// its Text plus the file links its Attachments turn into, add up to more
+	// than the budget is refused with ErrInputTooLarge where it is submitted,
+	// drafted or rewound to. Tool results: a round's calls run in order while
+	// their results' text is under the budget; the result that crosses it is
+	// kept whole and the calls after it are answered without running; a result
+	// whose text alone is over it is replaced by a note giving its size.
+	// Records: a round takes the waiting records in arrival order while their
+	// bodies add up to at most the budget, the rest wait for the next round,
+	// and a first record over it alone is cut to it and taken by itself. On
+	// replay each result's text, each record's body and the input's text are
+	// cut to the budget, keeping head and tail; an input is over it only when
+	// the budget shrank after it was sent, as after a switch to a smaller
+	// model. Media blocks are not counted. Half of it bounds an island's
+	// ui.notify values between draws and each part of island_spec. A
+	// non-positive value takes the default, 0.1; a value above 0.25 counts as
+	// 0.25.
+	ReplayItemShare float32
 	// ThreadMemoryLimit is the byte budget over everything a thread holds for
 	// replay: media counted raw, text counted as it stands. When
 	// Model.RequestBytes is known the budget is at most
@@ -42,13 +54,6 @@ type ThreadConfig struct {
 	// tool_use still gets a matching tool_result. Negative runs every call a
 	// round asks for. Default 32.
 	ToolCallLimit int
-	// InputBytes is the byte ceiling on one submitted Input: the length of the
-	// text blocks Input.Content() renders, which are its Text plus the file
-	// links its Attachments turn into. An input over it is refused with
-	// ErrInputTooLarge where it is submitted, drafted or rewound to, so nothing
-	// of it is drafted, stored or sent. It cannot be turned off: a
-	// non-positive value takes the default, 256 KiB.
-	InputBytes int
 }
 
 // ReplayHeadroom is what a thread's byte budget leaves free under the model's

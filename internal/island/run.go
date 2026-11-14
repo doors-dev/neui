@@ -54,7 +54,7 @@ func newRun(ctx context.Context, island *island, seq uint, space string, comment
 		island:           island,
 		seq:              seq,
 		config:           config,
-		notificationsCap: notificationsCap(ctrl.Config(), ctrl.Model()),
+		notificationsCap: replay.RoundItemBudget(ctrl.Config(), ctrl.Model()) / 2,
 		vm:               vm,
 		fs:               ctrl.FS(),
 		log:              log,
@@ -398,11 +398,4 @@ func logFile(space string) string {
 
 func islandDir(space string) string {
 	return space + ".island"
-}
-
-func notificationsCap(c api.ThreadConfig, m api.Model) int {
-	if c.ReplayResultsShare < 0 {
-		c.ReplayResultsShare = 1
-	}
-	return replay.ResultTextCap(c, m)
 }

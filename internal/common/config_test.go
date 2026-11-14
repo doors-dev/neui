@@ -47,3 +47,11 @@ func TestAppFilesConfigDefaults(t *testing.T) {
 		t.Fatalf("MaxBytes = %d, want %d", c.MaxBytes, 1<<30)
 	}
 }
+
+func TestReplayItemShareRange(t *testing.T) {
+	for share, want := range map[float32]float32{-1: 0.1, 0: 0.1, 0.2: 0.2, 1: 0.25} {
+		if got := ConfigDefaults(api.ThreadConfig{ReplayItemShare: share}).ReplayItemShare; got != want {
+			t.Fatalf("ReplayItemShare %v resolves to %v, want %v", share, got, want)
+		}
+	}
+}

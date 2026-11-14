@@ -320,7 +320,7 @@ func (s *state) toolNotify(ctx context.Context, data json.RawMessage) (struct{},
 		s.notifications.WriteByte(',')
 	}
 	json.HTMLEscape(&s.notifications, data)
-	if limit := s.run.NotificationsCap(); limit > 0 && s.notifications.Len()+1 > limit {
+	if limit := s.run.NotificationsCap(); s.notifications.Len()+1 > limit {
 		s.notifications.Truncate(prev)
 		return struct{}{}, fmt.Errorf("%d bytes: %w", limit, errNotificationsLimit)
 	}

@@ -48,27 +48,20 @@ func evictionTarget[T int | int64](budget T) T {
 }
 
 const (
-	bytesPerToken               = 4
-	resultTextCapWithoutContext = 32 << 10
+	bytesPerToken  = 4
+	unknownContext = 200_000
 )
 
-func ResultTextCap(config api.ThreadConfig, model api.Model) int {
-	if config.ReplayResultsShare < 0 {
-		return 0
+func RoundItemBudget(config api.ThreadConfig, model api.Model) int {
+	tokens := model.Context
+	if tokens == 0 {
+		tokens = unknownContext
 	}
-	if model.Context == 0 {
-		return resultTextCapWithoutContext
-	}
-	contextBytes := float32(model.Context) * bytesPerToken
-	roundShare := int(contextBytes * config.ReplayResultsShare)
-	callsPerRound := max(config.ToolCallLimit, 1)
-	return roundShare / callsPerRound
+	contextBytes := float32(tokens) * bytesPerToken
+	return int(contextBytes * config.ReplayItemShare)
 }
 
 func capText(c api.ContentToolResult, cap int) api.ContentToolResult {
-	if cap <= 0 {
-		return c
-	}
 	texts := make([]api.ContentText, len(c.Content))
 	indices := make([]int, 0, len(c.Content))
 	total := 0
@@ -146,30 +139,28 @@ func trimText(text api.ContentText, share int) api.ContentText {
 	return api.ContentText{Text: trimmed, Meta: text.Meta}
 }
 
-func recordContent(rec api.Record, cap int) api.Content {
-	var body string
+func recordBody(rec api.Record) string {
 	switch data := rec.Data.(type) {
 	case string:
-		body = html.EscapeString(data)
+		return html.EscapeString(data)
 	case json.RawMessage:
 		if !bytes.ContainsAny(data, "<>&") {
-			body = string(data)
-			break
+			return string(data)
 		}
 		var esc bytes.Buffer
 		json.HTMLEscape(&esc, data)
-		body = esc.String()
+		return esc.String()
 	default:
 		raw, err := json.Marshal(rec.Data)
 		if err != nil {
-			body = html.EscapeString("OUTPUT ENCODING ERROR: " + err.Error())
-		} else {
-			body = string(raw)
+			return html.EscapeString("OUTPUT ENCODING ERROR: " + err.Error())
 		}
+		return string(raw)
 	}
-	if cap > 0 {
-		body = trimText(api.ContentText{Text: body}, cap).Text
-	}
+}
+
+func recordContent(rec api.Record, cap int) api.Content {
+	body := trimText(api.ContentText{Text: recordBody(rec)}, cap).Text
 	return api.ContentText{Text: element(rec.Kind, rec.Attrs, body)}
 }
 

@@ -53,17 +53,15 @@ func ConfigDefaults(c api.ThreadConfig) api.ThreadConfig {
 	if c.CompactionPreserve == 0 {
 		c.CompactionPreserve = 0.1
 	}
-	if c.ReplayResultsShare == 0 {
-		c.ReplayResultsShare = 0.25
+	if c.ReplayItemShare <= 0 {
+		c.ReplayItemShare = 0.1
 	}
+	c.ReplayItemShare = min(c.ReplayItemShare, 0.25)
 	if c.ThreadMemoryLimit == 0 {
 		c.ThreadMemoryLimit = 18 << 20
 	}
 	if c.ToolCallLimit == 0 {
 		c.ToolCallLimit = 32
-	}
-	if c.InputBytes <= 0 {
-		c.InputBytes = 256 << 10
 	}
 	return c
 }

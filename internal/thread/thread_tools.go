@@ -113,7 +113,7 @@ func (s *threadTools) on(cmd any) {
 				inputBytes += len(text.Text)
 			}
 		}
-		if inputBytes > cmd.link.backend.Config().InputBytes {
+		if inputBytes > replay.RoundItemBudget(cmd.link.backend.Config(), cmd.link.backend.Provider().Model()) {
 			cmd.Err(api.ErrInputTooLarge)
 			return
 		}
