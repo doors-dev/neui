@@ -10,9 +10,14 @@ elem Mark() {
 			const mark = document.currentScript.parentElement
 			const log = mark.closest(".nechat-log")
 			if (!log) return
-			const below = mark.getBoundingClientRect().top - log.getBoundingClientRect().bottom
+			const shown = mark.getClientRects().length !== 0
+			let end = mark.getBoundingClientRect().top
+			for (const span of log.querySelectorAll(".nechat-span")) {
+				end = Math.max(end, span.getBoundingClientRect().bottom)
+			}
+			const below = end - log.getBoundingClientRect().bottom
 			mark.remove()
-			if (below > 48) return
+			if (!shown || below > 48) return
 			requestAnimationFrame(() => log.scrollTo({ top: log.scrollHeight, behavior: "smooth" }))
 		</script>
 	</div>

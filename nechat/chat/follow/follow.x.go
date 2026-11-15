@@ -1,4 +1,4 @@
-// Managed by GoX v0.3.4
+// Managed by GoX v0.4.0
 
 //line follow.gox:1
 package follow
@@ -19,11 +19,11 @@ func Mark() gox.Elem {
 			__e = __c.Init("script"); if __e != nil { return }
 			{
 				__e = __c.Submit(); if __e != nil { return }
-				__e = __c.Raw("const mark = document.currentScript.parentElement\n\t\t\tconst log = mark.closest(\".nechat-log\")\n\t\t\tif (!log) return\n\t\t\tconst below = mark.getBoundingClientRect().top - log.getBoundingClientRect().bottom\n\t\t\tmark.remove()\n\t\t\tif (below > 48) return\n\t\t\trequestAnimationFrame(() => log.scrollTo({ top: log.scrollHeight, behavior: \"smooth\" }))"); if __e != nil { return }
+				__e = __c.Raw("const mark = document.currentScript.parentElement\n\t\t\tconst log = mark.closest(\".nechat-log\")\n\t\t\tif (!log) return\n\t\t\tconst shown = mark.getClientRects().length !== 0\n\t\t\tlet end = mark.getBoundingClientRect().top\n\t\t\tfor (const span of log.querySelectorAll(\".nechat-span\")) {\n\t\t\t\tend = Math.max(end, span.getBoundingClientRect().bottom)\n\t\t\t}\n\t\t\tconst below = end - log.getBoundingClientRect().bottom\n\t\t\tmark.remove()\n\t\t\tif (!shown || below > 48) return\n\t\t\trequestAnimationFrame(() => log.scrollTo({ top: log.scrollHeight, behavior: \"smooth\" }))"); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line follow.gox:19
+//line follow.gox:24
 }
