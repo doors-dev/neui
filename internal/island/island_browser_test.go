@@ -63,9 +63,9 @@ func TestIslandDrawReturnsAfterTimeout(t *testing.T) {
 	carries(t, lastText(p.Request(t, 3)), `<task_notify `, `kind="notifications_list"`, `script="1"`, `[{"drawn":null}]`)
 }
 
-func pressSynced(t *testing.T, then func(input uint) testkit.Turn) testkit.Turn {
+func pressSynced(t *testing.T, then func(input string) testkit.Turn) testkit.Turn {
 	return testkit.Then(func(r api.Request) testkit.Turn {
-		var s struct{ Inputs []struct{ ID uint } }
+		var s struct{ Inputs []struct{ ID string } }
 		testkit.Decode(t, testkit.Results(r)[0], &s)
 		if len(s.Inputs) != 1 {
 			t.Errorf("the press space synced as %+v, want one input", s)
@@ -75,7 +75,7 @@ func pressSynced(t *testing.T, then func(input uint) testkit.Turn) testkit.Turn 
 	})
 }
 
-func pressScript(t *testing.T, shown <-chan string, then func(input uint) testkit.Turn) *testkit.Provider {
+func pressScript(t *testing.T, shown <-chan string, then func(input string) testkit.Turn) *testkit.Provider {
 	return testkit.NewProvider(api.Model{},
 		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
 		revised(t, func(revision string) testkit.Turn {
@@ -90,7 +90,7 @@ func pressScript(t *testing.T, shown <-chan string, then func(input uint) testki
 func TestIslandSubmitAnswersDraw(t *testing.T) {
 	marks := make(chan int, 1)
 	shown := make(chan string, 1)
-	p := pressScript(t, shown, func(uint) testkit.Turn {
+	p := pressScript(t, shown, func(string) testkit.Turn {
 		return testkit.Call("page__tool", map[string]any{"path": "board.screen.press_1", "tool": "press", "arg": map[string]any{}})
 	})
 	c := stack.Browser(t, stack.Host{Provider: p, Page: board(marks, shown)})
@@ -110,7 +110,7 @@ func TestIslandSubmitAnswersDraw(t *testing.T) {
 func TestIslandControlClickSubmits(t *testing.T) {
 	marks := make(chan int, 1)
 	shown := make(chan string, 1)
-	p := pressScript(t, shown, func(input uint) testkit.Turn {
+	p := pressScript(t, shown, func(input string) testkit.Turn {
 		return testkit.Call("page__click", map[string]any{"path": "board.screen.press_1", "id": input})
 	})
 	c := stack.Browser(t, stack.Host{Provider: p, Page: board(marks, shown)})
@@ -189,7 +189,7 @@ func TestIslandStopEndsTask(t *testing.T) {
 
 type inputs struct {
 	Inputs []struct {
-		ID   uint
+		ID   string
 		Desc string
 	}
 }

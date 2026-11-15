@@ -74,7 +74,7 @@ func order(changes chan<- string, clicks chan<- struct{}) gox.Elem {
 func TestInputDispatchReachesHandlers(t *testing.T) {
 	changes := make(chan string, 1)
 	clicks := make(chan struct{}, 1)
-	inputs := map[string]uint{}
+	inputs := map[string]string{}
 	p := testkit.NewProvider(api.Model{},
 		testkit.Call("page__sync", map[string]any{"path": "order"}),
 		testkit.Then(func(r api.Request) testkit.Turn {
@@ -85,8 +85,12 @@ func TestInputDispatchReachesHandlers(t *testing.T) {
 			}
 			return testkit.Call("page__write", map[string]any{"path": "order", "id": inputs["how many"], "value": "3"})
 		}),
-		testkit.Call("page__read", map[string]any{"path": "order", "id": 1}),
-		testkit.Call("page__click", map[string]any{"path": "order", "id": 2}),
+		testkit.Then(func(api.Request) testkit.Turn {
+			return testkit.Call("page__read", map[string]any{"path": "order", "id": inputs["how many"]})
+		}),
+		testkit.Then(func(api.Request) testkit.Turn {
+			return testkit.Call("page__click", map[string]any{"path": "order", "id": inputs["places the order"]})
+		}),
 		testkit.Say("placed"),
 	)
 	c := stack.Browser(t, stack.Host{Provider: p, Page: order(changes, clicks)})
@@ -94,11 +98,8 @@ func TestInputDispatchReachesHandlers(t *testing.T) {
 	c.Wait()
 	var written hookOutput
 	testkit.Decode(t, testkit.Results(p.Request(t, 2))[0], &written)
-	if written.Hooks != 1 || written.Diff != nil || written.Changes != nil {
+	if written.Hooks != 1 || !empty(written.Diff) || written.Changes != nil {
 		t.Fatalf("the write answered %+v, want the change handler and nothing changed", written)
-	}
-	if inputs["how many"] != 1 || inputs["places the order"] != 2 {
-		t.Fatalf("sync listed inputs %v, want how many as 1 and places the order as 2", inputs)
 	}
 	select {
 	case v := <-changes:
@@ -163,7 +164,7 @@ func TestRadioGroupStaysWritableAfterFirstMemberDoorIsRemoved(t *testing.T) {
 			return cur.Any(doored(new(doors.Door), radio("size", "m", changes)))
 		})
 	}
-	var group uint
+	var group string
 	p := testkit.NewProvider(api.Model{},
 		testkit.Call("page__sync", map[string]any{"path": "sizes"}),
 		testkit.Then(func(r api.Request) testkit.Turn {
@@ -197,7 +198,7 @@ func TestRadioGroupStaysWritableAfterFirstMemberDoorIsRemoved(t *testing.T) {
 	}
 	var dropped toolOutput
 	testkit.Decode(t, testkit.Results(p.Request(t, 3))[0], &dropped)
-	if dropped.Output != "dropped" || dropped.Diff != nil {
+	if dropped.Output != "dropped" || !empty(dropped.Diff) {
 		t.Fatalf("the drop answered %+v, want the group kept", dropped)
 	}
 	var after hookOutput
@@ -287,11 +288,19 @@ func TestReadReportsDisabled(t *testing.T) {
 	}
 	p := testkit.NewProvider(api.Model{},
 		testkit.Call("page__sync", map[string]any{"path": "form"}),
-		round(
-			call("name", "page__read", map[string]any{"path": "form", "id": 1}),
-			call("size", "page__read", map[string]any{"path": "form", "id": 2}),
-			call("color", "page__read", map[string]any{"path": "form", "id": 3}),
-		),
+		testkit.Then(func(r api.Request) testkit.Turn {
+			var s state
+			testkit.Decode(t, testkit.Results(r)[0], &s)
+			ids := map[string]string{}
+			for _, in := range s.Inputs {
+				ids[in.Desc] = in.ID
+			}
+			return round(
+				call("name", "page__read", map[string]any{"path": "form", "id": ids["the name"]}),
+				call("size", "page__read", map[string]any{"path": "form", "id": ids["the size"]}),
+				call("color", "page__read", map[string]any{"path": "form", "id": ids["the color"]}),
+			)
+		}),
 		testkit.Say("read"),
 	)
 	c := stack.Browser(t, stack.Host{Provider: p, Page: page})
@@ -355,11 +364,23 @@ func TestInputCallsReportChanges(t *testing.T) {
 		}
 		return (neui.Space{Name: "summary", Desc: "the summary"}).Proxy(cur, func(cur gox.Cursor) error { return cur.Any(count()) })
 	}
+	ids := map[string]string{}
 	p := testkit.NewProvider(api.Model{},
 		testkit.Call("page__sync", map[string]any{"path": "form"}),
-		testkit.Call("page__write", map[string]any{"path": "form", "id": 1, "value": "Ann"}),
-		testkit.Call("page__click", map[string]any{"path": "form", "id": 2}),
-		testkit.Call("page__focus", map[string]any{"path": "form", "id": 3}),
+		testkit.Then(func(r api.Request) testkit.Turn {
+			var s state
+			testkit.Decode(t, testkit.Results(r)[0], &s)
+			for _, in := range s.Inputs {
+				ids[in.Desc] = in.ID
+			}
+			return testkit.Call("page__write", map[string]any{"path": "form", "id": ids["the name"], "value": "Ann"})
+		}),
+		testkit.Then(func(api.Request) testkit.Turn {
+			return testkit.Call("page__click", map[string]any{"path": "form", "id": ids["saves"]})
+		}),
+		testkit.Then(func(api.Request) testkit.Turn {
+			return testkit.Call("page__focus", map[string]any{"path": "form", "id": ids["the note"]})
+		}),
 		testkit.Say("done"),
 	)
 	c := stack.Browser(t, stack.Host{Provider: p, Page: form})
@@ -374,6 +395,60 @@ func TestInputCallsReportChanges(t *testing.T) {
 		testkit.Decode(t, r, &out)
 		if out.Diff == nil || len(out.Diff.Data) != 1 || out.Diff.Data[0].Object != float64(i+1) || string(out.Changes) != `[{"path":"summary","changed":["data"]}]` {
 			t.Fatalf("the %s answered diff %+v and changes %s, want edits at %d in the form and the summary listed", call, out.Diff, out.Changes, i+1)
+		}
+	}
+}
+
+func TestFailedInputCallsReport(t *testing.T) {
+	ghost := func(cur gox.Cursor) error {
+		return (neui.Space{Name: "form", Desc: "the form"}).Proxy(cur, func(cur gox.Cursor) error {
+			if err := cur.Init("template"); err != nil {
+				return err
+			}
+			if err := cur.Submit(); err != nil {
+				return err
+			}
+			if err := (neui.Input{Desc: "the ghost"}).Proxy(cur, func(cur gox.Cursor) error {
+				if err := cur.InitVoid("input"); err != nil {
+					return err
+				}
+				return cur.Submit()
+			}); err != nil {
+				return err
+			}
+			return cur.Close()
+		})
+	}
+	var id string
+	p := testkit.NewProvider(api.Model{},
+		testkit.Call("page__sync", map[string]any{"path": "form"}),
+		testkit.Then(func(r api.Request) testkit.Turn {
+			var s state
+			testkit.Decode(t, testkit.Results(r)[0], &s)
+			if len(s.Inputs) == 1 {
+				id = s.Inputs[0].ID
+			}
+			return round(
+				call("write", "page__write", map[string]any{"path": "form", "id": id, "value": "x"}),
+				call("click", "page__click", map[string]any{"path": "form", "id": id}),
+				call("focus", "page__focus", map[string]any{"path": "form", "id": id}),
+			)
+		}),
+		testkit.Say("done"),
+	)
+	c := stack.Browser(t, stack.Host{Provider: p, Page: ghost})
+	c.Send("fill the ghost")
+	c.Wait()
+	results := testkit.Results(p.Request(t, 2))
+	for i, want := range []string{`{"hooks":0,"diff":{}}`, `{"hooks":0,"diff":{}}`, `{"diff":{}}`} {
+		r := results[i]
+		if r.Error == api.ToolOk || len(r.Content) != 2 {
+			t.Fatalf("the %s answered %#v, want its error and its result", r.ID, r.Content)
+		}
+		message, _ := r.Content[0].(api.ContentText)
+		value, _ := r.Content[1].(api.ContentText)
+		if !strings.HasSuffix(message.Text, "not found") || value.Text != want {
+			t.Fatalf("the %s failed with %#v, want the message and then %s", r.ID, r.Content, want)
 		}
 	}
 }

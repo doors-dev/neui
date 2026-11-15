@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 
 	"neui.dev/api"
@@ -89,6 +90,7 @@ func TestAgentContentError(t *testing.T) {
 	for name, fail := range map[string]error{
 		"image":   image,
 		"blocks":  blocks,
+		"empty":   blocksError{},
 		"plain":   errors.New("boom"),
 		"wrapped": fmt.Errorf("x: %w", image),
 	} {
@@ -100,22 +102,42 @@ func TestAgentContentError(t *testing.T) {
 	}
 	inner, _ := m.Get("image")
 	if _, err := m.AddRaw("nested", "", schema.AnyRawSchema, schema.AnyRawSchema, func(ctx context.Context, in json.RawMessage) (any, error) {
-		return inner.Dispatched(ctx, in)
+		return inner.Agent(ctx, in)
 	}); err != nil {
 		t.Fatal(err)
 	}
+	failed := api.ContentText{Text: "render failed"}
 	for name, want := range map[string]api.UserContents{
-		"image":   {image.Content()},
-		"blocks":  api.UserContents(blocks),
+		"image":   {failed, image.Content()},
+		"blocks":  {failed, blocks[0], blocks[1]},
+		"empty":   {failed},
 		"plain":   {api.ContentText{Text: "boom"}},
-		"wrapped": {image.Content()},
-		"nested":  {image.Content()},
+		"wrapped": {api.ContentText{Text: "x: render failed"}, image.Content()},
+		"nested":  {failed, image.Content()},
 	} {
 		tool, _ := m.Get(name)
 		content, err := tool.Agent(context.Background(), json.RawMessage(`{}`))
 		got := api.NewContentToolResult("id", content, err)
 		if !reflect.DeepEqual(got, api.ContentToolResult{ID: "id", Content: want, Error: api.ToolErrRuntime}) {
 			t.Errorf("%s: got %+v", name, got)
+		}
+	}
+}
+
+func TestRawToolNotesBlocks(t *testing.T) {
+	m := NewModule("m", "")
+	for name, output := range map[string]schema.Schema[any]{"blocks": schema.BlocksRawSchema, "any": schema.AnyRawSchema} {
+		if _, err := m.AddRaw(name, "", schema.AnyRawSchema, output, func(context.Context, json.RawMessage) (any, error) {
+			return nil, nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	const note = "\nOn a direct tool call the result arrives as array of content blocks"
+	for name, want := range map[string]bool{"blocks": true, "any": false} {
+		tool, _ := m.Get(name)
+		if got := strings.HasSuffix(tool.Summary(), note); got != want {
+			t.Errorf("%s: summary %q carries the blocks note: %v, want %v", name, tool.Summary(), got, want)
 		}
 	}
 }

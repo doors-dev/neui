@@ -3,7 +3,9 @@ package page
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -18,13 +20,16 @@ func TestIslandPathIsCanonical(t *testing.T) {
 	isl := island.NewIsland(gox.Elem(func(gox.Cursor) error { return nil }), func(slot gox.Comp) gox.Elem { return slot.Main() }, nil, nil, island.NewLibrary())
 	t.Cleanup(isl.Unmount)
 	p.space.children = []*space{{root: p, ctx: context.Background(), name: "isl", path: "isl", island: isl}}
-	for _, raw := range []string{"isl", "isl."} {
-		got, path, err := p.Island(context.Background(), raw)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got != isl || path != "isl" {
-			t.Fatalf("%q: got path %q", raw, path)
+	got, path, err := p.Island(context.Background(), "isl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != isl || path != "isl" {
+		t.Fatalf("got path %q", path)
+	}
+	for _, raw := range []string{"isl.", ".isl", "isl..x"} {
+		if _, _, err := p.Island(context.Background(), raw); !errors.Is(err, errSpaceNotFound) {
+			t.Fatalf("%q: got %v, want no such space", raw, err)
 		}
 	}
 }
@@ -49,11 +54,23 @@ func tree(paths ...string) *page {
 			s = s.children[i]
 		}
 	}
+	p.restamp()
 	return p
 }
 
+func (p *page) restamp() {
+	var walk func(s *space)
+	walk = func(s *space) {
+		s.digest = s.fresh()
+		for _, c := range s.children {
+			walk(c)
+		}
+	}
+	walk(p.space)
+}
+
 func (p *page) at(path string) *space {
-	s, err := p.space.find(strings.Split(path, "."))
+	s, err := p.space.find(path)
 	if err != nil {
 		panic(err)
 	}
@@ -62,21 +79,31 @@ func (p *page) at(path string) *space {
 
 func TestDigestTreatsDataAsSet(t *testing.T) {
 	s := tree("cart").at("cart")
-	s.data = []*data{note("a"), note("b")}
-	before := s.digest()
-	s.data = []*data{note("b"), note("a"), note("b")}
-	if s.digest() != before {
-		t.Fatal("a duplicate or a new order changed the digest")
+	a, b := note("a"), note("b")
+	s.count(2, a.hash, 1)
+	s.count(2, b.hash, 1)
+	before := s.digest
+	s.count(2, b.hash, -1)
+	s.count(2, a.hash, -1)
+	s.count(2, b.hash, 1)
+	s.count(2, a.hash, 1)
+	if s.digest != before {
+		t.Fatal("adding the same data in another order changed the digest")
 	}
+	s.count(2, b.hash, 1)
+	if s.digest != before {
+		t.Fatal("a duplicate changed the digest")
+	}
+	s.data = []*data{b, a, b}
 	if got := s.state().Data; len(got) != 2 || got[0].Text != "b" || got[1].Text != "a" {
 		t.Fatalf("the state lists %+v, want b and a once each", got)
 	}
-	s.data = s.data[:2]
-	if s.digest() != before {
+	s.count(2, b.hash, -1)
+	if s.digest != before {
 		t.Fatal("removing one of two duplicates changed the digest")
 	}
-	s.data = s.data[:1]
-	if s.digest() == before {
+	s.count(2, a.hash, -1)
+	if s.digest == before {
 		t.Fatal("removing the last a left the digest as it was")
 	}
 }
@@ -85,13 +112,15 @@ func TestDiffShowsWhatChanged(t *testing.T) {
 	p := tree("cart.items", "cart.total")
 	s := p.at("cart")
 	s.data = []*data{note("one")}
+	p.restamp()
 	old := s.snapshot(0)
-	if d := s.diff(old); d != nil {
-		t.Fatalf("an unchanged space diffs as %+v", d)
+	if d := s.diff(old); d == nil || !reflect.ValueOf(*d).IsZero() {
+		t.Fatalf("an unchanged space diffs as %+v, want an empty diff", d)
 	}
 	s.data = nil
 	s.children = s.children[:1]
 	s.children = append(s.children, &space{root: p, name: "zip", path: "cart.zip"})
+	p.restamp()
 	d := s.diff(old)
 	if d.Data == nil || len(d.Data) != 0 || d.Tools != nil || d.Inputs != nil {
 		t.Fatalf("the diff is %+v, want the emptied data list alone besides children", d)
@@ -141,11 +170,12 @@ func TestChangesListOneEntryPerSubtree(t *testing.T) {
 	n := &space{root: p, name: "n", path: "n", desc: "fresh"}
 	n.children = []*space{{root: p, name: "inner", path: "n.inner"}}
 	p.space.children = append(p.space.children, n)
+	p.restamp()
 	raw, err := json.Marshal(p.space.changes(before, "c"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `[{"path":"","changed":["children"]},{"path":"a","changed":["data"]},{"path":"b","changed":["children"]},{"path":"b.gone","removed":true},{"path":"n","added":true,"desc":"fresh"}]`
+	want := `[{"path":"a","changed":["data"]},{"path":"b.gone","removed":true},{"path":"n","added":true,"desc":"fresh"}]`
 	if string(raw) != want {
 		t.Fatalf("the changes are %s, want %s: c's own new child is its diff's, n.inner and b.gone.deep are under their tops", raw, want)
 	}
@@ -168,6 +198,7 @@ func TestChangesFoldPastFifty(t *testing.T) {
 	for i := range 10 {
 		p.space.children = append(p.space.children, &space{root: p, name: fmt.Sprintf("toast%d", i), path: fmt.Sprintf("toast%d", i)})
 	}
+	p.restamp()
 	got := p.space.changes(before, "aside")
 	if len(got) > 50 {
 		t.Fatalf("%d entries, want at most 50", len(got))
@@ -182,8 +213,8 @@ func TestChangesFoldPastFifty(t *testing.T) {
 				t.Fatalf("folded entry %+v, want a dash panel with children changed", c)
 			}
 			spaces += c.Spaces
-		case c.Path != "header" && c.Path != "":
-			t.Fatalf("unfolded entry %+v, want only the root, header and the toasts", c)
+		case c.Path != "header":
+			t.Fatalf("unfolded entry %+v, want only header and the toasts", c)
 		}
 		if c.Spaces > 0 && c.Spaces != 5 {
 			t.Fatalf("folded entry %+v, want each panel folded with its 5 widgets", c)
@@ -207,8 +238,72 @@ func TestChangesFoldAddedWhenMoreThanTwentyFive(t *testing.T) {
 	for i := range 60 {
 		orders.children = append(orders.children, &space{root: p, name: fmt.Sprintf("k%02d", i), path: fmt.Sprintf("orders.k%02d", i)})
 	}
+	p.restamp()
 	got := p.space.changes(before, "")
 	if len(got) != 1 || got[0].Path != "orders" || got[0].Spaces != 120 || !slices.Equal(got[0].Changed, []string{"children"}) {
 		t.Fatalf("a re-rendered list of 60 lists %+v, want one orders entry standing for 120 spaces", got)
+	}
+}
+
+func TestChangesFoldLargestClustersFirst(t *testing.T) {
+	var paths []string
+	for i := range 10 {
+		paths = append(paths, fmt.Sprintf("a.x%d", i))
+	}
+	for i := range 3 {
+		paths = append(paths, fmt.Sprintf("b.y%d", i))
+	}
+	for i := range 40 {
+		paths = append(paths, fmt.Sprintf("s%02d", i))
+	}
+	p := tree(paths...)
+	before := map[string][4]uint64{}
+	p.space.digests(before)
+	for _, path := range paths {
+		p.at(path).data = []*data{note(path)}
+	}
+	p.restamp()
+	got := p.space.changes(before, "")
+	var folded, listed []string
+	for _, c := range got {
+		if c.Spaces > 0 {
+			folded = append(folded, fmt.Sprintf("%s:%d", c.Path, c.Spaces))
+		} else if strings.HasPrefix(c.Path, "b.") {
+			listed = append(listed, c.Path)
+		}
+	}
+	if len(got) != 44 || !slices.Equal(folded, []string{"a:10"}) || len(listed) != 3 {
+		t.Fatalf("53 changes folded to %d entries, folded %v and listed %v from b, want only a's 10 folded and b's 3 listed", len(got), folded, listed)
+	}
+}
+
+func TestChangesKeepTwentyFiveAdded(t *testing.T) {
+	for _, n := range []int{25, 26} {
+		var paths []string
+		for i := range 26 {
+			paths = append(paths, fmt.Sprintf("old.r%02d", i))
+		}
+		p := tree(append(paths, "list")...)
+		before := map[string][4]uint64{}
+		p.space.digests(before)
+		for _, path := range paths {
+			p.at(path).data = []*data{note(path)}
+		}
+		list := p.at("list")
+		for i := range n {
+			list.children = append(list.children, &space{root: p, name: fmt.Sprintf("k%02d", i), path: fmt.Sprintf("list.k%02d", i)})
+		}
+		p.restamp()
+		got := p.space.changes(before, "")
+		added := 0
+		for _, c := range got {
+			if c.Added {
+				added++
+			}
+		}
+		want := map[int][2]int{25: {26, 25}, 26: {2, 0}}[n]
+		if len(got) != want[0] || added != want[1] {
+			t.Fatalf("%d added and 26 changed folded to %d entries with %d added listed, want %d and %d", n, len(got), added, want[0], want[1])
+		}
 	}
 }

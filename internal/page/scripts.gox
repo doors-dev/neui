@@ -6,7 +6,7 @@ elem element(id string) {
 	<script data:id=(id)>
 		const id = $data("id")
 		$on(id, async ({ action, value }) => {
-			const el = document.querySelector('[data-kid="' + id + '"]')
+			const el = document.querySelector('[data-neid="' + id + '"]')
 			if (!el) {
 				throw "element is not rendered"
 			}
@@ -105,7 +105,7 @@ elem radioGroup(id string) {
 	<script data:id=(id)>
 		const id = $data("id")
 		$on(id, async ({ action, value }) => {
-			const els = Array.from(document.querySelectorAll('[data-kid="' + id + '"]'))
+			const els = Array.from(document.querySelectorAll('[data-neid="' + id + '"]'))
 			if (els.length === 0) {
 				throw "element is not rendered"
 			}

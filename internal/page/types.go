@@ -74,8 +74,8 @@ type node struct {
 }
 
 type report struct {
-	Diff    *diff    `json:"diff,omitempty" description:"what changed in the called space during the call; absent when nothing did, or when it and changes would not fit in a result"`
-	Changes []change `json:"changes,omitempty" description:"other spaces that changed during the call. When many spaces change at once, the densest groups are folded into their common ancestor; spaces counts the changed spaces it stands for, so sync it to look inside. Newly added spaces stay listed unless a whole region re-rendered."`
+	Diff    *diff    `json:"diff,omitempty" description:"what changed in the called space while the call ran, whatever caused it: this call, the user or the application; {} when nothing did; absent only when it and changes would not fit in a result, and the space then counts as unread"`
+	Changes []change `json:"changes,omitempty" description:"other spaces that changed while the call ran, whatever caused it. When many spaces change at once, the densest groups are folded into their common ancestor; spaces counts the changed spaces it stands for, so sync it to look inside. Newly added spaces stay listed unless a whole region re-rendered."`
 }
 
 type diff struct {
@@ -92,8 +92,8 @@ type toolsDiff struct {
 }
 
 type inputsDiff struct {
-	Added   []input `json:"added,omitempty" description:"inputs that appeared, or came back with a new id after a re-render"`
-	Removed []uint  `json:"removed,omitempty" description:"ids no longer on the page"`
+	Added   []input  `json:"added,omitempty" description:"inputs that appeared or changed"`
+	Removed []string `json:"removed,omitempty" description:"ids of inputs that went or changed"`
 }
 
 type childrenDiff struct {
@@ -103,7 +103,7 @@ type childrenDiff struct {
 
 type change struct {
 	Path    string   `json:"path"`
-	Changed []string `json:"changed,omitempty" description:"the parts of the space that changed: tools, inputs, data, children"`
+	Changed []string `json:"changed,omitempty" description:"the parts of the space that changed: tools, inputs, data; a folded entry adds children"`
 	Added   bool     `json:"added,omitempty" description:"the space appeared"`
 	Desc    string   `json:"desc,omitempty"`
 	Removed bool     `json:"removed,omitempty" description:"the space went"`
@@ -112,12 +112,12 @@ type change struct {
 
 type inputRef struct {
 	Path string `json:"path" required:"true" description:"space path: child names from the root joined with dots; \"\" is the page root"`
-	ID   uint   `json:"id" required:"true" description:"input id from the space inputs list"`
+	ID   string `json:"id" required:"true" description:"input id from the space inputs list"`
 }
 
 type writeArg struct {
 	Path  string `json:"path" required:"true" description:"space path: child names from the root joined with dots; \"\" is the page root"`
-	ID    uint   `json:"id" required:"true" description:"input id from the space inputs list"`
+	ID    string `json:"id" required:"true" description:"input id from the space inputs list"`
 	Value any    `json:"value" required:"true" description:"string for text, boolean for checkbox, option value for select and radio, array of option values for multiple select"`
 }
 
@@ -135,7 +135,7 @@ type hookResult struct {
 }
 
 type toolResult struct {
-	Output any `json:"output" description:"what the page tool returned"`
+	Output any `json:"output,omitempty" description:"what the page tool returned"`
 	report
 }
 
@@ -176,23 +176,52 @@ type islandRunResult struct {
 }
 
 type refusal struct {
-	Refused string `json:"refused"`
-	Diff    *diff  `json:"diff,omitempty"`
-	Space   *state `json:"space,omitempty"`
+	reason string
+	Diff   *diff  `json:"diff,omitempty"`
+	Space  *state `json:"space,omitempty"`
 }
 
 func (r refusal) Error() string {
-	return r.Refused
+	return r.reason
 }
 
 func (r refusal) Content() api.UserContent {
 	raw, err := json.Marshal(r)
 	if err != nil {
-		return api.ContentText{Text: r.Refused}
+		return api.ContentText{Text: r.reason}
 	}
 	return api.ContentText{Text: string(raw)}
 }
 
 func (r refusal) ContentType() string {
+	return "text"
+}
+
+type failure struct {
+	result any
+	err    error
+}
+
+func (f failure) Error() string {
+	return f.err.Error()
+}
+
+func (f failure) Unwrap() error {
+	return f.err
+}
+
+func (f failure) MarshalJSON() ([]byte, error) {
+	return json.Marshal(f.result)
+}
+
+func (f failure) Content() api.UserContent {
+	raw, err := json.Marshal(f.result)
+	if err != nil {
+		return api.ContentText{Text: f.err.Error()}
+	}
+	return api.ContentText{Text: string(raw)}
+}
+
+func (f failure) ContentType() string {
 	return "text"
 }

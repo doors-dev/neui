@@ -14,7 +14,7 @@ import (
 
 var identifier = regexp.MustCompile(`^[A-Za-z_$][A-Za-z0-9_$]*$`)
 
-var reserved = []string{"slot", "draw", "notify", "root"}
+var reserved = []string{"slot", "draw", "notify", "end", "root"}
 
 func (l *library) checkName(name string) error {
 	if !identifier.MatchString(name) {

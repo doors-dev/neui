@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-var groups = [4]string{"tools", "inputs", "data", "children"}
+var groups = [3]string{"tools", "inputs", "data"}
 
 func (s *space) changes(before map[string][4]uint64, called string) []change {
 	var out []change
@@ -20,14 +20,16 @@ func (s *space) changes(before map[string][4]uint64, called string) []change {
 			}
 			return
 		}
-		if now := s.digest(); s.path != called && now != old {
+		if s.path != called {
 			c := change{Path: s.path}
 			for i, group := range groups {
-				if now[i] != old[i] {
+				if s.digest[i] != old[i] {
 					c.Changed = append(c.Changed, group)
 				}
 			}
-			out = append(out, c)
+			if c.Changed != nil {
+				out = append(out, c)
+			}
 		}
 		for _, c := range s.children {
 			walk(c)

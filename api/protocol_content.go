@@ -307,10 +307,10 @@ func NewToolContents(output any) (UserContents, error) {
 
 // NewContentToolResult builds the result answering call id. With a nil err it
 // carries content as ToolOk. Otherwise content is dropped and the result is
-// the Container, else the MultiContainer, that err is or wraps, as
-// NewToolContents encodes it, else err.Error() as one text block, classified
-// ToolErrJSON when err wraps a DiscardedArgumentsError and ToolErrRuntime for
-// any other error.
+// err.Error() as one text block, followed by the Container, else the
+// MultiContainer, that err is or wraps, as NewToolContents encodes it; content
+// that fails to encode is left out. It is classified ToolErrJSON when err
+// wraps a DiscardedArgumentsError and ToolErrRuntime for any other error.
 func NewContentToolResult(id string, content UserContents, err error) ContentToolResult {
 	if err != nil {
 		failure := ToolErrRuntime
@@ -318,14 +318,15 @@ func NewContentToolResult(id string, content UserContents, err error) ContentToo
 		if errors.As(err, &discarded) {
 			failure = ToolErrJSON
 		}
-		content = UserContents{ContentText{Text: err.Error()}}
+		var more UserContents
 		var container Container
 		var multi MultiContainer
 		if errors.As(err, &container) {
-			content, _ = NewToolContents(container)
+			more, _ = NewToolContents(container)
 		} else if errors.As(err, &multi) {
-			content, _ = NewToolContents(multi)
+			more, _ = NewToolContents(multi)
 		}
+		content = append(UserContents{ContentText{Text: err.Error()}}, more...)
 		return ContentToolResult{ID: id, Content: content, Error: failure}
 	}
 	return ContentToolResult{

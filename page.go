@@ -65,11 +65,14 @@ type Tool[I any, O any] struct {
 	// JSON; a script receives the value as JSON, and a page tool's output is
 	// the output field of the page call's result, next to what the call
 	// changed on the page. An error is reported to the agent as the call's
-	// failure; one that is or wraps an api.Container or api.MultiContainer
-	// carries that content, which a script finds as JSON in the thrown
-	// error's value property. ctx works with the Tool* functions; for a tool
-	// rendered on a page it is also a doors context of that render, so the
-	// handler can update the page, and it runs once the page has settled.
+	// failure, its message as text; one that is or wraps an api.Container or
+	// api.MultiContainer carries that content after the message, and a
+	// script finds it as JSON in the thrown error's value property. For a
+	// page tool that content, as JSON, is instead the output field of the
+	// result the failed page call carries next to what it changed on the
+	// page. ctx works with the Tool* functions; for a tool rendered on a page
+	// it is also a doors context of that render, so the handler can update
+	// the page, and it runs once the page has settled.
 	Handler func(ctx context.Context, i I) (O, error)
 }
 
@@ -171,6 +174,11 @@ func (r Rights) rights() page.Rights {
 // Supported tags are button, a, input, textarea and select; an input of type
 // submit, button, reset or image counts as a button, and a radio stands for
 // its whole same-name group. The input goes away with its render.
+//
+// The agent addresses it by an id made from Desc, the name attribute and,
+// for buttons, checkboxes and radios without a name, the value attribute, for
+// links the href; two inputs in one space that agree on these cannot be told
+// apart, and the agent's calls on them are refused.
 type Input struct {
 	// Desc tells the agent what the element does or holds.
 	Desc string
@@ -422,7 +430,8 @@ func IslandScope(ctx context.Context) doors.Scopes {
 // Library is what an island's scripts may use: app functions, views,
 // controls, layouts and head elements. Island.Library fills it. Names of
 // views, controls and layouts must be JavaScript identifiers, unique among
-// them, and not slot, draw, notify or root; scripts reach them as ui.<name>.
+// them, and not slot, draw, notify, end or root; scripts reach them as
+// ui.<name>.
 type Library struct {
 	inner island.Library
 }

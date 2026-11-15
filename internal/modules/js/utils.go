@@ -15,7 +15,6 @@ import (
 	"modernc.org/quickjs"
 	"neui.dev/api"
 	"neui.dev/internal/common"
-	"neui.dev/internal/tools"
 )
 
 const (
@@ -93,7 +92,7 @@ func RegisterTools(vm *quickjs.VM, ctx func() context.Context, prefix string, li
 		if err := vm.RegisterHostFunc(host, func(args []any) (any, error) {
 			out, err := t.JS(ctx())(args)
 			if err == nil {
-				return hostResult{Value: out.(tools.Value).Value}, nil
+				return hostResult{Value: out}, nil
 			}
 			var container api.Container
 			var multi api.MultiContainer

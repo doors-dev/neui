@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -12,8 +13,6 @@ import (
 	"neui.dev/internal/schema"
 	"neui.dev/internal/utils"
 )
-
-type Value struct{ Value any }
 
 func NewTool[I any, O any](name string, desc string, f func(ctx context.Context, input I) (O, error)) (common.Tool, error) {
 	name = utils.SanitizeName(name)
@@ -90,6 +89,9 @@ func NewRawTool(
 	b.WriteString(desc)
 	b.WriteString("\nOutput schema: ")
 	b.Write(outputSchema.Raw())
+	if bytes.Equal(outputSchema.Raw(), schema.BlocksRawSchema.Raw()) {
+		b.WriteString("\nOn a direct tool call the result arrives as array of content blocks")
+	}
 	rawCall := func(ctx context.Context, input json.RawMessage) (any, error) {
 		if err := inputSchema.ValidateRaw(input); err != nil {
 			return nil, err
@@ -157,17 +159,6 @@ func (c tool) Desc() string {
 	return c.desc
 }
 
-func (c tool) Dispatched(ctx context.Context, arg json.RawMessage) (any, error) {
-	switch true {
-	case FromAgent(ctx):
-		return c.Agent(ctx, arg)
-	case FromJS(ctx):
-		return c.JS(ctx)([]any{arg})
-	default:
-		panic("unknown tool call path")
-	}
-}
-
 func (c tool) Agent(ctx context.Context, input json.RawMessage) (api.UserContents, error) {
 	ctx = makeFromAgent(ctx)
 	output, err := c.rawCall(ctx, input)
@@ -200,9 +191,6 @@ func (c tool) JS(ctx context.Context) quickjs.HostFunc {
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", c.name, err)
 		}
-		if _, ok := output.(Value); ok {
-			return output, nil
-		}
-		return Value{output}, nil
+		return output, nil
 	}
 }

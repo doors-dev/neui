@@ -10,6 +10,7 @@ const ui = (() => {
 	const validateLayout = __validateLayout
 	const draw = __draw
 	const notify = __notify
+	const end = __end
 	delete globalThis.__create;
 	delete globalThis.__update;
 	delete globalThis.__release;
@@ -21,6 +22,7 @@ const ui = (() => {
 	delete globalThis.__validateLayout
 	delete globalThis.__draw
 	delete globalThis.__notify
+	delete globalThis.__end
 	const flatten = (content) => content.flat(Infinity).filter(c => c !== null && c !== undefined && c !== false)
 	const Widget = class {
 		static #reg = new FinalizationRegistry(id => release(id));
@@ -106,6 +108,10 @@ const ui = (() => {
 	}
 	ui.root = new Slot(true)
 	ui.notify = notify
+	ui.end = () => {
+		end()
+		while (true) { }
+	}
 	return ui
 })()
 Object.freeze(ui)

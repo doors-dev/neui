@@ -536,3 +536,190 @@ func TestIslandStartRefusedAfterSpecChange(t *testing.T) {
 		t.Fatalf("a refused start reported a task: %v", stack.Trace(events))
 	}
 }
+
+func TestIslandScriptReadsForItself(t *testing.T) {
+	page := func(cur gox.Cursor) error {
+		if err := (neui.Space{Name: "cart", Desc: "the cart"}).Proxy(cur, func(cur gox.Cursor) error {
+			return cur.Comp(neui.Tool[struct{}, string]{Name: "add", Desc: "adds an item", Handler: func(context.Context, struct{}) (string, error) {
+				return "added", nil
+			}})
+		}); err != nil {
+			return err
+		}
+		return cur.Any(board(make(chan int, 1), nil))
+	}
+	p := testkit.NewProvider(api.Model{},
+		testkit.Call("page__sync", map[string]any{"path": "cart"}),
+		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
+		revised(t, func(revision string) testkit.Turn {
+			return start(revision, `var seen = []
+try { seen.push(page__tool({path: "cart", tool: "add", arg: {}}).output) } catch (e) { seen.push(Object.keys(e.value).join(",")) }
+ui.notify(seen)`)
+		}),
+		testkit.Say("started"),
+		testkit.Say("noted"),
+	)
+	c := stack.Page(t, stack.Host{Provider: p, Page: page})
+	c.Send("add from the board")
+	c.Wait()
+	c.Wait()
+	if notify := lastText(p.Request(t, 4)); !strings.Contains(notify, `[["space"]]`) {
+		t.Fatalf("the island script's add notified %q, want it refused with the space: the agent's read is not the script's", notify)
+	}
+}
+
+func endBoard(marks chan<- int, screens chan<- string, success bool) gox.Elem {
+	shown := func(label string) gox.Elem {
+		return func(cur gox.Cursor) error {
+			select {
+			case screens <- label:
+			default:
+			}
+			return cur.Text(label)
+		}
+	}
+	return func(cur gox.Cursor) error {
+		island := neui.Island{
+			Name:        "board",
+			Desc:        "a board",
+			Placeholder: shown("idle"),
+			Template: func(slot gox.Comp) gox.Elem {
+				return func(cur gox.Cursor) error { return cur.Comp(slot) }
+			},
+			Library: func(l neui.Library) error {
+				return l.Tool("mark", "marks a number", func(ctx context.Context, in struct{ N int }) (int, error) {
+					marks <- in.N
+					return in.N, nil
+				})
+			},
+		}
+		if success {
+			island.Success = func(func(context.Context)) gox.Elem { return shown("done") }
+		}
+		return cur.Comp(island)
+	}
+}
+
+func endScreen(t *testing.T, screens <-chan string, success bool) string {
+	t.Helper()
+	want, status := "idle", "no app is running in this island"
+	if success {
+		want, status = "done", "the island's app, task 1, has ended and the island shows its end state"
+	}
+	select {
+	case got := <-screens:
+		if got != want {
+			t.Fatalf("the ended app shows %q, want %q", got, want)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatalf("the ended app never showed %q", want)
+	}
+	return status
+}
+
+func TestIslandEndEndsAppAsStopDoes(t *testing.T) {
+	for _, success := range []bool{true, false} {
+		t.Run(fmt.Sprintf("success %v", success), func(t *testing.T) {
+			marks := make(chan int, 4)
+			screens := make(chan string, 8)
+			p := testkit.NewProvider(api.Model{},
+				testkit.Call("page__island_spec", map[string]any{"path": "board"}),
+				revised(t, func(revision string) testkit.Turn {
+					return start(revision, `app.mark({N: 1})
+ui.notify("dropped")
+try { ui.end() } catch (e) { app.mark({N: 2}) } finally { app.mark({N: 3}) }
+app.mark({N: 4})`)
+				}),
+				testkit.Say("started"),
+				testkit.Say("ended"),
+				testkit.Call("page__sync", map[string]any{"path": "board.screen"}),
+				testkit.Say("seen"),
+			)
+			c := stack.Page(t, stack.Host{Provider: p, Page: endBoard(marks, screens, success)})
+			for len(screens) > 0 {
+				<-screens
+			}
+			c.Send("open the board")
+			c.Wait()
+			c.Wait()
+			ended := lastText(p.Request(t, 3))
+			for _, want := range []string{`<task_result `, `task_id="1"`, "the island's app ended: its script called ui.end()"} {
+				if !strings.Contains(ended, want) {
+					t.Fatalf("ui.end() reported %q, want it to carry %s", ended, want)
+				}
+			}
+			want := endScreen(t, screens, success)
+			c.Send("look at the board")
+			c.Wait()
+			if status := statusOf(t, testkit.Results(p.Request(t, 5))[0]); !strings.HasPrefix(status, want) {
+				t.Fatalf("the status after the end is %q, want %q", status, want)
+			}
+			if n := <-marks; n != 1 || len(marks) != 0 {
+				t.Fatalf("the script marked %d and %d more, want only 1: code after ui.end() ran", n, len(marks))
+			}
+			for i, r := range p.Requests() {
+				if strings.Contains(lastText(r), "dropped") {
+					t.Fatalf("request %d carries %q, want the values queued before ui.end() dropped as island_stop drops them", i, lastText(r))
+				}
+			}
+		})
+	}
+}
+
+func TestIslandStopEndsAppWithItsOwnResult(t *testing.T) {
+	for _, success := range []bool{true, false} {
+		t.Run(fmt.Sprintf("success %v", success), func(t *testing.T) {
+			marks := make(chan int, 1)
+			screens := make(chan string, 8)
+			p := testkit.NewProvider(api.Model{},
+				testkit.Call("page__island_spec", map[string]any{"path": "board"}),
+				revised(t, func(revision string) testkit.Turn {
+					return start(revision, `app.mark({N: 1})`)
+				}),
+				testkit.Call("page__island_stop", map[string]any{"path": "board"}),
+				testkit.Say("stopped"),
+				testkit.Call("page__sync", map[string]any{"path": "board.screen"}),
+				testkit.Say("seen"),
+			)
+			c := stack.Page(t, stack.Host{Provider: p, Page: endBoard(marks, screens, success)})
+			for len(screens) > 0 {
+				<-screens
+			}
+			c.Send("close the board")
+			c.Wait()
+			if r := testkit.Results(p.Request(t, 3))[0]; r.Error != api.ToolOk {
+				t.Fatalf("island_stop failed with %#v", r.Content)
+			}
+			stopped := lastText(p.Request(t, 3))
+			for _, want := range []string{`<task_result `, `task_id="1"`, "the island's app was stopped"} {
+				if !strings.Contains(stopped, want) {
+					t.Fatalf("island_stop reported %q, want it to carry %s", stopped, want)
+				}
+			}
+			want := endScreen(t, screens, success)
+			c.Send("look at the board")
+			c.Wait()
+			if status := statusOf(t, testkit.Results(p.Request(t, 5))[0]); !strings.HasPrefix(status, want) {
+				t.Fatalf("the status after the end is %q, want %q", status, want)
+			}
+		})
+	}
+}
+
+func TestIslandSpecCoversScriptPartsAndEnd(t *testing.T) {
+	p := testkit.NewProvider(api.Model{},
+		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
+		testkit.Say("done"),
+	)
+	c := stack.Page(t, stack.Host{Provider: p, Page: board(make(chan int, 1), nil)})
+	c.Send("open the board")
+	c.Wait()
+	_, _, spec := specText(t, testkit.Results(p.Request(t, 1))[0])
+	_, runtime, _ := strings.Cut(spec, "\nRuntime\n")
+	if !strings.Contains(runtime, "\n- When a script part completes execution, the app keeps its last drawn screen and waits for the next script. Buttons do nothing until you send the next script with island_continue. To close the app from a script, call ui.end() explicitly.\n") {
+		t.Fatalf("the spec's runtime does not carry the script part line:\n%s", spec)
+	}
+	if system := p.Request(t, 0).System; !strings.Contains(system, "\n- ui.end() ends the app as island_stop does") {
+		t.Fatalf("the island guide does not list ui.end():\n%s", system)
+	}
+}

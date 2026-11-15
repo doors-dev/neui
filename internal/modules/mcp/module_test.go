@@ -19,7 +19,6 @@ import (
 	"neui.dev/api"
 	"neui.dev/internal/common"
 	"neui.dev/internal/schema"
-	"neui.dev/internal/tools"
 )
 
 func serve(t *testing.T, srv *mcp.Server) *httptest.Server {
@@ -169,13 +168,9 @@ func TestResultAlwaysBlocks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("call: %v", err)
 	}
-	value, ok := out.(tools.Value)
+	multi, ok := out.(api.MultiContainer)
 	if !ok {
-		t.Fatalf("got %T, want tools.Value", out)
-	}
-	multi, ok := value.Value.(api.MultiContainer)
-	if !ok {
-		t.Fatalf("got %T (%v), want api.MultiContainer", value.Value, value.Value)
+		t.Fatalf("got %T (%v), want api.MultiContainer", out, out)
 	}
 	contents := multi.Contents()
 	if len(contents) != 1 {

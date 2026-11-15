@@ -3,12 +3,14 @@ package page
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
 
 	"github.com/doors-dev/doors"
 	"github.com/zeebo/xxh3"
+	"neui.dev/api"
 	"neui.dev/internal/common"
 	"neui.dev/internal/island"
 	"neui.dev/internal/replay"
@@ -55,9 +57,9 @@ type snapshot struct {
 	state  state
 }
 
-type permit struct {
+type permit[T any] struct {
 	module *module
-	path   string
+	item   T
 	old    snapshot
 	before map[string][4]uint64
 }
@@ -69,102 +71,108 @@ func (p *page) Module() Module {
 		snaps:  map[string]snapshot{},
 	}
 	_, err := m.Add(toolName, toolDesc, func(ctx context.Context, arg toolArg) (toolResult, error) {
-		var t *tool
-		a, err := m.act(ctx, arg.Path, true, func(s *space) error {
+		a, err := m.act(ctx, arg.Path, func(s *space) (*tool, error) {
 			i, ok := s.searchTool(utils.SanitizeName(arg.Tool))
 			if !ok {
-				return fmt.Errorf("tool %q in space %q: %w", arg.Tool, s.path, errToolNotFound)
+				return nil, fmt.Errorf("tool %q in space %q: %w", arg.Tool, s.path, errToolNotFound)
 			}
-			t = s.tools[i]
-			return nil
+			return s.tools[i], nil
 		})
 		if err != nil {
 			return toolResult{}, err
 		}
-		out, err := t.call(ctx, arg.Arg)
+		out, err := a.item.call(ctx, arg.Arg)
 		if err != nil {
-			return toolResult{}, err
+			var res toolResult
+			var value any
+			var container api.Container
+			var multi api.MultiContainer
+			if errors.As(err, &container) {
+				value = container
+			} else if errors.As(err, &multi) {
+				value = multi
+			}
+			if raw, merr := json.Marshal(value); value != nil && merr == nil {
+				res.Output = json.RawMessage(raw)
+				if !fits(ctx, res.Output) {
+					res.Output = replay.OmittedNote(len(raw))
+				}
+			}
+			return toolResult{}, a.fail(ctx, arg.Path, err, &res, &res.report)
 		}
 		raw, err := json.Marshal(out)
 		if err != nil {
-			return toolResult{}, err
+			var res toolResult
+			return toolResult{}, a.fail(ctx, arg.Path, err, &res, &res.report)
 		}
 		res := toolResult{Output: json.RawMessage(raw)}
 		if !fits(ctx, res.Output) {
 			res.Output = replay.OmittedNote(len(raw))
 		}
-		err = a.report(ctx, &res, &res.report)
+		err = a.report(ctx, arg.Path, &res, &res.report)
 		return res, err
 	})
 	if err != nil {
 		panic(err)
 	}
 	_, err = m.Add(readName, readDesc, func(ctx context.Context, arg inputRef) (readResult, error) {
-		var in input
-		_, err := m.act(ctx, arg.Path, false, func(s *space) (err error) {
-			in, err = s.getInput(arg.ID, "read")
-			return err
+		a, err := m.act(ctx, arg.Path, func(s *space) (input, error) {
+			return s.getInput(arg.ID, "read")
 		})
 		if err != nil {
 			return readResult{}, err
 		}
-		return dispatch[readResult](ctx, in, "read", nil)
+		return dispatch[readResult](ctx, a.item, "read", nil)
 	})
 	if err != nil {
 		panic(err)
 	}
 	_, err = m.Add(writeName, writeDesc, func(ctx context.Context, arg writeArg) (hookResult, error) {
-		var in input
-		a, err := m.act(ctx, arg.Path, true, func(s *space) (err error) {
-			in, err = s.getInput(arg.ID, "input")
-			return err
+		a, err := m.act(ctx, arg.Path, func(s *space) (input, error) {
+			return s.getInput(arg.ID, "input")
 		})
 		if err != nil {
 			return hookResult{}, err
 		}
-		res, err := dispatch[hookResult](ctx, in, "input", arg.Value)
+		res, err := dispatch[hookResult](ctx, a.item, "input", arg.Value)
 		if err != nil {
-			return hookResult{}, err
+			return hookResult{}, a.fail(ctx, arg.Path, err, &res, &res.report)
 		}
-		err = a.report(ctx, &res, &res.report)
+		err = a.report(ctx, arg.Path, &res, &res.report)
 		return res, err
 	})
 	if err != nil {
 		panic(err)
 	}
 	_, err = m.Add(clickName, clickDesc, func(ctx context.Context, arg inputRef) (hookResult, error) {
-		var in input
-		a, err := m.act(ctx, arg.Path, true, func(s *space) (err error) {
-			in, err = s.getInput(arg.ID, "click")
-			return err
+		a, err := m.act(ctx, arg.Path, func(s *space) (input, error) {
+			return s.getInput(arg.ID, "click")
 		})
 		if err != nil {
 			return hookResult{}, err
 		}
-		res, err := dispatch[hookResult](ctx, in, "click", nil)
+		res, err := dispatch[hookResult](ctx, a.item, "click", nil)
 		if err != nil {
-			return hookResult{}, err
+			return hookResult{}, a.fail(ctx, arg.Path, err, &res, &res.report)
 		}
-		err = a.report(ctx, &res, &res.report)
+		err = a.report(ctx, arg.Path, &res, &res.report)
 		return res, err
 	})
 	if err != nil {
 		panic(err)
 	}
 	_, err = m.Add(focusName, focusDesc, func(ctx context.Context, arg inputRef) (report, error) {
-		var in input
-		a, err := m.act(ctx, arg.Path, true, func(s *space) (err error) {
-			in, err = s.getInput(arg.ID, "focus")
-			return err
+		a, err := m.act(ctx, arg.Path, func(s *space) (input, error) {
+			return s.getInput(arg.ID, "focus")
 		})
 		if err != nil {
 			return report{}, err
 		}
-		if _, err := dispatch[struct{}](ctx, in, "focus", nil); err != nil {
-			return report{}, err
-		}
 		var res report
-		err = a.report(ctx, &res, &res)
+		if _, err := dispatch[struct{}](ctx, a.item, "focus", nil); err != nil {
+			return report{}, a.fail(ctx, arg.Path, err, &res, &res)
+		}
+		err = a.report(ctx, arg.Path, &res, &res)
 		return res, err
 	})
 	if err != nil {
@@ -176,7 +184,7 @@ func (p *page) Module() Module {
 		if ctx.Err() != nil {
 			return node{}, context.Cause(ctx)
 		}
-		s, err := p.space.find(strings.Split(arg.Path, "."))
+		s, err := p.space.find(arg.Path)
 		if err != nil {
 			return node{}, err
 		}
@@ -195,7 +203,7 @@ func (p *page) Module() Module {
 		if ctx.Err() != nil {
 			return state{}, context.Cause(ctx)
 		}
-		s, err := p.space.find(strings.Split(arg.Path, "."))
+		s, err := p.space.find(arg.Path)
 		if err != nil {
 			return state{}, err
 		}
@@ -203,7 +211,7 @@ func (p *page) Module() Module {
 		if !fits(ctx, live.state) {
 			return state{}, fmt.Errorf("space %q: %w", s.path, errSpaceTooLarge)
 		}
-		m.snaps[s.path] = live
+		m.store(s, live)
 		return live.state, nil
 	})
 	if err != nil {
@@ -332,68 +340,89 @@ func (s Page) Island(ctx context.Context, path string) (island.Island, string, e
 	if ctx.Err() != nil {
 		return nil, "", context.Cause(ctx)
 	}
-	return s.space.findIsland(strings.Split(path, "."))
+	return s.space.findIsland(path)
 }
 
-func (m *module) act(ctx context.Context, path string, reports bool, find func(s *space) error) (permit, error) {
+func (m *module) act[T any](ctx context.Context, path string, find func(s *space) (T, error)) (permit[T], error) {
 	m.page.mu.Lock()
 	defer m.page.mu.Unlock()
 	if ctx.Err() != nil {
-		return permit{}, context.Cause(ctx)
+		return permit[T]{}, context.Cause(ctx)
 	}
-	s, err := m.page.space.find(strings.Split(path, "."))
+	s, err := m.page.space.find(path)
 	if err != nil {
-		return permit{}, err
+		return permit[T]{}, err
 	}
 	by := tools.RunID(ctx)
 	old, ok := m.snaps[s.path]
-	if ok && old.by == by && old.digest == s.digest() {
-		if err := find(s); err != nil {
-			return permit{}, err
+	if ok && old.by == by && old.digest == s.digest {
+		item, err := find(s)
+		if err != nil {
+			return permit[T]{}, err
 		}
-		a := permit{module: m, path: s.path, old: old}
-		if reports {
-			a.before = map[string][4]uint64{}
-			m.page.space.digests(a.before)
-		}
-		return a, nil
+		before := map[string][4]uint64{}
+		m.page.space.digests(before)
+		return permit[T]{module: m, item: item, old: old, before: before}, nil
 	}
 	live := s.snapshot(by)
-	r := refusal{Refused: refusedUnreadMessage, Space: &live.state}
+	r := refusal{reason: refusedUnreadMessage, Space: &live.state}
 	if ok && old.by == by {
-		r = refusal{Refused: refusedChangedMessage, Diff: s.diff(old)}
+		r = refusal{reason: refusedChangedMessage, Diff: s.diff(old)}
 	}
 	if !fits(ctx, r) {
-		return permit{}, refusal{Refused: refusedTooLargeMessage}
+		return permit[T]{}, errRefusedTooLarge
 	}
-	m.snaps[s.path] = live
-	return permit{}, r
+	m.store(s, live)
+	return permit[T]{}, r
 }
 
-func (a permit) report(ctx context.Context, res any, rep *report) error {
+func (m *module) store(s *space, snap snapshot) {
+	m.snaps[s.path] = snap
+	prefix := s.path + "."
+	if s.path == "" {
+		prefix = ""
+	}
+	for path := range m.snaps {
+		rest, ok := strings.CutPrefix(path, prefix)
+		if !ok || rest == "" {
+			continue
+		}
+		name, _, _ := strings.Cut(rest, ".")
+		if _, found := s.search(name); !found {
+			delete(m.snaps, path)
+		}
+	}
+}
+
+func (a permit[T]) report(ctx context.Context, path string, res any, rep *report) error {
 	p := a.module.page
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if ctx.Err() != nil {
 		return context.Cause(ctx)
 	}
-	s, err := p.space.find(strings.Split(a.path, "."))
+	s, err := p.space.find(path)
 	if err != nil {
 		rep.Diff = &diff{Removed: true}
 	} else {
 		rep.Diff = s.diff(a.old)
 	}
-	rep.Changes = p.space.changes(a.before, a.path)
+	rep.Changes = p.space.changes(a.before, path)
 	if !fits(ctx, res) {
 		*rep = report{}
 		return nil
 	}
-	if s == nil {
-		delete(a.module.snaps, a.path)
-	} else {
-		a.module.snaps[a.path] = s.snapshot(a.old.by)
+	if s != nil {
+		a.module.store(s, s.snapshot(a.old.by))
 	}
 	return nil
+}
+
+func (a permit[T]) fail(ctx context.Context, path string, err error, res any, rep *report) error {
+	if a.report(ctx, path, res, rep) != nil || rep.Diff == nil {
+		return err
+	}
+	return failure{result: res, err: err}
 }
 
 func fits(ctx context.Context, v any) bool {

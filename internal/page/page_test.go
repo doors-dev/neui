@@ -4,10 +4,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
+	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -20,9 +25,11 @@ import (
 	"neui.dev/internal/common"
 	"neui.dev/internal/modules/js"
 	"neui.dev/internal/page"
+	"neui.dev/internal/schema"
 	"neui.dev/internal/testkit"
 	"neui.dev/internal/testkit/stack"
 	"neui.dev/internal/thread"
+	"neui.dev/internal/tools"
 )
 
 type state struct {
@@ -30,7 +37,7 @@ type state struct {
 	Island bool
 	Tools  []struct{ Name string }
 	Inputs []struct {
-		ID     uint
+		ID     string
 		Kind   string
 		Desc   string
 		Rights string
@@ -52,8 +59,8 @@ type diff struct {
 		Removed []string
 	}
 	Inputs *struct {
-		Added   []struct{ ID uint }
-		Removed []uint
+		Added   []struct{ ID string }
+		Removed []string
 	}
 	Data []struct {
 		Text   string
@@ -75,10 +82,13 @@ type toolOutput struct {
 	report
 }
 
+func empty(d *diff) bool {
+	return d != nil && reflect.ValueOf(*d).IsZero()
+}
+
 type refusal struct {
-	Refused string
-	Diff    *diff
-	Space   *state
+	Diff  *diff
+	Space *state
 }
 
 func shop() gox.Elem {
@@ -157,15 +167,33 @@ func refused(t *testing.T, r api.ContentToolResult, want string) {
 
 func refusedWith(t *testing.T, r api.ContentToolResult) refusal {
 	t.Helper()
-	if r.Error == api.ToolOk {
-		t.Fatalf("call %s succeeded with %#v, want it refused", r.ID, r.Content)
+	var keys map[string]json.RawMessage
+	failedWith(t, r, "not done", &keys)
+	if len(keys) != 1 || (keys["diff"] == nil && keys["space"] == nil) {
+		t.Fatalf("call %s was refused with %#v, want diff or space alone", r.ID, r.Content)
 	}
 	var out refusal
-	testkit.Decode(t, r, &out)
-	if !strings.HasPrefix(out.Refused, "not done") {
-		t.Fatalf("call %s failed with %#v, want a refusal", r.ID, r.Content)
-	}
+	testkit.Decode(t, api.ContentToolResult{ID: r.ID, Content: r.Content[1:]}, &out)
 	return out
+}
+
+func failedWith(t *testing.T, r api.ContentToolResult, message string, v any) {
+	t.Helper()
+	if r.Error == api.ToolOk || len(r.Content) != 2 {
+		t.Fatalf("call %s answered %#v, want an error with its message and its content", r.ID, r.Content)
+	}
+	if text, ok := r.Content[0].(api.ContentText); !ok || !strings.HasPrefix(text.Text, message) {
+		t.Fatalf("call %s failed with %#v, want the message %q first", r.ID, r.Content, message)
+	}
+	testkit.Decode(t, api.ContentToolResult{ID: r.ID, Content: r.Content[1:]}, v)
+}
+
+func plain(t *testing.T, r api.ContentToolResult, want string) {
+	t.Helper()
+	refused(t, r, want)
+	if len(r.Content) != 1 {
+		t.Fatalf("call %s failed with %#v, want the message alone", r.ID, r.Content)
+	}
 }
 
 func call(id string, name string, args any) api.Event {
@@ -286,8 +314,36 @@ func TestRenderFailsOnEmptyNameAndUnencodableData(t *testing.T) {
 	}
 }
 
+func TestInputElementCarriesNeid(t *testing.T) {
+	app := doors.NewApp(func(context.Context, doors.Request) gox.Elem {
+		return func(cur gox.Cursor) error {
+			p := page.NewPage(doors.InstanceContext(cur.Context()))
+			return doors.Ctx(context.WithValue(cur.Context(), common.KeySpace, p.Space())).Proxy(cur, func(cur gox.Cursor) error {
+				return (neui.Input{Desc: "the note"}).Proxy(cur, func(cur gox.Cursor) error {
+					if err := cur.InitVoid("input"); err != nil {
+						return err
+					}
+					return cur.Submit()
+				})
+			})
+		}
+	}, doors.WithID(doors.IDRand()), doors.WithLogger(slog.New(slog.DiscardHandler)))
+	response := httptest.NewRecorder()
+	app.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
+	body := response.Body.String()
+	src := regexp.MustCompile(`data-d0d-id="[^"]*" src="([^"]+)"`).FindStringSubmatch(body)
+	if !strings.Contains(body, `<input data-neid="`) || src == nil {
+		t.Fatalf("the page rendered %s, want the input keyed by data-neid and its script", body)
+	}
+	script := httptest.NewRecorder()
+	app.ServeHTTP(script, httptest.NewRequest(http.MethodGet, src[1], nil))
+	if !strings.Contains(script.Body.String(), `[data-neid="`) || strings.Contains(script.Body.String(), "data-kid") {
+		t.Fatalf("the input's script is %s, want it to find the element by data-neid", script.Body.String())
+	}
+}
+
 func TestReadIsChecked(t *testing.T) {
-	p := testkit.NewProvider(api.Model{}, testkit.Call("page__read", map[string]any{"path": "cart", "id": 1}), testkit.Say("done"))
+	p := testkit.NewProvider(api.Model{}, testkit.Call("page__read", map[string]any{"path": "cart", "id": "unread"}), testkit.Say("done"))
 	c := stack.Page(t, stack.Host{Provider: p, Page: shop()})
 	c.Send("read the total")
 	c.Wait()
@@ -331,7 +387,7 @@ func TestChangeByOtherCallRefusedWithDiff(t *testing.T) {
 	c.Wait()
 	var restocked toolOutput
 	testkit.Decode(t, testkit.Results(p.Request(t, 2))[0], &restocked)
-	if restocked.Output != "restocked" || restocked.Diff != nil || string(restocked.Changes) != `[{"path":"cart","changed":["data"]}]` {
+	if restocked.Output != "restocked" || !empty(restocked.Diff) || string(restocked.Changes) != `[{"path":"cart","changed":["data"]}]` {
 		t.Fatalf("the restock answered %+v with changes %s, want cart's data listed", restocked, restocked.Changes)
 	}
 	r := refusedWith(t, testkit.Results(p.Request(t, 3))[0])
@@ -357,13 +413,13 @@ func TestChildChangeDoesNotRefuseParent(t *testing.T) {
 	c.Wait()
 	var out toolOutput
 	testkit.Decode(t, testkit.Results(p.Request(t, 3))[0], &out)
-	if out.Output != "checking out" || out.Diff != nil || out.Changes != nil {
+	if out.Output != "checking out" || !empty(out.Diff) || out.Changes != nil {
 		t.Fatalf("the checkout after a change inside cart answered %+v, want it run with nothing changed", out)
 	}
 }
 
 func TestInputRightsRefused(t *testing.T) {
-	inputs := map[string]uint{}
+	inputs := map[string]string{}
 	p := testkit.NewProvider(api.Model{},
 		testkit.Call("page__sync", map[string]any{"path": "cart"}),
 		testkit.Then(func(r api.Request) testkit.Turn {
@@ -441,7 +497,7 @@ func TestUnnamedRadiosAreSeparateInputs(t *testing.T) {
 	var s state
 	testkit.Decode(t, testkit.Results(p.Request(t, 1))[0], &s)
 	var got []string
-	ids := map[uint]bool{}
+	ids := map[string]bool{}
 	for _, in := range s.Inputs {
 		got = append(got, in.Kind+" "+in.Desc)
 		ids[in.ID] = true
@@ -450,6 +506,31 @@ func TestUnnamedRadiosAreSeparateInputs(t *testing.T) {
 	if fmt.Sprint(got) != fmt.Sprint(want) || len(ids) != 3 {
 		t.Fatalf("the radios synced as %q, want %q with distinct ids", got, want)
 	}
+}
+
+type stuck struct {
+	Count int `json:"count"`
+}
+
+func (s stuck) Error() string {
+	return "stuck"
+}
+
+func (s stuck) Content() api.UserContent {
+	return api.ContentText{Text: fmt.Sprintf("stuck at %d", s.Count)}
+}
+
+func (s stuck) ContentType() string {
+	return "text"
+}
+
+type tangled struct {
+	stuck
+	Wire chan int
+}
+
+func (tangled) Error() string {
+	return "tangled"
 }
 
 func board() gox.Elem {
@@ -476,7 +557,13 @@ func board() gox.Elem {
 		}}); err != nil {
 			return err
 		}
-		if err := space(cur, "counter", "the counter", count.Bind(func(n int) gox.Elem {
+		fail := func(name string, err error) neui.Tool[struct{}, string] {
+			return neui.Tool[struct{}, string]{Name: name, Desc: "counts and fails", Handler: func(ctx context.Context, _ struct{}) (string, error) {
+				count.Mutate(ctx, func(n int) int { return n + 1 })
+				return "", err
+			}}
+		}
+		if err := space(cur, "counter", "the counter", fail("jam", errors.New("jammed")), fail("stick", fmt.Errorf("jam: %w", stuck{Count: 7})), fail("tangle", tangled{Wire: make(chan int)}), count.Bind(func(n int) gox.Elem {
 			return func(cur gox.Cursor) error { return cur.Comp(neui.Data{Text: "count", Object: n}) }
 		})); err != nil {
 			return err
@@ -490,7 +577,11 @@ func board() gox.Elem {
 		})); err != nil {
 			return err
 		}
-		return space(cur, "panel", "the panel", neui.Tool[struct{}, string]{Name: "toggle", Desc: "toggles the dialog", Handler: toggle}, open.Bind(func(o bool) gox.Elem {
+		return space(cur, "panel", "the panel", neui.Tool[struct{}, string]{Name: "toggle", Desc: "toggles the dialog", Handler: toggle}, gox.Elem(func(cur gox.Cursor) error {
+			return space(cur, "dialogs", "the dialog list", neui.Tool[struct{}, string]{Name: "noop", Desc: "does nothing", Handler: func(context.Context, struct{}) (string, error) {
+				return "nothing", nil
+			}})
+		}), open.Bind(func(o bool) gox.Elem {
 			return func(cur gox.Cursor) error {
 				if !o {
 					return nil
@@ -499,7 +590,9 @@ func board() gox.Elem {
 					open.Mutate(ctx, func(bool) bool { return false })
 					return "closed", nil
 				}}, gox.Elem(func(cur gox.Cursor) error {
-					if err := space(cur, "body", "the body"); err != nil {
+					if err := space(cur, "body", "the body", neui.Tool[struct{}, string]{Name: "noop", Desc: "does nothing", Handler: func(context.Context, struct{}) (string, error) {
+						return "nothing", nil
+					}}); err != nil {
 						return err
 					}
 					return space(cur, "footer", "the footer")
@@ -536,11 +629,11 @@ func TestReportListsWhatChanged(t *testing.T) {
 		return out
 	}
 	toggled := output(2)
-	if toggled.Diff != nil || string(toggled.Changes) != `[{"path":"counter","changed":["data"]},{"path":"list.row","changed":["data"]},{"path":"panel","changed":["children"]},{"path":"panel.dialog","added":true,"desc":"the dialog"}]` {
+	if !empty(toggled.Diff) || string(toggled.Changes) != `[{"path":"counter","changed":["data"]},{"path":"list.row","changed":["data"]},{"path":"panel.dialog","added":true,"desc":"the dialog"}]` {
 		t.Fatalf("the toggle answered diff %+v and changes %s", toggled.Diff, toggled.Changes)
 	}
 	closed := output(4)
-	if closed.Diff == nil || !closed.Diff.Removed || string(closed.Changes) != `[{"path":"panel","changed":["children"]}]` {
+	if closed.Diff == nil || !closed.Diff.Removed || closed.Changes != nil {
 		t.Fatalf("the close answered diff %+v and changes %s, want the dialog removed", closed.Diff, closed.Changes)
 	}
 	reopened := output(6)
@@ -572,7 +665,7 @@ return out`),
 	c.Wait()
 	var first struct{ Result []string }
 	testkit.Decode(t, testkit.Results(p.Request(t, 2))[0], &first)
-	if fmt.Sprint(first.Result) != "[refused,space added]" {
+	if fmt.Sprint(first.Result) != "[space added]" {
 		t.Fatalf("the script saw %q, want its first add refused with the space and its second run", first.Result)
 	}
 	if r := refusedWith(t, testkit.Results(p.Request(t, 3))[0]); r.Space == nil {
@@ -580,29 +673,62 @@ return out`),
 	}
 	var second struct{ Result []string }
 	testkit.Decode(t, testkit.Results(p.Request(t, 4))[0], &second)
-	if len(second.Result) != 2 || !strings.HasPrefix(second.Result[0], "tool: not done") || second.Result[1] != "refused,space" {
+	if len(second.Result) != 2 || !strings.HasPrefix(second.Result[0], "tool: not done") || second.Result[1] != "space" {
 		t.Fatalf("a second script saw %q, want the add refused with the space", second.Result)
 	}
 }
 
 func TestRewindClearsReads(t *testing.T) {
-	add := map[string]any{"path": "cart", "tool": "add", "arg": map[string]any{}}
-	p := testkit.NewProvider(api.Model{},
-		testkit.Call("page__sync", map[string]any{"path": "cart"}),
-		testkit.Say("synced"),
-		testkit.Say("later"),
-		testkit.Call("page__tool", add),
-		testkit.Say("done"),
-	)
-	c := stack.Page(t, stack.Host{Provider: p, Page: shop()})
-	c.Send("look")
-	c.Wait()
-	c.Send("wait")
-	second := c.Wait()[0].(api.ChatEventRoundStart).Round.ID
-	c.Rewind(second, "add")
-	c.Wait()
-	if r := refusedWith(t, testkit.Results(p.Request(t, 4))[0]); r.Space == nil {
-		t.Fatalf("the add after the rewind was refused with %+v, want the whole space", r)
+	started := make(chan struct{}, 1)
+	hold := tools.NewModule("hold", "")
+	if _, err := hold.AddRaw("run", "holds until canceled", schema.ObjectRawSchema, schema.AnyRawSchema, func(ctx context.Context, _ json.RawMessage) (any, error) {
+		started <- struct{}{}
+		<-ctx.Done()
+		return nil, context.Cause(ctx)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, state := range []struct {
+		name  string
+		turn  testkit.Turn
+		enter func(c *stack.Chat)
+	}{
+		{"waiting", testkit.Say("later"), func(c *stack.Chat) { c.Wait() }},
+		{"streaming", testkit.Hang(api.EventStart{ID: "hang", Model: "stub"}), func(*stack.Chat) {}},
+		{"tools", testkit.Call("hold__run", map[string]any{}), func(*stack.Chat) { <-started }},
+		{"compacting", testkit.Events(api.EventStart{ID: "full", Model: "stub"}, api.EventErr{Code: api.CodeContextLength, Err: errors.New("prompt is too long")}), func(c *stack.Chat) {
+			c.Until(func(e api.ChatEvent) bool {
+				compacting, ok := e.(api.ChatEventCompacting)
+				return ok && compacting.Running
+			})
+		}},
+	} {
+		t.Run(state.name, func(t *testing.T) {
+			p := testkit.NewProvider(api.Model{Name: "stub"},
+				testkit.Call("page__sync", map[string]any{"path": "cart"}),
+				testkit.Say("synced"),
+				state.turn,
+				testkit.Call("page__tool", map[string]any{"path": "cart", "tool": "add", "arg": map[string]any{}}),
+				testkit.Say("done"),
+			)
+			p.OnCompaction(testkit.Hang(api.EventStart{ID: "compact", Model: "stub"}))
+			c := stack.Page(t, stack.Host{Provider: p, Page: shop(), Options: []common.Option{common.OptionModule(func(context.Context) common.Module { return hold })}})
+			c.Send("look")
+			c.Wait()
+			c.Send("wait")
+			events := c.Until(func(e api.ChatEvent) bool {
+				_, ok := e.(api.ChatEventRoundStart)
+				return ok
+			})
+			second := events[len(events)-1].(api.ChatEventRoundStart).Round.ID
+			state.enter(c)
+			c.Rewind(second, "add")
+			c.Wait()
+			requests := p.Requests()
+			if r := refusedWith(t, testkit.Results(requests[len(requests)-1])[0]); r.Space == nil {
+				t.Fatalf("the add after a rewind while %s was refused with %+v, want the whole space", state.name, r)
+			}
+		})
 	}
 }
 
@@ -692,14 +818,315 @@ func TestResultsFitTheRoundItemBudget(t *testing.T) {
 		t.Fatalf("the grow answered %+v, want only its output: the diff does not fit", grew)
 	}
 	for i := 4; i <= 5; i++ {
-		if r := refusedWith(t, result(i)); r.Diff != nil || r.Space != nil || !strings.Contains(r.Refused, "too large") {
-			t.Fatalf("dump %d after the unread grow was refused with %+v, want the reason alone", i-3, r)
-		}
+		plain(t, result(i), "not done: you have not read this space as it is now, and it is too large")
 	}
 	refused(t, result(6), "too large for a result")
 	var scripted struct{ Result int }
 	testkit.Decode(t, result(7), &scripted)
 	if scripted.Result != 3000 {
 		t.Fatalf("the script's dump answered %d bytes, want 3000", scripted.Result)
+	}
+}
+
+func TestFailedCallReports(t *testing.T) {
+	tool := func(name string) map[string]any {
+		return map[string]any{"path": "counter", "tool": name, "arg": map[string]any{}}
+	}
+	p := testkit.NewProvider(api.Model{},
+		testkit.Call("page__sync", map[string]any{"path": "counter"}),
+		testkit.Call("page__tool", tool("jam")),
+		testkit.Call("page__tool", tool("jam")),
+		testkit.Call("page__tool", tool("stick")),
+		testkit.Call("page__tool", tool("tangle")),
+		testkit.Call("js__run", map[string]any{"code": `page__sync({path: "counter"})
+return ["jam", "stick"].map(tool => { try { page__tool({path: "counter", tool, arg: {}}) } catch (e) { return [e.message, Object.keys(e.value).sort().join(","), e.value.output ?? null] } })`, "comment": "jams"}),
+		testkit.Say("done"),
+	)
+	c := stack.Page(t, stack.Host{Provider: p, Page: board(), Options: []common.Option{common.OptionModule(js.Module)}})
+	c.Send("jam")
+	c.Wait()
+	for i, want := range []struct {
+		message string
+		keys    string
+		output  any
+	}{
+		{"jammed", "changes,diff", nil},
+		{"jammed", "changes,diff", nil},
+		{"jam: stuck", "changes,diff,output", map[string]any{"count": float64(7)}},
+		{"tangled", "changes,diff", nil},
+	} {
+		r := testkit.Results(p.Request(t, i+2))[0]
+		var keys map[string]json.RawMessage
+		failedWith(t, r, want.message, &keys)
+		var out toolOutput
+		failedWith(t, r, want.message, &out)
+		if got := strings.Join(slices.Sorted(maps.Keys(keys)), ","); got != want.keys || !reflect.DeepEqual(out.Output, want.output) {
+			t.Fatalf("call %d failed with %s, want keys %s and output %v", i+1, r.Content[1], want.keys, want.output)
+		}
+		if out.Diff == nil || len(out.Diff.Data) != 1 || out.Diff.Data[0].Object != float64(i+1) || string(out.Changes) != `[{"path":"list.row","changed":["data"]}]` {
+			t.Fatalf("call %d failed with %+v and changes %s, want the count at %d and the row listed", i+1, out, out.Changes, i+1)
+		}
+	}
+	var scripted struct{ Result json.RawMessage }
+	testkit.Decode(t, testkit.Results(p.Request(t, 6))[0], &scripted)
+	if string(scripted.Result) != `[["tool: jammed","changes,diff",null],["tool: jam: stuck","changes,diff,output",{"count":7}]]` {
+		t.Fatalf("the script caught %s, want the message in e.message and the call's result in e.value", scripted.Result)
+	}
+}
+
+func TestPathWithEmptySegmentIsNoSpace(t *testing.T) {
+	p := testkit.NewProvider(api.Model{},
+		round(
+			call("cart", "page__sync", map[string]any{"path": "cart"}),
+			call("sync", "page__sync", map[string]any{"path": "cart."}),
+			call("tool", "page__tool", map[string]any{"path": "cart.", "tool": "add", "arg": map[string]any{}}),
+			call("lead", "page__sync", map[string]any{"path": ".cart"}),
+		),
+		testkit.Say("done"),
+	)
+	c := stack.Page(t, stack.Host{Provider: p, Page: shop()})
+	c.Send("look")
+	c.Wait()
+	results := testkit.Results(p.Request(t, 1))
+	if results[0].Error != api.ToolOk {
+		t.Fatalf("the sync of cart answered %#v", results[0].Content)
+	}
+	for _, r := range results[1:] {
+		plain(t, r, `space "" under`)
+		refused(t, r, "no such space")
+	}
+}
+
+func TestReopenedDialogActsWithoutRead(t *testing.T) {
+	tool := func(path string, name string) map[string]any {
+		return map[string]any{"path": path, "tool": name, "arg": map[string]any{}}
+	}
+	p := testkit.NewProvider(api.Model{},
+		testkit.Call("page__sync", map[string]any{"path": "controls"}),
+		testkit.Call("page__tool", tool("controls", "toggle")),
+		testkit.Call("page__sync", map[string]any{"path": "panel.dialog"}),
+		testkit.Call("page__tool", tool("panel.dialog", "close")),
+		testkit.Call("page__tool", tool("panel.dialog", "close")),
+		testkit.Call("page__tool", tool("controls", "toggle")),
+		testkit.Call("page__tool", tool("panel.dialog", "close")),
+		testkit.Say("done"),
+	)
+	c := stack.Page(t, stack.Host{Provider: p, Page: board()})
+	c.Send("toggle")
+	c.Wait()
+	var closed toolOutput
+	testkit.Decode(t, testkit.Results(p.Request(t, 4))[0], &closed)
+	if closed.Diff == nil || !closed.Diff.Removed {
+		t.Fatalf("the close answered %+v, want the dialog removed", closed)
+	}
+	refused(t, testkit.Results(p.Request(t, 5))[0], "no such space")
+	r := testkit.Results(p.Request(t, 7))[0]
+	var again toolOutput
+	testkit.Decode(t, r, &again)
+	if r.Error != api.ToolOk || again.Output != "closed" {
+		t.Fatalf("the close after the reopen answered %#v, want it run on the read from before", r.Content)
+	}
+}
+
+func TestStoredReadDropsReadsOfGoneChildren(t *testing.T) {
+	tool := func(path string, name string) map[string]any {
+		return map[string]any{"path": path, "tool": name, "arg": map[string]any{}}
+	}
+	for _, store := range []struct {
+		name  string
+		after testkit.Turn
+	}{
+		{"sync", testkit.Call("page__sync", map[string]any{"path": "panel"})},
+		{"report", testkit.Call("page__tool", tool("panel", "toggle"))},
+	} {
+		t.Run(store.name, func(t *testing.T) {
+			closer := testkit.Call("page__tool", tool("controls", "toggle"))
+			if store.name == "report" {
+				closer = testkit.Call("page__sync", map[string]any{"path": "panel"})
+			}
+			p := testkit.NewProvider(api.Model{},
+				round(call("controls", "page__sync", map[string]any{"path": "controls"}), call("dialogs", "page__sync", map[string]any{"path": "panel.dialogs"})),
+				testkit.Call("page__tool", tool("controls", "toggle")),
+				round(call("dialog", "page__sync", map[string]any{"path": "panel.dialog"}), call("body", "page__sync", map[string]any{"path": "panel.dialog.body"})),
+				closer,
+				store.after,
+				testkit.Call("page__tool", tool("controls", "toggle")),
+				round(call("close", "page__tool", tool("panel.dialog", "close")), call("body", "page__tool", tool("panel.dialog.body", "noop")), call("dialogs", "page__tool", tool("panel.dialogs", "noop"))),
+				testkit.Say("done"),
+			)
+			c := stack.Page(t, stack.Host{Provider: p, Page: board()})
+			c.Send("toggle")
+			c.Wait()
+			results := testkit.Results(p.Request(t, 7))
+			for _, r := range results[:2] {
+				if got := refusedWith(t, r); got.Space == nil {
+					t.Fatalf("call %s was refused with %+v, want the whole space", r.ID, got)
+				}
+			}
+			var out toolOutput
+			testkit.Decode(t, results[2], &out)
+			if results[2].Error != api.ToolOk || out.Output != "nothing" {
+				t.Fatalf("the sibling's noop answered %#v, want it run", results[2].Content)
+			}
+		})
+	}
+}
+
+func TestInputIdsFollowContent(t *testing.T) {
+	redraws := doors.NewSource(0)
+	button := func(desc string, attrs ...any) gox.Elem {
+		return func(cur gox.Cursor) error {
+			return (neui.Input{Desc: desc}).Proxy(cur, func(cur gox.Cursor) error {
+				if err := cur.InitVoid("input"); err != nil {
+					return err
+				}
+				for i := 0; i < len(attrs); i += 2 {
+					if err := cur.Set(attrs[i].(string), attrs[i+1]); err != nil {
+						return err
+					}
+				}
+				return cur.Submit()
+			})
+		}
+	}
+	link := func(href string) gox.Elem {
+		return func(cur gox.Cursor) error {
+			return (neui.Input{Desc: "opens"}).Proxy(cur, func(cur gox.Cursor) error {
+				if err := cur.Init("a"); err != nil {
+					return err
+				}
+				if err := cur.Set("href", href); err != nil {
+					return err
+				}
+				if err := cur.Submit(); err != nil {
+					return err
+				}
+				return cur.Close()
+			})
+		}
+	}
+	form := func(cur gox.Cursor) error {
+		return (neui.Space{Name: "form", Desc: "the form"}).Proxy(cur, func(cur gox.Cursor) error {
+			if err := cur.Comp(neui.Tool[struct{}, string]{Name: "redraw", Desc: "redraws the form", Handler: func(ctx context.Context, _ struct{}) (string, error) {
+				redraws.Mutate(ctx, func(n int) int { return n + 1 })
+				return "redrawn", nil
+			}}); err != nil {
+				return err
+			}
+			for _, el := range []gox.Elem{
+				button("the note", "name", "note", "value", "typed"),
+				button("picks", "type", "checkbox", "name", "pick", "value", "a"),
+				button("picks", "type", "checkbox", "name", "pick", "value", "b"),
+				button("deletes", "type", "submit"),
+				button("deletes", "type", "submit"),
+				link("/a"),
+				link("/b"),
+				redraws.Bind(func(n int) gox.Elem {
+					return func(cur gox.Cursor) error {
+						if err := cur.Any(button("saves", "type", "submit", "name", "save", "value", "now")); err != nil {
+							return err
+						}
+						return cur.Comp(neui.Data{Text: "redraws", Object: n})
+					}
+				}),
+			} {
+				if err := cur.Any(el); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	}
+	id := func(desc, name, value string) string {
+		return fmt.Sprintf("%08x", uint32(xxh3.HashString(desc+"\x00"+name+"\x00"+value)))
+	}
+	p := testkit.NewProvider(api.Model{},
+		testkit.Call("page__sync", map[string]any{"path": "form"}),
+		testkit.Call("page__tool", map[string]any{"path": "form", "tool": "redraw", "arg": map[string]any{}}),
+		testkit.Call("page__click", map[string]any{"path": "form", "id": id("deletes", "", "")}),
+		testkit.Say("done"),
+	)
+	c := stack.Page(t, stack.Host{Provider: p, Page: form})
+	c.Send("look")
+	c.Wait()
+	var s state
+	testkit.Decode(t, testkit.Results(p.Request(t, 1))[0], &s)
+	var got []string
+	for _, in := range s.Inputs {
+		got = append(got, in.Desc+" "+in.ID)
+	}
+	want := []string{"the note " + id("the note", "note", ""), "picks " + id("picks", "pick", "a"), "picks " + id("picks", "pick", "b"), "deletes " + id("deletes", "", ""), "opens " + id("opens", "", "/a"), "opens " + id("opens", "", "/b"), "saves " + id("saves", "save", "now")}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("the form synced inputs %q, want %q", got, want)
+	}
+	var redrawn toolOutput
+	testkit.Decode(t, testkit.Results(p.Request(t, 2))[0], &redrawn)
+	if redrawn.Diff == nil || redrawn.Diff.Inputs != nil || len(redrawn.Diff.Data) != 1 {
+		t.Fatalf("the redraw answered %+v, want only the data changed: the redrawn button keeps its id", redrawn.Diff)
+	}
+	plain(t, testkit.Results(p.Request(t, 3))[0], "not done: more than one input")
+}
+
+func TestStoredDigestsMatchARecount(t *testing.T) {
+	var root page.Space
+	var stale []string
+	n := doors.NewSource(0)
+	bump := func(req api.Request) testkit.Turn {
+		stale = append(stale, page.StaleDigests(root)...)
+		return testkit.Call("page__tool", map[string]any{"path": "s", "tool": "bump", "arg": map[string]any{}})
+	}
+	p := testkit.NewProvider(api.Model{},
+		testkit.Call("page__sync", map[string]any{"path": "s"}),
+		testkit.Then(bump),
+		testkit.Then(bump),
+		testkit.Then(bump),
+		testkit.Then(func(api.Request) testkit.Turn {
+			stale = append(stale, page.StaleDigests(root)...)
+			return testkit.Say("done")
+		}),
+	)
+	c := stack.Page(t, stack.Host{Provider: p, Page: func(cur gox.Cursor) error {
+		root = cur.Context().Value(common.KeySpace).(page.Space)
+		return (neui.Space{Name: "s", Desc: "the space"}).Proxy(cur, func(cur gox.Cursor) error {
+			if err := cur.Comp(neui.Tool[struct{}, string]{Name: "bump", Desc: "bumps", Handler: func(ctx context.Context, _ struct{}) (string, error) {
+				n.Mutate(ctx, func(n int) int { return n + 1 })
+				return "bumped", nil
+			}}); err != nil {
+				return err
+			}
+			return cur.Any(n.Bind(func(n int) gox.Elem {
+				return func(cur gox.Cursor) error {
+					if n%2 == 1 {
+						return nil
+					}
+					for _, el := range []any{
+						neui.Tool[struct{}, string]{Name: "twin", Desc: "first", Handler: func(context.Context, struct{}) (string, error) { return "first", nil }},
+						neui.Tool[struct{}, string]{Name: "twin", Desc: "second", Handler: func(context.Context, struct{}) (string, error) { return "second", nil }},
+						neui.Data{Text: "twice"},
+						neui.Data{Text: "twice"},
+						radio("size", "s", make(chan string, 1)),
+						radio("size", "m", make(chan string, 1)),
+						gox.Elem(func(cur gox.Cursor) error {
+							return (neui.Input{Desc: "the note"}).Proxy(cur, func(cur gox.Cursor) error {
+								if err := cur.InitVoid("input"); err != nil {
+									return err
+								}
+								return cur.Submit()
+							})
+						}),
+					} {
+						if err := cur.Any(el); err != nil {
+							return err
+						}
+					}
+					return (neui.Space{Name: "c", Desc: "a child"}).Proxy(cur, func(gox.Cursor) error { return nil })
+				}
+			}))
+		})
+	}})
+	c.Send("bump")
+	c.Wait()
+	if stale != nil {
+		t.Fatalf("spaces %q stored digests that differ from a recount", stale)
 	}
 }

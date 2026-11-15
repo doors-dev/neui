@@ -2,9 +2,11 @@ package page
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -29,6 +31,8 @@ type space struct {
 	tools    []*tool
 	data     []*data
 	island   island.Island
+	digest   [4]uint64
+	counts   [4]map[uint64]int
 	inputs
 }
 
@@ -84,6 +88,7 @@ func (s Space) addSpace(ctx context.Context, name string, desc string, island is
 		return ctx, nil
 	}
 	s.children = slices.Insert(s.children, index, space)
+	s.rehash(3)
 	return ctx, nil
 }
 
@@ -98,6 +103,7 @@ func (s *space) removeSpace(space *space) {
 			continue
 		}
 		s.children = slices.Delete(s.children, i, i+1)
+		s.rehash(3)
 		return
 	}
 }
@@ -114,19 +120,21 @@ func (s *space) searchTool(name string) (int, bool) {
 	})
 }
 
-func (s *space) find(path []string) (*space, error) {
-	if len(path) == 0 || (len(path) == 1 && path[0] == "") {
+func (s *space) find(path string) (*space, error) {
+	if path == "" {
 		return s, nil
 	}
-	child := path[0]
-	index, ok := s.search(child)
-	if !ok {
-		return nil, fmt.Errorf("space %q under %q: %w", child, s.path, errSpaceNotFound)
+	for _, name := range strings.Split(path, ".") {
+		index, ok := s.search(name)
+		if !ok {
+			return nil, fmt.Errorf("space %q under %q: %w", name, s.path, errSpaceNotFound)
+		}
+		s = s.children[index]
 	}
-	return s.children[index].find(slices.Delete(path, 0, 1))
+	return s, nil
 }
 
-func (s *space) findIsland(path []string) (island.Island, string, error) {
+func (s *space) findIsland(path string) (island.Island, string, error) {
 	space, err := s.find(path)
 	if err != nil {
 		return nil, "", err
@@ -137,40 +145,66 @@ func (s *space) findIsland(path []string) (island.Island, string, error) {
 	return space.island, space.path, nil
 }
 
-func (s *space) digest() [4]uint64 {
-	var d [4]uint64
-	for _, t := range s.tools {
-		d[0] ^= t.hash
+func (s *space) count(set int, hash uint64, delta int) {
+	if s.counts[set] == nil {
+		s.counts[set] = map[uint64]int{}
 	}
-	for _, in := range s.list {
-		d[1] ^= in.hash
+	n := s.counts[set][hash] + delta
+	if n == 0 {
+		delete(s.counts[set], hash)
+	} else {
+		s.counts[set][hash] = n
 	}
-	seen := map[uint64]bool{}
-	for _, e := range s.data {
-		if !seen[e.hash] {
-			seen[e.hash] = true
-			d[2] ^= e.hash
+	if n == 0 || (n == 1 && delta > 0) {
+		s.rehash(set)
+	}
+}
+
+func (s *space) rehash(set int) {
+	var hashes []uint64
+	switch set {
+	case 0:
+		for _, t := range s.tools {
+			hashes = append(hashes, t.hash)
 		}
+	case 3:
+		for _, c := range s.children {
+			hashes = append(hashes, xxh3.HashString(c.name))
+		}
+	default:
+		hashes = slices.Collect(maps.Keys(s.counts[set]))
 	}
-	for _, c := range s.children {
-		d[3] ^= xxh3.HashString(c.name)
+	s.digest[set] = 0
+	if len(hashes) == 0 {
+		return
 	}
-	return d
+	slices.Sort(hashes)
+	h := xxh3.New()
+	for _, hash := range hashes {
+		h.Write(binary.LittleEndian.AppendUint64(nil, hash))
+	}
+	s.digest[set] = h.Sum64()
 }
 
 func (s *space) digests(out map[string][4]uint64) {
-	out[s.path] = s.digest()
+	out[s.path] = s.digest
 	for _, c := range s.children {
 		c.digests(out)
 	}
 }
 
 func (s *space) state() state {
-	out := state{Path: s.path, Desc: s.desc, Island: s.island != nil, Inputs: slices.Clone(s.list)}
+	out := state{Path: s.path, Desc: s.desc, Island: s.island != nil}
 	for _, t := range s.tools {
 		out.Tools = append(out.Tools, *t)
 	}
 	seen := map[uint64]bool{}
+	for _, in := range s.list {
+		if !seen[in.hash] {
+			seen[in.hash] = true
+			out.Inputs = append(out.Inputs, in)
+		}
+	}
 	for _, e := range s.data {
 		if !seen[e.hash] {
 			seen[e.hash] = true
@@ -184,13 +218,13 @@ func (s *space) state() state {
 }
 
 func (s *space) snapshot(by uint64) snapshot {
-	return snapshot{by: by, digest: s.digest(), state: s.state()}
+	return snapshot{by: by, digest: s.digest, state: s.state()}
 }
 
 func (s *space) diff(old snapshot) *diff {
-	now := s.digest()
+	now := s.digest
 	if now == old.digest {
-		return nil
+		return &diff{}
 	}
 	cur := s.state()
 	out := &diff{}
@@ -269,6 +303,7 @@ func (s Space) AddData(ctx context.Context, text string, object any) error {
 		return context.Canceled
 	}
 	s.data = append(s.data, d)
+	s.count(2, d.hash, 1)
 	s.root.mu.Unlock()
 	doors.OnClean(ctx, func() {
 		s.root.mu.Lock()
@@ -278,6 +313,7 @@ func (s Space) AddData(ctx context.Context, text string, object any) error {
 		}
 		if i := slices.Index(s.data, d); i >= 0 {
 			s.data = slices.Delete(s.data, i, i+1)
+			s.count(2, d.hash, -1)
 		}
 	})
 	return nil
@@ -334,10 +370,15 @@ func (s Space) AddTool[I any, O any](ctx context.Context, name string, desc stri
 		s.root.mu.Unlock()
 		return context.Canceled
 	}
-	if i, found := s.searchTool(t.Name); found {
-		s.tools[i] = t
-	} else {
+	switch i, found := s.searchTool(t.Name); {
+	case !found:
 		s.tools = slices.Insert(s.tools, i, t)
+		s.rehash(0)
+	case s.tools[i].hash != t.hash:
+		s.tools[i] = t
+		s.rehash(0)
+	default:
+		s.tools[i] = t
 	}
 	s.root.mu.Unlock()
 	doors.OnClean(ctx, func() {
@@ -348,6 +389,7 @@ func (s Space) AddTool[I any, O any](ctx context.Context, name string, desc stri
 		}
 		if i, found := s.searchTool(t.Name); found && s.tools[i] == t {
 			s.tools = slices.Delete(s.tools, i, i+1)
+			s.rehash(0)
 		}
 	})
 	return nil

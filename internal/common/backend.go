@@ -29,9 +29,6 @@ type Tool interface {
 	Summary() string
 	// Output is the JSON schema of the tool's result.
 	Output() []byte
-	// Dispatched calls the tool the way ctx says it was reached, from the
-	// agent or from a script.
-	Dispatched(ctx context.Context, arg json.RawMessage) (any, error)
 	// Agent calls the tool as a direct tool call and returns its result as
 	// content for the model.
 	Agent(ctx context.Context, input json.RawMessage) (api.UserContents, error)

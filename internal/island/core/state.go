@@ -34,6 +34,7 @@ type Run interface {
 	Rearm() error
 	Config() api.IslandConfig
 	AckHandover()
+	End()
 	Store() doors.Store
 }
 
@@ -162,6 +163,13 @@ func (s *state) RegisterTools(vm *quickjs.VM) error {
 		panic(err)
 	}
 	_, err = m.Add("draw", "", s.toolDraw)
+	if err != nil {
+		panic(err)
+	}
+	_, err = m.Add("end", "", func(ctx context.Context, _ struct{}) (struct{}, error) {
+		s.run.End()
+		return struct{}{}, nil
+	})
 	if err != nil {
 		panic(err)
 	}

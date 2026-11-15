@@ -209,6 +209,10 @@ func (r *run) done() <-chan struct{} {
 	return r.end
 }
 
+func (r *run) End() {
+	r.cancel(errEnded)
+}
+
 func (r *run) overtake() <-chan struct{} {
 	r.cancel(errOvertaken)
 	return r.end
@@ -236,6 +240,8 @@ func (r *run) run() {
 				switch cause := context.Cause(r.ctx); {
 				case errors.Is(cause, errStopped):
 					r.task.Ok(stoppedResult)
+				case errors.Is(cause, errEnded):
+					r.task.Ok(endedResult)
 				case errors.Is(cause, errOvertaken):
 					r.task.Ok(overtakenResult)
 				default:

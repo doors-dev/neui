@@ -175,7 +175,7 @@ func TestRunToolContentErrorReachesScript(t *testing.T) {
 	}
 	inner, _ := fail.Get("image")
 	if _, err := fail.Add("nested", "", func(ctx context.Context, _ struct{}) (any, error) {
-		return inner.Dispatched(ctx, json.RawMessage(`{}`))
+		return inner.JS(ctx)([]any{json.RawMessage(`{}`)})
 	}); err != nil {
 		t.Fatal(err)
 	}

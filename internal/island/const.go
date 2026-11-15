@@ -10,6 +10,7 @@ const unmountedMessage = "the island is no longer on the page: sync to see what 
 const nothingToContinueMessage = "no app is running in this island: start one with island_start"
 const nothingToStopMessage = "no app is running in this island"
 const stoppedMessage = "the island's app was stopped"
+const endedMessage = "the island's app ended: its script called ui.end()"
 const overtakenMessage = "the island's app was replaced by a new one started with island_start"
 const screenSpaceName = "screen"
 const screenSpaceDesc = "what the island shows now: the app while one runs, otherwise its placeholder or end screen"
@@ -24,6 +25,7 @@ const scriptRejectedMessage = "the script was not queued and nothing ran: fix it
 
 const specNotation = `Schemas are JSON Schema. Pass an object even when nothing is needed: {}. What update(patch) does is up to each view or control: see the descriptions in its patch schema. A {"$ref":"#/definitions/X"} refers to X under Definitions at the end. A field with "function" takes the JavaScript source of a one-argument function: arg is what it receives, returns what it must return.`
 const specRuntime = `- A control reports only while a script is inside ui.draw(), one action per draw; actions taken at other times, while a script runs or after it has ended, are dropped.
+- When a script part completes execution, the app keeps its last drawn screen and waits for the next script. Buttons do nothing until you send the next script with island_continue. To close the app from a script, call ui.end() explicitly.
 - A value that doesn't match its schema throws at the call; a failing app function throws its error, which may carry a value in e.value.
 - Your other tools are globals here too, named <module>__<tool>(args), such as files__read or page__tool; they run synchronously and return their result.
 `
@@ -32,6 +34,7 @@ var errUnmounted = errors.New(unmountedMessage)
 var errNothingToContinue = errors.New(nothingToContinueMessage)
 var errNothingToStop = errors.New(nothingToStopMessage)
 var errStopped = errors.New(stoppedMessage)
+var errEnded = errors.New(endedMessage)
 var errOvertaken = errors.New(overtakenMessage)
 var errTurnTime = errors.New(turnTimeMessage)
 var errFnTime = errors.New(fnTimeMessage)
@@ -40,6 +43,7 @@ var errQueueFull = errors.New(queueFullMessage)
 var errScriptRejected = errors.New(scriptRejectedMessage)
 
 var stoppedResult = json.RawMessage(`"` + stoppedMessage + `"`)
+var endedResult = json.RawMessage(`"` + endedMessage + `"`)
 var overtakenResult = json.RawMessage(`"` + overtakenMessage + `"`)
 
 func runningStatus(task uint) string {
