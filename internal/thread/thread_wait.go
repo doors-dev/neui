@@ -196,6 +196,7 @@ func (s threadWait) on(cmd any) {
 			s.thread.link.send(newMessageEvent(nil, api.ChatEventTasks{Tasks: s.thread.link.taskList()}))
 		}
 		s.thread.rewindAttachments(removed, cmd.input)
+		s.thread.link.pageModule.Reset()
 		if err := s.thread.sweepDrafts(); err != nil {
 			doors.Logger(s.thread.link.backend.Context()).Error("thread: draft sweep failed", "thread", s.thread.id, "err", err)
 		}

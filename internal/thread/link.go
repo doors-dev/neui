@@ -25,7 +25,8 @@ func newLink(thread *thread, backend *common.Backend, page page.Page, meta any) 
 	ctx, cancel := context.WithCancel(backend.Context())
 	toolkit := toolkit.NewToolkit(ctx, backend.Modules()...)
 	linkCtx, linkCancel := context.WithCancel(ctx)
-	linkToolkit := toolkit.Wrap(linkCtx, page.Module)
+	pageModule := page.Module()
+	linkToolkit := toolkit.Wrap(linkCtx, func(context.Context) common.Module { return pageModule })
 	return &link{
 		thread:      thread,
 		backend:     backend,
@@ -38,6 +39,7 @@ func newLink(thread *thread, backend *common.Backend, page page.Page, meta any) 
 		toolkit:     toolkit,
 		linkToolkit: linkToolkit,
 		page:        page,
+		pageModule:  pageModule,
 		linkTasks:   &linkTasks{thread: thread},
 		meta:        meta,
 	}
@@ -55,6 +57,7 @@ type link struct {
 	toolkit     toolkit.Toolkit
 	linkToolkit toolkit.Toolkit
 	page        page.Page
+	pageModule  page.Module
 	once        sync.Once
 	meta        any
 	*linkTasks
@@ -141,13 +144,7 @@ func (l *link) useTools(roundID api.RoundID, tools []api.ContentToolUse) (<-chan
 				}
 			}
 			if size > budget {
-				human := fmt.Sprintf("%d bytes", size)
-				if size >= 1<<20 {
-					human = fmt.Sprintf("%.1f MB", float64(size)/(1<<20))
-				} else if size >= 1<<10 {
-					human = fmt.Sprintf("%.1f KB", float64(size)/(1<<10))
-				}
-				note := fmt.Sprintf("Result omitted: it was %s, more than a turn's tool results can hold. Ask for less, or process it in a script.", human)
+				note := replay.OmittedNote(size)
 				res = api.ContentToolResult{ID: res.ID, Content: api.UserContents{api.ContentText{Text: note}}, Error: res.Error}
 				size = len(note)
 			}
@@ -178,7 +175,8 @@ func (l *link) dispose() {
 func (l *link) inherit(page page.Page, meta any) *link {
 	l.linkCancel()
 	linkCtx, linkCancel := context.WithCancel(l.ctx)
-	linkToolkit := l.toolkit.Wrap(linkCtx, page.Module)
+	pageModule := page.Module()
+	linkToolkit := l.toolkit.Wrap(linkCtx, func(context.Context) common.Module { return pageModule })
 	return &link{
 		thread:      l.thread,
 		backend:     l.backend,
@@ -191,6 +189,7 @@ func (l *link) inherit(page page.Page, meta any) *link {
 		toolkit:     l.toolkit,
 		linkToolkit: linkToolkit,
 		page:        page,
+		pageModule:  pageModule,
 		linkTasks:   l.linkTasks,
 		meta:        meta,
 	}

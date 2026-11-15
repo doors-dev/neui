@@ -534,6 +534,7 @@ func (t *thread) applyCompaction(cmd commandApplyCompaction) bool {
 		t.criticalErr(nil, err)
 		return false
 	}
+	t.link.pageModule.Reset()
 	usage := t.replay.Usage()
 	t.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: usage, Final: false, CanCompact: t.canCompact()}))
 	return true

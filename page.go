@@ -28,7 +28,8 @@ type Space struct {
 	// Name is the space's segment of the path. Names are reduced to ASCII
 	// letters, digits and _ (runs of other characters become one _); names
 	// that reduce to the same value replace each other, and a name with no
-	// letter or digit becomes empty. A sibling rendered later with the same
+	// letter or digit is replaced by one made from its hash and logged. An
+	// empty name fails the render. A sibling rendered later with the same
 	// name replaces the earlier one.
 	Name string
 	// Desc tells the agent what the region is and what it is for.
@@ -62,13 +63,13 @@ type Tool[I any, O any] struct {
 	// agent call to a module tool, a string or fmt.Stringer result reaches
 	// the agent as text, an api content value as itself and anything else as
 	// JSON; a script receives the value as JSON, and a page tool's output is
-	// wrapped with the space's new seq and changes. An error is reported to
-	// the agent as the call's failure; one that is or wraps an api.Container
-	// or api.MultiContainer carries that content, which a script finds as
-	// JSON in the thrown error's value property. ctx works with the Tool*
-	// functions; for a tool rendered on a page it is also a doors context of
-	// that render, so the handler can update the page, and it runs once the
-	// page has settled.
+	// the output field of the page call's result, next to what the call
+	// changed on the page. An error is reported to the agent as the call's
+	// failure; one that is or wraps an api.Container or api.MultiContainer
+	// carries that content, which a script finds as JSON in the thrown
+	// error's value property. ctx works with the Tool* functions; for a tool
+	// rendered on a page it is also a doors context of that render, so the
+	// handler can update the page, and it runs once the page has settled.
 	Handler func(ctx context.Context, i I) (O, error)
 }
 
@@ -114,7 +115,9 @@ func (a Ask[I, O]) ask() {}
 
 // Data attaches information for the agent to the space it is rendered in,
 // such as the records a view shows or hints on how to use it. The agent reads
-// it when it syncs the page; it need not match what the screen displays.
+// it when it syncs the page; it need not match what the screen displays. It
+// is encoded once when it renders: render it again to change what the agent
+// sees.
 type Data struct {
 	// Text is a note in plain words, on its own or saying what Object is.
 	Text string
@@ -123,7 +126,8 @@ type Data struct {
 }
 
 // Main adds the data to the space it is rendered in, for as long as that
-// render lives. It renders nothing.
+// render lives. It renders nothing; the render fails when Object cannot be
+// encoded to JSON.
 func (d Data) Main() gox.Elem {
 	return gox.Elem(func(cur gox.Cursor) error {
 		ctx := cur.Context()
@@ -288,7 +292,8 @@ type Island struct {
 	// Name is the island space's segment of the path. Names are reduced to
 	// ASCII letters, digits and _ (runs of other characters become one _);
 	// names that reduce to the same value replace each other, and a name
-	// with no letter or digit becomes empty.
+	// with no letter or digit is replaced by one made from its hash and
+	// logged. An empty name fails the render.
 	Name string
 	// Desc tells the agent what the island is for.
 	Desc string

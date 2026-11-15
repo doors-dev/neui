@@ -3,12 +3,14 @@ package page
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
 
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
+	"github.com/zeebo/xxh3"
 )
 
 type Rights string
@@ -20,16 +22,21 @@ const (
 )
 
 type input struct {
-	ctx       context.Context          `json:"-"`
 	ID        uint                     `json:"id" description:"pass to read, write, click and focus"`
 	Kind      kind                     `json:"kind" description:"button, link, input or radio; button and link take click, input and radio take write; a radio entry stands for its whole same-name group"`
+	Type      string                   `json:"type" description:"html flavor of the element"`
+	Desc      string                   `json:"desc"`
+	Rights    Rights                   `json:"rights" description:"RW allows every call, R only read and focus, W only click, write and focus"`
+	ctx       context.Context          `json:"-"`
 	elementID string                   `json:"-"`
 	members   map[uint]context.Context `json:"-"`
-	Desc      string                   `json:"desc"`
-	Type      string                   `json:"type" description:"html flavor of the element"`
-	Name      string                   `json:"name,omitempty" description:"html name attribute"`
-	Rights    Rights                   `json:"rights" description:"RW allows every call, R only read and focus, W only click, write and focus"`
-	Disabled  bool                     `json:"disabled,omitempty" description:"present and true when the element is disabled"`
+	name      string                   `json:"-"`
+	raw       json.RawMessage          `json:"-"`
+	hash      uint64                   `json:"-"`
+}
+
+func (in input) MarshalJSON() ([]byte, error) {
+	return in.raw, nil
 }
 
 type kind string
@@ -42,14 +49,13 @@ const (
 )
 
 type inputs struct {
-	counter uint
-	member  uint
-	list    []input
+	member uint
+	list   []input
 }
 
 func (s *space) elementID() (uint, string) {
-	s.counter += 1
-	return s.counter, fmt.Sprintf("%s-%d", s.path, s.counter)
+	s.root.counter += 1
+	return s.root.counter, fmt.Sprintf("%s-%d", s.path, s.root.counter)
 }
 
 func searchInput(list []input, id uint) (int, bool) {
@@ -91,7 +97,7 @@ func (s Space) Radio(ctx context.Context, permissios Rights, desc string, attrs 
 	name, _ := attrs.Get("name").Value().(string)
 	group := -1
 	for i := range s.list {
-		if name != "" && s.list[i].Kind == kindRadio && s.list[i].Name == name {
+		if name != "" && s.list[i].Kind == kindRadio && s.list[i].name == name {
 			group = i
 			break
 		}
@@ -103,8 +109,7 @@ func (s Space) Radio(ctx context.Context, permissios Rights, desc string, attrs 
 	var elementID string
 	if group < 0 {
 		id, elementID = s.elementID()
-		s.bump()
-		s.list = append(s.list, input{
+		in := input{
 			ctx:       memberCtx,
 			ID:        id,
 			Kind:      kindRadio,
@@ -112,9 +117,17 @@ func (s Space) Radio(ctx context.Context, permissios Rights, desc string, attrs 
 			members:   map[uint]context.Context{member: memberCtx},
 			Desc:      desc,
 			Type:      "radio",
-			Name:      name,
+			name:      name,
 			Rights:    permissios,
-		})
+		}
+		type bare input
+		raw, err := json.Marshal(bare(in))
+		if err != nil {
+			s.root.mu.Unlock()
+			return nil, err
+		}
+		in.raw, in.hash = raw, xxh3.Hash(raw)
+		s.list = append(s.list, in)
 	} else {
 		id = s.list[group].ID
 		elementID = s.list[group].elementID
@@ -135,7 +148,6 @@ func (s Space) Radio(ctx context.Context, permissios Rights, desc string, attrs 
 		delete(s.list[i].members, member)
 		if len(s.list[i].members) == 0 {
 			s.list = slices.Delete(s.list, i, i+1)
-			s.bump()
 			return
 		}
 		for _, memberCtx := range s.list[i].members {
@@ -158,12 +170,10 @@ func (s Space) element(ctx context.Context, permissios Rights, desc string, attr
 	}
 	id, elementID := s.elementID()
 	idAttr.Set(elementID)
-	s.bump()
 	if t, ok := attrs.Get("type").Value().(string); ok {
 		typ = t
 	}
-	name, _ := attrs.Get("name").Value().(string)
-	s.list = append(s.list, input{
+	in := input{
 		ctx:       doors.DetachedContext(ctx),
 		ID:        id,
 		Kind:      kind,
@@ -171,9 +181,15 @@ func (s Space) element(ctx context.Context, permissios Rights, desc string, attr
 		Desc:      desc,
 		Rights:    permissios,
 		Type:      typ,
-		Name:      name,
-		Disabled:  attrs.Get("disabled").IsSet(),
-	})
+	}
+	type bare input
+	raw, err := json.Marshal(bare(in))
+	if err != nil {
+		s.root.mu.Unlock()
+		return nil, err
+	}
+	in.raw, in.hash = raw, xxh3.Hash(raw)
+	s.list = append(s.list, in)
 	s.root.mu.Unlock()
 	doors.OnClean(ctx, func() {
 		s.root.mu.Lock()
@@ -183,27 +199,26 @@ func (s Space) element(ctx context.Context, permissios Rights, desc string, attr
 		}
 		if i, ok := searchInput(s.list, id); ok {
 			s.list = slices.Delete(s.list, i, i+1)
-			s.bump()
 		}
 	})
 	return script(elementID), nil
 }
 
-func (s *space) getInput(path []string, seq uint, id uint) (*space, input, error) {
-	if len(path) == 0 || (len(path) == 1 && path[0] == "") {
-		if s.seq != seq {
-			return nil, input{}, fmt.Errorf("seq of space %q: %w", s.path, errSeqMismatch)
-		}
-		i, ok := searchInput(s.list, id)
-		if !ok {
-			return nil, input{}, fmt.Errorf("input %d in space %q: %w", id, s.path, errInputNotFound)
-		}
-		return s, s.list[i], nil
-	}
-	child := path[0]
-	index, ok := s.search(child)
+func (s *space) getInput(id uint, action string) (input, error) {
+	i, ok := searchInput(s.list, id)
 	if !ok {
-		return nil, input{}, fmt.Errorf("space %q under %q: %w", child, s.path, errSpaceNotFound)
+		return input{}, fmt.Errorf("input %d in space %q: %w", id, s.path, errInputNotFound)
 	}
-	return s.children[index].getInput(slices.Delete(path, 0, 1), seq, id)
+	in := s.list[i]
+	switch action {
+	case "read":
+		if in.Rights == W {
+			return input{}, fmt.Errorf("%q on input %d with rights %s: %w", action, id, in.Rights, errRights)
+		}
+	case "click", "input":
+		if in.Rights == R {
+			return input{}, fmt.Errorf("%q on input %d with rights %s: %w", action, id, in.Rights, errRights)
+		}
+	}
+	return in, nil
 }

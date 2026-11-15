@@ -41,9 +41,9 @@ func carries(t *testing.T, record string, want ...string) {
 func TestIslandDrawReturnsAfterTimeout(t *testing.T) {
 	marks := make(chan int)
 	p := testkit.NewProvider(api.Model{},
-		testkit.Call("page__sync", map[string]any{"path": "", "depth": 1}),
-		boardSeq(t, func(seq uint) testkit.Turn {
-			return start(seq, `ui.root.set(ui.column({})); var r = ui.draw(1); app.mark({N: r === null ? 1 : 0}); ui.notify({drawn: r})`)
+		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
+		revised(t, func(revision string) testkit.Turn {
+			return start(revision, `ui.root.set(ui.column({})); var r = ui.draw(1); app.mark({N: r === null ? 1 : 0}); ui.notify({drawn: r})`)
 		}),
 		testkit.Say("started"),
 		testkit.Say("noted"),
@@ -63,30 +63,25 @@ func TestIslandDrawReturnsAfterTimeout(t *testing.T) {
 	carries(t, lastText(p.Request(t, 3)), `<task_notify `, `kind="notifications_list"`, `script="1"`, `[{"drawn":null}]`)
 }
 
-func pressSynced(t *testing.T, then func(seq uint, input uint) testkit.Turn) testkit.Turn {
+func pressSynced(t *testing.T, then func(input uint) testkit.Turn) testkit.Turn {
 	return testkit.Then(func(r api.Request) testkit.Turn {
-		var s struct {
-			Space struct {
-				Seq    uint
-				Inputs []struct{ ID uint }
-			}
-		}
+		var s struct{ Inputs []struct{ ID uint } }
 		testkit.Decode(t, testkit.Results(r)[0], &s)
-		if len(s.Space.Inputs) != 1 {
-			t.Errorf("the press space synced as %+v, want one input", s.Space)
+		if len(s.Inputs) != 1 {
+			t.Errorf("the press space synced as %+v, want one input", s)
 			return testkit.Say("lost")
 		}
-		return then(s.Space.Seq, s.Space.Inputs[0].ID)
+		return then(s.Inputs[0].ID)
 	})
 }
 
-func pressScript(t *testing.T, shown <-chan string, then func(seq uint, input uint) testkit.Turn) *testkit.Provider {
+func pressScript(t *testing.T, shown <-chan string, then func(input uint) testkit.Turn) *testkit.Provider {
 	return testkit.NewProvider(api.Model{},
-		testkit.Call("page__sync", map[string]any{"path": "", "depth": 1}),
-		boardSeq(t, func(seq uint) testkit.Turn {
-			return start(seq, `var b = ui.press({label: "go", value: "(n) => app.mark({N: n}) * 2"}); ui.root.set(b); var r = ui.draw(); ui.notify(r); ui.draw(1)`)
+		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
+		revised(t, func(revision string) testkit.Turn {
+			return start(revision, `var b = ui.press({label: "go", value: "(n) => app.mark({N: n}) * 2"}); ui.root.set(b); var r = ui.draw(); ui.notify(r); ui.draw(1)`)
 		}),
-		shownThen(t, shown, testkit.Call("page__sync", map[string]any{"path": "board.screen.press_1", "depth": 0})),
+		shownThen(t, shown, testkit.Call("page__sync", map[string]any{"path": "board.screen.press_1"})),
 		pressSynced(t, then),
 		testkit.Say("pressed"),
 	)
@@ -95,8 +90,8 @@ func pressScript(t *testing.T, shown <-chan string, then func(seq uint, input ui
 func TestIslandSubmitAnswersDraw(t *testing.T) {
 	marks := make(chan int, 1)
 	shown := make(chan string, 1)
-	p := pressScript(t, shown, func(seq uint, _ uint) testkit.Turn {
-		return testkit.Call("page__tool", map[string]any{"path": "board.screen.press_1", "seq": seq, "tool": "press", "arg": map[string]any{}})
+	p := pressScript(t, shown, func(uint) testkit.Turn {
+		return testkit.Call("page__tool", map[string]any{"path": "board.screen.press_1", "tool": "press", "arg": map[string]any{}})
 	})
 	c := stack.Browser(t, stack.Host{Provider: p, Page: board(marks, shown)})
 	c.Send("press it")
@@ -115,8 +110,8 @@ func TestIslandSubmitAnswersDraw(t *testing.T) {
 func TestIslandControlClickSubmits(t *testing.T) {
 	marks := make(chan int, 1)
 	shown := make(chan string, 1)
-	p := pressScript(t, shown, func(seq uint, input uint) testkit.Turn {
-		return testkit.Call("page__click", map[string]any{"path": "board.screen.press_1", "seq": seq, "id": input})
+	p := pressScript(t, shown, func(input uint) testkit.Turn {
+		return testkit.Call("page__click", map[string]any{"path": "board.screen.press_1", "id": input})
 	})
 	c := stack.Browser(t, stack.Host{Provider: p, Page: board(marks, shown)})
 	c.Send("press it")
@@ -136,9 +131,9 @@ func TestIslandInterruptHandsOverTheUI(t *testing.T) {
 	marks := make(chan int)
 	shown := make(chan string, 1)
 	p := testkit.NewProvider(api.Model{},
-		testkit.Call("page__sync", map[string]any{"path": "", "depth": 1}),
-		boardSeq(t, func(seq uint) testkit.Turn {
-			return start(seq, `var b = ui.press({label: "wait", value: "(n) => n"}); ui.root.set(b); while (true) { ui.draw() }`)
+		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
+		revised(t, func(revision string) testkit.Turn {
+			return start(revision, `var b = ui.press({label: "wait", value: "(n) => n"}); ui.root.set(b); while (true) { ui.draw() }`)
 		}),
 		shownThen(t, shown, testkit.Call("page__island_continue", map[string]any{"path": "board", "code": `app.mark({N: 2}); ui.notify({kept: b.id})`, "interrupt": true})),
 		testkit.Say("continued"),
@@ -173,9 +168,9 @@ func TestIslandInterruptHandsOverTheUI(t *testing.T) {
 func TestIslandStopEndsTask(t *testing.T) {
 	shown := make(chan string, 1)
 	p := testkit.NewProvider(api.Model{},
-		testkit.Call("page__sync", map[string]any{"path": "", "depth": 1}),
-		boardSeq(t, func(seq uint) testkit.Turn {
-			return start(seq, `ui.root.set(ui.press({label: "wait", value: "(n) => n"})); while (true) { ui.draw() }`)
+		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
+		revised(t, func(revision string) testkit.Turn {
+			return start(revision, `ui.root.set(ui.press({label: "wait", value: "(n) => n"})); while (true) { ui.draw() }`)
 		}),
 		shownThen(t, shown, testkit.Call("page__island_stop", map[string]any{"path": "board"})),
 		testkit.Say("stopped"),
@@ -192,62 +187,53 @@ func TestIslandStopEndsTask(t *testing.T) {
 	}
 }
 
-type screenTree struct {
-	Space struct {
-		Data []struct {
-			Text   string
-			Object any
-		}
-		Children map[string]struct {
-			Seq    uint
-			Inputs []struct {
-				ID   uint
-				Desc string
-			}
-		}
+type inputs struct {
+	Inputs []struct {
+		ID   uint
+		Desc string
 	}
 }
 
-func screenOf(t *testing.T, r api.ContentToolResult) (string, screenTree) {
+func screenOf(t *testing.T, results []api.ContentToolResult) (string, []string) {
 	t.Helper()
-	var s screenTree
-	testkit.Decode(t, r, &s)
-	for _, d := range s.Space.Data {
-		if d.Text == "status" {
-			text, _ := d.Object.(string)
-			return text, s
+	var labels []string
+	for _, r := range results[1:] {
+		if r.Error != api.ToolOk {
+			continue
+		}
+		var child inputs
+		testkit.Decode(t, r, &child)
+		for _, in := range child.Inputs {
+			labels = append(labels, in.Desc)
 		}
 	}
-	t.Fatalf("the screen synced as %+v, want a status", s.Space)
-	return "", s
+	return statusOf(t, results[0]), labels
 }
 
-func labels(s screenTree) []string {
-	var all []string
-	for _, child := range s.Space.Children {
-		for _, in := range child.Inputs {
-			all = append(all, in.Desc)
-		}
+func syncScreen(children ...string) testkit.Turn {
+	events := []api.Event{api.EventStart{ID: "screen", Model: "fake"}}
+	for i, path := range append([]string{"board.screen"}, children...) {
+		events = append(events, api.EventTool{Index: i, ID: path, Name: "page__sync", Args: `{"path":"` + path + `"}`}, api.EventClose{Index: i})
 	}
-	return all
+	return testkit.Events(append(events, api.EventOk{Code: api.CodeTurn})...)
 }
 
 func TestIslandOvertakeStatusNamesNewTaskBeforeItsFirstDraw(t *testing.T) {
 	marks := make(chan int)
 	shown := make(chan string, 1)
-	var boardAt uint
+	var boardAt string
 	p := testkit.NewProvider(api.Model{},
-		testkit.Call("page__sync", map[string]any{"path": "", "depth": 1}),
-		boardSeq(t, func(seq uint) testkit.Turn {
-			boardAt = seq
-			return start(seq, `ui.root.set(ui.press({label: "old", value: "(n) => n"})); while (true) { ui.draw() }`)
+		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
+		revised(t, func(revision string) testkit.Turn {
+			boardAt = revision
+			return start(revision, `ui.root.set(ui.press({label: "old", value: "(n) => n"})); while (true) { ui.draw() }`)
 		}),
 		shownThen(t, shown, testkit.Then(func(api.Request) testkit.Turn {
 			return start(boardAt, `app.mark({N: 1}); ui.root.set(ui.press({label: "new", value: "(n) => n"})); while (true) { ui.draw() }`)
 		})),
-		testkit.Call("page__sync", map[string]any{"path": "board.screen", "depth": 1}),
+		syncScreen("board.screen.press_1"),
 		testkit.Say("seen the old screen"),
-		testkit.Call("page__sync", map[string]any{"path": "board.screen", "depth": 1}),
+		syncScreen("board.screen.press_1"),
 		testkit.Say("seen the new screen"),
 	)
 	c := stack.Browser(t, stack.Host{Provider: p, Page: board(marks, shown)})
@@ -258,11 +244,11 @@ func TestIslandOvertakeStatusNamesNewTaskBeforeItsFirstDraw(t *testing.T) {
 	if s != (started{Task: 2, Script: 1}) {
 		t.Fatalf("the overtaking start answered %+v, want task 2 script 1", s)
 	}
-	status, screen := screenOf(t, testkit.Results(p.Request(t, 4))[0])
+	status, screen := screenOf(t, testkit.Results(p.Request(t, 4)))
 	if !strings.Contains(status, "task 2") {
 		t.Fatalf("before the new run's first draw the status is %q, want it to name task 2", status)
 	}
-	if got := labels(screen); !slices.Equal(got, []string{"old"}) {
+	if got := screen; !slices.Equal(got, []string{"old"}) {
 		t.Fatalf("before the new run's first draw the screen shows %v, want the old press", got)
 	}
 	select {
@@ -280,11 +266,11 @@ func TestIslandOvertakeStatusNamesNewTaskBeforeItsFirstDraw(t *testing.T) {
 	}
 	c.Send("look again")
 	c.Wait()
-	status, screen = screenOf(t, testkit.Results(p.Request(t, 6))[0])
+	status, screen = screenOf(t, testkit.Results(p.Request(t, 6)))
 	if !strings.Contains(status, "task 2") {
 		t.Fatalf("after the new run's first draw the status is %q, want it to name task 2", status)
 	}
-	if got := labels(screen); !slices.Equal(got, []string{"new"}) {
+	if got := screen; !slices.Equal(got, []string{"new"}) {
 		t.Fatalf("after the new run's first draw the screen shows %v, want the new press", got)
 	}
 }
@@ -319,9 +305,9 @@ func buttons(drawn chan<- struct{}) gox.Elem {
 func TestIslandButtonWithAgentIsClickableAndSubmitsItsValue(t *testing.T) {
 	drawn := make(chan struct{}, 1)
 	p := testkit.NewProvider(api.Model{},
-		testkit.Call("page__sync", map[string]any{"path": "", "depth": 1}),
-		boardSeq(t, func(seq uint) testkit.Turn {
-			return start(seq, `ui.root.set(ui.column({}, ui.button({text: "Go", value: "v1", agent: "submits go"}), ui.button({text: "Plain", value: "v2"}))); ui.notify(ui.draw()); ui.draw(1)`)
+		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
+		revised(t, func(revision string) testkit.Turn {
+			return start(revision, `ui.root.set(ui.column({}, ui.button({text: "Go", value: "v1", agent: "submits go"}), ui.button({text: "Plain", value: "v2"}))); ui.notify(ui.draw()); ui.draw(1)`)
 		}),
 		testkit.Then(func(api.Request) testkit.Turn {
 			select {
@@ -329,16 +315,18 @@ func TestIslandButtonWithAgentIsClickableAndSubmitsItsValue(t *testing.T) {
 			case <-time.After(10 * time.Second):
 				t.Error("the buttons were never drawn")
 			}
-			return testkit.Call("page__sync", map[string]any{"path": "board.screen", "depth": 1})
+			return syncScreen("board.screen.button_1", "board.screen.button_2")
 		}),
 		testkit.Then(func(r api.Request) testkit.Turn {
-			_, s := screenOf(t, testkit.Results(r)[0])
-			agent, plain := s.Space.Children["button_1"], s.Space.Children["button_2"]
+			results := testkit.Results(r)
+			var agent, plain inputs
+			testkit.Decode(t, results[1], &agent)
+			testkit.Decode(t, results[2], &plain)
 			if len(agent.Inputs) != 1 || agent.Inputs[0].Desc != "submits go" || len(plain.Inputs) != 0 {
-				t.Errorf("the buttons synced as %+v, want only the agent one as an input", s.Space.Children)
+				t.Errorf("the buttons synced as %+v and %+v, want only the agent one as an input", agent, plain)
 				return testkit.Say("lost")
 			}
-			return testkit.Call("page__click", map[string]any{"path": "board.screen.button_1", "seq": agent.Seq, "id": agent.Inputs[0].ID})
+			return testkit.Call("page__click", map[string]any{"path": "board.screen.button_1", "id": agent.Inputs[0].ID})
 		}),
 		testkit.Say("clicked"),
 		testkit.Say("noted"),

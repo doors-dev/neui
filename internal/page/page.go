@@ -4,30 +4,25 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-
-	"github.com/doors-dev/doors"
 	"strings"
 	"sync"
-	"sync/atomic"
 
+	"github.com/doors-dev/doors"
+	"github.com/zeebo/xxh3"
 	"neui.dev/internal/common"
 	"neui.dev/internal/island"
 	"neui.dev/internal/replay"
-	"neui.dev/internal/schema"
 	"neui.dev/internal/tools"
+	"neui.dev/internal/utils"
 )
 
 type Page = *page
 
 func NewPage(ctx context.Context) Page {
 	root := &page{}
-	seq := root.adv()
 	root.space = &space{
-		root:     root,
-		ctx:      ctx,
-		seq:      seq,
-		deltaSeq: seq,
-		actions:  tools.NewModule("root", ""),
+		root: root,
+		ctx:  ctx,
 	}
 	return root
 }
@@ -46,132 +41,188 @@ func (s Page) Context() context.Context {
 	return s.space.ctx
 }
 
-func (s *page) Module(ctx context.Context) common.Module {
-	pageModule := tools.NewModule(moduleName, moduleDesc+"\n\n"+islandsDesc)
-	synced := atomic.Bool{}
-	toolInput, err := schema.NewSchema[toolArg]()
-	if err != nil {
-		panic(err)
+type Module = *module
+
+type module struct {
+	tools.Module
+	page  *page
+	snaps map[string]snapshot
+}
+
+type snapshot struct {
+	by     uint64
+	digest [4]uint64
+	state  state
+}
+
+type permit struct {
+	module *module
+	path   string
+	old    snapshot
+	before map[string][4]uint64
+}
+
+func (p *page) Module() Module {
+	m := &module{
+		Module: tools.NewModule(moduleName, moduleDesc+"\n\n"+islandsDesc),
+		page:   p,
+		snaps:  map[string]snapshot{},
 	}
-	toolOutput, err := schema.NewSchema[toolResult[any]]()
-	if err != nil {
-		panic(err)
-	}
-	toolInputRaw, err := schema.NewRawSchema(json.RawMessage(toolInput.Raw()))
-	if err != nil {
-		panic(err)
-	}
-	toolOutputRaw, err := schema.NewRawSchema(json.RawMessage(toolOutput.Raw()))
-	if err != nil {
-		panic(err)
-	}
-	_, err = pageModule.AddRaw(toolName, toolDesc, toolInputRaw, toolOutputRaw, func(ctx context.Context, raw json.RawMessage) (any, error) {
-		if !synced.Load() {
-			return nil, errSync
-		}
-		input, err := toolInput.Decode(raw)
+	_, err := m.Add(toolName, toolDesc, func(ctx context.Context, arg toolArg) (toolResult, error) {
+		var t *tool
+		a, err := m.act(ctx, arg.Path, true, func(s *space) error {
+			i, ok := s.searchTool(utils.SanitizeName(arg.Tool))
+			if !ok {
+				return fmt.Errorf("tool %q in space %q: %w", arg.Tool, s.path, errToolNotFound)
+			}
+			t = s.tools[i]
+			return nil
+		})
 		if err != nil {
-			return nil, err
+			return toolResult{}, err
 		}
-		return s.tool(ctx, input)
-	})
-	if err != nil {
-		panic(err)
-	}
-	_, err = pageModule.Add(readName, readDesc, func(ctx context.Context, arg inputRef) (readResult, error) {
-		if !synced.Load() {
-			return readResult{}, errSync
+		out, err := t.call(ctx, arg.Arg)
+		if err != nil {
+			return toolResult{}, err
 		}
-		res, _, _, err := dispatch[readResult](s, ctx, arg, "read", nil)
+		raw, err := json.Marshal(out)
+		if err != nil {
+			return toolResult{}, err
+		}
+		res := toolResult{Output: json.RawMessage(raw)}
+		if !fits(ctx, res.Output) {
+			res.Output = replay.OmittedNote(len(raw))
+		}
+		err = a.report(ctx, &res, &res.report)
 		return res, err
 	})
 	if err != nil {
 		panic(err)
 	}
-	_, err = pageModule.Add(writeName, writeDesc, func(ctx context.Context, arg writeArg) (hookResult, error) {
-		if !synced.Load() {
-			return hookResult{}, errSync
+	_, err = m.Add(readName, readDesc, func(ctx context.Context, arg inputRef) (readResult, error) {
+		var in input
+		_, err := m.act(ctx, arg.Path, false, func(s *space) (err error) {
+			in, err = s.getInput(arg.ID, "read")
+			return err
+		})
+		if err != nil {
+			return readResult{}, err
 		}
-		res, target, before, err := dispatch[hookResult](s, ctx, inputRef{Path: arg.Path, Seq: arg.Seq, ID: arg.ID}, "input", arg.Value)
+		return dispatch[readResult](ctx, in, "read", nil)
+	})
+	if err != nil {
+		panic(err)
+	}
+	_, err = m.Add(writeName, writeDesc, func(ctx context.Context, arg writeArg) (hookResult, error) {
+		var in input
+		a, err := m.act(ctx, arg.Path, true, func(s *space) (err error) {
+			in, err = s.getInput(arg.ID, "input")
+			return err
+		})
 		if err != nil {
 			return hookResult{}, err
 		}
-		s.mu.Lock()
-		if target.ctx.Err() == nil {
-			res.Seq = target.seq
-		}
-		res.Changes, err = s.collectChanges(changesArg{SincePageSeq: before})
-		s.mu.Unlock()
-		return res, err
-	})
-	if err != nil {
-		panic(err)
-	}
-	_, err = pageModule.Add(clickName, clickDesc, func(ctx context.Context, arg inputRef) (hookResult, error) {
-		if !synced.Load() {
-			return hookResult{}, errSync
-		}
-		res, target, before, err := dispatch[hookResult](s, ctx, arg, "click", nil)
+		res, err := dispatch[hookResult](ctx, in, "input", arg.Value)
 		if err != nil {
 			return hookResult{}, err
 		}
-		s.mu.Lock()
-		if target.ctx.Err() == nil {
-			res.Seq = target.seq
-		}
-		res.Changes, err = s.collectChanges(changesArg{SincePageSeq: before})
-		s.mu.Unlock()
+		err = a.report(ctx, &res, &res.report)
 		return res, err
 	})
 	if err != nil {
 		panic(err)
 	}
-	_, err = pageModule.Add(focusName, focusDesc, func(ctx context.Context, arg inputRef) (struct{}, error) {
-		if !synced.Load() {
-			return struct{}{}, errSync
-		}
-		_, _, _, err := dispatch[struct{}](s, ctx, arg, "focus", nil)
-		return struct{}{}, err
-	})
-	if err != nil {
-		panic(err)
-	}
-	_, err = pageModule.Add(syncName, syncDesc, func(ctx context.Context, arg syncArg) (syncResult, error) {
-		out, err := s.sync(ctx, arg)
+	_, err = m.Add(clickName, clickDesc, func(ctx context.Context, arg inputRef) (hookResult, error) {
+		var in input
+		a, err := m.act(ctx, arg.Path, true, func(s *space) (err error) {
+			in, err = s.getInput(arg.ID, "click")
+			return err
+		})
 		if err != nil {
-			return syncResult{}, err
+			return hookResult{}, err
 		}
-		synced.Store(true)
-		return out, nil
+		res, err := dispatch[hookResult](ctx, in, "click", nil)
+		if err != nil {
+			return hookResult{}, err
+		}
+		err = a.report(ctx, &res, &res.report)
+		return res, err
 	})
 	if err != nil {
 		panic(err)
 	}
-	_, err = pageModule.Add(changesName, changesDesc, func(ctx context.Context, arg changesArg) (changesResult, error) {
-		if !synced.Load() {
-			return changesResult{}, errSync
+	_, err = m.Add(focusName, focusDesc, func(ctx context.Context, arg inputRef) (report, error) {
+		var in input
+		a, err := m.act(ctx, arg.Path, true, func(s *space) (err error) {
+			in, err = s.getInput(arg.ID, "focus")
+			return err
+		})
+		if err != nil {
+			return report{}, err
 		}
-		return s.changes(ctx, arg)
+		if _, err := dispatch[struct{}](ctx, in, "focus", nil); err != nil {
+			return report{}, err
+		}
+		var res report
+		err = a.report(ctx, &res, &res)
+		return res, err
 	})
 	if err != nil {
 		panic(err)
 	}
-	_, err = pageModule.Add(islandSpecName, islandSpecDesc, func(ctx context.Context, arg islandSpecArg) (string, error) {
+	_, err = m.Add(treeName, treeDesc, func(ctx context.Context, arg treeArg) (node, error) {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		if ctx.Err() != nil {
+			return node{}, context.Cause(ctx)
+		}
+		s, err := p.space.find(strings.Split(arg.Path, "."))
+		if err != nil {
+			return node{}, err
+		}
+		depth := uint(3)
+		if arg.Depth != nil {
+			depth = *arg.Depth
+		}
+		return s.tree(depth), nil
+	})
+	if err != nil {
+		panic(err)
+	}
+	_, err = m.Add(syncName, syncDesc, func(ctx context.Context, arg syncArg) (state, error) {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		if ctx.Err() != nil {
+			return state{}, context.Cause(ctx)
+		}
+		s, err := p.space.find(strings.Split(arg.Path, "."))
+		if err != nil {
+			return state{}, err
+		}
+		live := s.snapshot(tools.RunID(ctx))
+		if !fits(ctx, live.state) {
+			return state{}, fmt.Errorf("space %q: %w", s.path, errSpaceTooLarge)
+		}
+		m.snaps[s.path] = live
+		return live.state, nil
+	})
+	if err != nil {
+		panic(err)
+	}
+	_, err = m.Add(islandSpecName, islandSpecDesc, func(ctx context.Context, arg islandSpecArg) (string, error) {
 		if tools.FromJS(ctx) {
 			return "", errIslandFromJS
 		}
-		if !synced.Load() {
-			return "", errSync
-		}
-		island, seq, path, err := s.island(ctx, arg.Path)
+		island, path, err := p.Island(ctx, arg.Path)
 		if err != nil {
 			return "", err
 		}
 		spec, ends, items := island.Spec(ctx, path)
+		revision := xxh3.HashString(spec)
 		ctrl := common.GetController(ctx)
 		limit := replay.RoundItemBudget(ctrl.Config(), ctrl.Model()) / 2
 		part := max(arg.Part, 1)
-		whole := fmt.Sprintf("seq %d\n\n", seq)
+		whole := fmt.Sprintf("revision %016x\n\n", revision)
 		if len(whole)+len(spec) <= limit {
 			if part > 1 {
 				return "", fmt.Errorf("part %d, the spec has 1 in all: %w", part, errIslandSpecPart)
@@ -180,9 +231,9 @@ func (s *page) Module(ctx context.Context) common.Module {
 		}
 		head := func(i int, n int) string {
 			if i < n {
-				return fmt.Sprintf("seq %d\npart %d of %d: call island_spec with part %d for the rest\n\n", seq, i, n, i+1)
+				return fmt.Sprintf("revision %016x\npart %d of %d: call island_spec with part %d for the rest\n\n", revision, i, n, i+1)
 			}
-			return fmt.Sprintf("seq %d\npart %d of %d\n\n", seq, i, n)
+			return fmt.Sprintf("revision %016x\npart %d of %d\n\n", revision, i, n)
 		}
 		room := limit - len(head(len(ends)-1, len(ends)))
 		cuts := []int{0}
@@ -206,22 +257,19 @@ func (s *page) Module(ctx context.Context) common.Module {
 	if err != nil {
 		panic(err)
 	}
-	_, err = pageModule.Add(islandStartName, islandStartDesc, func(ctx context.Context, arg islandStartArg) (islandRunResult, error) {
+	_, err = m.Add(islandStartName, islandStartDesc, func(ctx context.Context, arg islandStartArg) (islandRunResult, error) {
 		if tools.FromJS(ctx) {
 			return islandRunResult{}, errIslandFromJS
-		}
-		if !synced.Load() {
-			return islandRunResult{}, errSync
 		}
 		if (arg.File == "") == (arg.Code == "") {
 			return islandRunResult{}, errFileOrCode
 		}
-		island, seq, path, err := s.island(ctx, arg.Path)
+		island, path, err := p.Island(ctx, arg.Path)
 		if err != nil {
 			return islandRunResult{}, err
 		}
-		if seq != arg.Seq {
-			return islandRunResult{}, errIslandSeqMismatch
+		if spec, _, _ := island.Spec(ctx, path); fmt.Sprintf("%016x", xxh3.HashString(spec)) != arg.Revision {
+			return islandRunResult{}, errIslandRevision
 		}
 		var task, script uint
 		if arg.File != "" {
@@ -234,17 +282,14 @@ func (s *page) Module(ctx context.Context) common.Module {
 	if err != nil {
 		panic(err)
 	}
-	_, err = pageModule.Add(islandContinueName, islandContinueDesc, func(ctx context.Context, arg islandContinueArg) (islandRunResult, error) {
+	_, err = m.Add(islandContinueName, islandContinueDesc, func(ctx context.Context, arg islandContinueArg) (islandRunResult, error) {
 		if tools.FromJS(ctx) {
 			return islandRunResult{}, errIslandFromJS
-		}
-		if !synced.Load() {
-			return islandRunResult{}, errSync
 		}
 		if (arg.File == "") == (arg.Code == "") {
 			return islandRunResult{}, errFileOrCode
 		}
-		island, _, _, err := s.island(ctx, arg.Path)
+		island, _, err := p.Island(ctx, arg.Path)
 		if err != nil {
 			return islandRunResult{}, err
 		}
@@ -259,14 +304,11 @@ func (s *page) Module(ctx context.Context) common.Module {
 	if err != nil {
 		panic(err)
 	}
-	_, err = pageModule.Add(islandStopName, islandStopDesc, func(ctx context.Context, arg islandStopArg) (struct{}, error) {
+	_, err = m.Add(islandStopName, islandStopDesc, func(ctx context.Context, arg islandStopArg) (struct{}, error) {
 		if tools.FromJS(ctx) {
 			return struct{}{}, errIslandFromJS
 		}
-		if !synced.Load() {
-			return struct{}{}, errSync
-		}
-		island, _, _, err := s.island(ctx, arg.Path)
+		island, _, err := p.Island(ctx, arg.Path)
 		if err != nil {
 			return struct{}{}, err
 		}
@@ -275,60 +317,96 @@ func (s *page) Module(ctx context.Context) common.Module {
 	if err != nil {
 		panic(err)
 	}
-	return pageModule
+	return m
+}
+
+func (m Module) Reset() {
+	m.page.mu.Lock()
+	defer m.page.mu.Unlock()
+	clear(m.snaps)
 }
 
 func (s Page) Island(ctx context.Context, path string) (island.Island, string, error) {
-	island, _, path, err := s.island(ctx, path)
-	return island, path, err
-}
-
-func (s *page) island(ctx context.Context, path string) (island.Island, uint, string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if ctx.Err() != nil {
-		return nil, 0, "", context.Cause(ctx)
+		return nil, "", context.Cause(ctx)
 	}
 	return s.space.findIsland(strings.Split(path, "."))
 }
 
-func (s *page) tool(ctx context.Context, arg toolArg) (any, error) {
-	s.mu.Lock()
+func (m *module) act(ctx context.Context, path string, reports bool, find func(s *space) error) (permit, error) {
+	m.page.mu.Lock()
+	defer m.page.mu.Unlock()
 	if ctx.Err() != nil {
-		s.mu.Unlock()
-		return nil, context.Cause(ctx)
+		return permit{}, context.Cause(ctx)
 	}
-	tool, err := s.space.getTool(strings.Split(arg.Path, "."), arg.Seq, arg.Tool)
-	s.mu.Unlock()
+	s, err := m.page.space.find(strings.Split(path, "."))
 	if err != nil {
-		return nil, err
+		return permit{}, err
 	}
-	return tool.Dispatched(ctx, arg.Arg)
+	by := tools.RunID(ctx)
+	old, ok := m.snaps[s.path]
+	if ok && old.by == by && old.digest == s.digest() {
+		if err := find(s); err != nil {
+			return permit{}, err
+		}
+		a := permit{module: m, path: s.path, old: old}
+		if reports {
+			a.before = map[string][4]uint64{}
+			m.page.space.digests(a.before)
+		}
+		return a, nil
+	}
+	live := s.snapshot(by)
+	r := refusal{Refused: refusedUnreadMessage, Space: &live.state}
+	if ok && old.by == by {
+		r = refusal{Refused: refusedChangedMessage, Diff: s.diff(old)}
+	}
+	if !fits(ctx, r) {
+		return permit{}, refusal{Refused: refusedTooLargeMessage}
+	}
+	m.snaps[s.path] = live
+	return permit{}, r
 }
 
-func dispatch[T any](s *page, ctx context.Context, ref inputRef, action string, value any) (T, *space, uint, error) {
-	var res T
-	s.mu.Lock()
+func (a permit) report(ctx context.Context, res any, rep *report) error {
+	p := a.module.page
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	if ctx.Err() != nil {
-		s.mu.Unlock()
-		return res, nil, 0, context.Cause(ctx)
+		return context.Cause(ctx)
 	}
-	target, in, err := s.space.getInput(strings.Split(ref.Path, "."), ref.Seq, ref.ID)
-	before := s.counter
-	s.mu.Unlock()
+	s, err := p.space.find(strings.Split(a.path, "."))
 	if err != nil {
-		return res, nil, 0, err
+		rep.Diff = &diff{Removed: true}
+	} else {
+		rep.Diff = s.diff(a.old)
 	}
-	switch action {
-	case "read":
-		if in.Rights == W {
-			return res, nil, 0, fmt.Errorf("%q on input %d with rights %s: %w", action, ref.ID, in.Rights, errRights)
-		}
-	case "click", "input":
-		if in.Rights == R {
-			return res, nil, 0, fmt.Errorf("%q on input %d with rights %s: %w", action, ref.ID, in.Rights, errRights)
-		}
+	rep.Changes = p.space.changes(a.before, a.path)
+	if !fits(ctx, res) {
+		*rep = report{}
+		return nil
 	}
+	if s == nil {
+		delete(a.module.snaps, a.path)
+	} else {
+		a.module.snaps[a.path] = s.snapshot(a.old.by)
+	}
+	return nil
+}
+
+func fits(ctx context.Context, v any) bool {
+	if !tools.FromAgent(ctx) {
+		return true
+	}
+	raw, err := json.Marshal(v)
+	ctrl := common.GetController(ctx)
+	return err == nil && len(raw) <= replay.RoundItemBudget(ctrl.Config(), ctrl.Model())
+}
+
+func dispatch[T any](ctx context.Context, in input, action string, value any) (T, error) {
+	var res T
 	callCtx, cancel := context.WithCancel(in.ctx)
 	defer cancel()
 	ch := doors.Call(callCtx, doors.ActionEmit[T]{
@@ -340,50 +418,19 @@ func dispatch[T any](s *page, ctx context.Context, ref inputRef, action string, 
 		select {
 		case <-ctx.Done():
 			var t T
-			return t, nil, 0, context.Cause(ctx)
+			return t, context.Cause(ctx)
 		case err, ok := <-ch:
 			var t T
 			if !ok {
-				return t, nil, 0, context.Canceled
+				return t, context.Canceled
 			}
 			if err != nil {
-				return t, nil, 0, err
+				return t, err
 			}
 			if scheduled {
-				return res, target, before, nil
+				return res, nil
 			}
 			scheduled = true
 		}
 	}
-}
-
-func (s *page) sync(ctx context.Context, arg syncArg) (syncResult, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	target, err := s.space.sync(strings.Split(arg.Path, "."), arg.Depth+1)
-	if err != nil {
-		return syncResult{}, err
-	}
-	return syncResult{PageSeq: s.counter, Space: target}, nil
-}
-
-func (s *page) changes(ctx context.Context, arg changesArg) (changesResult, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.collectChanges(arg)
-}
-
-func (s *page) collectChanges(arg changesArg) (changesResult, error) {
-	node, err := s.space.find(strings.Split(arg.Path, "."))
-	if err != nil {
-		return changesResult{}, err
-	}
-	spaces := []*syncSpace{}
-	node.collectChanged(arg.SincePageSeq, &spaces)
-	return changesResult{PageSeq: s.counter, Spaces: spaces}, nil
-}
-
-func (s *page) adv() uint {
-	s.counter += 1
-	return s.counter
 }

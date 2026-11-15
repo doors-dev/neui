@@ -14,11 +14,9 @@ import (
 )
 
 type screenStatus struct {
-	Space struct {
-		Data []struct {
-			Text   string
-			Object any
-		}
+	Data []struct {
+		Text   string
+		Object any
 	}
 }
 
@@ -26,13 +24,13 @@ func statusOf(t *testing.T, r api.ContentToolResult) string {
 	t.Helper()
 	var s screenStatus
 	testkit.Decode(t, r, &s)
-	for _, d := range s.Space.Data {
+	for _, d := range s.Data {
 		if d.Text == "status" {
 			text, _ := d.Object.(string)
 			return text
 		}
 	}
-	t.Fatalf("the screen synced as %+v, want a status", s.Space)
+	t.Fatalf("the screen synced as %+v, want a status", s)
 	return ""
 }
 
@@ -73,17 +71,17 @@ func TestIslandOvertakeWithCanceledCallShowsPlaceholderOnceOldRunEnds(t *testing
 	held := make(chan error, 1)
 	release := make(chan struct{})
 	placeheld := make(chan struct{}, 8)
-	var board uint
+	var board string
 	p := testkit.NewProvider(api.Model{},
-		testkit.Call("page__sync", map[string]any{"path": "", "depth": 1}),
-		boardSeq(t, func(seq uint) testkit.Turn {
-			board = seq
-			return start(seq, `app.hold({})`)
+		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
+		revised(t, func(revision string) testkit.Turn {
+			board = revision
+			return start(revision, `app.hold({})`)
 		}),
 		testkit.Say("started"),
 		testkit.Then(func(api.Request) testkit.Turn { return start(board, `ui.notify(2)`) }),
 		testkit.Say("noted"),
-		testkit.Call("page__sync", map[string]any{"path": "board.screen", "depth": 0}),
+		testkit.Call("page__sync", map[string]any{"path": "board.screen"}),
 		testkit.Call("page__island_continue", map[string]any{"path": "board", "code": `ui.notify(3)`}),
 		testkit.Say("seen"),
 	)
@@ -141,9 +139,9 @@ func TestIslandTurnDeadlineEndsBlockingAppCall(t *testing.T) {
 	release := make(chan struct{})
 	close(release)
 	p := testkit.NewProvider(api.Model{},
-		testkit.Call("page__sync", map[string]any{"path": "", "depth": 1}),
-		boardSeq(t, func(seq uint) testkit.Turn {
-			return start(seq, `app.hold({}); ui.notify("after")`)
+		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
+		revised(t, func(revision string) testkit.Turn {
+			return start(revision, `app.hold({}); ui.notify("after")`)
 		}),
 		testkit.Say("started"),
 		testkit.Say("seen"),

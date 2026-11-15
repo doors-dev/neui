@@ -61,6 +61,16 @@ func RoundItemBudget(config api.ThreadConfig, model api.Model) int {
 	return int(contextBytes * config.ReplayItemShare)
 }
 
+func OmittedNote(size int) string {
+	human := fmt.Sprintf("%d bytes", size)
+	if size >= 1<<20 {
+		human = fmt.Sprintf("%.1f MB", float64(size)/(1<<20))
+	} else if size >= 1<<10 {
+		human = fmt.Sprintf("%.1f KB", float64(size)/(1<<10))
+	}
+	return fmt.Sprintf("Result omitted: it was %s, more than a turn's tool results can hold. Ask for less, or process it in a script.", human)
+}
+
 func capText(c api.ContentToolResult, cap int) api.ContentToolResult {
 	texts := make([]api.ContentText, len(c.Content))
 	indices := make([]int, 0, len(c.Content))

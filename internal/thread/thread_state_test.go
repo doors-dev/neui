@@ -46,6 +46,7 @@ func stubThread(t *testing.T, id api.ThreadID, p api.Provider, config api.Thread
 		linkCtx:    linkCtx,
 		linkCancel: linkCancel,
 		ch:         make(chan Message),
+		pageModule: page.NewPage(ctx).Module(),
 		linkTasks:  &linkTasks{thread: th},
 	}
 	r := replay.NewReplay(ctx, id, messages, backend.Config(), p.Model())
@@ -274,6 +275,7 @@ func TestAskFromBeforeReloadReachesTheNewPage(t *testing.T) {
 		linkCtx:    old.linkCtx,
 		linkCancel: old.linkCancel,
 		ch:         make(chan Message),
+		pageModule: old.pageModule,
 		linkTasks:  old.linkTasks,
 	}
 	result := make(chan error, 1)

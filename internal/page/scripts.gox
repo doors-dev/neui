@@ -30,33 +30,36 @@ elem element(id string) {
 					if (tag === "a") {
 						return { label: el.textContent.trim(), href: el.getAttribute("href") }
 					}
+					const disabled = el.disabled
 					if (tag === "button") {
 						return {
 							...(el.value ? { value: el.value } : {}),
 							label: el.textContent.trim(),
+							disabled,
 						}
 					}
 					if (["submit", "button", "reset"].includes(type)) {
-						return { value: el.value, label: el.value }
+						return { value: el.value, label: el.value, disabled }
 					}
 					if (type === "image") {
-						return { value: el.value, label: el.alt || "" }
+						return { value: el.value, label: el.alt || "", disabled }
 					}
 					if (type === "checkbox") {
-						return { value: el.checked, label }
+						return { value: el.checked, label, disabled }
 					}
 					if (tag === "select") {
 						const options = Array.from(el.options).map((o) => ({
 							value: o.value,
 							label: o.label,
 							selected: o.selected,
+							disabled: o.disabled,
 						}))
 						const value = el.multiple
 							? Array.from(el.selectedOptions).map((o) => o.value)
 							: el.value
-						return { value, options, label }
+						return { value, options, label, disabled }
 					}
-					return { value: el.value, label }
+					return { value: el.value, label, disabled }
 				}
 				case "input": {
 					if (
@@ -118,6 +121,7 @@ elem radioGroup(id string) {
 						value: el.value,
 						label: el.labels && el.labels[0] ? el.labels[0].textContent.trim() : "",
 						selected: el.checked,
+						disabled: el.disabled,
 					}))
 					const checked = els.find((el) => el.checked)
 					return { value: checked ? checked.value : null, options }

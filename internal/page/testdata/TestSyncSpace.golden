@@ -1,0 +1,63 @@
+{
+  "path": "",
+  "desc": "",
+  "tools": [
+    {
+      "name": "checkout",
+      "desc": "starts the checkout\nOutput schema: {\"type\":\"string\"}",
+      "inputSchema": {
+        "type": "object"
+      }
+    }
+  ],
+  "data": [
+    {
+      "text": "the shop"
+    }
+  ],
+  "children": [
+    {
+      "name": "cart",
+      "desc": "the cart"
+    },
+    {
+      "name": "notes",
+      "desc": "the notes"
+    }
+  ]
+}
+{
+  "path": "cart",
+  "desc": "the cart",
+  "tools": [
+    {
+      "name": "add",
+      "desc": "adds an item\nOutput schema: {\"type\":\"string\"}",
+      "inputSchema": {
+        "type": "object"
+      }
+    }
+  ],
+  "inputs": [
+    {
+      "id": 1,
+      "kind": "input",
+      "type": "text",
+      "desc": "the order total",
+      "rights": "R"
+    },
+    {
+      "id": 2,
+      "kind": "button",
+      "type": "button",
+      "desc": "pays the order",
+      "rights": "W"
+    }
+  ],
+  "data": [
+    {
+      "text": "items",
+      "object": 1
+    }
+  ]
+}
