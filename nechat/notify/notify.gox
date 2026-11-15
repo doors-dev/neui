@@ -38,6 +38,7 @@ func kind(err error) string {
 elem Script() {
 	<script>
 		const root = document.currentScript.closest(".nechat-widget")
+		const timers = new Map()
 		const show = (kind) => {
 			let key = ""
 			if (kind === "network") key = "network"
@@ -46,22 +47,15 @@ elem Script() {
 			if (!key) return
 			const box = root.querySelector(".nechat-toasts")
 			if (!box) return
-			const shown = box.querySelector(`.nechat-toast[data-key="${key}"]`)
-			if (shown) {
-				for (const el of [shown, ...shown.querySelectorAll(".nechat-file-fill")]) {
-					el.style.animation = "none"
-					void el.offsetWidth
-					el.style.animation = ""
-				}
-				return
+			let toast = box.querySelector(`.nechat-toast[data-key="${key}"]`)
+			if (!toast) {
+				toast = box
+					.querySelector(`template[data-key="${key}"]`)
+					.content.firstElementChild.cloneNode(true)
+				box.append(toast)
 			}
-			const toast = box
-				.querySelector(`template[data-key="${key}"]`)
-				.content.firstElementChild.cloneNode(true)
-			toast.addEventListener("animationend", (e) => {
-				if (e.target === toast) toast.remove()
-			})
-			box.append(toast)
+			clearTimeout(timers.get(key))
+			timers.set(key, setTimeout(() => toast.remove(), 4000))
 		}
 		const listen = (e) => show(e.detail)
 		root.addEventListener("nechat_error", listen)
@@ -76,14 +70,12 @@ elem Toasts() {
 			<div class="nechat-toast" data-key="network">
 				<span class="nechat-toast-lead">~>(doors.Class("nechat-ic")) ~(icons.Prohibit())</span>
 				<span class="nechat-toast-text">Network error occurred</span>
-				<i class="nechat-file-fill" aria-hidden="true"></i>
 			</div>
 		</template>
 		<template data-key="error">
 			<div class="nechat-toast" data-key="error" role="alert">
 				<span class="nechat-toast-lead">~>(doors.Class("nechat-ic")) ~(icons.WarningFill())</span>
 				<span class="nechat-toast-text">Something went wrong</span>
-				<i class="nechat-file-fill" aria-hidden="true"></i>
 			</div>
 		</template>
 	</div>

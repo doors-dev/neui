@@ -12,6 +12,7 @@ type compaction struct {
 	cancel     context.CancelFunc
 	compaction replay.Compaction
 	held       *commandApplyCompaction
+	chunk      int
 }
 
 func (c *compaction) start(ctx context.Context, rc replay.Compaction) (context.Context, int) {
@@ -26,6 +27,7 @@ func (c *compaction) start(ctx context.Context, rc replay.Compaction) (context.C
 }
 
 func (c *compaction) stop() {
+	c.chunk = 0
 	if !c.isActive() {
 		return
 	}
@@ -50,6 +52,7 @@ func (c *compaction) report(seq int) (replay.Compaction, bool) {
 	c.seq += 1
 	c.cancel()
 	c.cancel = nil
+	c.chunk = 0
 	return c.compaction, true
 }
 

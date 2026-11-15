@@ -172,11 +172,10 @@ type Instance interface {
 	// reads it as an <app_event name="…"> element carrying attrs, with data as
 	// its body: a string is escaped text, json.RawMessage is passed as is,
 	// anything else is encoded as JSON. The event is stored in the thread,
-	// creating a New thread in storage. An idle agent starts a turn at once,
-	// unless the conversation no longer fits the model's context window
-	// (ErrContextFull); a busy one reads it in its next turn, or a later one
-	// while the records ahead of it fill a turn's ThreadConfig.ReplayItemShare
-	// budget. Returns ErrUnlinked when the instance has no thread open or switched threads
+	// creating a New thread in storage. An idle agent starts a turn at once; a
+	// busy one reads it in its next turn, or a later one while the records
+	// ahead of it fill a turn's ThreadConfig.ReplayItemShare budget. Returns
+	// ErrUnlinked when the instance has no thread open or switched threads
 	// before the event landed; a storage failure is returned and also ends the
 	// link with ChatEventCriticalError.
 	Emit(ctx context.Context, name string, attrs map[string]string, data any) error
@@ -210,8 +209,7 @@ type ChatThread interface {
 	// ErrWrongState when an input is already pending or input is empty (an
 	// idle thread with unanswered tool results accepts an empty Send and
 	// resumes); ErrInputTooLarge when its text is over the
-	// ThreadConfig.ReplayItemShare budget; ErrContextFull when the
-	// conversation no longer fits the model's context window.
+	// ThreadConfig.ReplayItemShare budget.
 	Send(ctx context.Context, input Input) error
 	// Stop aborts the running round, cancels the running tool calls with
 	// ErrCanceledByUser, or cancels a compaction the turn waits on (results
@@ -225,8 +223,7 @@ type ChatThread interface {
 	// Retry runs the last round again when the thread is idle and that round
 	// ended without an answer (error, abort, or input only); the new round's
 	// ChatEventRoundStart names the replaced one in Truncate. ErrWrongState
-	// otherwise, including after an ok or refused round; ErrContextFull when
-	// the conversation no longer fits the model's context window.
+	// otherwise, including after an ok or refused round.
 	Retry(ctx context.Context) error
 	// Compact starts a compaction of the history in the background. It
 	// returns ErrWrongState when ChatState.CanCompact, as last reported, is

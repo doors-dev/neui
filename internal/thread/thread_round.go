@@ -264,12 +264,12 @@ func (s *threadRound) err(code api.ErrCode, cause error, content api.Indexed[api
 			s.thread.switchStateCompact(s.round, usage, content)
 			return
 		}
-		s.thread.replay.ContextFull()
 		if err := s.thread.replay.RoundError(errors.New(string(code)), usage, content); err != nil {
 			s.thread.criticalErr(nil, err)
 			return
 		}
-		s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundEnd{Round: s.round.ID, State: api.RoundError, Error: string(code), Usage: usage, Final: true, CanCompact: s.thread.canCompact()}))
+		s.thread.criticalErr(nil, api.ErrCompactionFailed)
+		return
 	case api.CodeTooLarge:
 		if !errors.Is(cause, api.ErrMeasuredTooLarge) && s.thread.replay.Tighten() {
 			round, truncate, messages, err := s.thread.replay.Retry()

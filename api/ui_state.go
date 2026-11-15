@@ -60,10 +60,9 @@ type ChatState struct {
 	Compaction bool
 	// CanCompact reports whether ChatThread.Compact would be accepted now: no
 	// compaction is running, at least two rounds have completed since the last
-	// compaction, Usage has reached Config().CompactionAllowed times
-	// Model().Context (not checked when Model().Context is 0), and Send would
-	// not be refused with ErrContextFull. Later changes arrive on
-	// ChatEventRoundStart, ChatEventRoundEnd and ChatEventCompacting.
+	// compaction, and Usage has reached Config().CompactionAllowed times
+	// Model().Context (not checked when Model().Context is 0). Later changes
+	// arrive on ChatEventRoundStart, ChatEventRoundEnd and ChatEventCompacting.
 	CanCompact bool
 	// Meta is the meta that the Instance.ThreadOpen which switched to this
 	// thread passed, nil for every other way a chat comes up. It is never

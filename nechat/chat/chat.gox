@@ -55,11 +55,15 @@ const (
 	alive closedKind = iota
 	failed
 	deleted
+	tooLong
 )
 
 func closedKindOf(err error) closedKind {
 	if errors.Is(err, api.ErrNotFound) {
 		return deleted
+	}
+	if errors.Is(err, api.ErrCompactionFailed) {
+		return tooLong
 	}
 	return failed
 }
@@ -270,6 +274,9 @@ elem (c *chat) closed(kind closedKind) {
 	icon, head, text := icons.WarningFill(), "Something went wrong", "This chat hit an error."
 	if kind == deleted {
 		icon, head, text = icons.Trash(), "This chat was deleted.", "It was deleted elsewhere."
+	}
+	if kind == tooLong {
+		head, text = "This chat is too long", "It no longer fits the model's context window. Start a new chat to continue."
 	}
 	var once sync.Once
 	confirm := func(ctx context.Context) {

@@ -150,11 +150,12 @@ func (s *threadCompact) on(cmd any) {
 			return
 		}
 		if !applied {
-			if code, _ := cmd.resp.Err(); code == api.CodeContextLength {
-				s.thread.replay.ContextFull()
-			}
 			if err := s.thread.replay.RoundError(errors.New(string(api.CodeContextLength)), s.usage, s.content); err != nil {
 				s.thread.criticalErr(nil, err)
+				return
+			}
+			if code, _ := cmd.resp.Err(); code == api.CodeContextLength {
+				s.thread.criticalErr(nil, api.ErrCompactionFailed)
 				return
 			}
 			s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundEnd{Round: s.round.ID, State: api.RoundError, Error: string(api.CodeContextLength), Usage: s.usage, Final: true, CanCompact: s.thread.canCompact()}))

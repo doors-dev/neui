@@ -5,10 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 	"testing"
 
 	"neui.dev/api"
+	"neui.dev/internal/common"
+	"neui.dev/internal/page"
 	"neui.dev/internal/replay"
 	"neui.dev/internal/testkit"
 	"neui.dev/internal/thread/response"
@@ -358,8 +361,56 @@ func TestHalvingDoesNotArmTheGrowthGate(t *testing.T) {
 	}
 }
 
-func TestOneRoundCompactionTooLongEndsContextFull(t *testing.T) {
+func compactionFailed(t *testing.T, th *thread, storage api.MessageStorage, ch chan Message, round api.RoundID) {
+	t.Helper()
+	var events []api.ChatEvent
+	for len(ch) != 0 {
+		if m, ok := (<-ch).(MessageEvent); ok {
+			events = append(events, m.Event)
+		}
+	}
+	if th.link != nil || th.replay != nil {
+		t.Fatalf("the link is still open after the compaction failed")
+	}
+	if _, ok := th.state.(threadWait); !ok {
+		t.Fatalf("the thread is in %T, want idle", th.state)
+	}
+	if len(events) == 0 {
+		t.Fatalf("the failed compaction sent no events")
+	}
+	if e, ok := events[len(events)-1].(api.ChatEventCriticalError); !ok || !errors.Is(e.Err, api.ErrCompactionFailed) {
+		t.Fatalf("the last event is %+v, want a critical error with ErrCompactionFailed", events[len(events)-1])
+	}
+	if th.compaction.isActive() || th.compaction.chunk != 0 || th.pending {
+		t.Fatalf("after the critical error: compaction %v, chunk %d, pending %v", th.compaction.isActive(), th.compaction.chunk, th.pending)
+	}
+	stored := 0
+	for r, err := range storage.RoundRange(context.Background(), th.id, round, round) {
+		if err != nil {
+			t.Fatalf("RoundRange: %v", err)
+		}
+		stored++
+		if r.State != api.RoundError || r.Error != string(api.CodeContextLength) {
+			t.Fatalf("the failed round is stored as %s %q, want an error with context_length", r.State, r.Error)
+		}
+	}
+	if stored != 1 {
+		t.Fatalf("the failed round was not stored")
+	}
+}
+
+func reopen(t *testing.T, th *thread, backend *common.Backend) func() []api.ChatEvent {
+	t.Helper()
+	if _, err := openLink(th.state.(threadWait), commandLink{backend, page.NewPage(context.Background()), true, nil, nil, NewResultResponse[Link]()}); err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	t.Cleanup(th.link.dispose)
+	return captureEvents(th)
+}
+
+func TestOneRoundCompactionTooLongIsCompactionFailed(t *testing.T) {
 	th, r, events := compactionThread(t, "halve-full", api.Model{Name: "stub", Context: 1000}, 2)
+	backend := th.link.backend
 	round, _, err := r.RoundInit(api.Input{Text: "too long"})
 	if err != nil {
 		t.Fatalf("replay RoundInit: %v", err)
@@ -370,55 +421,110 @@ func TestOneRoundCompactionTooLongEndsContextFull(t *testing.T) {
 	state := th.switchStateCompact(round, api.EventUsage{}, nil)
 	th.pending = true
 	events()
+	ch := th.link.ch
 	state.on(commandApplyCompaction{resp: flushed(api.EventErr{Code: api.CodeContextLength, Err: errors.New("prompt is too long")}), seq: th.compaction.seq})
-	if _, ok := th.state.(threadWait); !ok {
-		t.Fatalf("the thread is in %T, want idle", th.state)
+	compactionFailed(t, th, backend.Storage(), ch, round.ID)
+	events = reopen(t, th, backend)
+	op := NewOperation(context.Background())
+	th.state.(threadWait).on(commandRetry{link: th.link, Operation: op})
+	if err := op.Receive(); err != nil {
+		t.Fatalf("Retry after reopening: %v", err)
 	}
-	if !r.IsContextFull() || th.canCompact() || th.pending {
-		t.Fatalf("full %v CanCompact %v pending %v", r.IsContextFull(), th.canCompact(), th.pending)
-	}
-	send, retry := NewOperation(context.Background()), NewOperation(context.Background())
-	th.state.(threadWait).on(commandSend{link: th.link, Operation: send, input: api.Input{Text: "more"}})
-	th.state.(threadWait).on(commandRetry{link: th.link, Operation: retry})
-	for _, op := range []Operation{send, retry} {
-		if err := op.Receive(); !errors.Is(err, api.ErrContextFull) {
-			t.Fatalf("got %v, want ErrContextFull", err)
+	var start *api.ChatEventRoundStart
+	for _, e := range events() {
+		if e, ok := e.(api.ChatEventRoundStart); ok {
+			start = &e
 		}
 	}
-	if _, ok := th.state.(threadWait); !ok {
-		t.Fatalf("a refused command left the thread in %T", th.state)
+	if _, ok := th.state.(*threadRound); !ok || start == nil || start.Truncate != round.ID {
+		t.Fatalf("Retry after reopening left the thread in %T with %+v, want the failed round retried", th.state, start)
 	}
 }
 
-func TestContextLengthWithNothingToCompactEndsContextFull(t *testing.T) {
+func TestContextLengthWithNothingToCompactIsCompactionFailed(t *testing.T) {
 	th, r, events := compactionThread(t, "halve-nothing", api.Model{Name: "stub", Context: 1000}, 1)
+	backend := th.link.backend
 	state := startRound(t, th, r, api.Input{Text: "too long"})
 	events()
+	ch := th.link.ch
 	state.err(api.CodeContextLength, nil, nil, api.EventUsage{})
-	if !r.IsContextFull() {
-		t.Fatalf("the round ended without the context-full state")
+	compactionFailed(t, th, backend.Storage(), ch, state.round.ID)
+	events = reopen(t, th, backend)
+	op := NewOperation(context.Background())
+	th.state.(threadWait).on(commandSend{link: th.link, Operation: op, input: api.Input{Text: "more"}})
+	if err := op.Receive(); err != nil {
+		t.Fatalf("Send after reopening: %v", err)
 	}
-	var end []api.ChatEventRoundEnd
-	for _, e := range events() {
-		if e, ok := e.(api.ChatEventRoundEnd); ok {
-			end = append(end, e)
-		}
-	}
-	if len(end) != 1 || end[0].Error != string(api.CodeContextLength) || end[0].CanCompact {
-		t.Fatalf("the round ended with %+v", end)
+	if _, ok := th.state.(*threadRound); !ok || !slices.ContainsFunc(events(), func(e api.ChatEvent) bool {
+		_, ok := e.(api.ChatEventRoundStart)
+		return ok
+	}) {
+		t.Fatalf("Send after reopening left the thread in %T without a round start", th.state)
 	}
 }
 
-func TestRecordWhileContextFullStartsNoRound(t *testing.T) {
-	th, r, _ := growingThread(t, "full-record", 3)
-	r.ContextFull()
-	op := NewOperation(context.Background())
-	th.state.(threadWait).on(commandRecord{link: th.link, Operation: op, origin: api.NoRoundID, kind: "note", data: "x"})
-	if err := op.Receive(); err != nil {
-		t.Fatalf("Record: %v", err)
+func TestChunkEndsWithTheCompactionProcess(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		end  func(th *thread)
+	}{
+		{"applied", func(th *thread) {
+			th.on(commandApplyCompaction{resp: flushed(api.EventText{Index: 0, Text: "the summary"}, api.EventOk{Code: api.CodeTurn}), seq: th.compaction.seq})
+		}},
+		{"failed", func(th *thread) {
+			th.on(commandApplyCompaction{resp: flushed(api.EventErr{Code: api.CodeNetwork, Err: errors.New("reset")}), seq: th.compaction.seq})
+		}},
+		{"halved to one round", func(th *thread) {
+			for th.compaction.isActive() {
+				th.on(commandApplyCompaction{resp: flushed(api.EventErr{Code: api.CodeContextLength, Err: errors.New("prompt is too long")}), seq: th.compaction.seq})
+			}
+		}},
+		{"stopped", func(th *thread) {
+			th.compaction.stop()
+		}},
+		{"critical", func(th *thread) {
+			th.criticalErr(nil, errors.New("boom"))
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			th, _, _ := growingThread(t, api.ThreadID("chunk-"+tc.name), 8)
+			if _, err := th.compact(false); err != nil {
+				t.Fatalf("compact: %v", err)
+			}
+			first := th.compaction.compaction
+			th.on(commandApplyCompaction{resp: flushed(api.EventErr{Code: api.CodeContextLength, Err: errors.New("prompt is too long")}), seq: th.compaction.seq})
+			if !th.compaction.isActive() || th.compaction.chunk != first.Half() || th.compaction.chunk == 0 {
+				t.Fatalf("the halved pass runs %v with chunk %d, want %d", th.compaction.isActive(), th.compaction.chunk, first.Half())
+			}
+			tc.end(th)
+			if th.compaction.isActive() || th.compaction.chunk != 0 {
+				t.Fatalf("the process ended with the compaction active %v and chunk %d, want none", th.compaction.isActive(), th.compaction.chunk)
+			}
+		})
 	}
-	if _, ok := th.state.(threadWait); !ok || !r.IsPending() {
-		t.Fatalf("the thread is in %T with the record pending %v, want idle with it pending", th.state, r.IsPending())
+}
+
+func TestNextPassOfAnEpisodeIsNotCapped(t *testing.T) {
+	th, r, _ := growingThread(t, "halve-next-pass", 8)
+	startRound(t, th, r, api.Input{Text: "too long"}).err(api.CodeContextLength, nil, nil, api.EventUsage{})
+	th.state.(*threadCompact).on(commandApplyCompaction{resp: flushed(api.EventErr{Code: api.CodeContextLength, Err: errors.New("prompt is too long")}), seq: th.compaction.seq})
+	chunk := th.compaction.chunk
+	if chunk == 0 {
+		t.Fatalf("no halved pass started")
+	}
+	th.state.(*threadCompact).on(commandApplyCompaction{resp: flushed(api.EventText{Index: 0, Text: "the summary"}, api.EventOk{Code: api.CodeTurn}), seq: th.compaction.seq})
+	retried, ok := th.state.(*threadRound)
+	if !ok || th.compaction.chunk != 0 {
+		t.Fatalf("after the applied pass the thread is in %T with chunk %d, want the round retried and no chunk", th.state, th.compaction.chunk)
+	}
+	uncapped, _, _ := r.PrepareCompaction(true, 0)
+	capped, _, _ := r.PrepareCompaction(true, chunk)
+	if uncapped.Target == capped.Target {
+		t.Fatalf("the setup needs a chunk that caps the next pass")
+	}
+	retried.err(api.CodeContextLength, nil, nil, api.EventUsage{})
+	if !th.compaction.isActive() || th.compaction.compaction.Target != uncapped.Target {
+		t.Fatalf("the next pass targets %d, want the uncapped %d", th.compaction.compaction.Target, uncapped.Target)
 	}
 }
 
@@ -510,7 +616,7 @@ func TestOverflowOnASmallerModelCompactsInHalvedPasses(t *testing.T) {
 		}
 		log = append(log, entry)
 	}
-	if got, want := strings.Join(log, " "), "R800k! C720k! C360k! C180k R622k! C182k R442k! C182k R262k! C182k R82k"; got != want {
+	if got, want := strings.Join(log, " "), "R800k! C720k! C360k! C180k R622k! C602k! C302k! C142k R482k! C462k! C222k! C102k R382k! C362k! C182k R202k! C182k R22k"; got != want {
 		t.Fatalf("provider log\n got %s\nwant %s", got, want)
 	}
 }

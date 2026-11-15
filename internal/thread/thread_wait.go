@@ -81,10 +81,6 @@ func (s threadWait) on(cmd any) {
 			s.thread.criticalErr(nil, err)
 			return
 		}
-		if s.thread.replay.IsContextFull() {
-			cmd.NoMessage()
-			return
-		}
 		round, err := s.thread.switchStateRound()
 		if err != nil {
 			cmd.Err(err)
@@ -102,7 +98,7 @@ func (s threadWait) on(cmd any) {
 			s.thread.criticalErr(nil, err)
 			return
 		}
-		if !found || !s.thread.replay.IsPending() || s.thread.replay.IsContextFull() {
+		if !found || !s.thread.replay.IsPending() {
 			return
 		}
 		round, err := s.thread.switchStateRound()
@@ -123,7 +119,7 @@ func (s threadWait) on(cmd any) {
 			s.thread.criticalErr(nil, err)
 			return
 		}
-		if !s.thread.replay.IsPending() || s.thread.replay.IsContextFull() {
+		if !s.thread.replay.IsPending() {
 			return
 		}
 		round, err := s.thread.switchStateRound()
@@ -135,10 +131,6 @@ func (s threadWait) on(cmd any) {
 	case commandSend:
 		if s.thread.link != cmd.link {
 			cmd.Err(api.ErrUnlinked)
-			return
-		}
-		if s.thread.replay.IsContextFull() {
-			cmd.Err(api.ErrContextFull)
 			return
 		}
 		inputBytes := 0
@@ -212,10 +204,6 @@ func (s threadWait) on(cmd any) {
 		}
 		if !s.thread.replay.IsRetriable() {
 			cmd.Err(api.ErrWrongState)
-			return
-		}
-		if s.thread.replay.IsContextFull() {
-			cmd.Err(api.ErrContextFull)
 			return
 		}
 		round, truncate, replay, err := s.thread.replay.Retry()

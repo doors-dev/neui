@@ -222,6 +222,10 @@ type Compaction struct {
 	index  int
 }
 
+func (c Compaction) Half() int {
+	return c.index / 2
+}
+
 func (s *messages) isStashed() bool {
 	return len(s.resultStash) != 0 || len(s.recordStash) != 0
 }

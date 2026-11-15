@@ -169,8 +169,10 @@ func (ChatEventTasks) chatEvent() {}
 // thread, or to a fresh thread when that fails; a new Chat is built the next
 // time the element renders, for example after ChatThread.Reload.
 type ChatEventCriticalError struct {
-	// Err is the cause: a storage failure, or ErrNotFound when the thread was
-	// deleted through another instance's ThreadDelete.
+	// Err is the cause: a storage failure, ErrNotFound when the thread was
+	// deleted through another instance's ThreadDelete, or ErrCompactionFailed
+	// when compaction cannot make the conversation fit the model's context
+	// window.
 	Err error
 }
 

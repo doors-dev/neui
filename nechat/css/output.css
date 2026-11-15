@@ -43,28 +43,6 @@
     width: 100%;
   }
 }
-@keyframes nechat-toast {
-  0% {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  3%, 94% {
-    opacity: 1;
-    transform: none;
-  }
-  100% {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-}
-@keyframes nechat-toast-hold {
-  0% {
-    visibility: visible;
-  }
-  100% {
-    visibility: hidden;
-  }
-}
 @layer nechat {
   .nechat-widget {
     --app-bg: var(--nechat-dark-app-bg, oklch(14.1% 0.005 285.823));
@@ -280,7 +258,6 @@
     display: flex;
     min-height: calc(var(--spacing, 0.25rem) * 7);
     max-width: 100%;
-    animation: nechat-toast 4.25s ease-out forwards;
     align-items: center;
     gap: calc(var(--spacing, 0.25rem) * 2);
     overflow: hidden;
@@ -315,18 +292,6 @@
     padding-block: calc(var(--spacing, 0.25rem) * 0.5);
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-  .nechat-toast > .nechat-file-fill {
-    width: 0px;
-    animation: nechat-auto-fill 4s linear forwards;
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .nechat-toast {
-      animation: nechat-toast-hold 4s steps(1,end) forwards;
-    }
-    .nechat-toast > .nechat-file-fill {
-      display: none;
-    }
   }
   .nechat-widget_off .nechat-composer {
     pointer-events: none;
