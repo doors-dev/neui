@@ -11,6 +11,7 @@ import (
 
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
+	"github.com/go-rod/rod/lib/proto"
 	"neui.dev"
 	"neui.dev/api"
 	"neui.dev/internal/testkit"
@@ -387,4 +388,140 @@ func TestIslandButtonWithAgentIsClickableAndSubmitsItsValue(t *testing.T) {
 		t.Fatalf("the click answered %#v, want the button's handler run", r.Content)
 	}
 	carries(t, lastText(p.Request(t, 4)), `<task_notify `, `script="1"`, `[{"id":1,"output":"v1"}]`)
+}
+
+const actionNote = `note="the part stopped at this error while handling the user&#39;s action in last_action, which was not carried out; any parts queued behind it were dropped, listed in dropped; the app runs on: send the fix with island_append, and in it carry out that action or ask the user to redo it"`
+
+const plainErrorNote = `note="the part stopped at this error and any parts queued behind it were dropped, listed in dropped; the app runs on: send what should still run with island_append"`
+
+func userClick(t *testing.T, c *stack.Chat, text string) {
+	t.Helper()
+	button, err := c.Page.Timeout(10*time.Second).ElementR("button", "^"+text+"$")
+	if err != nil {
+		t.Fatalf("the %s button never reached the page: %v", text, err)
+	}
+	if err := button.Click(proto.InputMouseButtonLeft, 1); err != nil {
+		t.Fatalf("the user's click on %s failed: %v", text, err)
+	}
+}
+
+func lacks(t *testing.T, record string, unwanted string) {
+	t.Helper()
+	if strings.Contains(record, unwanted) {
+		t.Fatalf("the record %q carries %s", record, unwanted)
+	}
+}
+
+func throwBoard(t *testing.T, code string) (*testkit.Provider, *stack.Chat) {
+	p := testkit.NewProvider(api.Model{},
+		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
+		revised(t, func(revision string) testkit.Turn { return start(revision, code) }),
+		testkit.Say("started"),
+		testkit.Say("seen"),
+	)
+	c := stack.Browser(t, stack.Host{Provider: p, Page: board(make(chan int, 1), nil)})
+	c.Send("open the board")
+	c.Wait()
+	return p, c
+}
+
+func TestIslandThrowWhileHandlingAnActionReportsIt(t *testing.T) {
+	p, c := throwBoard(t, `ui.root.set(ui.column({}, ui.press({label: "keep", value: "(n) => n"}), ui.press({label: "save", value: "(n) => n * 2"}))); ui.draw(); throw new Error("save failed")`)
+	userClick(t, c, "save")
+	carries(t, recorded(t, c, p, `kind="script_error"`), `script="1"`, "save failed", `last_action="{&#34;id&#34;:2,&#34;output&#34;:42}"`, actionNote)
+}
+
+func TestIslandThrowAfterDrawingAgainLeavesTheActionOut(t *testing.T) {
+	p, c := throwBoard(t, `ui.root.set(ui.press({label: "save", value: "(n) => n"})); ui.draw(); ui.draw(1); throw new Error("later")`)
+	userClick(t, c, "save")
+	record := recorded(t, c, p, `kind="script_error"`)
+	carries(t, record, `script="1"`, "later", plainErrorNote)
+	lacks(t, record, "last_action")
+}
+
+func TestIslandThrowInALaterPartLeavesTheEarlierActionOut(t *testing.T) {
+	p := testkit.NewProvider(api.Model{},
+		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
+		revised(t, func(revision string) testkit.Turn {
+			return start(revision, `ui.root.set(ui.press({label: "save", value: "(n) => n"})); ui.notify(ui.draw())`)
+		}),
+		testkit.Say("started"),
+		testkit.Call("page__island_append", map[string]any{"path": "board", "code": `throw new Error("later")`}),
+		testkit.Say("appended"),
+		testkit.Say("seen"),
+	)
+	c := stack.Browser(t, stack.Host{Provider: p, Page: board(make(chan int, 1), nil)})
+	c.Send("open the board")
+	c.Wait()
+	userClick(t, c, "save")
+	carries(t, recorded(t, c, p, `kind="notifications_list"`), `script="1"`, `>[{"id":1,"output":21}]</task_notify>`)
+	record := recorded(t, c, p, `kind="script_error"`)
+	carries(t, record, `script="2"`, "later", plainErrorNote)
+	lacks(t, record, "last_action")
+}
+
+type fillParams struct {
+	Size int
+}
+
+type fill struct {
+	size   int
+	submit func(ctx context.Context, s string) bool
+}
+
+func (f fill) Update(context.Context, struct{}) {}
+
+func (f fill) Main() gox.Elem {
+	return func(cur gox.Cursor) error {
+		if err := cur.Init("button"); err != nil {
+			return err
+		}
+		if err := cur.Modify(doors.AClick{On: func(ctx context.Context, _ doors.RequestPointer) bool {
+			f.submit(ctx, strings.Repeat("x", f.size))
+			return false
+		}}); err != nil {
+			return err
+		}
+		if err := cur.Submit(); err != nil {
+			return err
+		}
+		if err := cur.Text("fill"); err != nil {
+			return err
+		}
+		return cur.Close()
+	}
+}
+
+func fillBoard(cur gox.Cursor) error {
+	return cur.Comp(neui.Island{
+		Name:        "board",
+		Desc:        "a board",
+		Placeholder: func(cur gox.Cursor) error { return cur.Text("idle") },
+		Template: func(slot gox.Comp) gox.Elem {
+			return func(cur gox.Cursor) error { return cur.Comp(slot) }
+		},
+		Library: func(l neui.Library) error {
+			return l.Control("fill", "a button that answers with size x's", func(_ context.Context, p fillParams, submit func(ctx context.Context, s string) bool) (api.Widget[struct{}], error) {
+				return fill{size: p.Size, submit: submit}, nil
+			})
+		},
+	})
+}
+
+func TestIslandThrowWhileHandlingAnOversizedActionKeepsItsID(t *testing.T) {
+	p := testkit.NewProvider(api.Model{Name: "fake", Context: 200_000},
+		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
+		revised(t, func(revision string) testkit.Turn {
+			return start(revision, `ui.root.set(ui.fill({size: 40000})); ui.draw(); throw new Error("save failed")`)
+		}),
+		testkit.Say("started"),
+		testkit.Say("seen"),
+	)
+	c := stack.Browser(t, stack.Host{Provider: p, Page: gox.Elem(fillBoard)})
+	c.Send("open the board")
+	c.Wait()
+	userClick(t, c, "fill")
+	record := recorded(t, c, p, `kind="script_error"`)
+	carries(t, record, `script="1"`, "save failed", `last_action="{&#34;id&#34;:1,&#34;output_omitted&#34;:true}"`, actionNote)
+	lacks(t, record, "xxxx")
 }

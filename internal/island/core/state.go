@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"slices"
 	"sync"
 	"time"
@@ -99,6 +100,7 @@ type state struct {
 	mu                 sync.Mutex
 	hook               *chan struct{}
 	stash              *submit
+	action             *Result
 	handover           bool
 	root               slot
 	seeded             bool
@@ -337,6 +339,9 @@ func (s *state) toolNotify(ctx context.Context, data json.RawMessage) (struct{},
 }
 
 func (s *state) toolDraw(ctx context.Context, ms int) (*Result, error) {
+	s.mu.Lock()
+	s.action = nil
+	s.mu.Unlock()
 	if s.applied != nil {
 		s.run.PauseTurn()
 		select {
@@ -395,6 +400,7 @@ func (s *state) collect() (*Result, error) {
 			ID:     s.stash.id,
 			Output: s.stash.data,
 		}
+		s.action = &Result{ID: r.ID, Output: r.Output}
 		s.stash.data = nil
 		s.mu.Unlock()
 		return r, nil
@@ -407,6 +413,29 @@ func (s *state) collect() (*Result, error) {
 	}
 	s.mu.Unlock()
 	return nil, nil
+}
+
+func (s *state) ForgetAction() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.action = nil
+}
+
+func (s *state) LastAction() string {
+	s.mu.Lock()
+	action := s.action
+	s.mu.Unlock()
+	if action == nil {
+		return ""
+	}
+	data, err := json.Marshal(action)
+	if err != nil || len(html.EscapeString(string(data))) > s.run.NotificationsCap() {
+		data, _ = json.Marshal(struct {
+			ID            uint `json:"id"`
+			OutputOmitted bool `json:"output_omitted"`
+		}{action.ID, true})
+	}
+	return string(data)
 }
 
 func (s *state) ResetHandover() {

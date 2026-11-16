@@ -483,6 +483,9 @@ func TestIslandScriptThrowReportsError(t *testing.T) {
 			t.Fatalf("the throw reported %q, want it to carry %s", record, want)
 		}
 	}
+	if strings.Contains(record, "last_action") {
+		t.Fatalf("a throw before any user action reported %q, want no last_action", record)
+	}
 }
 
 func TestIslandHostErrorReachesScriptInFull(t *testing.T) {

@@ -17,6 +17,7 @@ const screenSpaceDesc = "what the island shows now: the app while one runs, othe
 const noAppStatus = "no app is running in this island: begin one with island_begin"
 const idleNote = "the screen has no control, so the part waits in this ui.draw() until you send the next part with island_interrupt or end the app with island_end"
 const scriptErrorNote = "the part stopped at this error and any parts queued behind it were dropped, listed in dropped; the app runs on: send what should still run with island_append"
+const scriptErrorActionNote = "the part stopped at this error while handling the user's action in last_action, which was not carried out; any parts queued behind it were dropped, listed in dropped; the app runs on: send the fix with island_append, and in it carry out that action or ask the user to redo it"
 const callErrorNote = "fix the source and pass it again, by an update or in a new view or control"
 const widgetErrorNote = "the view or control keeps running: update or replace it"
 const turnTimeMessage = "the part went that long without ui.draw, app function and tool calls included, and was stopped: keep the work between two draws short and avoid unbounded loops"

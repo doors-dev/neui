@@ -270,6 +270,7 @@ func (r *run) run() {
 			}
 			eval := r.queue.PopFront()
 			r.resetHandover()
+			r.state.ForgetAction()
 			r.current = eval.script
 			r.runner.reset()
 			r.mu.Unlock()
@@ -324,6 +325,10 @@ func (r *run) run() {
 				}
 				r.mu.Unlock()
 				meta := map[string]any{"script": eval.script, "kind": "script_error", "note": scriptErrorNote}
+				if action := r.state.LastAction(); action != "" {
+					meta["last_action"] = action
+					meta["note"] = scriptErrorActionNote
+				}
 				if len(dropped) > 0 {
 					meta["dropped"] = dropped
 				}
