@@ -122,7 +122,7 @@ func revised(t *testing.T, then func(revision string) testkit.Turn) testkit.Turn
 }
 
 func start(revision string, code string) testkit.Turn {
-	return testkit.Call("page__island_start", map[string]any{"path": "board", "revision": revision, "code": code, "comment": "the board app"})
+	return testkit.Call("page__island_begin", map[string]any{"path": "board", "revision": revision, "code": code, "comment": "the board app"})
 }
 
 func refused(t *testing.T, r api.ContentToolResult, want string) {
@@ -206,7 +206,7 @@ func TestIslandSpecListsLibrary(t *testing.T) {
 			api.EventClose{Index: 1},
 			api.EventTool{Index: 2, ID: "spec-whole", Name: "page__island_spec", Args: `{"path":"board"}`},
 			api.EventClose{Index: 2},
-			api.EventTool{Index: 3, ID: "spec-part-2", Name: "page__island_spec", Args: `{"path":"board","part":2}`},
+			api.EventTool{Index: 3, ID: "spec-page-2", Name: "page__island_spec", Args: `{"path":"board","page":2}`},
 			api.EventClose{Index: 3},
 			api.EventOk{Code: api.CodeTurn},
 		),
@@ -247,7 +247,7 @@ func TestIslandSpecListsLibrary(t *testing.T) {
 			t.Fatalf("the spec does not list %s:\n%s", name, body)
 		}
 	}
-	refused(t, results[1], "part 2, the spec has 1 in all")
+	refused(t, results[1], "page 2, the spec has 1 in all")
 }
 
 func TestIslandSpecKeepsDefinitionsAtTheEnd(t *testing.T) {
@@ -274,7 +274,7 @@ func TestIslandSpecKeepsDefinitionsAtTheEnd(t *testing.T) {
 	t.Logf("island_spec of neisland.RegisterAll: %d bytes", len(spec))
 }
 
-func TestIslandSpecComesInParts(t *testing.T) {
+func TestIslandSpecComesInPages(t *testing.T) {
 	full := testkit.NewProvider(api.Model{},
 		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
 		testkit.Say("done"),
@@ -285,7 +285,7 @@ func TestIslandSpecComesInParts(t *testing.T) {
 	_, _, whole := specText(t, testkit.Results(full.Request(t, 1))[0])
 	model := api.Model{Name: "fake", Context: 31_250}
 	limit := replay.RoundItemBudget(common.ConfigDefaults(api.ThreadConfig{}), model) / 2
-	parts := 0
+	pages := 0
 	first := ""
 	var p *testkit.Provider
 	p = testkit.NewProvider(model,
@@ -293,12 +293,12 @@ func TestIslandSpecComesInParts(t *testing.T) {
 		testkit.Then(func(r api.Request) testkit.Turn {
 			revision, head, _ := specText(t, testkit.Results(r)[0])
 			first = revision
-			fmt.Sscanf(head, "revision %s\npart 1 of %d", new(string), &parts)
-			turns := make([]testkit.Turn, 0, parts+1)
-			for part := 2; part <= parts+1; part++ {
+			fmt.Sscanf(head, "revision %s\npage 1 of %d", new(string), &pages)
+			turns := make([]testkit.Turn, 0, pages+1)
+			for page := 2; page <= pages+1; page++ {
 				turns = append(turns, testkit.Events(
-					api.EventStart{ID: "parts", Model: "fake"},
-					api.EventTool{Index: 0, ID: fmt.Sprint("spec-part-", part), Name: "page__island_spec", Args: fmt.Sprintf(`{"path":"board","part":%d}`, part)},
+					api.EventStart{ID: "pages", Model: "fake"},
+					api.EventTool{Index: 0, ID: fmt.Sprint("spec-page-", page), Name: "page__island_spec", Args: fmt.Sprintf(`{"path":"board","page":%d}`, page)},
 					api.EventClose{Index: 0},
 					api.EventOk{Code: api.CodeTurn},
 				))
@@ -310,47 +310,47 @@ func TestIslandSpecComesInParts(t *testing.T) {
 	c = stack.Page(t, stack.Host{Provider: p, Page: fullBoard()})
 	c.Send("open the board")
 	c.Wait()
-	if parts < 3 {
-		t.Fatalf("a %d-byte spec under a %d-byte part size came in %d parts, want 3 or more", len(whole), limit, parts)
+	if pages < 3 {
+		t.Fatalf("a %d-byte spec under a %d-byte page size came in %d pages, want 3 or more", len(whole), limit, pages)
 	}
 	var results []api.ContentToolResult
-	for i := 1; i <= parts+1; i++ {
+	for i := 1; i <= pages+1; i++ {
 		results = append(results, testkit.Results(p.Request(t, i))...)
 	}
-	if len(results) != parts+1 {
-		t.Fatalf("%d parts read, want %d and one past the end", len(results), parts+1)
+	if len(results) != pages+1 {
+		t.Fatalf("%d pages read, want %d and one past the end", len(results), pages+1)
 	}
-	refused(t, results[parts], fmt.Sprintf("part %d, the spec has %d in all", parts+1, parts))
+	refused(t, results[pages], fmt.Sprintf("page %d, the spec has %d in all: no such page of the spec", pages+1, pages))
 	joined := ""
-	for i, r := range results[:parts] {
+	for i, r := range results[:pages] {
 		revision, head, body := specText(t, r)
 		if revision != first {
-			t.Fatalf("part %d carries revision %s, part 1 %s, want every part to carry the whole spec's", i+1, revision, first)
+			t.Fatalf("page %d carries revision %s, page 1 %s, want every page to carry the whole spec's", i+1, revision, first)
 		}
-		want := fmt.Sprintf("revision %s\npart %d of %d: call island_spec with part %d for the rest", revision, i+1, parts, i+2)
-		if i == parts-1 {
-			want = fmt.Sprintf("revision %s\npart %d of %d", revision, parts, parts)
+		want := fmt.Sprintf("revision %s\npage %d of %d: call island_spec with page %d for the rest", revision, i+1, pages, i+2)
+		if i == pages-1 {
+			want = fmt.Sprintf("revision %s\npage %d of %d", revision, pages, pages)
 		}
 		if head != want {
-			t.Fatalf("part %d opens with %q, want %q", i+1, head, want)
+			t.Fatalf("page %d opens with %q, want %q", i+1, head, want)
 		}
 		if size := len(head) + 2 + len(body); size > limit || strings.Contains(body, "<truncated>") {
-			t.Fatalf("part %d takes %d bytes, over the %d-byte part size", i+1, size, limit)
+			t.Fatalf("page %d takes %d bytes, over the %d-byte page size", i+1, size, limit)
 		}
 		if !strings.HasSuffix(body, "\n") {
-			t.Fatalf("part %d ends inside a line:\n%s", i+1, body)
+			t.Fatalf("page %d ends inside a line:\n%s", i+1, body)
 		}
 		joined += body
 	}
 	if joined != whole {
-		t.Fatalf("the parts joined differ from the whole spec:\n%s", joined)
+		t.Fatalf("the pages joined differ from the whole spec:\n%s", joined)
 	}
-	if r := testkit.Results(p.Request(t, parts+2))[0]; r.Error != api.ToolOk {
-		t.Fatalf("island_start with the parts' revision answered %#v, want it accepted", r.Content)
+	if r := testkit.Results(p.Request(t, pages+2))[0]; r.Error != api.ToolOk {
+		t.Fatalf("island_begin with the pages' revision answered %#v, want it accepted", r.Content)
 	}
 }
 
-func TestIslandSpecItemOverPartRefused(t *testing.T) {
+func TestIslandSpecItemOverPageRefused(t *testing.T) {
 	p := testkit.NewProvider(api.Model{Name: "fake", Context: 1_000},
 		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
 		testkit.Say("done"),
@@ -359,9 +359,11 @@ func TestIslandSpecItemOverPartRefused(t *testing.T) {
 	c.Send("open the board")
 	c.Wait()
 	refused(t, testkit.Results(p.Request(t, 1))[0], "logs and files takes")
+	refused(t, testkit.Results(p.Request(t, 1))[0], "a page holds")
+	refused(t, testkit.Results(p.Request(t, 1))[0], "larger than a page can hold")
 }
 
-func TestIslandStartReturnsTask(t *testing.T) {
+func TestIslandBeginReturnsTask(t *testing.T) {
 	marks := make(chan int, 1)
 	p := testkit.NewProvider(api.Model{},
 		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
@@ -380,7 +382,7 @@ func TestIslandStartReturnsTask(t *testing.T) {
 	var s started
 	testkit.Decode(t, testkit.Results(p.Request(t, 2))[0], &s)
 	if s != (started{Task: 1, Script: 1}) {
-		t.Fatalf("island_start answered %+v, want task 1 script 1", s)
+		t.Fatalf("island_begin answered %+v, want task 1 script 1", s)
 	}
 	select {
 	case n := <-marks:
@@ -398,6 +400,71 @@ func TestIslandStartReturnsTask(t *testing.T) {
 	}
 }
 
+func TestIslandAppendQueuesBehindTheRunningPart(t *testing.T) {
+	held := make(chan struct{}, 1)
+	release := make(chan struct{})
+	page := func(cur gox.Cursor) error {
+		return cur.Comp(neui.Island{
+			Name:        "board",
+			Desc:        "a board",
+			Placeholder: func(cur gox.Cursor) error { return cur.Text("idle") },
+			Template: func(slot gox.Comp) gox.Elem {
+				return func(cur gox.Cursor) error { return cur.Comp(slot) }
+			},
+			Library: func(l neui.Library) error {
+				return l.Tool("hold", "holds until released", func(ctx context.Context, _ struct{}) (int, error) {
+					held <- struct{}{}
+					select {
+					case <-release:
+						return 0, nil
+					case <-ctx.Done():
+						return 0, context.Cause(ctx)
+					}
+				})
+			},
+		})
+	}
+	appended := func(code string) testkit.Turn {
+		return testkit.Call("page__island_append", map[string]any{"path": "board", "code": code})
+	}
+	p := testkit.NewProvider(api.Model{},
+		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
+		revised(t, func(revision string) testkit.Turn {
+			return start(revision, `var order = [1]; app.hold({}); order.push(2)`)
+		}),
+		testkit.Then(func(api.Request) testkit.Turn {
+			select {
+			case <-held:
+			case <-time.After(5 * time.Second):
+				t.Error("the first part never reached app.hold")
+			}
+			return appended(`order.push(3)`)
+		}),
+		testkit.Then(func(api.Request) testkit.Turn { return appended(`order.push(4); ui.notify(order)`) }),
+		testkit.Then(func(api.Request) testkit.Turn {
+			close(release)
+			return testkit.Say("appended")
+		}),
+		testkit.Say("noted"),
+	)
+	c := stack.Page(t, stack.Host{Provider: p, Page: page})
+	c.Send("open the board")
+	c.Wait()
+	for i, want := range []started{{Task: 1, Script: 2}, {Task: 1, Script: 3}} {
+		var s started
+		testkit.Decode(t, testkit.Results(p.Request(t, 3+i))[0], &s)
+		if s != want {
+			t.Fatalf("island_append %d answered %+v while the first part held, want %+v", i+1, s, want)
+		}
+	}
+	notify := recorded(t, c, p, `kind="notifications_list"`)
+	for _, want := range []string{`script="3"`, `>[[1,2,3,4]]</task_notify>`} {
+		if !strings.Contains(notify, want) {
+			t.Fatalf("the appended parts notified %q, want them run in order after the first part, carrying %s", notify, want)
+		}
+	}
+}
+
 func TestIslandScriptThrowReportsError(t *testing.T) {
 	p := testkit.NewProvider(api.Model{},
 		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
@@ -411,7 +478,7 @@ func TestIslandScriptThrowReportsError(t *testing.T) {
 	c.Send("open the board")
 	c.Wait()
 	record := recorded(t, c, p, `kind="script_error"`)
-	for _, want := range []string{`script="1"`, "boom", "send what should still run with island_continue"} {
+	for _, want := range []string{`script="1"`, "boom", "send what should still run with island_append"} {
 		if !strings.Contains(record, want) {
 			t.Fatalf("the throw reported %q, want it to carry %s", record, want)
 		}
@@ -463,7 +530,7 @@ ui.notify(seen)`)
 	}
 }
 
-func TestIslandStartStaleRevisionRefused(t *testing.T) {
+func TestIslandBeginStaleRevisionRefused(t *testing.T) {
 	p := testkit.NewProvider(api.Model{},
 		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
 		revised(t, func(revision string) testkit.Turn {
@@ -480,7 +547,7 @@ func TestIslandStartStaleRevisionRefused(t *testing.T) {
 	}
 }
 
-func TestIslandStartSyntaxErrorRefused(t *testing.T) {
+func TestIslandBeginSyntaxErrorRefused(t *testing.T) {
 	p := testkit.NewProvider(api.Model{},
 		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
 		revised(t, func(revision string) testkit.Turn {
@@ -497,7 +564,7 @@ func TestIslandStartSyntaxErrorRefused(t *testing.T) {
 	}
 }
 
-func TestIslandStartRefusedAfterSpecChange(t *testing.T) {
+func TestIslandBeginRefusedAfterSpecChange(t *testing.T) {
 	mode := doors.NewSource(0)
 	page := func(cur gox.Cursor) error {
 		if err := cur.Comp(neui.Tool[struct{}, string]{Name: "next", Desc: "changes the board", Handler: func(ctx context.Context, _ struct{}) (string, error) {
@@ -566,7 +633,7 @@ func TestIslandStartRefusedAfterSpecChange(t *testing.T) {
 	}
 }
 
-func TestIslandScriptReadsForItself(t *testing.T) {
+func TestIslandScriptActsOnTheAgentsRead(t *testing.T) {
 	page := func(cur gox.Cursor) error {
 		if err := (neui.Space{Name: "cart", Desc: "the cart"}).Proxy(cur, func(cur gox.Cursor) error {
 			return cur.Comp(neui.Tool[struct{}, string]{Name: "add", Desc: "adds an item", Handler: func(context.Context, struct{}) (string, error) {
@@ -591,8 +658,8 @@ ui.notify(seen)`)
 	c := stack.Page(t, stack.Host{Provider: p, Page: page})
 	c.Send("add from the board")
 	c.Wait()
-	if notify := recorded(t, c, p, `kind="notifications_list"`); !strings.Contains(notify, `[["space"]]`) {
-		t.Fatalf("the island script's add notified %q, want it refused with the space: the agent's read is not the script's", notify)
+	if notify := recorded(t, c, p, `kind="notifications_list"`); !strings.Contains(notify, `[["added"]]`) {
+		t.Fatalf("the island script's add notified %q, want it run on the agent's read", notify)
 	}
 }
 
@@ -678,7 +745,7 @@ func endedAs(t *testing.T, ended <-chan endView, success bool, body string) {
 	}
 }
 
-func TestIslandEndEndsAppAsStopDoes(t *testing.T) {
+func TestIslandUIEndEndsAppAsIslandEndDoes(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		success bool
@@ -718,7 +785,7 @@ func TestIslandEndEndsAppAsStopDoes(t *testing.T) {
 	}
 }
 
-func TestIslandStopEndsAppWithItsOwnResult(t *testing.T) {
+func TestIslandEndEndsAppWithItsOwnResult(t *testing.T) {
 	for _, success := range []bool{true, false} {
 		t.Run(fmt.Sprintf("success %v", success), func(t *testing.T) {
 			held := make(chan struct{}, 1)
@@ -736,7 +803,7 @@ func TestIslandStopEndsAppWithItsOwnResult(t *testing.T) {
 					case <-time.After(5 * time.Second):
 						t.Error("the script never reached app.hold")
 					}
-					return testkit.Call("page__island_stop", map[string]any{"path": "board"})
+					return testkit.Call("page__island_end", map[string]any{"path": "board"})
 				}),
 				reply,
 				reply,
@@ -746,14 +813,14 @@ func TestIslandStopEndsAppWithItsOwnResult(t *testing.T) {
 				<-screens
 			}
 			c.Send("close the board")
-			endedAs(t, ended, success, `"the island's app was stopped"`)
-			if r := testkit.Results(p.Request(t, 3))[0]; r.ID != "call-page__island_stop" || r.Error != api.ToolOk {
-				t.Fatalf("island_stop answered %#v, want it to succeed", r)
+			endedAs(t, ended, success, `"the island's app was ended with island_end"`)
+			if r := testkit.Results(p.Request(t, 3))[0]; r.ID != "call-page__island_end" || r.Error != api.ToolOk {
+				t.Fatalf("island_end answered %#v, want it to succeed", r)
 			}
 			for i, r := range p.Requests() {
 				for _, text := range lastTexts(r) {
 					if strings.Contains(text, "dropped") {
-						t.Fatalf("request %d carries %q, want the values queued before island_stop dropped", i, text)
+						t.Fatalf("request %d carries %q, want the values queued before island_end dropped", i, text)
 					}
 				}
 			}

@@ -21,7 +21,6 @@ import (
 	"neui.dev/internal/island/core"
 	"neui.dev/internal/modules/js"
 	"neui.dev/internal/replay"
-	"neui.dev/internal/tools"
 )
 
 func newRun(ctx context.Context, island *island, seq uint, space string, comment string) (*run, error) {
@@ -50,7 +49,7 @@ func newRun(ctx context.Context, island *island, seq uint, space string, comment
 		vm.Close()
 		return nil, err
 	}
-	ctx, cancel := context.WithCancelCause(tools.WithRun(ctrl.Context()))
+	ctx, cancel := context.WithCancelCause(ctrl.Context())
 	r := &run{
 		island:           island,
 		seq:              seq,

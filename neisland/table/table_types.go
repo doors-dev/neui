@@ -122,8 +122,8 @@ type Params struct {
 	Sort       *sortSpec                     `json:"sort,omitempty" description:"sort when the table shows; ignored when the column is out of range or not sortable"`
 	Search     bool                          `json:"search,omitempty" description:"true lets the user search; with rows, only rows with a cell containing the text show, case-insensitive"`
 	PageSize   int                           `json:"pageSize,omitempty" minimum:"1" maximum:"100" default:"20" description:"rows per page"`
-	Clickable  bool                          `json:"clickable,omitempty" description:"true makes each row's first cell clickable"`
-	Selectable bool                          `json:"selectable,omitempty" description:"true lets the user select rows and submit the selection; the selection survives page changes and reloads"`
+	Clickable  bool                          `json:"clickable,omitempty" description:"true makes each row's first cell clickable: the way to let the user pick one row"`
+	Selectable bool                          `json:"selectable,omitempty" description:"true lets the user select several rows and submit them together; the selection survives page changes and reloads"`
 	Selected   []string                      `json:"selected,omitempty" maxItems:"1000" uniqueItems:"true" items.maxLength:"200" description:"ids of the rows selected when the table shows"`
 }
 

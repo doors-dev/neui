@@ -82,7 +82,7 @@ func TestIslandOvertakeWithCanceledCallShowsPlaceholderOnceOldRunEnds(t *testing
 		testkit.Then(func(api.Request) testkit.Turn { return start(board, `ui.notify(2)`) }),
 		testkit.Say("noted"),
 		testkit.Call("page__sync", map[string]any{"path": "board.screen"}),
-		testkit.Call("page__island_continue", map[string]any{"path": "board", "code": `ui.notify(3)`}),
+		testkit.Call("page__island_append", map[string]any{"path": "board", "code": `ui.notify(3)`}),
 		testkit.Say("seen"),
 	)
 	c := stack.Page(t, stack.Host{Provider: p, Page: hold{held: held, release: release, placeheld: placeheld}.board()})

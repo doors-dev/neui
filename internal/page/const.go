@@ -3,7 +3,7 @@ package page
 import "errors"
 
 const moduleName = "page"
-const moduleDesc = `Your access to the live page the user has open: use it to help the user operate the application — navigate, fill inputs, press buttons, call the tools the page exposes, or focus an element to point the user at it. The page is a tree of spaces, UI regions carrying tools, inputs and child spaces. Only what the application chose to expose is there, so a missing element means unavailable to you, not absent from the page: say so instead of guessing. read, write, click, focus and tool act only while the space is as you last read it; otherwise they fail without acting. Every page call made as a tool call costs a round; for repetitive work — the same steps over several rows or items — write a script when the js module is available. A script does not share your reads: sync each space in the script before acting in it. In a script, a refused or failed page call throws, and its e.value holds what its error carries: diff, space, or the failed call's result. Spaces, paths, syncs, rerenders and refused calls are your plumbing, invisible to the user: report outcomes in page terms — what was filled, pressed or changed — unless the user asks how the page works.`
+const moduleDesc = `Your access to the live page the user has open: use it to help the user operate the application — navigate, fill inputs, press buttons, call the tools the page exposes, or focus an element to point the user at it. The page is a tree of spaces, UI regions carrying tools, inputs and child spaces. Only what the application chose to expose is there, so a missing element means unavailable to you, not absent from the page: say so instead of guessing. read, write, click, focus and tool need the space read first, with sync, by you or a script, and act only while it is as it was last read; otherwise they fail without acting. Every page call made as a tool call costs a round; for repetitive work — the same steps over several rows or items — write a script when the js module is available. In a script, a refused or failed page call throws, and its e.value holds what its error carries: diff, space, or the failed call's result. Spaces, paths, syncs, rerenders and refused calls are your plumbing, invisible to the user: report outcomes in page terms — what was filled, pressed or changed — unless the user asks how the page works.`
 const toolName = "tool"
 const toolDesc = `Call a tool defined by the currently rendered page.`
 const readName = "read"
@@ -18,10 +18,10 @@ const syncName = "sync"
 const syncDesc = `Read one space of the currently rendered page whole.`
 const treeName = "tree"
 const treeDesc = `Show the spaces of the currently rendered page with names and descriptions only. It does not count as reading them.`
-const refusedUnreadMessage = "not done: you had not read this space; space shows it as it is now and counts as your read, so check it and call again"
-const refusedChangedMessage = "not done: the space changed since you last read it; diff shows what changed and brings your read up to date, so check it and call again"
+const refusedUnreadMessage = "not done: this space has not been read; space shows it as it is now and counts as a read, so check it and call again"
+const refusedChangedMessage = "not done: the space changed since it was last read; diff shows what changed and brings the read up to date, so check it and call again"
 const refusedDuplicateMessage = "not done: more than one input in this space has this id, so no call can address any of them; use a tool of the space that does the same, or ask the user to do it on the page"
-const refusedTooLargeMessage = "not done: you have not read this space as it is now, and it is too large to show in a result: act on it from a script, syncing it there first; without a script tool, tell the user this part of the page is out of your reach"
+const refusedTooLargeMessage = "not done: this space has not been read as it is now, and it is too large to show in a result: act on it from a script, syncing it there first; without a script tool, tell the user this part of the page is out of your reach"
 const spaceTooLargeMessage = "the space is too large for a result: sync it and act on it from a script, where results have no size limit"
 const islandRevisionMessage = "the island's spec changed since that revision: read island_spec again"
 const toolNotFoundMessage = "no such tool in the space: sync its path to see the current tools"
@@ -31,14 +31,16 @@ const inputNotFoundMessage = "no such input in the space: sync its path to see t
 const islandSpecName = "island_spec"
 const islandSpecDesc = `Read an island's spec: the views, controls, layouts and app functions its app can use, and where its logs and files go. Use only what it lists. Read it before starting an app. Not accessible from scripts.`
 const islandNotFoundMessage = "this space is not an island: call tree to see which spaces are islands"
-const islandSpecPartMessage = "no such part of the spec"
-const islandSpecItemMessage = "one item of the spec is larger than a part can hold, so the spec cannot be read and no app can start in this island"
-const islandStartName = "island_start"
-const islandStartDesc = `Begin a new app in an island with the first part of its script. An app already running there is replaced: its task ends, its queued parts and the values it notified since its last ui.draw() are dropped, and its screen stays until the new app's first ui.draw(). Returns once the part is queued, before it runs. Not accessible from scripts.`
-const islandContinueName = "island_continue"
-const islandContinueDesc = `Append the next part to the script of an island's running app. Returns once the part is queued. Not accessible from scripts.`
-const islandStopName = "island_stop"
-const islandStopDesc = `End an island's app now, whether a part is running or not, and return once it has ended. The island then shows its end screen instead of the app's last frame, and the values notified since the last ui.draw() are dropped. Not accessible from scripts.`
+const islandSpecPageMessage = "no such page of the spec"
+const islandSpecItemMessage = "one item of the spec is larger than a page can hold, so the spec cannot be read and no app can start in this island"
+const islandBeginName = "island_begin"
+const islandBeginDesc = `Begin a new app in an island with the first part of its script. An app already running there is replaced: its task ends, its queued parts and the values it notified since its last ui.draw() are dropped, and its screen stays until the new app's first ui.draw(). Returns once the part is queued, before it runs. Not accessible from scripts.`
+const islandAppendName = "island_append"
+const islandAppendDesc = `Append the next part to the script of an island's running app. It runs once the parts before it have ended, so behind a part that never ends, such as a loop on ui.draw(), it never runs. Not accessible from scripts.`
+const islandInterruptName = "island_interrupt"
+const islandInterruptDesc = `Send the next part to an island's running app to take over: the running part stops at its first ui.draw(), which still presents its frame, the parts queued behind it are dropped, and this part runs. Not accessible from scripts.`
+const islandEndName = "island_end"
+const islandEndDesc = `End an island's app now, whether a part is running or not: the island replaces the app's screen with its own, and the values a running part notified since its last ui.draw() are dropped. Not accessible from scripts.`
 const fileOrCodeMessage = "set exactly one of file and code"
 const islandFromJSMessage = "island tools are not accessible from a script"
 const failedAfterRunMessage = "the call ran and then failed, so the page may have changed: the result that comes with this error shows what changed"
@@ -53,27 +55,29 @@ Open one when it serves the user better than chat or direct page calls do:
 - Complex input: several fields, a choice from options, a confirmation, or a structured answer that would be clumsy to collect in prose.
 - A custom view: a table, summary, comparison or overview built from app data that the app itself doesn't show.
 
-Build what the request needs, plus what the app needs to work and be easy to use, and nothing more.
+Build what the request needs, plus what the app needs to work and be easy to use. An app usually serves this one task and is then closed: skip undo, history, extra screens and write-backs nobody asked for.
 
 To the user, an island is part of the page: tell them what its app shows or asks, not how its script, parts and task work, unless they ask.
 
 How an app runs
 
-An app is one script that you write in parts: island_start begins it with the first part, and each island_continue appends the next part, which runs once the parts before it have ended. Write plain synchronous JavaScript, with no async, await or promises.
+An app is one script that you write in parts: island_begin begins it with the first part, and each island_append appends the next part, which runs once the parts before it have ended. Write plain synchronous JavaScript, with no async, await or promises.
 
 The script runs the app the way a game engine runs frames. It builds a frame and calls ui.draw() to present it: only ui.draw() puts the script's changes on screen. The draw waits for the one thing that happens in that frame, the user's action on one of its controls, and returns it as {id, output}: id is that control's .id, and output has the shape of its output schema. Then the script builds and draws the next frame, or the part ends. No action can happen between draws.
 
-A frame with no control can have no action: its ui.draw() waits until you send island_continue with interrupt or stop the app. ui.draw(ms), with ms above 0, returns null when no action comes within ms milliseconds.
+A frame with no control can have no action: its ui.draw() waits until you send the next part with island_interrupt or end the app with island_end. ui.draw(ms), with ms above 0, returns null when no action comes within ms milliseconds.
 
 ui.notify(value) queues value for you as part of the frame: the draw sends the queued values to you as one notifications_list record, and so does each part's end, an error included.
 
-When a part ends, the app stays open with its last drawn screen and waits for the next part. No draw is waiting then, so its controls do nothing until a later part draws. To close the app from a script, call ui.end().
+When a part ends, whether its code finishes or throws, the app stays open with its last drawn screen and waits for the next part. No draw is waiting then, so its controls do nothing until a later part draws. To close the app from a script, call ui.end().
+
+A throw reaches you as a script_error with its line and reason, so don't catch errors you don't expect on the normal path: fix them in the next part.
 
 At ui.end(), the values notified since the last draw arrive in the app's task result, not as a notifications_list record.
 
-To change what a running part does, send the next part by island_continue with interrupt. It takes over at the running part's first draw: that draw presents its frame and, instead of returning an action, hands control to the new part. The rest of the interrupted part never runs, and the parts queued behind it are cleared.
+To change what a running part does, send the next part with island_interrupt. It takes over at the running part's first draw: that draw presents its frame and, instead of returning an action, hands control to the new part. The rest of the interrupted part never runs, and the parts queued behind it are cleared.
 
-An interrupt, ui.end(), island_stop or a part working too long between draws ends the part on the spot: its catch and finally blocks are skipped.
+island_interrupt, ui.end(), island_end or a part working too long between draws ends the part on the spot: its catch and finally blocks are skipped.
 
 The screen
 
@@ -81,7 +85,7 @@ You control the screen with slots, containers whose content you replace. ui.root
 
 Usually you set ui.root once, to a layout with a slot at each place whose content changes, and afterwards set only those slots.
 
-Example, with placeholder names for the views, controls, layouts and app functions an island's spec lists:
+Example, with made-up names: the real views, controls, layouts and app functions are those the island's spec lists.
 
     var notice = ui.slot(), body = ui.slot()
     ui.root.set(ui.column({}, ui.heading({ text: "Orders" }), notice, body))
@@ -91,6 +95,8 @@ Example, with placeholder names for the views, controls, layouts and app functio
     notice.set()
     body.set(ui.orderEditor({ order: app.order({ id: ev.output }) }))
     ev = ui.draw()
+
+What the island shows is also a space of the page: the island's screen child space. While an app runs, it holds a child space for each view and control on screen; otherwise it holds the island's own placeholder or end screen, which may have content of its own. A view or control may expose inputs, data or tools there, so you can help the user with the app or check it, but none has to.
 
 Views and controls
 
@@ -108,11 +114,11 @@ A typical app builds its screen once and then runs one loop. In the first part, 
 1. Draw, and tell the action apart by comparing its id with each control's .id.
 2. Answer in code whatever code can answer: call app functions and tools, update views and controls, set slots, and draw again. The user sees the result without waiting for you, and none of your turns is spent.
 3. When an action needs your judgment, notify what you need to decide, such as choices, ids, counts and statuses, not data loaded only to display it. Then return from the loop so the part ends. You decide, then send a part that changes what is needed and calls the loop again.
-4. When the work is done, notify the outcome and call ui.end(). Leave the app open after a part ends only while its screen still serves the user or you will continue it.
+4. When the work is done, call ui.end(). Keep the app open only while its screen is what the user wants, such as a dashboard or a view they asked for, or when you will continue it.
 
-Example, with placeholder names:
+Example, with made-up names:
 
-    // island_start
+    // island_begin
     var status = ui.message({ text: "Pick an order to edit it" })
     var orders = ui.orderList({ orders: app.orders({}) })
     var done = ui.button({ text: "Done" })
@@ -149,7 +155,7 @@ Example, with placeholder names:
 
 Saving an order with a refund ends the part, and its end sends you [{"order":7,"refund":120}] as a notifications_list record. You decide, then send:
 
-    // island_continue
+    // island_append
     app.refundOrder({ id: 7, amount: 120 })
     status.update({ text: "Refund of 120 for order 7 approved" })
     body.set(orders)
@@ -157,7 +163,7 @@ Saving an order with a refund ends the part, and its end sends you [{"order":7,"
 
 To change the list while work() waits in a draw:
 
-    // island_continue with interrupt
+    // island_interrupt
     orders.update({ orders: app.orders({ unpaid: true }) })
     work()`
 
@@ -170,7 +176,7 @@ var errSpaceNotFound = errors.New(spaceNotFoundMessage)
 var errInputNotFound = errors.New(inputNotFoundMessage)
 var errRights = errors.New(rightsMessage)
 var errIslandNotFound = errors.New(islandNotFoundMessage)
-var errIslandSpecPart = errors.New(islandSpecPartMessage)
+var errIslandSpecPage = errors.New(islandSpecPageMessage)
 var errIslandSpecItem = errors.New(islandSpecItemMessage)
 var errFileOrCode = errors.New(fileOrCodeMessage)
 var errIslandFromJS = errors.New(islandFromJSMessage)

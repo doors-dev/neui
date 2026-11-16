@@ -12,7 +12,6 @@ import (
 	"github.com/gammazero/deque"
 	"modernc.org/quickjs"
 	"neui.dev/internal/modules/js/task"
-	"neui.dev/internal/tools"
 )
 
 type ConfigKey struct{}
@@ -199,7 +198,7 @@ func (r *runtime) execute(vm *quickjs.VM, input task.Input) (out string, err err
 	if err := RegisterLoggers(vm, input.Controller.FS(), logName(input.Name)); err != nil {
 		return "", fmt.Errorf("%q: %v: %w", input.Name, err, errRuntime)
 	}
-	if err := RegisterModules(vm, tools.WithRun(input.Context), input.Controller.Modules()); err != nil {
+	if err := RegisterModules(vm, input.Context, input.Controller.Modules()); err != nil {
 		return "", fmt.Errorf("%q: %v: %w", input.Name, err, errRuntime)
 	}
 	res, err := vm.Eval(input.Script, quickjs.EvalGlobal)

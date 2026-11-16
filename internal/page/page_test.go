@@ -669,40 +669,34 @@ func TestReportListsWhatChanged(t *testing.T) {
 	}
 }
 
-func TestScriptsReadForThemselves(t *testing.T) {
-	add := map[string]any{"path": "cart", "tool": "add", "arg": map[string]any{}}
-	script := func(code string) testkit.Turn {
-		return testkit.Call("js__run", map[string]any{"code": code, "comment": "adds"})
-	}
+func TestAgentAndScriptsShareReads(t *testing.T) {
 	p := testkit.NewProvider(api.Model{},
 		testkit.Call("page__sync", map[string]any{"path": "cart"}),
-		script(`const out = []
-try { page__tool({path: "cart", tool: "add", arg: {}}) } catch (e) { out.push(Object.keys(e.value).join(",")) }
-out.push(page__tool({path: "cart", tool: "add", arg: {}}).output)
-return out`),
-		testkit.Call("page__tool", add),
-		script(`try { page__tool({path: "cart", tool: "add", arg: {}}) } catch (e) { return [e.message, Object.keys(e.value).join(",")] }`),
+		testkit.Call("js__run", map[string]any{"code": `page__sync({path: "notes"})
+try { return ["ran", page__tool({path: "cart", tool: "add", arg: {}}).output] } catch (e) { return [e.message, Object.keys(e.value).join(",")] }`, "comment": "adds"}),
+		testkit.Call("page__tool", map[string]any{"path": "notes", "tool": "restock", "arg": map[string]any{}}),
 		testkit.Say("done"),
 	)
 	c := stack.Page(t, stack.Host{Provider: p, Page: shop(), Options: []common.Option{common.OptionModule(js.Module)}})
 	c.Send("add from a script")
 	c.Wait()
-	var first struct{ Result []string }
-	testkit.Decode(t, testkit.Results(p.Request(t, 2))[0], &first)
-	if fmt.Sprint(first.Result) != "[space added]" {
-		t.Fatalf("the script saw %q, want its first add refused with the space and its second run", first.Result)
+	var script struct{ Result []string }
+	testkit.Decode(t, testkit.Results(p.Request(t, 2))[0], &script)
+	if fmt.Sprint(script.Result) != "[ran added]" {
+		t.Fatalf("a script acting on the agent's read saw %q, want the add run", script.Result)
 	}
-	if r := refusedWith(t, testkit.Results(p.Request(t, 3))[0]); r.Space == nil {
-		t.Fatalf("the agent's add after the script's read was refused with %+v, want the whole space", r)
+	r := testkit.Results(p.Request(t, 3))[0]
+	if r.Error != api.ToolOk {
+		t.Fatalf("the agent's restock on a script's read answered %#v, want it run", r.Content)
 	}
-	var second struct{ Result []string }
-	testkit.Decode(t, testkit.Results(p.Request(t, 4))[0], &second)
-	if len(second.Result) != 2 || !strings.HasPrefix(second.Result[0], "tool: not done") || second.Result[1] != "space" {
-		t.Fatalf("a second script saw %q, want the add refused with the space", second.Result)
+	var restocked toolOutput
+	testkit.Decode(t, r, &restocked)
+	if restocked.Output != "restocked" {
+		t.Fatalf("the agent's restock on a script's read answered %+v", restocked)
 	}
 }
 
-func TestEachScriptRunReadsForItself(t *testing.T) {
+func TestScriptsShareReads(t *testing.T) {
 	script := func(code string) testkit.Turn {
 		return testkit.Call("js__run", map[string]any{"code": code, "comment": "adds"})
 	}
@@ -716,8 +710,41 @@ func TestEachScriptRunReadsForItself(t *testing.T) {
 	c.Wait()
 	var second struct{ Result []string }
 	testkit.Decode(t, testkit.Results(p.Request(t, 2))[0], &second)
-	if len(second.Result) != 2 || !strings.HasPrefix(second.Result[0], "tool: not done: you had not read this space") || second.Result[1] != "space" {
-		t.Fatalf("a script acting on the read of an earlier script saw %q, want the add refused with the space", second.Result)
+	if fmt.Sprint(second.Result) != "[ran added]" {
+		t.Fatalf("a script acting on the read of an earlier script saw %q, want the add run", second.Result)
+	}
+}
+
+func TestRefusalsFollowTheLastReadByAnyone(t *testing.T) {
+	p := testkit.NewProvider(api.Model{},
+		round(call("cart", "page__sync", map[string]any{"path": "cart"}), call("notes", "page__sync", map[string]any{"path": "notes"})),
+		testkit.Call("page__tool", map[string]any{"path": "notes", "tool": "restock", "arg": map[string]any{}}),
+		testkit.Call("js__run", map[string]any{"code": `const act = (path, tool) => { try { return ["ran", page__tool({path: path, tool: tool, arg: {}}).output] } catch (e) { return [e.message, Object.keys(e.value).join(",")] } }
+return [act("cart", "add"), act("", "checkout")]`, "comment": "adds and checks out"}),
+		round(call("add", "page__tool", map[string]any{"path": "cart", "tool": "add", "arg": map[string]any{}}), call("checkout", "page__tool", map[string]any{"path": "", "tool": "checkout", "arg": map[string]any{}})),
+		testkit.Say("done"),
+	)
+	c := stack.Page(t, stack.Host{Provider: p, Page: shop(), Options: []common.Option{common.OptionModule(js.Module)}})
+	c.Send("restock, add and check out")
+	c.Wait()
+	var script struct{ Result [][]string }
+	testkit.Decode(t, testkit.Results(p.Request(t, 3))[0], &script)
+	if len(script.Result) != 2 || len(script.Result[0]) != 2 || !strings.HasPrefix(script.Result[0][0], "tool: not done: the space changed since it was last read") || script.Result[0][1] != "diff" {
+		t.Fatalf("a script's add on the cart the agent read before the restock saw %q, want it refused with the diff", script.Result)
+	}
+	if len(script.Result[1]) != 2 || !strings.HasPrefix(script.Result[1][0], "tool: not done: this space has not been read") || script.Result[1][1] != "space" {
+		t.Fatalf("a script's checkout on the root nobody read saw %q, want it refused with the space", script.Result[1])
+	}
+	for i, want := range []string{"added", "checking out"} {
+		r := testkit.Results(p.Request(t, 4))[i]
+		if r.Error != api.ToolOk {
+			t.Fatalf("the agent's call %s after the script's refusals answered %#v, want it run", r.ID, r.Content)
+		}
+		var out toolOutput
+		testkit.Decode(t, r, &out)
+		if out.Output != want {
+			t.Fatalf("the agent's call %s answered %+v, want %q", r.ID, out, want)
+		}
 	}
 }
 
@@ -861,7 +888,7 @@ func TestResultsFitTheRoundItemBudget(t *testing.T) {
 		t.Fatalf("the grow answered %+v, want only its output: the diff does not fit", grew)
 	}
 	for i := 4; i <= 5; i++ {
-		plain(t, result(i), "not done: you have not read this space as it is now, and it is too large")
+		plain(t, result(i), "not done: this space has not been read as it is now, and it is too large")
 	}
 	refused(t, result(6), "too large for a result")
 	var scripted struct{ Result int }
@@ -944,7 +971,7 @@ func TestFailuresFitTheRoundItemBudget(t *testing.T) {
 		t.Fatalf("the call after the loud failure was refused with %+v, want the count it did not see", r)
 	}
 	for i := 8; i <= 9; i++ {
-		plain(t, result(i), "not done: you have not read this space as it is now, and it is too large")
+		plain(t, result(i), "not done: this space has not been read as it is now, and it is too large")
 	}
 }
 

@@ -1,24 +1,8 @@
 package tools
 
-import (
-	"context"
-	"sync/atomic"
-)
+import "context"
 
 type fromKey struct{}
-
-type runKey struct{}
-
-var runs atomic.Uint64
-
-func WithRun(ctx context.Context) context.Context {
-	return context.WithValue(ctx, runKey{}, runs.Add(1))
-}
-
-func RunID(ctx context.Context) uint64 {
-	id, _ := ctx.Value(runKey{}).(uint64)
-	return id
-}
 
 type from int
 

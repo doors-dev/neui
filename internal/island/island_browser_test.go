@@ -63,7 +63,7 @@ func TestIslandDrawReturnsAfterTimeout(t *testing.T) {
 	carries(t, lastText(p.Request(t, 3)), `<task_notify `, `kind="notifications_list"`, `script="1"`, `[{"drawn":null}]`)
 }
 
-func TestIslandEndCarriesValuesSinceLastDraw(t *testing.T) {
+func TestIslandUIEndCarriesValuesSinceLastDraw(t *testing.T) {
 	p := testkit.NewProvider(api.Model{},
 		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
 		revised(t, func(revision string) testkit.Turn {
@@ -150,7 +150,7 @@ func TestIslandInterruptHandsOverTheUI(t *testing.T) {
 		revised(t, func(revision string) testkit.Turn {
 			return start(revision, `var b = ui.press({label: "wait", value: "(n) => n"}); ui.root.set(b); while (true) { ui.draw() }`)
 		}),
-		shownThen(t, shown, testkit.Call("page__island_continue", map[string]any{"path": "board", "code": `app.mark({N: 2}); ui.notify({kept: b.id})`, "interrupt": true})),
+		shownThen(t, shown, testkit.Call("page__island_interrupt", map[string]any{"path": "board", "code": `app.mark({N: 2}); ui.notify({kept: b.id})`})),
 		testkit.Say("continued"),
 		testkit.Say("noted"),
 	)
@@ -160,7 +160,7 @@ func TestIslandInterruptHandsOverTheUI(t *testing.T) {
 	var s started
 	testkit.Decode(t, testkit.Results(p.Request(t, 3))[0], &s)
 	if s != (started{Task: 1, Script: 2}) {
-		t.Fatalf("island_continue answered %+v, want task 1 script 2", s)
+		t.Fatalf("island_interrupt answered %+v, want task 1 script 2", s)
 	}
 	select {
 	case <-marks:
@@ -180,25 +180,59 @@ func TestIslandInterruptHandsOverTheUI(t *testing.T) {
 	}
 }
 
-func TestIslandStopEndsTask(t *testing.T) {
+func TestIslandAppendWaitsBehindADrawLoopAndInterruptTakesOver(t *testing.T) {
+	marks := make(chan int)
+	shown := make(chan string, 1)
+	p := testkit.NewProvider(api.Model{},
+		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
+		revised(t, func(revision string) testkit.Turn {
+			return start(revision, `var b = ui.press({label: "wait", value: "(n) => n"}); ui.root.set(b); while (true) { ui.draw() }`)
+		}),
+		shownThen(t, shown, testkit.Call("page__island_append", map[string]any{"path": "board", "code": `app.mark({N: 1})`})),
+		testkit.Call("page__island_interrupt", map[string]any{"path": "board", "code": `app.mark({N: 2}); ui.notify({kept: b.id})`}),
+		testkit.Say("interrupted"),
+		testkit.Say("noted"),
+	)
+	c := stack.Browser(t, stack.Host{Provider: p, Page: board(marks, shown)})
+	c.Send("change the board")
+	c.Wait()
+	for i, want := range []started{{Task: 1, Script: 2}, {Task: 1, Script: 3}} {
+		var s started
+		testkit.Decode(t, testkit.Results(p.Request(t, 3+i))[0], &s)
+		if s != want {
+			t.Fatalf("call %d answered %+v, want %+v", i+1, s, want)
+		}
+	}
+	select {
+	case n := <-marks:
+		if n != 2 {
+			t.Fatalf("the first mark is %d, want 2 from the interrupting part: the appended part waits behind the draw loop and is dropped", n)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the interrupting part never ran")
+	}
+	carries(t, recorded(t, c, p, `kind="notifications_list"`), `script="3"`, `[{"kept":1}]`)
+}
+
+func TestIslandEndEndsTask(t *testing.T) {
 	shown := make(chan string, 1)
 	p := testkit.NewProvider(api.Model{},
 		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
 		revised(t, func(revision string) testkit.Turn {
 			return start(revision, `ui.root.set(ui.press({label: "wait", value: "(n) => n"})); while (true) { ui.draw() }`)
 		}),
-		shownThen(t, shown, testkit.Call("page__island_stop", map[string]any{"path": "board"})),
-		testkit.Say("stopped"),
+		shownThen(t, shown, testkit.Call("page__island_end", map[string]any{"path": "board"})),
+		testkit.Say("ended"),
 	)
 	c := stack.Browser(t, stack.Host{Provider: p, Page: board(make(chan int, 1), shown)})
 	c.Send("close the board")
 	events := c.Wait()
 	if r := testkit.Results(p.Request(t, 3))[0]; r.Error != api.ToolOk {
-		t.Fatalf("island_stop failed with %#v", r.Content)
+		t.Fatalf("island_end failed with %#v", r.Content)
 	}
 	carries(t, lastText(p.Request(t, 3)), `<task_result `, `task_id="1"`)
 	if trace := stack.Trace(events); trace[len(trace)-1] != "RoundEnd(ok,final)" {
-		t.Fatalf("the stop round traced %v", trace)
+		t.Fatalf("the end round traced %v", trace)
 	}
 }
 

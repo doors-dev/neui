@@ -15,7 +15,7 @@ type toolArg struct {
 
 type islandSpecArg struct {
 	Path string `json:"path" required:"true" description:"space path: child names from the root joined with dots; \"\" is the page root"`
-	Part uint   `json:"part,omitempty" description:"the part to read, from 1, when the spec comes in parts; absent reads part 1"`
+	Page uint   `json:"page,omitempty" description:"the page to read, from 1, when the spec comes in pages; absent reads page 1"`
 }
 
 type syncArg struct {
@@ -75,7 +75,7 @@ type node struct {
 }
 
 type report struct {
-	Diff    *diff    `json:"diff,omitempty" description:"what changed in the called space while the call ran, whatever caused it: this call, the user or the application; {} when nothing did. It brings your read of the space up to date, so no sync is needed after the call. Absent only when it and changes would not fit in a result; your read then stays as it was before the call."`
+	Diff    *diff    `json:"diff,omitempty" description:"what changed in the called space while the call ran, whatever caused it: this call, the user or the application; {} when nothing did. It brings the read of the space up to date, so no sync is needed after the call. Absent only when it and changes would not fit in a result; the read then stays as it was before the call."`
 	Changes []change `json:"changes,omitempty" description:"other spaces that changed while the call ran, whatever caused it. When many spaces change at once, the densest groups are folded into their common ancestor; added spaces stay listed one by one unless very many appeared at once."`
 }
 
@@ -147,7 +147,7 @@ type inputArg struct {
 	Value  any    `json:"value,omitempty"`
 }
 
-type islandStartArg struct {
+type islandBeginArg struct {
 	Path     string `json:"path" required:"true" description:"space path: child names from the root joined with dots; \"\" is the page root"`
 	Revision string `json:"revision" required:"true" description:"the revision from the first line of island_spec"`
 	File     string `json:"file,omitempty" description:"workspace path of a file holding this part; set exactly one of file and code"`
@@ -155,14 +155,13 @@ type islandStartArg struct {
 	Comment  string `json:"comment" description:"short description of what the app does; shown to the user while it runs and echoed in its task records"`
 }
 
-type islandContinueArg struct {
-	Path      string `json:"path" required:"true" description:"space path: child names from the root joined with dots; \"\" is the page root"`
-	File      string `json:"file,omitempty" description:"workspace path of a file holding this part; set exactly one of file and code"`
-	Code      string `json:"code,omitempty" description:"source of this part; set exactly one of file and code"`
-	Interrupt bool   `json:"interrupt,omitempty" description:"true: this part interrupts the running one instead of running after the parts sent before it"`
+type islandNextArg struct {
+	Path string `json:"path" required:"true" description:"space path: child names from the root joined with dots; \"\" is the page root"`
+	File string `json:"file,omitempty" description:"workspace path of a file holding this part; set exactly one of file and code"`
+	Code string `json:"code,omitempty" description:"source of this part; set exactly one of file and code"`
 }
 
-type islandStopArg struct {
+type islandEndArg struct {
 	Path string `json:"path" required:"true" description:"space path: child names from the root joined with dots; \"\" is the page root"`
 }
 

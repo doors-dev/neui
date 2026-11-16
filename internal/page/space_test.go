@@ -113,7 +113,7 @@ func TestDiffShowsWhatChanged(t *testing.T) {
 	s := p.at("cart")
 	s.data = []*data{note("one")}
 	p.restamp()
-	old := s.snapshot(0)
+	old := s.snapshot()
 	if d := s.diff(old); d == nil || !reflect.ValueOf(*d).IsZero() {
 		t.Fatalf("an unchanged space diffs as %+v, want an empty diff", d)
 	}
@@ -158,7 +158,7 @@ func TestDiffAndChangesShowToolsAndInputs(t *testing.T) {
 	p.at("inputs").list = []input{field("x", RW)}
 	p.at("all").tools = []*tool{kit("t", 1)}
 	p.restamp()
-	old := form.snapshot(0)
+	old := form.snapshot()
 	before := map[string][4]uint64{}
 	p.space.digests(before)
 	form.tools = []*tool{kit("b", 2), kit("c", 1)}

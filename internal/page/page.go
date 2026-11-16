@@ -52,7 +52,6 @@ type module struct {
 }
 
 type snapshot struct {
-	by     uint64
 	digest [4]uint64
 	state  state
 }
@@ -211,7 +210,7 @@ func (p *page) Module() Module {
 		if err != nil {
 			return state{}, err
 		}
-		live := s.snapshot(tools.RunID(ctx))
+		live := s.snapshot()
 		if !fits(ctx, "", live.state) {
 			return state{}, fmt.Errorf("space %q: %w", s.path, errSpaceTooLarge)
 		}
@@ -233,26 +232,26 @@ func (p *page) Module() Module {
 		revision := xxh3.HashString(spec)
 		ctrl := common.GetController(ctx)
 		limit := replay.RoundItemBudget(ctrl.Config(), ctrl.Model()) / 2
-		part := max(arg.Part, 1)
+		want := max(arg.Page, 1)
 		whole := fmt.Sprintf("revision %016x\n\n", revision)
 		if len(whole)+len(spec) <= limit {
-			if part > 1 {
-				return "", fmt.Errorf("part %d, the spec has 1 in all: %w", part, errIslandSpecPart)
+			if want > 1 {
+				return "", fmt.Errorf("page %d, the spec has 1 in all: %w", want, errIslandSpecPage)
 			}
 			return whole + spec, nil
 		}
 		head := func(i int, n int) string {
 			if i < n {
-				return fmt.Sprintf("revision %016x\npart %d of %d: call island_spec with part %d for the rest\n\n", revision, i, n, i+1)
+				return fmt.Sprintf("revision %016x\npage %d of %d: call island_spec with page %d for the rest\n\n", revision, i, n, i+1)
 			}
-			return fmt.Sprintf("revision %016x\npart %d of %d\n\n", revision, i, n)
+			return fmt.Sprintf("revision %016x\npage %d of %d\n\n", revision, i, n)
 		}
 		room := limit - len(head(len(ends)-1, len(ends)))
 		cuts := []int{0}
 		prev := 0
 		for i, end := range ends {
 			if end-prev > room {
-				return "", fmt.Errorf("%s takes %d bytes, a part holds %d: %w", items[i], end-prev, room, errIslandSpecItem)
+				return "", fmt.Errorf("%s takes %d bytes, a page holds %d: %w", items[i], end-prev, room, errIslandSpecItem)
 			}
 			if end-cuts[len(cuts)-1] > room {
 				cuts = append(cuts, prev)
@@ -260,16 +259,16 @@ func (p *page) Module() Module {
 			prev = end
 		}
 		cuts = append(cuts, len(spec))
-		parts := len(cuts) - 1
-		if part > uint(parts) {
-			return "", fmt.Errorf("part %d, the spec has %d in all: %w", part, parts, errIslandSpecPart)
+		pages := len(cuts) - 1
+		if want > uint(pages) {
+			return "", fmt.Errorf("page %d, the spec has %d in all: %w", want, pages, errIslandSpecPage)
 		}
-		return head(int(part), parts) + spec[cuts[part-1]:cuts[part]], nil
+		return head(int(want), pages) + spec[cuts[want-1]:cuts[want]], nil
 	})
 	if err != nil {
 		panic(err)
 	}
-	_, err = m.Add(islandStartName, islandStartDesc, func(ctx context.Context, arg islandStartArg) (islandRunResult, error) {
+	_, err = m.Add(islandBeginName, islandBeginDesc, func(ctx context.Context, arg islandBeginArg) (islandRunResult, error) {
 		if tools.FromJS(ctx) {
 			return islandRunResult{}, errIslandFromJS
 		}
@@ -294,7 +293,7 @@ func (p *page) Module() Module {
 	if err != nil {
 		panic(err)
 	}
-	_, err = m.Add(islandContinueName, islandContinueDesc, func(ctx context.Context, arg islandContinueArg) (islandRunResult, error) {
+	_, err = m.Add(islandAppendName, islandAppendDesc, func(ctx context.Context, arg islandNextArg) (islandRunResult, error) {
 		if tools.FromJS(ctx) {
 			return islandRunResult{}, errIslandFromJS
 		}
@@ -307,16 +306,38 @@ func (p *page) Module() Module {
 		}
 		var task, script uint
 		if arg.File != "" {
-			task, script, err = island.ContinueFile(ctx, arg.File, arg.Interrupt)
+			task, script, err = island.ContinueFile(ctx, arg.File, false)
 		} else {
-			task, script, err = island.ContinueCode(arg.Code, arg.Interrupt)
+			task, script, err = island.ContinueCode(arg.Code, false)
 		}
 		return islandRunResult{Task: task, Script: script}, err
 	})
 	if err != nil {
 		panic(err)
 	}
-	_, err = m.Add(islandStopName, islandStopDesc, func(ctx context.Context, arg islandStopArg) (struct{}, error) {
+	_, err = m.Add(islandInterruptName, islandInterruptDesc, func(ctx context.Context, arg islandNextArg) (islandRunResult, error) {
+		if tools.FromJS(ctx) {
+			return islandRunResult{}, errIslandFromJS
+		}
+		if (arg.File == "") == (arg.Code == "") {
+			return islandRunResult{}, errFileOrCode
+		}
+		island, _, err := p.Island(ctx, arg.Path)
+		if err != nil {
+			return islandRunResult{}, err
+		}
+		var task, script uint
+		if arg.File != "" {
+			task, script, err = island.ContinueFile(ctx, arg.File, true)
+		} else {
+			task, script, err = island.ContinueCode(arg.Code, true)
+		}
+		return islandRunResult{Task: task, Script: script}, err
+	})
+	if err != nil {
+		panic(err)
+	}
+	_, err = m.Add(islandEndName, islandEndDesc, func(ctx context.Context, arg islandEndArg) (struct{}, error) {
 		if tools.FromJS(ctx) {
 			return struct{}{}, errIslandFromJS
 		}
@@ -357,9 +378,8 @@ func (m *module) act[T any](ctx context.Context, path string, find func(s *space
 	if err != nil {
 		return permit[T]{}, err
 	}
-	by := tools.RunID(ctx)
 	old, ok := m.snaps[s.path]
-	if ok && old.by == by && old.digest == s.digest {
+	if ok && old.digest == s.digest {
 		item, err := find(s)
 		if err != nil {
 			return permit[T]{}, err
@@ -368,9 +388,9 @@ func (m *module) act[T any](ctx context.Context, path string, find func(s *space
 		m.page.space.digests(before)
 		return permit[T]{module: m, item: item, old: old, before: before}, nil
 	}
-	live := s.snapshot(by)
+	live := s.snapshot()
 	r := refusal{reason: refusedUnreadMessage, Space: &live.state}
-	if ok && old.by == by {
+	if ok {
 		r = refusal{reason: refusedChangedMessage, Diff: s.diff(old)}
 	}
 	if !fits(ctx, r.reason, r) {
@@ -417,7 +437,7 @@ func (a permit[T]) report(ctx context.Context, path string, message string, res 
 		return nil
 	}
 	if s != nil {
-		a.module.store(s, s.snapshot(a.old.by))
+		a.module.store(s, s.snapshot())
 	}
 	return nil
 }

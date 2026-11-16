@@ -217,8 +217,8 @@ func (s *space) state() state {
 	return out
 }
 
-func (s *space) snapshot(by uint64) snapshot {
-	return snapshot{by: by, digest: s.digest, state: s.state()}
+func (s *space) snapshot() snapshot {
+	return snapshot{digest: s.digest, state: s.state()}
 }
 
 func (s *space) diff(old snapshot) *diff {
