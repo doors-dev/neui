@@ -20,6 +20,7 @@ require (
 	golang.org/x/net v0.58.0
 	modernc.org/libquickjs v0.13.1
 	modernc.org/quickjs v0.25.0
+	modernc.org/sqlite v1.57.0
 	rsc.io/pdf v0.1.1
 )
 
