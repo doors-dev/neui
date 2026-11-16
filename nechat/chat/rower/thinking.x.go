@@ -1,4 +1,4 @@
-// Managed by GoX v0.3.4
+// Managed by GoX v0.4.0
 
 //line thinking.gox:1
 package rower
@@ -39,7 +39,7 @@ type thinking struct {
 	summarySlot *doors.Door
 }
 
-const summary = "Thinking..."
+const summary = "Reasoning"
 
 //line thinking.gox:41
 func (t *thinking) Main() gox.Elem {

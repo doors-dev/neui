@@ -1720,15 +1720,33 @@
   .nechat-follow {
     height: 0px;
   }
+  .nechat-agent .nechat-follow {
+    display: inline;
+  }
   .nechat-turn {
+    display: inline;
     min-width: 0px;
   }
   .nechat-blk {
+    margin-inline-end: calc(var(--spacing, 0.25rem) * 4);
     margin-top: calc(var(--spacing, 0.25rem) * 2);
-    display: grid;
+    display: inline-grid;
+    max-width: 100%;
     min-width: 0px;
     grid-template-columns: 1rem minmax(0,1fr);
     column-gap: calc(var(--spacing, 0.25rem) * 2);
+    vertical-align: top;
+  }
+  .nechat-blk:has(> :is(.nechat-prose, .nechat-summary), > .nechat-col > .nechat-status, > .nechat-think[open]) {
+    margin-inline-end: 0px;
+    display: grid;
+    font-family: var(--font-serif, ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif);
+  }
+  .nechat-blk > :is(.nechat-records, .nechat-tools-flat, div.nechat-think),	.nechat-blk > .nechat-think:not([open]) > .nechat-think-head {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .nechat-user {
     position: relative;
@@ -1787,11 +1805,8 @@
     gap: calc(var(--spacing, 0.25rem) * 1.5);
   }
   .nechat-agent {
+    display: inline;
     min-width: 0px;
-    font-family: var(--font-serif, ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif);
-  }
-  .nechat-turn > .nechat-blk {
-    font-family: var(--font-serif, ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif);
   }
   .nechat-records, .nechat-summary {
     color: var(--app-ink-quiet);
@@ -1849,16 +1864,17 @@
     white-space: nowrap;
   }
   .nechat-tools-flat {
-    display: flex;
-    flex-wrap: wrap;
-    column-gap: calc(var(--spacing, 0.25rem) * 3);
     color: var(--app-ink-quiet);
   }
   .nechat-tool-flat {
     display: inline-flex;
     gap: var(--spacing, 0.25rem);
   }
+  .nechat-tool-flat:not(:last-child) {
+    margin-inline-end: calc(var(--spacing, 0.25rem) * 3);
+  }
   .nechat-tool-flat:not(:last-child)::after {
+    margin-inline-start: calc(var(--spacing, 0.25rem) * -1);
     --nechat-tw-content: ',';
     content: var(--nechat-tw-content);
   }
@@ -1913,10 +1929,6 @@
     outline-color: var(--focus-ring);
     --nechat-tw-outline-style: solid;
     outline-style: solid;
-  }
-  .nechat-think-body .nechat-prose {
-    font-size: var(--text-sm, 0.875rem);
-    line-height: var(--nechat-tw-leading, var(--text-sm--line-height, calc(1.25 / 0.875)));
   }
   .nechat-prose {
     --_nechat-radius-sm: var(--nechat-radius-sm, 0.25rem);

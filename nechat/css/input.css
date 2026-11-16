@@ -1405,16 +1405,25 @@
 	.nechat-section[data-pending] { @apply hidden }
 	.nechat-span { @apply h-[100cqh] absolute top-0 -z-10 w-full pointer-events-none }
 	.nechat-follow { @apply h-0 }
-	.nechat-turn { @apply min-w-0 }
+	.nechat-agent .nechat-follow { @apply inline }
+	.nechat-turn { @apply inline min-w-0 }
 
 	.nechat-blk {
 		@apply
-		grid
+		inline-grid
 		grid-cols-[1rem_minmax(0,1fr)]
 		gap-x-2
+		align-top
+		max-w-full
 		min-w-0
+		me-4
 		mt-2
 	}
+
+	.nechat-blk:has(> :is(.nechat-prose, .nechat-summary), > .nechat-col > .nechat-status, > .nechat-think[open]) { @apply grid me-0 font-serif }
+
+	.nechat-blk > :is(.nechat-records, .nechat-tools-flat, div.nechat-think),
+	.nechat-blk > .nechat-think:not([open]) > .nechat-think-head { @apply block whitespace-nowrap overflow-hidden text-ellipsis }
 
 	.nechat-user { @apply relative flex justify-end items-center gap-2 min-w-0 mt-5 mb-3 }
 
@@ -1463,8 +1472,7 @@
 
 	.nechat-bubble-text { @apply whitespace-pre-wrap }
 	.nechat-bubble-files { @apply flex flex-wrap justify-end gap-1.5 min-w-0 }
-	.nechat-agent { @apply font-serif min-w-0 }
-	.nechat-turn > .nechat-blk { @apply font-serif }
+	.nechat-agent { @apply inline min-w-0 }
 	.nechat-records, .nechat-summary { @apply text-(--app-ink-quiet) }
 
 	.nechat-seam {
@@ -1519,16 +1527,11 @@
 		text-ellipsis
 	}
 
-	.nechat-tools-flat {
-		@apply
-		flex
-		flex-wrap
-		gap-x-3
-		text-(--app-ink-quiet)
-	}
+	.nechat-tools-flat { @apply text-(--app-ink-quiet) }
 
 	.nechat-tool-flat { @apply inline-flex gap-1 }
-	.nechat-tool-flat:not(:last-child)::after { @apply content-[','] }
+	.nechat-tool-flat:not(:last-child) { @apply me-3 }
+	.nechat-tool-flat:not(:last-child)::after { @apply content-[','] -ms-1 }
 	.nechat-tool-count { @apply text-(--app-ink-quiet) tabular-nums }
 
 	.nechat-think {
@@ -1577,7 +1580,6 @@
 		outline-(--focus-ring)
 	}
 
-	.nechat-think-body .nechat-prose { @apply text-sm }
 
 	.nechat-prose {
 		--_nechat-radius-sm: var(--nechat-radius-sm, 0.25rem);

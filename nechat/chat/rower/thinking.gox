@@ -36,7 +36,7 @@ type thinking struct {
 	summarySlot *doors.Door
 }
 
-const summary = "Thinking..."
+const summary = "Reasoning"
 
 elem (t *thinking) Main() {
 	~~

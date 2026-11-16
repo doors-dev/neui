@@ -71,7 +71,7 @@ ui.notify(value) queues value for you as part of the frame: the draw sends the q
 
 When a part ends, whether its code finishes or throws, the app stays open with its last drawn screen and waits for the next part. No draw is waiting then, so its controls do nothing until a later part draws. To close the app from a script, call ui.end().
 
-A throw reaches you as a script_error with its line and reason, so don't catch errors you don't expect on the normal path: fix them in the next part.
+A throw reaches you as a script_error with its line and reason, so don't catch errors you don't expect on the normal path: fix them in the next part. If you spot a bug in a part that is still running, don't wait for the user to hit it: send the fix at once with island_interrupt; the app's views and state stay.
 
 At ui.end(), the values notified since the last draw arrive in the app's task result, not as a notifications_list record.
 
