@@ -316,17 +316,18 @@ type Params struct {
 	_       struct{}       `additionalProperties:"false"`
 	Fields  []fieldParams  `json:"fields" required:"true" nullable:"false" minItems:"1" maxItems:"50" description:"fields in display order, each with a name unique within the form"`
 	Submits []submitParams `json:"submits,omitempty" maxItems:"5" description:"submit buttons in display order; omitted gives one Submit button"`
-	Cancel  string         `json:"cancel,omitempty" minLength:"1" maxLength:"80" description:"label of a cancel button; pressing it gives {\"canceled\": true}; omit for no cancel button"`
 }
 
 type submitParams struct {
-	_     struct{} `additionalProperties:"false"`
-	Text  string   `json:"text" required:"true" minLength:"1" maxLength:"80" description:"label of the button"`
-	Value string   `json:"value,omitempty" maxLength:"200" description:"what the result's submit gets when this button is pressed; \"\" when omitted"`
-	Style string   `json:"style,omitempty" enum:"primary,secondary,success,danger" description:"visual weight; primary for the first button and secondary for the others when omitted"`
+	_          struct{} `additionalProperties:"false"`
+	Text       string   `json:"text" required:"true" minLength:"1" maxLength:"80" description:"label of the button"`
+	Value      string   `json:"value,omitempty" maxLength:"200" description:"what the result's submit gets when this button is pressed; \"\" when omitted"`
+	Style      string   `json:"style,omitempty" enum:"primary,secondary,success,danger" description:"visual weight; primary for the first button and secondary for the others when omitted"`
+	Novalidate bool     `json:"novalidate,omitempty" description:"true lets this button work even while rules fail; its submit gives the data as entered; use it for skip/reject actions"`
 }
 
 var errDuplicateName = errors.New("duplicate field name")
+var errNovalidateValue = errors.New("a novalidate button needs a value that no button without novalidate has")
 var errRequired = errors.New("field is required")
 var errUploading = errors.New("files are still uploading")
 var errSystem = errors.New("couldn't check this value")

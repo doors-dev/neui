@@ -79,7 +79,7 @@ func TestMarkdownFileLinks(t *testing.T) {
 
 func TestMarkdownTableCells(t *testing.T) {
 	a := stack.Island(t, devkit.App{Island: widgets(), Dir: markdownWorkspace(t), Script: `
-		ui.root.set(ui.table({columns: [{title: "File", sort: true}, {title: "Note"}], search: true, selectable: true, rows: [
+		ui.root.set(ui.table({columns: [{title: "File", sort: true}, {title: "Note"}], search: true, select: {}, rows: [
 			{id: "a", cells: ["[zeta](file:///notes.txt)", "**b**old # not a heading"]},
 			{id: "b", cells: ["*alpha*", "` + "`code`" + ` [site](https://example.com)"]},
 			{id: "c", cells: ["**Mid**", "[gone](file:///missing.txt)"]}

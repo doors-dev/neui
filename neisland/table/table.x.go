@@ -45,9 +45,9 @@ type widget struct {
 // call; either change goes back to the first page. A click on a row's first
 // cell (when clickable) submits the row id, and a click on one of its action
 // buttons submits the row id and the button's value, to the script waiting
-// in ui.draw(). When selectable, rows
-// get checkboxes; the selection, at most 1000 ids, survives page changes and
-// reloads, and its button submits the selected ids, sorted. An
+// in ui.draw(). With select, rows get checkboxes; the selection, at most
+// 1000 ids, survives page changes and reloads, and the select button submits
+// the selected ids, sorted. An
 // empty patch reloads the rows.
 func New(ctx context.Context, p Params, submit func(ctx context.Context, s Submit) bool) (api.Widget[Patch], error) {
 	p.initDefault()
@@ -213,7 +213,7 @@ func (t widget) render() gox.Elem {
 	if actions {
 		columnCount++
 	}
-	if t.params.Selectable {
+	if t.params.Select != nil {
 		columnCount++
 	}
 
@@ -243,7 +243,7 @@ func (t widget) render() gox.Elem {
 							__e = __c.Submit(); if __e != nil { return }
 //line table.gox:192
 							__e = __c.Any(func() any {
-							if !t.params.Selectable {
+							if t.params.Select == nil {
 								return nil
 							}
 							ids := make([]string, len(content.Rows))
@@ -353,7 +353,7 @@ func (t widget) render() gox.Elem {
 									__e = __c.Set("class", "neisland-table-row"); if __e != nil { return }
 									__e = __c.Submit(); if __e != nil { return }
 //line table.gox:229
-									if t.params.Selectable {
+									if t.params.Select != nil {
 										__e = __c.Init("td"); if __e != nil { return }
 										{
 //line table.gox:230
@@ -478,7 +478,7 @@ func (t widget) render() gox.Elem {
 										__e = __c.Set("aria-hidden", "true"); if __e != nil { return }
 										__e = __c.Submit(); if __e != nil { return }
 //line table.gox:289
-										if t.params.Selectable {
+										if t.params.Select != nil {
 											__e = __c.Init("td"); if __e != nil { return }
 											{
 //line table.gox:290
@@ -787,7 +787,7 @@ func (t widget) status(sel map[string]struct{}, content result, page int, size i
 //line table.gox:458
 				__e = __c.Set("type", "button"); if __e != nil { return }
 //line table.gox:459
-				__e = __c.Set("class", "neisland-button neisland-button-sm neisland-button-primary"); if __e != nil { return }
+				__e = __c.Set("class", "neisland-button neisland-button-sm neisland-button-" + t.params.Select.Style); if __e != nil { return }
 //line table.gox:460
 				__e = __c.Modify(doors.AClick{
 				Scope: neui.IslandScope(ctx),
@@ -797,7 +797,8 @@ func (t widget) status(sel map[string]struct{}, content result, page int, size i
 				},
 			}); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-				__e = __c.Text("Submit"); if __e != nil { return }
+//line table.gox:467
+				__e = __c.Any(t.params.Select.Text); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 			__e = __c.Init("button"); if __e != nil { return }

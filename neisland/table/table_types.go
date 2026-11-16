@@ -115,21 +115,33 @@ func stateEqual(old state, new state) bool {
 
 // Params is what a script passes to ui.table.
 type Params struct {
-	_          struct{}                      `additionalProperties:"false"`
-	Columns    []column                      `json:"columns" required:"true" nullable:"false" minItems:"1" maxItems:"12" description:"column headers, in order"`
-	Query      neui.IslandCall[page, result] `json:"query,omitempty" description:"returns the rows for a page, called whenever the table needs rows"`
-	Rows       []row                         `json:"rows,omitempty" maxItems:"100" description:"fixed rows; the table pages, sorts and searches them itself"`
-	Sort       *sortSpec                     `json:"sort,omitempty" description:"sort when the table shows; ignored when the column is out of range or not sortable"`
-	Search     bool                          `json:"search,omitempty" description:"true lets the user search; with rows, only rows with a cell containing the text show, case-insensitive"`
-	PageSize   int                           `json:"pageSize,omitempty" minimum:"1" maximum:"100" default:"20" description:"rows per page"`
-	Clickable  bool                          `json:"clickable,omitempty" description:"true makes each row's first cell clickable: the way to let the user pick one row"`
-	Selectable bool                          `json:"selectable,omitempty" description:"true lets the user select several rows and submit them together; the selection survives page changes and reloads"`
-	Selected   []string                      `json:"selected,omitempty" maxItems:"1000" uniqueItems:"true" items.maxLength:"200" description:"ids of the rows selected when the table shows"`
+	_         struct{}                      `additionalProperties:"false"`
+	Columns   []column                      `json:"columns" required:"true" nullable:"false" minItems:"1" maxItems:"12" description:"column headers, in order"`
+	Query     neui.IslandCall[page, result] `json:"query,omitempty" description:"returns the rows for a page, called whenever the table needs rows"`
+	Rows      []row                         `json:"rows,omitempty" maxItems:"100" description:"fixed rows; the table pages, sorts and searches them itself"`
+	Sort      *sortSpec                     `json:"sort,omitempty" description:"sort when the table shows; ignored when the column is out of range or not sortable"`
+	Search    bool                          `json:"search,omitempty" description:"true lets the user search; with rows, only rows with a cell containing the text show, case-insensitive"`
+	PageSize  int                           `json:"pageSize,omitempty" minimum:"1" maximum:"100" default:"20" description:"rows per page"`
+	Clickable bool                          `json:"clickable,omitempty" description:"true makes each row's first cell clickable: the way to let the user pick one row"`
+	Selected  []string                      `json:"selected,omitempty" maxItems:"1000" uniqueItems:"true" items.maxLength:"200" description:"ids of the rows selected when the table shows"`
+	Select    *selection                    `json:"select,omitempty" description:"lets the user select several rows and submit them together with this button; the selection survives page changes and reloads"`
+}
+
+type selection struct {
+	_     struct{} `additionalProperties:"false"`
+	Text  string   `json:"text,omitempty" minLength:"1" maxLength:"80" default:"Submit" description:"label of the button"`
+	Style string   `json:"style,omitempty" enum:"primary,secondary,success,danger" default:"primary" description:"visual weight"`
 }
 
 func (p *Params) initDefault() {
 	if p.PageSize == 0 {
 		p.PageSize = 20
+	}
+	if p.Select != nil && p.Select.Text == "" {
+		p.Select.Text = "Submit"
+	}
+	if p.Select != nil && p.Select.Style == "" {
+		p.Select.Style = "primary"
 	}
 	if p.Sort != nil && (p.Sort.Column < 0 || p.Sort.Column >= len(p.Columns) || !p.Columns[p.Sort.Column].Sort) {
 		p.Sort = nil

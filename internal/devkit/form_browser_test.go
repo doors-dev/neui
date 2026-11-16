@@ -664,39 +664,6 @@ func TestFormSubmits(t *testing.T) {
 	stack.ExpectJSON(t, a.Submitted(), `{"data": {"title": "Hi"}, "submit": "publish"}`)
 }
 
-func TestFormCancel(t *testing.T) {
-	a, f := formApp(t, `{fields: [{type: "text", label: "Name", name: "name", required: true}], cancel: "Never mind"}`)
-	f.ExpectSubmitDisabled(true)
-	f.Find(".neisland-form-actions button[type=button]").WaitText("Never mind")
-	f.Cancel()
-	stack.ExpectJSON(t, a.Submitted(), `{"canceled": true}`)
-}
-
-func TestFormCancelQuietAfterSubmits(t *testing.T) {
-	_, f := formApp(t, `{fields: [{type: "text", label: "Name", name: "name", required: true}], submits: [{text: "Save", value: "save"}, {text: "Publish", value: "publish"}], cancel: "Never mind"}`)
-	f.ExpectSubmitMessage("form is not completed or contains errors")
-	got := f.Find(".neisland-form-actions").Element().MustEval(`() => {
-		const order = Array.from(this.children).map((c) => c.matches("button[type=submit]") ? "submit" : c.matches("button.neisland-form-cancel") ? "cancel" : c.matches(".neisland-form-help") ? "help" : c.tagName).join(" ")
-		const cancel = this.querySelector(".neisland-form-cancel")
-		const save = this.querySelector("button[type=submit]")
-		const s = getComputedStyle(cancel)
-		const r = cancel.getBoundingClientRect()
-		const row = Math.abs(r.top + r.height / 2 - (save.getBoundingClientRect().top + save.getBoundingClientRect().height / 2)) < 1
-		return [order, s.backgroundColor, s.borderTopWidth, s.textDecorationLine, r.height >= 24, row].join(" | ")
-	}`).String()
-	if want := "submit submit cancel help | rgba(0, 0, 0, 0) | 0px | underline | true | true"; got != want {
-		t.Fatalf("the actions are %q, want %q", got, want)
-	}
-	focus := f.Find(".neisland-form-cancel").Element().MustEval(`() => {
-		this.focus()
-		const s = getComputedStyle(this)
-		return [this.matches(":focus-visible"), s.outlineStyle, s.outlineWidth].join(" ")
-	}`).String()
-	if focus != "true solid 2px" {
-		t.Fatalf("the focused cancel shows %q, want a 2px focus ring", focus)
-	}
-}
-
 func TestFormFile(t *testing.T) {
 	dir := t.TempDir()
 	a := stack.Island(t, devkit.App{Island: widgets(), Dir: dir, Script: `ui.root.set(ui.form({fields: [

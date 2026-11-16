@@ -4589,61 +4589,6 @@
     justify-content: flex-start;
     gap: calc(var(--spacing, 0.25rem) * 1.5);
   }
-  .neisland-form-cancel {
-    margin: 0px;
-    display: inline-flex;
-    min-height: calc(var(--spacing, 0.25rem) * 6);
-    cursor: pointer;
-    align-items: center;
-    border-radius: var(--neisland-radius,0.25rem);
-    border-style: var(--neisland-tw-border-style);
-    border-width: 0px;
-    background-color: transparent;
-    padding-inline: calc(var(--spacing, 0.25rem) * 1.5);
-    font-family: inherit;
-    font-size: var(--text-sm, 0.875rem);
-    line-height: var(--leading-tight, 1.25);
-    --neisland-tw-font-weight: var(--font-weight-medium, 500);
-    font-weight: var(--font-weight-medium, 500);
-    color: currentcolor;
-    @supports (color: color-mix(in lab, red, red)) {
-      color: color-mix(in oklab, currentcolor 82%, transparent);
-    }
-    text-decoration-line: underline;
-    text-decoration-color: currentcolor;
-    @supports (color: color-mix(in lab, red, red)) {
-      text-decoration-color: color-mix(in oklab, currentcolor 40%, transparent);
-    }
-    text-underline-offset: 2px;
-    -webkit-user-select: none;
-    user-select: none;
-    &:hover {
-      @media (hover: hover) {
-        color: currentcolor;
-      }
-    }
-    &:hover {
-      @media (hover: hover) {
-        text-decoration-color: currentcolor;
-      }
-    }
-    &:focus-visible {
-      outline-style: var(--neisland-tw-outline-style);
-      outline-width: 2px;
-    }
-    &:focus-visible {
-      outline-offset: 2px;
-    }
-    &:focus-visible {
-      outline-color: var(--neisland-focus,light-dark(var(--color-blue-600,#2563eb),var(--color-blue-400,#60a5fa)));
-    }
-    @media (forced-colors: active) {
-      color: LinkText;
-    }
-    @media (forced-colors: active) {
-      text-decoration-color: LinkText;
-    }
-  }
   .neisland-form-framed {
     border-radius: var(--neisland-radius-lg,0.375rem);
     border-style: var(--neisland-tw-border-style);

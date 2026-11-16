@@ -42,9 +42,9 @@ type widget struct {
 // call; either change goes back to the first page. A click on a row's first
 // cell (when clickable) submits the row id, and a click on one of its action
 // buttons submits the row id and the button's value, to the script waiting
-// in ui.draw(). When selectable, rows
-// get checkboxes; the selection, at most 1000 ids, survives page changes and
-// reloads, and its button submits the selected ids, sorted. An
+// in ui.draw(). With select, rows get checkboxes; the selection, at most
+// 1000 ids, survives page changes and reloads, and the select button submits
+// the selected ids, sorted. An
 // empty patch reloads the rows.
 func New(ctx context.Context, p Params, submit func(ctx context.Context, s Submit) bool) (api.Widget[Patch], error) {
 	p.initDefault()
@@ -180,7 +180,7 @@ elem (t widget) render() {
 	if actions {
 		columnCount++
 	}
-	if t.params.Selectable {
+	if t.params.Select != nil {
 		columnCount++
 	}
 	~~
@@ -190,7 +190,7 @@ elem (t widget) render() {
 				<thead>
 					<tr>
 						~({
-							if !t.params.Selectable {
+							if t.params.Select == nil {
 								return nil
 							}
 							ids := make([]string, len(content.Rows))
@@ -226,7 +226,7 @@ elem (t widget) render() {
 					} else {
 						~(for _, r := range content.Rows {
 							<tr class="neisland-table-row">
-								~(if t.params.Selectable {
+								~(if t.params.Select != nil {
 									<td class="neisland-table-cell neisland-table-check">
 										~({
 											label := r.ID
@@ -286,7 +286,7 @@ elem (t widget) render() {
 						~(if page > 1 || content.Total != nil && *content.Total > size {
 							~(for range size - len(content.Rows) {
 								<tr class="neisland-table-filler" aria-hidden="true">
-									~(if t.params.Selectable {
+									~(if t.params.Select != nil {
 										<td class="neisland-table-cell neisland-table-check"></td>
 									})
 									~(for range t.params.Columns {
@@ -456,7 +456,7 @@ elem (t widget) status(sel map[string]struct{}, content result, page int, size i
 		<span class="neisland-table-status-text" role="status"><span class="neisland-table-count">~(len(sel))</span> selected</span>
 		<button
 			type="button"
-			class="neisland-button neisland-button-sm neisland-button-primary"
+			class=("neisland-button neisland-button-sm neisland-button-" + t.params.Select.Style)
 			(doors.AClick{
 				Scope: neui.IslandScope(ctx),
 				On: func(ctx context.Context, _ doors.RequestPointer) bool {
@@ -464,7 +464,7 @@ elem (t widget) status(sel map[string]struct{}, content result, page int, size i
 					return false
 				},
 			})>
-			Submit
+			~(t.params.Select.Text)
 		</button>
 		<button
 			type="button"

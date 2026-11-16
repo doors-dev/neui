@@ -353,31 +353,6 @@ func TestSubmitEnterInSearchDoesNotSubmit(t *testing.T) {
 	stack.ExpectJSON(t, covSubmitted(a), `{"data": {"title": "Hi", "veg": [{"value": "kale", "label": "Kale"}]}, "submit": "publish"}`)
 }
 
-func TestCancelSkipsValidation(t *testing.T) {
-	a, f := covSubmitApp(t, "", `{fields: [
-		{type: "text", label: "Name", name: "name", required: true},
-		{type: "number", label: "Count", name: "count", min: 1}
-	], submits: [{text: "Save", value: "save"}, {text: "Publish", value: "publish"}], cancel: "Never mind"}`)
-	if texts := f.ActionTexts(); !reflect.DeepEqual(texts, []string{"Save", "Publish", "Never mind"}) {
-		t.Fatalf("the actions are %q, want the cancel after the submits", texts)
-	}
-	f.Find(".neisland-form-actions button[type=button]").WaitAttr("class", "neisland-form-cancel")
-	f.ExpectSubmitMessage("form is not completed or contains errors")
-	f.ExpectCancelEnabled()
-	f.Cancel()
-	stack.ExpectJSON(t, covSubmitted(a), `{"canceled": true}`)
-	f.Field("Count").Type("0")
-	f.ExpectSubmitMessage("form is not completed or contains errors")
-	f.ExpectCancelEnabled()
-	f.Cancel()
-	stack.ExpectJSON(t, covSubmitted(a), `{"canceled": true}`)
-	f.Field("Name").Type("Ada")
-	f.Field("Count").Type("3")
-	f.ExpectSubmitDisabled(false)
-	f.Cancel()
-	stack.ExpectJSON(t, covSubmitted(a), `{"canceled": true}`)
-}
-
 const covSubmitShapesSpec = `{fields: [
 	{type: "text", label: "Text", name: "text"},
 	{type: "email", label: "Email", name: "email"},

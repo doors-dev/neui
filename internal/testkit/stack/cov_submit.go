@@ -42,8 +42,7 @@ func (f Form) SubmitButtons() []SubmitButton {
 	return buttons
 }
 
-// ActionTexts lists the texts of every button by the submit buttons, the
-// cancel button included, in display order.
+// ActionTexts lists the texts of the form's action buttons in display order.
 func (f Form) ActionTexts() []string {
 	f.a.t.Helper()
 	raw := f.Find(".neisland-form-actions").Element().MustEval(`() => JSON.stringify(Array.from(this.querySelectorAll("button")).map((b) => b.textContent.replace(/\s+/g, " ").trim()))`).Str()
@@ -54,13 +53,7 @@ func (f Form) ActionTexts() []string {
 	return texts
 }
 
-// ExpectCancelEnabled waits until the cancel button can be pressed.
-func (f Form) ExpectCancelEnabled() {
-	f.a.t.Helper()
-	f.Find(".neisland-form-actions button[type=button]").WaitNoAttr("disabled")
-}
-
-// Settle waits out the moment after a submit or a cancel, while the app
+// Settle waits out the moment after a submit, while the app
 // still rejects submits until the script draws again.
 func (a *IslandApp) Settle() {
 	time.Sleep(500 * time.Millisecond)

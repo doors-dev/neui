@@ -537,12 +537,6 @@ func (f Form) Submit(text string) {
 	f.do("submit", text, fmt.Sprintf("press enabled submit %q", text))
 }
 
-// Cancel presses the cancel button.
-func (f Form) Cancel() {
-	f.a.t.Helper()
-	f.do("cancel", nil, "press cancel")
-}
-
 // ExpectSubmitDisabled waits until every submit button is disabled, or
 // every one is enabled.
 func (f Form) ExpectSubmitDisabled(disabled bool) {
@@ -829,14 +823,6 @@ const widgetJS = `function (path, op, arg) {
 		if (b.disabled) {
 			const help = actions().querySelector(".neisland-form-help")
 			throw new Error("submit " + JSON.stringify(arg) + " is disabled: " + (help ? norm(help.textContent) : "no message"))
-		}
-		b.click()
-		return ""
-	}
-	case "cancel": {
-		const b = actions().querySelector("button[type=button]")
-		if (!b) {
-			throw new Error("no cancel button")
 		}
 		b.click()
 		return ""

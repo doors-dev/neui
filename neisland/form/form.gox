@@ -16,8 +16,7 @@ import (
 // fields and presses one of the submit buttons, which sends
 // {"data": values, "submit": button value} to the script waiting in
 // ui.draw(). Files upload into the island dir as they are picked; a file
-// field's value is their workspace paths. The cancel button sends
-// {"canceled": true}.
+// field's value is their workspace paths.
 func New(ctx context.Context, p Params, submit func(ctx context.Context, s map[string]any) bool) (api.Widget[struct{}], error) {
 	if len(p.Submits) == 0 {
 		p.Submits = []submitParams{{Text: "Submit"}}
@@ -29,6 +28,13 @@ func New(ctx context.Context, p Params, submit func(ctx context.Context, s map[s
 			p.Submits[i].Style = "primary"
 		default:
 			p.Submits[i].Style = "secondary"
+		}
+	}
+	for _, s := range p.Submits {
+		if s.Novalidate && slices.ContainsFunc(p.Submits, func(o submitParams) bool {
+			return !o.Novalidate && o.Value == s.Value
+		}) {
+			return nil, fmt.Errorf("submit %q: %w", s.Text, errNovalidateValue)
 		}
 	}
 	m := make(map[string]any)
@@ -116,20 +122,21 @@ func (f *widget) onSubmit(ctx context.Context, r doors.RequestRawForm) {
 		neui.IslandReport(ctx, fmt.Errorf("form submit: %w", err))
 		return
 	}
-	choice := f.params.Submits[0].Value
-	if value := parsed.FormValue(f.id); slices.ContainsFunc(f.params.Submits, func(s submitParams) bool {
+	choice := f.params.Submits[0]
+	value := parsed.FormValue(f.id)
+	if i := slices.IndexFunc(f.params.Submits, func(s submitParams) bool {
 		return s.Value == value
-	}) {
-		choice = value
+	}); i >= 0 {
+		choice = f.params.Submits[i]
 	}
 	f.root.mu.Lock()
-	if errorsOf(*f.group.errors.Get()) != errorsNone {
+	if !choice.Novalidate && errorsOf(*f.group.errors.Get()) != errorsNone {
 		f.root.mu.Unlock()
 		return
 	}
 	data := f.group.collect()
 	f.root.mu.Unlock()
-	f.submit(ctx, map[string]any{"data": data, "submit": choice})
+	f.submit(ctx, map[string]any{"data": data, "submit": choice.Value})
 }
 
 elem (f *widget) Main() {
@@ -154,29 +161,25 @@ elem (f *widget) Main() {
 		})
 		<div class="neisland-form-actions neisland-form-actions-band">
 			~(for _, s := range f.params.Submits {
-				<button
-					(&f.locked)
-					type="submit"
-					class=("neisland-button neisland-button-md neisland-button-" + s.Style)
-					data-submit=(s.Value)
-					disabled=(errs != errorsNone)
-					aria-describedby=(f.id + "-s")>
-					~(s.Text)
-				</button>
-			})
-			~(if f.params.Cancel != "" {
-				<button
-					(doors.AClick{
-						Scope: scope,
-						On: func(ctx context.Context, r doors.RequestPointer) bool {
-							f.submit(ctx, map[string]any{"canceled": true})
-							return false
-						},
-					})
-					type="button"
-					class="neisland-form-cancel">
-					~(f.params.Cancel)
-				</button>
+				~(if s.Novalidate {
+					<button
+						type="submit"
+						class=("neisland-button neisland-button-md neisland-button-" + s.Style)
+						data-submit=(s.Value)
+						formnovalidate>
+						~(s.Text)
+					</button>
+				} else {
+					<button
+						(&f.locked)
+						type="submit"
+						class=("neisland-button neisland-button-md neisland-button-" + s.Style)
+						data-submit=(s.Value)
+						disabled=(errs != errorsNone)
+						aria-describedby=(f.id + "-s")>
+						~(s.Text)
+					</button>
+				})
 			})
 			~(f.errors.Bind(elem(errs errorKind) {
 				~(if errs != errorsNone {

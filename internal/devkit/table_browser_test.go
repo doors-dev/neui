@@ -14,7 +14,7 @@ import (
 
 func TestTableRowsPatchKeepsSelectedRows(t *testing.T) {
 	a := stack.Island(t, devkit.App{Island: widgets(), Script: `
-		var table = ui.table({columns: [{title: "Name"}], selectable: true, selected: ["c", "b"], rows: [
+		var table = ui.table({columns: [{title: "Name"}], select: {}, selected: ["c", "b"], rows: [
 			{id: "a", cells: ["Ann"]}, {id: "b", cells: ["Bob"]}, {id: "c", cells: ["Cid"]}
 		]})
 		var patch = ui.button({text: "Patch"})
@@ -77,7 +77,7 @@ const footerJS = `() => {
 }`
 
 func TestTableFooterStatusSlotKeepsSizeWithSelection(t *testing.T) {
-	a := layoutApp(t, 1280, `ui.table({columns: [{title: "Name"}], selectable: true, rows: `+tableRows(57)+`})`)
+	a := layoutApp(t, 1280, `ui.table({columns: [{title: "Name"}], select: {}, rows: `+tableRows(57)+`})`)
 	status := a.Find(".neisland-table-footer > .neisland-table-status")
 	status.Find(".neisland-table-status-text").WaitText("Showing 1–20 of 57")
 	before := a.Page.MustEval(footerJS).String()
@@ -97,7 +97,7 @@ func TestTableFooterStatusSlotKeepsSizeWithSelection(t *testing.T) {
 }
 
 func TestTableFooterWrapsPagerOnNarrowPage(t *testing.T) {
-	a := layoutApp(t, 390, `ui.table({columns: [{title: "Name"}], selectable: true, pageSize: 10, rows: `+tableRows(100)+`})`)
+	a := layoutApp(t, 390, `ui.table({columns: [{title: "Name"}], select: {}, pageSize: 10, rows: `+tableRows(100)+`})`)
 	a.Find(".neisland-table-status-text").WaitText("Showing 1–10 of 100")
 	got := a.Page.MustEval(footerJS).String()
 	if f := strings.Fields(got); f[0] != "208" || f[1] != "24" || f[2] != "12" || f[4] != "12" || f[5] != "true" || f[6] != "true" {
@@ -140,7 +140,7 @@ func tableRowsWithActions(n int) string {
 }
 
 func TestTableLastPageOfRowsPadsWithFillers(t *testing.T) {
-	a := layoutApp(t, 1280, `ui.table({columns: [{title: "Name"}, {title: "Note"}], selectable: true, pageSize: 5, rows: `+tableRowsWithActions(12)+`})`)
+	a := layoutApp(t, 1280, `ui.table({columns: [{title: "Name"}, {title: "Note"}], select: {}, pageSize: 5, rows: `+tableRowsWithActions(12)+`})`)
 	status := a.Find(".neisland-table-status-text")
 	status.WaitText("Showing 1–5 of 12")
 	first := strings.Fields(a.Page.MustEval(fillerJS).String())
@@ -188,7 +188,7 @@ func TestTableLastPageOfQueryPadsWithFillers(t *testing.T) {
 }
 
 func TestTableSinglePageHasNoFillers(t *testing.T) {
-	a := layoutApp(t, 1280, `ui.column({}, ui.table({columns: [{title: "Name"}], selectable: true, pageSize: 5, rows: `+tableRows(3)+`}), ui.table({columns: [{title: "Entry"}], pageSize: 5, query: String(function (p) {
+	a := layoutApp(t, 1280, `ui.column({}, ui.table({columns: [{title: "Name"}], select: {}, pageSize: 5, rows: `+tableRows(3)+`}), ui.table({columns: [{title: "Entry"}], pageSize: 5, query: String(function (p) {
 		return {rows: [{id: "a", cells: ["a"]}, {id: "b", cells: ["b"]}]}
 	})}))`)
 	a.Find(".neisland-table-card:nth-of-type(1) .neisland-table-status-text").WaitText("Showing 1–3 of 3")
@@ -210,7 +210,7 @@ const narrowCellsJS = `() => {
 func TestTableNarrowKeepsShortValuesOnOneLine(t *testing.T) {
 	for _, width := range []int{570, 390} {
 		t.Run(strconv.Itoa(width), func(t *testing.T) {
-			a := layoutApp(t, width, `ui.table({columns: [{title: "Invoice"}, {title: "Amount"}, {title: "Due date"}, {title: "Description"}], selectable: true, rows: [
+			a := layoutApp(t, width, `ui.table({columns: [{title: "Invoice"}, {title: "Amount"}, {title: "Due date"}, {title: "Description"}], select: {}, rows: [
 				{id: "a", cells: ["INV-20418", "$1,412.00", "2026-11-12", "Quarterly freight for the north region, including two late deliveries that were credited back on the next statement"], actions: [{value: "view", text: "View"}, {value: "pay", text: "Mark paid", style: "primary"}]},
 				{id: "b", cells: ["INV-20419", "$412.00", "2026-11-13", "Spare parts"], actions: [{value: "view", text: "View"}, {value: "pay", text: "Mark paid", style: "primary"}]}
 			]})`)
@@ -255,7 +255,7 @@ func TestTableRendersAsOneCard(t *testing.T) {
 }
 
 func TestTableCardCheckColumnKeepsPadding(t *testing.T) {
-	a := layoutApp(t, 1280, `ui.table({columns: [{title: "Name"}], selectable: true, rows: [{id: "a", cells: ["Ann"]}, {id: "b", cells: ["Bob"]}]})`)
+	a := layoutApp(t, 1280, `ui.table({columns: [{title: "Name"}], select: {}, rows: [{id: "a", cells: ["Ann"]}, {id: "b", cells: ["Bob"]}]})`)
 	a.Find(".neisland-table-status-text").WaitText("Showing 1–2 of 2")
 	expectEval(t, a, `() => {
 		const card = document.querySelector(".neisland-table-card")
