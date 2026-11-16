@@ -70,6 +70,9 @@ type child struct {
 
 type node struct {
 	child
+	Tools    int    `json:"tools,omitempty"`
+	Inputs   int    `json:"inputs,omitempty"`
+	Data     int    `json:"data,omitempty"`
 	Children []node `json:"children,omitempty" description:"child spaces in name order"`
 	More     int    `json:"more,omitempty" description:"this many children not listed; call tree on this space to go deeper, or sync it to see all its children"`
 }

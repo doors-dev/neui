@@ -235,6 +235,24 @@ func TestTreeMarksWhatItLeavesOut(t *testing.T) {
 	}
 }
 
+func TestTreeCountsWhatEachSpaceHolds(t *testing.T) {
+	p := tree("form")
+	form := p.at("form")
+	form.tools = []*tool{{Name: "a"}, {Name: "b"}}
+	field := input{ID: "i1"}
+	field.raw, _ = json.Marshal(map[string]any{"id": "i1"})
+	field.hash = xxh3.Hash(field.raw)
+	form.list = []input{field, field}
+	form.data = []*data{note("x"), note("y"), note("x")}
+	got := p.space.tree(1).Children[0]
+	if got.Tools != 2 || got.Inputs != 1 || got.Data != 2 {
+		t.Fatalf("form counts %d tools, %d inputs and %d data, want 2, 1 and 2: inputs and data that cannot be told apart are listed once", got.Tools, got.Inputs, got.Data)
+	}
+	if root := p.space.tree(0); root.Tools != 0 || root.Inputs != 0 || root.Data != 0 {
+		t.Fatalf("the empty root counts %+v, want nothing", root)
+	}
+}
+
 func TestChangesListOneEntryPerSubtree(t *testing.T) {
 	p := tree("a", "b.gone.deep", "c.x")
 	before := map[string][4]uint64{}

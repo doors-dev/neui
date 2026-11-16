@@ -274,7 +274,20 @@ func (s *space) diff(old snapshot) *diff {
 }
 
 func (s *space) tree(depth uint) node {
-	out := node{child: child{Name: s.name, Desc: s.desc, Island: s.island != nil}}
+	out := node{child: child{Name: s.name, Desc: s.desc, Island: s.island != nil}, Tools: len(s.tools)}
+	seen := map[uint64]bool{}
+	for _, in := range s.list {
+		if !seen[in.hash] {
+			seen[in.hash] = true
+			out.Inputs++
+		}
+	}
+	for _, e := range s.data {
+		if !seen[e.hash] {
+			seen[e.hash] = true
+			out.Data++
+		}
+	}
 	if depth == 0 {
 		out.More = len(s.children)
 		return out

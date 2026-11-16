@@ -237,7 +237,7 @@ func TestSyncSpace(t *testing.T) {
 	testkit.Golden(t, out.Bytes())
 }
 
-func TestTreeShowsSpacesOnly(t *testing.T) {
+func TestTreeShowsSpacesAndCountsOnly(t *testing.T) {
 	p := testkit.NewProvider(api.Model{},
 		round(call("root", "page__tree", map[string]any{}), call("cart", "page__tree", map[string]any{"path": "cart", "depth": 0})),
 		testkit.Say("done"),
@@ -252,8 +252,8 @@ func TestTreeShowsSpacesOnly(t *testing.T) {
 		got = append(got, string(raw))
 	}
 	want := []string{
-		`{"name":"","desc":"","children":[{"name":"cart","desc":"the cart"},{"name":"notes","desc":"the notes"}]}`,
-		`{"name":"cart","desc":"the cart"}`,
+		`{"name":"","desc":"","tools":1,"data":1,"children":[{"name":"cart","desc":"the cart","tools":1,"inputs":2,"data":1},{"name":"notes","desc":"the notes","tools":1,"data":1}]}`,
+		`{"name":"cart","desc":"the cart","tools":1,"inputs":2,"data":1}`,
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("tree answered\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))

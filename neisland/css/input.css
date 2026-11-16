@@ -159,7 +159,7 @@
 	.neisland-tone-danger { @apply shadow-[inset_0_3px_0_var(--neisland-danger,var(--color-red-600,#dc2626))] forced-colors:border-t-4 }
 	.neisland-tone-label { @apply sr-only }
 
-	.neisland-table-card { @apply flex flex-col min-w-0 rounded-(--neisland-radius-lg,0.375rem) border border-current/16 forced-colors:border-[CanvasText] }
+	.neisland-table-card { @apply flex flex-col grow min-w-[min(100%,var(--neisland-item-md,12rem))] rounded-(--neisland-radius-lg,0.375rem) border border-current/16 forced-colors:border-[CanvasText] }
 	.neisland-table-card-head { @apply flex px-3 pt-3 pb-2.5 }
 	.neisland-table-card-box {
 		@apply overflow-auto max-h-(--neisland-table-max-h,28rem) scroll-pt-8
@@ -237,7 +237,7 @@
 	}
 	.neisland-table-search { @apply max-w-xs }
 
-	.neisland-form { @apply flex flex-col gap-y-2.5 min-w-0 @container text-sm }
+	.neisland-form { @apply flex flex-col grow gap-y-2.5 min-w-[min(100%,var(--neisland-item-md,12rem))] @container text-sm }
 	.neisland-form-field { @apply flex flex-col gap-1 min-w-0 }
 	.neisland-form-label { @apply text-sm font-medium text-current/82 }
 	.neisland-form-legend { @apply float-left w-full px-0 }
