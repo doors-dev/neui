@@ -34,8 +34,8 @@ func stubThread(t *testing.T, id api.ThreadID, p api.Provider, config api.Thread
 	backend := common.NewBackend(ctx, messages, store, store, []common.Option{common.OptionProvider(p)})
 	fs := filesystem.Open(id, store, store, api.FilesConfig{})
 	t.Cleanup(func() { fs.Dispose() })
-	linkCtx, linkCancel := context.WithCancel(ctx)
-	linkCancel()
+	linkCtx, linkCancel := context.WithCancelCause(ctx)
+	linkCancel(nil)
 	th := &thread{id: id, ch: make(chan Command)}
 	th.link = &link{
 		thread:     th,
@@ -426,7 +426,7 @@ func openLink(st interface{ on(any) }, cmd commandLink) (Link, error) {
 }
 
 func livePage(th *thread) {
-	th.link.linkCtx, th.link.linkCancel = context.WithCancel(context.Background())
+	th.link.linkCtx, th.link.linkCancel = context.WithCancelCause(context.Background())
 	th.link.page = page.NewPage(context.Background())
 	th.link.toolkit = toolkit.NewToolkit(context.Background())
 }
@@ -470,6 +470,9 @@ func TestOpenFromAnotherPageInheritsTheLink(t *testing.T) {
 	}
 	if link.inner == old || old.linkCtx.Err() == nil {
 		t.Fatalf("an open from another page kept the old link")
+	}
+	if cause := context.Cause(old.linkCtx); !errors.Is(cause, common.ErrRelinked) {
+		t.Fatalf("an open from another page ended the old page's work with %v, want the relink", cause)
 	}
 }
 

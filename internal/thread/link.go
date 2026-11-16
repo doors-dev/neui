@@ -24,7 +24,7 @@ func newLink(thread *thread, backend *common.Backend, page page.Page, meta any) 
 	fs := filesystem.Open(thread.id, backend.WorkspaceStorage(), backend.FileStorage(), backend.FilesConfig())
 	ctx, cancel := context.WithCancel(backend.Context())
 	toolkit := toolkit.NewToolkit(ctx, backend.Modules()...)
-	linkCtx, linkCancel := context.WithCancel(ctx)
+	linkCtx, linkCancel := context.WithCancelCause(ctx)
 	pageModule := page.Module()
 	linkToolkit := toolkit.Wrap(linkCtx, func(context.Context) common.Module { return pageModule })
 	return &link{
@@ -52,7 +52,7 @@ type link struct {
 	ctx         context.Context
 	cancel      context.CancelFunc
 	linkCtx     context.Context
-	linkCancel  context.CancelFunc
+	linkCancel  context.CancelCauseFunc
 	ch          chan Message
 	toolkit     toolkit.Toolkit
 	linkToolkit toolkit.Toolkit
@@ -173,8 +173,8 @@ func (l *link) dispose() {
 }
 
 func (l *link) inherit(page page.Page, meta any) *link {
-	l.linkCancel()
-	linkCtx, linkCancel := context.WithCancel(l.ctx)
+	l.linkCancel(common.ErrRelinked)
+	linkCtx, linkCancel := context.WithCancelCause(l.ctx)
 	pageModule := page.Module()
 	linkToolkit := l.toolkit.Wrap(linkCtx, func(context.Context) common.Module { return pageModule })
 	return &link{

@@ -831,6 +831,65 @@ func TestIslandEndEndsAppWithItsOwnResult(t *testing.T) {
 	}
 }
 
+func TestIslandRelinkEndsAppWithTheValuesSinceItsLastDraw(t *testing.T) {
+	const relinked = "the chat moved to a new page, by a reload or in another tab, which ended the app; begin a new one with island_begin if it is still needed"
+	const queued = `ui.root.set(ui.column({})); ui.notify(2); app.mark({N: 1}); ui.draw()`
+	relink := func(c *stack.Chat, _ api.Task) { c.Relink() }
+	for _, tc := range []struct {
+		name string
+		code string
+		end  func(c *stack.Chat, task api.Task)
+		want string
+	}{
+		{"relinked while the draw waits", `ui.root.set(ui.column({})); app.mark({N: 1}); ui.draw()`, relink,
+			`<task_result comment="the board app" error="` + relinked + `" log="board.island.log" module="page" name="island_begin" path="board" task_id="1">null</task_result>`},
+		{"relinked with values notified since the last draw", queued, relink,
+			`<task_result comment="the board app" error="` + relinked + `" log="board.island.log" module="page" name="island_begin" path="board" task_id="1">{"notifications":[2]}</task_result>`},
+		{"canceled by the user with values notified since the last draw", queued, func(_ *stack.Chat, task api.Task) { task.Cancel(api.ErrCanceledByUser) },
+			`<task_result comment="the board app" error="canceled by user" log="board.island.log" module="page" name="island_begin" path="board" task_id="1">null</task_result>`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			marks := make(chan int, 1)
+			p := testkit.NewProvider(api.Model{},
+				testkit.Call("page__island_spec", map[string]any{"path": "board"}),
+				revised(t, func(revision string) testkit.Turn {
+					return start(revision, tc.code)
+				}),
+				testkit.Say("started"),
+				testkit.Say("noted"),
+				testkit.Say("ended"),
+			)
+			c := stack.Page(t, stack.Host{Provider: p, Page: board(marks, nil)})
+			c.Send("open the board")
+			var task api.Task
+			for _, e := range c.Wait() {
+				if e, ok := e.(api.ChatEventTasks); ok && len(e.Tasks) == 1 {
+					task = e.Tasks[0]
+				}
+			}
+			if task.Cancel == nil {
+				t.Fatal("the start listed no task")
+			}
+			select {
+			case <-marks:
+			case <-time.After(5 * time.Second):
+				t.Fatal("the script never reached its draw")
+			}
+			tc.end(c, task)
+			if got := recorded(t, c, p, "<task_result "); got != tc.want {
+				t.Fatalf("the app's end reached the agent as\n%s\nwant\n%s", got, tc.want)
+			}
+			for i, r := range p.Requests() {
+				for _, text := range lastTexts(r) {
+					if strings.Contains(text, "<task_notify ") && strings.Contains(text, ">[2]</task_notify>") {
+						t.Fatalf("request %d carries %q, want the values queued since the last draw in the task_result or dropped", i, text)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestIslandGuideHoldsMechanismAndSpecOnlyIslandParts(t *testing.T) {
 	p := testkit.NewProvider(api.Model{},
 		testkit.Call("page__island_spec", map[string]any{"path": "board"}),

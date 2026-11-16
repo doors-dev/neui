@@ -29,6 +29,8 @@ type Chat struct {
 	Page    *rod.Page
 	t       *testing.T
 	guard   time.Duration
+	ctx     context.Context
+	backend *common.Backend
 	link    thread.Link
 	send    func(api.Input) error
 	events  chan api.ChatEvent
@@ -59,16 +61,34 @@ func open(t *testing.T, h Host, ctx context.Context, p page.Page) *Chat {
 	options := append([]common.Option{common.OptionProvider(h.Provider)}, h.Options...)
 	backend := common.NewBackend(ctx, local.NewMessageStorage(), store, store, options)
 	c := &Chat{
-		t:      t,
-		guard:  5 * time.Second,
-		link:   thread.NewLink(backend, p),
-		events: make(chan api.ChatEvent, 256),
-		inits:  make(chan api.ChatState, 1),
+		t:       t,
+		guard:   5 * time.Second,
+		ctx:     ctx,
+		backend: backend,
+		link:    thread.NewLink(backend, p),
+		events:  make(chan api.ChatEvent, 256),
+		inits:   make(chan api.ChatState, 1),
 	}
 	c.send = func(input api.Input) error {
 		return c.Do(func(l thread.Link, op thread.Operation) thread.Command { return l.Send(op, input) })
 	}
 	t.Cleanup(c.Close)
+	c.listen()
+	c.State()
+	return c
+}
+
+func (c *Chat) Relink() {
+	c.t.Helper()
+	link, err := thread.OpenLink(c.link.ID(), c.backend, page.NewPage(c.ctx), nil, nil)
+	if err != nil {
+		c.t.Fatalf("relink: %v", err)
+	}
+	c.link = link
+	c.listen()
+}
+
+func (c *Chat) listen() {
 	receive, done := c.link.Receiver()
 	go func() {
 		for {
@@ -92,8 +112,6 @@ func open(t *testing.T, h Host, ctx context.Context, p page.Page) *Chat {
 			}
 		}
 	}()
-	c.State()
-	return c
 }
 
 func (c *Chat) Do(command func(l thread.Link, op thread.Operation) thread.Command) error {

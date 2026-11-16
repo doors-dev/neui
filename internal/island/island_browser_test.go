@@ -237,6 +237,30 @@ func TestIslandEndEndsTask(t *testing.T) {
 	}
 }
 
+func TestIslandReloadEndsAppWaitingForTheUser(t *testing.T) {
+	shown := make(chan string, 1)
+	p := testkit.NewProvider(api.Model{},
+		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
+		revised(t, func(revision string) testkit.Turn {
+			return start(revision, `ui.root.set(ui.press({label: "wait", value: "(n) => n"})); ui.draw()`)
+		}),
+		testkit.Say("started"),
+		testkit.Say("ended"),
+	)
+	c := stack.Browser(t, stack.Host{Provider: p, Page: board(make(chan int, 1), shown)})
+	c.Send("open the board")
+	c.Wait()
+	select {
+	case <-shown:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the press was never drawn")
+	}
+	if err := c.Page.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	carries(t, recorded(t, c, p, "<task_result "), `task_id="1"`, `error="the chat moved to a new page, by a reload or in another tab, which ended the app; begin a new one with island_begin if it is still needed"`, `>null</task_result>`)
+}
+
 type inputs struct {
 	Inputs []struct {
 		ID   string

@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
@@ -422,6 +423,36 @@ func TestChildChangeDoesNotRefuseParent(t *testing.T) {
 	if out.Output != "checking out" || !empty(out.Diff) || out.Changes != nil {
 		t.Fatalf("the checkout after a change inside cart answered %+v, want it run with nothing changed", out)
 	}
+}
+
+func TestRelinkEndsAnInFlightCall(t *testing.T) {
+	p := testkit.NewProvider(api.Model{},
+		testkit.Call("page__sync", map[string]any{"path": "cart"}),
+		testkit.Then(func(r api.Request) testkit.Turn {
+			var s state
+			testkit.Decode(t, testkit.Results(r)[0], &s)
+			for _, in := range s.Inputs {
+				if in.Desc == "pays the order" {
+					return testkit.Call("page__click", map[string]any{"path": "cart", "id": in.ID})
+				}
+			}
+			t.Errorf("the cart synced as %+v, want the pay button", s)
+			return testkit.Say("lost")
+		}),
+		testkit.Say("done"),
+	)
+	c := stack.Page(t, stack.Host{Provider: p, Page: shop()})
+	c.Send("pay")
+	ends := 0
+	c.Until(func(e api.ChatEvent) bool {
+		if _, ok := e.(api.ChatEventRoundEnd); ok {
+			ends++
+		}
+		return ends == 2
+	})
+	c.Relink()
+	c.Wait()
+	plain(t, testkit.Results(p.Request(t, 2))[0], "the chat moved to a new page, by a reload or in another tab, which ended what ran on the old page")
 }
 
 func TestInputRightsRefused(t *testing.T) {
@@ -1301,4 +1332,33 @@ func TestStoredDigestsMatchARecount(t *testing.T) {
 	if stale != nil {
 		t.Fatalf("spaces %q stored digests that differ from a recount", stale)
 	}
+}
+
+func TestPageToolDuringRelinkReportsTheRelink(t *testing.T) {
+	started := make(chan struct{}, 1)
+	pg := func(cur gox.Cursor) error {
+		return (neui.Space{Name: "box", Desc: "the box"}).Proxy(cur, func(cur gox.Cursor) error {
+			return cur.Comp(neui.Tool[struct{}, string]{Name: "hold", Desc: "holds", Handler: func(ctx context.Context, _ struct{}) (string, error) {
+				started <- struct{}{}
+				<-ctx.Done()
+				return "", ctx.Err()
+			}})
+		})
+	}
+	p := testkit.NewProvider(api.Model{},
+		testkit.Call("page__sync", map[string]any{"path": "box"}),
+		testkit.Call("page__tool", map[string]any{"path": "box", "tool": "hold", "arg": map[string]any{}}),
+		testkit.Say("done"),
+	)
+	c := stack.Page(t, stack.Host{Provider: p, Page: gox.Elem(pg)})
+	c.Send("hold")
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the tool handler never started")
+	}
+	c.Relink()
+	c.Wait()
+	r := testkit.Results(p.Request(t, 2))[0]
+	plain(t, r, "the chat moved to a new page, by a reload or in another tab, which ended what ran on the old page")
 }

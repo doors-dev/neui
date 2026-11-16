@@ -33,7 +33,7 @@ func (l Link) Close() {
 	if l.inner == nil {
 		return
 	}
-	l.inner.linkCancel()
+	l.inner.linkCancel(nil)
 	select {
 	case <-l.inner.thread.close:
 	case l.inner.thread.ch <- commandUnlink{l.inner}:

@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"slices"
 	"sync"
 
@@ -32,11 +33,17 @@ func (t commonTask) Ok(output json.RawMessage) {
 }
 
 func (t commonTask) Err(err error) {
+	var output any
+	var withOutput common.ErrorWithOutput
+	if errors.As(err, &withOutput) {
+		output = withOutput.Output
+	}
 	select {
 	case <-t.link.thread.close:
 	case t.link.thread.ch <- commandTaskResult{
 		linkTasks: t.link,
 		id:        t.id,
+		output:    output,
 		err:       err,
 	}:
 	}

@@ -356,9 +356,11 @@ func (s Space) AddTool[I any, O any](ctx context.Context, name string, desc stri
 			doors.OnSettle(base, func(context.Context) {
 				close(settled)
 			}, func(opCtx context.Context) {
-				opCtx, cancel := context.WithCancel(opCtx)
-				defer cancel()
-				stop := context.AfterFunc(ctx, cancel)
+				opCtx, cancel := context.WithCancelCause(opCtx)
+				defer cancel(nil)
+				stop := context.AfterFunc(ctx, func() {
+					cancel(context.Cause(ctx))
+				})
 				defer stop()
 				opCtx = tools.Attach(opCtx, ctx)
 				opCtx = common.AttachThread(opCtx, ctx)
@@ -367,6 +369,9 @@ func (s Space) AddTool[I any, O any](ctx context.Context, name string, desc stri
 			select {
 			case <-settled:
 			case <-ctx.Done():
+				return nil, context.Cause(ctx)
+			}
+			if err != nil && ctx.Err() != nil {
 				return nil, context.Cause(ctx)
 			}
 			return out, err

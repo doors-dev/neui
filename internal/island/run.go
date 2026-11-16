@@ -252,6 +252,14 @@ func (r *run) run() {
 					}{endedMessage, r.state.TakeNotifications()})
 				case errors.Is(cause, errOvertaken):
 					result = overtakenResult
+				case errors.Is(cause, common.ErrRelinked):
+					r.endErr = errRelinked
+					if notifications := r.state.TakeNotifications(); notifications != nil {
+						output, _ := json.Marshal(struct {
+							Notifications json.RawMessage `json:"notifications"`
+						}{notifications})
+						r.endErr = common.ErrorWithOutput{Err: errRelinked, Output: output}
+					}
 				default:
 					r.endErr = cause
 				}
