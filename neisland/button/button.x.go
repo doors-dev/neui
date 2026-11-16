@@ -27,13 +27,11 @@ type Params struct {
 	Text string `json:"text" maxLength:"80" required:"true" minLength:"1" description:"label shown on the button"`
 	Disabled bool `json:"disabled,omitempty" description:"true disables the button: clicks do nothing"`
 	Value string `json:"value,omitempty" maxLength:"1000" description:"data the click submits; empty when omitted"`
-	Agent string `json:"agent,omitempty" maxLength:"300" description:"when set, you can click this button as the user would: it is an input in the island's screen space, in the child space named after this control and its id, such as button_3; this text tells you what the click does"`
 }
 
 // New builds a button widget for Library.Control: a click on the enabled
-// button submits its value param to the script waiting in ui.draw(). With
-// agent set, the button is also an Input of the enclosing space, so the agent
-// can click it.
+// button submits its value param to the script waiting in ui.draw(). It is
+// also an Input described by its text, so the agent can click it.
 func New(ctx context.Context, p Params, submit func(ctx context.Context, value string) bool) (api.Widget[Patch], error) {
 	if p.Size == "" {
 		p.Size = "md"
@@ -65,33 +63,24 @@ func (b widget) Update(ctx context.Context, patch Patch) {
 }
 
 
-//line button.gox:65
+//line button.gox:63
 func (b widget) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line button.gox:66
+//line button.gox:64
 		__e = __c.Any(b.state.Bind(b.render)); if __e != nil { return }
 	return })
+//line button.gox:65
+}
+
 //line button.gox:67
-}
-
-func (p Params) input() gox.Proxy {
-	if p.Agent == "" {
-		return gox.ProxyFunc(func(cur gox.Cursor, el gox.Elem) error {
-			return el(cur)
-		})
-	}
-	return neui.Input{Desc: p.Agent}
-}
-
-//line button.gox:78
 func (b widget) render(p Params) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line button.gox:79
-		__e = (p.input()).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+//line button.gox:68
+		__e = (neui.Input{Desc: p.Text}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
-//line button.gox:79
+//line button.gox:68
 			__e = (doors.AClick{
 		Scope: neui.IslandScope(ctx),
 		On: func(ctx context.Context, rp doors.RequestPointer) bool {
@@ -105,19 +94,21 @@ func (b widget) render(p Params) gox.Elem {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.Init("button"); if __e != nil { return }
 				{
-//line button.gox:89
+//line button.gox:78
 					__e = __c.Set("type", "button"); if __e != nil { return }
-//line button.gox:90
+//line button.gox:79
 					__e = __c.Set("class", "neisland-button neisland-button-" + p.Size + " neisland-button-" + p.Style); if __e != nil { return }
-//line button.gox:91
+//line button.gox:80
+					__e = __c.Set("value", p.Value); if __e != nil { return }
+//line button.gox:81
 					__e = __c.Set("disabled", p.Disabled); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line button.gox:92
+//line button.gox:82
 					__e = __c.Any(p.Text); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
 			return })); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
-//line button.gox:94
+//line button.gox:84
 }

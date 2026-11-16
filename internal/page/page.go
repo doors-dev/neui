@@ -130,35 +130,35 @@ func (p *page) Module() Module {
 	if err != nil {
 		panic(err)
 	}
-	_, err = m.Add(writeName, writeDesc, func(ctx context.Context, arg writeArg) (report, error) {
+	_, err = m.Add(writeName, writeDesc, func(ctx context.Context, arg writeArg) (actionReport, error) {
 		a, err := m.act(ctx, arg.Path, func(s *space) (input, error) {
 			return s.getInput(arg.ID, "input")
 		})
 		if err != nil {
-			return report{}, err
+			return actionReport{}, err
 		}
-		var res report
-		if _, err := dispatch[struct{}](ctx, a.item, "input", arg.Value); err != nil {
-			return report{}, a.fail(ctx, arg.Path, err, &res, &res)
+		res, err := dispatch[actionReport](ctx, a.item, "input", arg.Value)
+		if err != nil {
+			return actionReport{}, a.fail(ctx, arg.Path, err, &res.report, &res.report)
 		}
-		err = a.report(ctx, arg.Path, "", &res, &res)
+		err = a.report(ctx, arg.Path, "", &res, &res.report)
 		return res, err
 	})
 	if err != nil {
 		panic(err)
 	}
-	_, err = m.Add(clickName, clickDesc, func(ctx context.Context, arg inputRef) (report, error) {
+	_, err = m.Add(clickName, clickDesc, func(ctx context.Context, arg inputRef) (actionReport, error) {
 		a, err := m.act(ctx, arg.Path, func(s *space) (input, error) {
 			return s.getInput(arg.ID, "click")
 		})
 		if err != nil {
-			return report{}, err
+			return actionReport{}, err
 		}
-		var res report
-		if _, err := dispatch[struct{}](ctx, a.item, "click", nil); err != nil {
-			return report{}, a.fail(ctx, arg.Path, err, &res, &res)
+		res, err := dispatch[actionReport](ctx, a.item, "click", nil)
+		if err != nil {
+			return actionReport{}, a.fail(ctx, arg.Path, err, &res.report, &res.report)
 		}
-		err = a.report(ctx, arg.Path, "", &res, &res)
+		err = a.report(ctx, arg.Path, "", &res, &res.report)
 		return res, err
 	})
 	if err != nil {

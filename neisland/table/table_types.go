@@ -15,14 +15,15 @@ import (
 )
 
 type state struct {
-	query    neui.IslandCall[page, result]
-	rows     []row
-	size     int
-	page     int
-	sort     *sortSpec
-	search   string
-	seq      int
-	selected map[string]struct{}
+	query     neui.IslandCall[page, result]
+	rows      []row
+	size      int
+	page      int
+	sort      *sortSpec
+	search    string
+	searchSeq int
+	seq       int
+	selected  map[string]struct{}
 }
 
 func (t *state) isDataSource() bool {
@@ -104,7 +105,7 @@ func (t *state) queryData(ctx context.Context) (result, error) {
 }
 
 func stateEqual(old state, new state) bool {
-	if old.seq != new.seq {
+	if old.seq != new.seq || old.searchSeq != new.searchSeq {
 		return false
 	}
 	if !maps.Equal(old.selected, new.selected) {

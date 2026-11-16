@@ -6,7 +6,7 @@ require (
 	code.dny.dev/ssrf v0.3.0
 	codeberg.org/readeck/go-readability/v2 v2.1.2
 	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.2
-	github.com/doors-dev/doors v0.19.0-rc6
+	github.com/doors-dev/doors v0.19.0-rc10
 	github.com/doors-dev/gox v0.4.0
 	github.com/gammazero/deque v1.2.1
 	github.com/go-rod/rod v0.116.2
@@ -20,7 +20,6 @@ require (
 	golang.org/x/net v0.58.0
 	modernc.org/libquickjs v0.13.1
 	modernc.org/quickjs v0.25.0
-	modernc.org/sqlite v1.57.0
 	rsc.io/pdf v0.1.1
 )
 

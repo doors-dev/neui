@@ -1,4 +1,4 @@
-// Managed by GoX v0.3.4
+// Managed by GoX v0.4.0
 
 //line form_search.gox:1
 package form
@@ -264,24 +264,25 @@ func (f *searchWidget) Main() gox.Elem {
 		}
 		return false
 	})
-
+	body := gox.Elem(func(__c gox.Cursor) (__e error) {
+		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line form_search.gox:255
+//line form_search.gox:254
 			__e = __c.Set("class", "neisland-form-field"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line form_search.gox:256
+//line form_search.gox:255
 			if label == nil {
 				__e = __c.Init("span"); if __e != nil { return }
 				{
-//line form_search.gox:257
+//line form_search.gox:256
 					__e = __c.Set("class", "neisland-form-label"); if __e != nil { return }
-//line form_search.gox:257
+//line form_search.gox:256
 					__e = __c.Set("id", f.id + "-l"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line form_search.gox:258
+//line form_search.gox:257
 					__e = __c.Any(f.params.Label); if __e != nil { return }
-//line form_search.gox:259
+//line form_search.gox:258
 					__e = __c.Any(f.field.error.RouteBeam(
 					doors.RouteBeamMatch(func(err error) bool {
 						return f.params.Min > 0 && err != nil
@@ -289,95 +290,112 @@ func (f *searchWidget) Main() gox.Elem {
 						ctx := __c.Context(); _ = ctx
 						__e = __c.Init("span"); if __e != nil { return }
 						{
-//line form_search.gox:262
+//line form_search.gox:261
 							__e = __c.Set("class", "neisland-form-required"); if __e != nil { return }
-//line form_search.gox:262
+//line form_search.gox:261
 							__e = __c.Set("aria-hidden", "true"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.Text("*"); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
-//line form_search.gox:262
+//line form_search.gox:261
 					return }))),
 				)); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
 			}
-//line form_search.gox:266
+//line form_search.gox:265
 			__e = __c.Any(f.chosen.Bind(f.picked)); if __e != nil { return }
-//line form_search.gox:267
+//line form_search.gox:266
 			__e = __c.Any(doors.DeriveBeam(f.chosen, func(chosen []option) bool {
 			return len(chosen) >= f.params.Max
 		}).Bind(f.entry)); if __e != nil { return }
-//line form_search.gox:270
+//line form_search.gox:269
 			__e = __c.Any(&focus); if __e != nil { return }
-//line form_search.gox:271
+//line form_search.gox:270
 			__e = __c.Any(f.found.Bind(f.results)); if __e != nil { return }
 			__e = __c.Init("p"); if __e != nil { return }
 			{
-//line form_search.gox:272
+//line form_search.gox:271
 				__e = __c.Set("class", "neisland-form-search-status"); if __e != nil { return }
-//line form_search.gox:272
+//line form_search.gox:271
 				__e = __c.Set("role", "status"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line form_search.gox:273
+//line form_search.gox:272
 				__e = __c.Any(f.found.Bind(func(found searchFound) gox.Elem {
 				return gox.Elem(func(__c gox.Cursor) (__e error) {
 					ctx := __c.Context(); _ = ctx
-//line form_search.gox:274
+//line form_search.gox:273
 					if found.failed {
 						__e = __c.Text("Search failed."); if __e != nil { return }
-//line form_search.gox:276
+//line form_search.gox:275
 					} else if found.query != "" && len(found.results) == 0 {
 						__e = __c.Text("No matches for “"); if __e != nil { return }
-//line form_search.gox:277
+//line form_search.gox:276
 						__e = __c.Any(found.query); if __e != nil { return }
 						__e = __c.Text("”."); if __e != nil { return }
-//line form_search.gox:278
+//line form_search.gox:277
 					} else if len(found.results) == 1 {
 						__e = __c.Text("1 match"); if __e != nil { return }
-//line form_search.gox:280
+//line form_search.gox:279
 					} else if len(found.results) > 1 {
-//line form_search.gox:281
+//line form_search.gox:280
 						__e = __c.Any(len(found.results)); if __e != nil { return }
 						__e = __c.Text(" matches"); if __e != nil { return }
 					}
 				return })
-//line form_search.gox:283
+//line form_search.gox:282
 			})); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line form_search.gox:285
+//line form_search.gox:284
 			__e = __c.Any(f.field.error.RouteBeam(
 			doors.RouteBeamMatch(shownErr, doors.RouteBind(func(err error) gox.Elem {
 				return gox.Elem(func(__c gox.Cursor) (__e error) {
 					ctx := __c.Context(); _ = ctx
 					__e = __c.Init("p"); if __e != nil { return }
 					{
-//line form_search.gox:287
+//line form_search.gox:286
 						__e = __c.Set("class", "neisland-form-error"); if __e != nil { return }
-//line form_search.gox:287
+//line form_search.gox:286
 						__e = __c.Set("id", f.id + "-e"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line form_search.gox:287
+//line form_search.gox:286
 						__e = __c.Any(err.Error()); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
-//line form_search.gox:287
+//line form_search.gox:286
 				return })
 			})),
 		)); if __e != nil { return }
+//line form_search.gox:289
+			__e = __c.Any(errorData(f.params.Name, f.field.error)); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
+//line form_search.gox:290
 	return })
-//line form_search.gox:291
+
+//line form_search.gox:292
+		if f.field.item != nil {
+//line form_search.gox:293
+			__e = __c.Any(body); if __e != nil { return }
+		} else  {
+//line form_search.gox:295
+			__e = (neui.Space{Name: f.params.Name, Desc: f.params.Label}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+				ctx := __c.Context(); _ = ctx
+//line form_search.gox:295
+				__e = __c.Any(body); if __e != nil { return }
+			return })); if __e != nil { return }
+		}
+	return })
+//line form_search.gox:297
 }
 
-//line form_search.gox:293
+//line form_search.gox:299
 func (f *searchWidget) picked(chosen []option) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line form_search.gox:295
+//line form_search.gox:301
 		full := len(chosen) >= f.params.Max
 	label, labelledby := any(nil), any(f.id + "-l")
 	if f.field.item != nil {
@@ -391,33 +409,36 @@ func (f *searchWidget) picked(chosen []option) gox.Elem {
 
 		__e = __c.Init("ul"); if __e != nil { return }
 		{
-//line form_search.gox:307
+//line form_search.gox:313
 			__e = __c.Modify(&f.label); if __e != nil { return }
-//line form_search.gox:308
+//line form_search.gox:314
 			__e = __c.Set("class", "neisland-form-search-chosen"); if __e != nil { return }
-//line form_search.gox:309
+//line form_search.gox:315
 			__e = __c.Set("aria-label", label); if __e != nil { return }
-//line form_search.gox:310
+//line form_search.gox:316
 			__e = __c.Set("aria-labelledby", labelledby); if __e != nil { return }
-//line form_search.gox:311
+//line form_search.gox:317
 			__e = __c.Set("aria-describedby", describedby); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line form_search.gox:312
+//line form_search.gox:318
 			for _, o := range chosen {
-//line form_search.gox:314
+//line form_search.gox:320
 				key, _ := json.Marshal(o.Value)
 
 				__e = __c.Init("li"); if __e != nil { return }
 				{
-//line form_search.gox:316
+//line form_search.gox:322
 					__e = __c.Set("class", "neisland-form-search-chip"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line form_search.gox:317
+//line form_search.gox:323
 					__e = __c.Any(o.Label); if __e != nil { return }
-					__e = __c.Init("button"); if __e != nil { return }
-					{
-//line form_search.gox:319
-						__e = __c.Modify(doors.AClick{
+//line form_search.gox:324
+					__e = (neui.Input{Desc: "remove " + o.Label}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+						ctx := __c.Context(); _ = ctx
+						__e = __c.Init("button"); if __e != nil { return }
+						{
+//line form_search.gox:325
+							__e = __c.Modify(doors.AClick{
 						Scope: f.field.scope(),
 						Batch: true,
 						On: func(ctx context.Context, r doors.RequestPointer) bool {
@@ -425,32 +446,35 @@ func (f *searchWidget) picked(chosen []option) gox.Elem {
 							return false
 						},
 					}); if __e != nil { return }
-//line form_search.gox:327
-						__e = __c.Set("type", "button"); if __e != nil { return }
-//line form_search.gox:328
-						__e = __c.Set("class", "neisland-form-remove"); if __e != nil { return }
-//line form_search.gox:329
-						__e = __c.Set("aria-label", "Remove " + o.Label); if __e != nil { return }
-						__e = __c.Submit(); if __e != nil { return }
-						__e = __c.Text("×"); if __e != nil { return }
-					}
-					__e = __c.Close(); if __e != nil { return }
+//line form_search.gox:333
+							__e = __c.Set("type", "button"); if __e != nil { return }
+//line form_search.gox:334
+							__e = __c.Set("class", "neisland-form-remove"); if __e != nil { return }
+//line form_search.gox:335
+							__e = __c.Set("value", string(key)); if __e != nil { return }
+//line form_search.gox:336
+							__e = __c.Set("aria-label", "Remove " + o.Label); if __e != nil { return }
+							__e = __c.Submit(); if __e != nil { return }
+							__e = __c.Text("×"); if __e != nil { return }
+						}
+						__e = __c.Close(); if __e != nil { return }
+					return })); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
 			}
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line form_search.gox:335
+//line form_search.gox:342
 }
 
-//line form_search.gox:337
+//line form_search.gox:344
 func (f *searchWidget) entry(full bool) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line form_search.gox:338
+//line form_search.gox:345
 		if !full {
-//line form_search.gox:340
+//line form_search.gox:347
 			chosen, _ := f.chosen.Read(ctx)
 		label, labelledby := any(nil), any(f.id + "-l")
 		if f.field.item != nil {
@@ -458,16 +482,19 @@ func (f *searchWidget) entry(full bool) gox.Elem {
 			labelledby = nil
 		}
 
-			__e = __c.InitVoid("input"); if __e != nil { return }
-			{
-//line form_search.gox:348
-				__e = __c.Modify(&f.controls); if __e != nil { return }
-//line form_search.gox:349
-				__e = __c.Modify(&f.invalid); if __e != nil { return }
-//line form_search.gox:350
-				__e = __c.Modify(&f.label); if __e != nil { return }
-//line form_search.gox:351
-				__e = __c.Modify(doors.AInput{
+//line form_search.gox:354
+			__e = (neui.Input{Desc: "search"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+				ctx := __c.Context(); _ = ctx
+				__e = __c.InitVoid("input"); if __e != nil { return }
+				{
+//line form_search.gox:355
+					__e = __c.Modify(&f.controls); if __e != nil { return }
+//line form_search.gox:356
+					__e = __c.Modify(&f.invalid); if __e != nil { return }
+//line form_search.gox:357
+					__e = __c.Modify(&f.label); if __e != nil { return }
+//line form_search.gox:358
+					__e = __c.Modify(doors.AInput{
 				Scope: f.field.scope().And(&doors.ScopeDebounce{Duration: 250 * time.Millisecond, Limit: time.Second}),
 				Race: doors.RaceStrict,
 				On: func(ctx context.Context, r doors.RequestInput) bool {
@@ -475,85 +502,87 @@ func (f *searchWidget) entry(full bool) gox.Elem {
 					return false
 				},
 			}); if __e != nil { return }
-//line form_search.gox:359
-				__e = __c.Modify(doors.AKeyDown{
+//line form_search.gox:366
+					__e = __c.Modify(doors.AKeyDown{
 				Key: doors.Key{Key: "Enter"},
 				PreventDefault: true,
 			}); if __e != nil { return }
-//line form_search.gox:363
-				__e = __c.Set("class", "neisland-form-search-input"); if __e != nil { return }
-//line form_search.gox:364
-				__e = __c.Set("id", f.id); if __e != nil { return }
-//line form_search.gox:365
-				__e = __c.Set("type", "text"); if __e != nil { return }
-//line form_search.gox:366
-				__e = __c.Set("autocomplete", "off"); if __e != nil { return }
-//line form_search.gox:367
-				__e = __c.Set("placeholder", f.params.Placeholder); if __e != nil { return }
-//line form_search.gox:368
-				__e = __c.Set("aria-label", label); if __e != nil { return }
-//line form_search.gox:369
-				__e = __c.Set("aria-labelledby", labelledby); if __e != nil { return }
 //line form_search.gox:370
-				__e = __c.Set("aria-required", aria(f.params.Min > 0)); if __e != nil { return }
+					__e = __c.Set("class", "neisland-form-search-input"); if __e != nil { return }
 //line form_search.gox:371
-				__e = __c.Set("aria-invalid", aria(shownErr(f.validate(chosen)))); if __e != nil { return }
+					__e = __c.Set("id", f.id); if __e != nil { return }
 //line form_search.gox:372
-				__e = __c.Set("data-required-empty", errors.Is(f.validate(chosen), errRequired)); if __e != nil { return }
+					__e = __c.Set("type", "text"); if __e != nil { return }
 //line form_search.gox:373
-				__e = __c.Set("aria-describedby", f.id + "-e"); if __e != nil { return }
-			}
-			__e = __c.Submit(); if __e != nil { return }
+					__e = __c.Set("autocomplete", "off"); if __e != nil { return }
 //line form_search.gox:374
+					__e = __c.Set("placeholder", f.params.Placeholder); if __e != nil { return }
+//line form_search.gox:375
+					__e = __c.Set("aria-label", label); if __e != nil { return }
+//line form_search.gox:376
+					__e = __c.Set("aria-labelledby", labelledby); if __e != nil { return }
+//line form_search.gox:377
+					__e = __c.Set("aria-required", aria(f.params.Min > 0)); if __e != nil { return }
+//line form_search.gox:378
+					__e = __c.Set("aria-invalid", aria(shownErr(f.validate(chosen)))); if __e != nil { return }
+//line form_search.gox:379
+					__e = __c.Set("data-required-empty", errors.Is(f.validate(chosen), errRequired)); if __e != nil { return }
+//line form_search.gox:380
+					__e = __c.Set("aria-describedby", f.id + "-e"); if __e != nil { return }
+				}
+				__e = __c.Submit(); if __e != nil { return }
+			return })); if __e != nil { return }
+//line form_search.gox:381
 		} else if f.params.Max > 1 {
 			__e = __c.Init("p"); if __e != nil { return }
 			{
-//line form_search.gox:375
+//line form_search.gox:382
 				__e = __c.Set("class", "neisland-form-search-max"); if __e != nil { return }
-//line form_search.gox:375
+//line form_search.gox:382
 				__e = __c.Set("id", f.id + "-h"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Text("Maximum of "); if __e != nil { return }
-//line form_search.gox:375
+//line form_search.gox:382
 				__e = __c.Any(f.params.Max); if __e != nil { return }
 				__e = __c.Text(" chosen."); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		}
 	return })
-//line form_search.gox:377
+//line form_search.gox:384
 }
 
-//line form_search.gox:379
+//line form_search.gox:386
 func (f *searchWidget) results(found searchFound) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line form_search.gox:381
+//line form_search.gox:388
 		label, labelledby := any(nil), any(f.id + "-l")
 	if f.field.item != nil {
 		label, _ = f.field.item.Read(ctx)
 		labelledby = nil
 	}
 
-//line form_search.gox:387
+//line form_search.gox:394
 		if len(found.results) > 0 {
 			__e = __c.Init("ul"); if __e != nil { return }
 			{
-//line form_search.gox:389
+//line form_search.gox:396
 				__e = __c.Modify(&f.label); if __e != nil { return }
-//line form_search.gox:390
+//line form_search.gox:397
 				__e = __c.Set("class", "neisland-form-search-results"); if __e != nil { return }
-//line form_search.gox:391
+//line form_search.gox:398
 				__e = __c.Set("id", f.id + "-r"); if __e != nil { return }
-//line form_search.gox:392
+//line form_search.gox:399
 				__e = __c.Set("aria-label", label); if __e != nil { return }
-//line form_search.gox:393
+//line form_search.gox:400
 				__e = __c.Set("aria-labelledby", labelledby); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line form_search.gox:394
+//line form_search.gox:401
 				for i := range found.results {
-//line form_search.gox:396
+//line form_search.gox:403
 					o := found.results[i]
+				key, _ := json.Marshal(o.Value)
 				before, match, after := o.Label, "", ""
 				for at := range o.Label {
 					if end := at + len(found.query); end <= len(o.Label) && strings.EqualFold(o.Label[at:end], found.query) {
@@ -565,10 +594,13 @@ func (f *searchWidget) results(found searchFound) gox.Elem {
 					__e = __c.Init("li"); if __e != nil { return }
 					{
 						__e = __c.Submit(); if __e != nil { return }
-						__e = __c.Init("button"); if __e != nil { return }
-						{
-//line form_search.gox:407
-							__e = __c.Modify(doors.AClick{
+//line form_search.gox:414
+						__e = (neui.Input{Desc: "choose " + o.Label}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+							ctx := __c.Context(); _ = ctx
+							__e = __c.Init("button"); if __e != nil { return }
+							{
+//line form_search.gox:415
+								__e = __c.Modify(doors.AClick{
 							Scope: f.field.scope(),
 							Batch: true,
 							On: func(ctx context.Context, r doors.RequestPointer) bool {
@@ -576,36 +608,39 @@ func (f *searchWidget) results(found searchFound) gox.Elem {
 								return false
 							},
 						}); if __e != nil { return }
-//line form_search.gox:415
-							__e = __c.Set("type", "button"); if __e != nil { return }
-//line form_search.gox:416
-							__e = __c.Set("class", "neisland-form-search-result"); if __e != nil { return }
-//line form_search.gox:417
-							__e = __c.Set("aria-label", "Choose " + o.Label); if __e != nil { return }
-							__e = __c.Submit(); if __e != nil { return }
-							__e = __c.Init("span"); if __e != nil { return }
-							{
-								__e = __c.Submit(); if __e != nil { return }
-//line form_search.gox:419
-								__e = __c.Any(before); if __e != nil { return }
-//line form_search.gox:420
-								if match != "" {
-									__e = __c.Init("mark"); if __e != nil { return }
-									{
-//line form_search.gox:421
-										__e = __c.Set("class", "neisland-form-match"); if __e != nil { return }
-										__e = __c.Submit(); if __e != nil { return }
-//line form_search.gox:421
-										__e = __c.Any(match); if __e != nil { return }
-									}
-									__e = __c.Close(); if __e != nil { return }
-								}
 //line form_search.gox:423
-								__e = __c.Any(after); if __e != nil { return }
+								__e = __c.Set("type", "button"); if __e != nil { return }
+//line form_search.gox:424
+								__e = __c.Set("class", "neisland-form-search-result"); if __e != nil { return }
+//line form_search.gox:425
+								__e = __c.Set("value", string(key)); if __e != nil { return }
+//line form_search.gox:426
+								__e = __c.Set("aria-label", "Choose " + o.Label); if __e != nil { return }
+								__e = __c.Submit(); if __e != nil { return }
+								__e = __c.Init("span"); if __e != nil { return }
+								{
+									__e = __c.Submit(); if __e != nil { return }
+//line form_search.gox:428
+									__e = __c.Any(before); if __e != nil { return }
+//line form_search.gox:429
+									if match != "" {
+										__e = __c.Init("mark"); if __e != nil { return }
+										{
+//line form_search.gox:430
+											__e = __c.Set("class", "neisland-form-match"); if __e != nil { return }
+											__e = __c.Submit(); if __e != nil { return }
+//line form_search.gox:430
+											__e = __c.Any(match); if __e != nil { return }
+										}
+										__e = __c.Close(); if __e != nil { return }
+									}
+//line form_search.gox:432
+									__e = __c.Any(after); if __e != nil { return }
+								}
+								__e = __c.Close(); if __e != nil { return }
 							}
 							__e = __c.Close(); if __e != nil { return }
-						}
-						__e = __c.Close(); if __e != nil { return }
+						return })); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
 				}
@@ -613,7 +648,7 @@ func (f *searchWidget) results(found searchFound) gox.Elem {
 			__e = __c.Close(); if __e != nil { return }
 		}
 	return })
-//line form_search.gox:430
+//line form_search.gox:439
 }
 
 func (f *searchWidget) validate(chosen []option) error {

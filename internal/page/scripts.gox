@@ -8,29 +8,42 @@ elem element(id string) {
 		$on(id, async ({ action, value }) => {
 			const el = document.querySelector('[data-neid="' + id + '"]')
 			if (!el) {
-				throw "element is not rendered"
+				throw new Error("element is not rendered")
 			}
 			const tag = el.tagName.toLowerCase()
 			const type = (el.getAttribute("type") || "").toLowerCase()
+			const refused = el.matches(":disabled") || el.closest("[inert]") !== null
+			if (type === "file" && (action === "click" || action === "input")) {
+				throw new Error(
+					"a file input can't be set or opened by you: focus it and ask the user to choose a file",
+				)
+			}
 			switch (action) {
-				case "click":
-					await $sys.emit(el, new PointerEvent("click", { bubbles: true }))
-					return {}
+				case "click": {
+					const n = await $sys.emit(
+						el,
+						new PointerEvent("click", { bubbles: true, cancelable: true }),
+					)
+					return { handled: n > 0 }
+				}
 				case "focus":
 					el.focus({ preventScroll: true })
 					el.scrollIntoView({ behavior: "smooth", block: "nearest" })
 					return {}
 				case "read": {
+					const disabled = refused || el.getAttribute("aria-disabled") === "true"
 					const label =
-						el.labels && el.labels[0] ? el.labels[0].textContent.trim() : ""
+						el.labels && el.labels[0]
+							? el.labels[0].textContent.trim()
+							: el.getAttribute("aria-label") || ""
+					const text = el.textContent.trim() || el.getAttribute("aria-label") || ""
 					if (tag === "a") {
-						return { label: el.textContent.trim(), href: el.getAttribute("href") }
+						return { label: text, href: el.getAttribute("href"), disabled }
 					}
-					const disabled = el.disabled
 					if (tag === "button") {
 						return {
 							...(el.value ? { value: el.value } : {}),
-							label: el.textContent.trim(),
+							label: text,
 							disabled,
 						}
 					}
@@ -42,6 +55,13 @@ elem element(id string) {
 					}
 					if (type === "checkbox") {
 						return { value: el.checked, label, disabled }
+					}
+					if (type === "file") {
+						return {
+							files: Array.from(el.files).map((f) => f.name),
+							label,
+							disabled,
+						}
 					}
 					if (tag === "select") {
 						const options = Array.from(el.options).map((o) => ({
@@ -63,32 +83,73 @@ elem element(id string) {
 						tag === "button" ||
 						["submit", "button", "reset", "image"].includes(type)
 					) {
-						throw "not an input"
+						throw new Error("not an input")
 					}
 					if (type === "checkbox") {
-						el.checked = !!value
-						await $sys.emit(el, new Event("change", { bubbles: true }))
-						return {}
+						if (typeof value !== "boolean") {
+							throw new Error("a checkbox takes true or false")
+						}
+						if (el.checked === value) {
+							return { handled: false }
+						}
+						const n = await $sys.emit(
+							el,
+							new PointerEvent("click", { bubbles: true, cancelable: true }),
+						)
+						return { handled: n > 0 }
+					}
+					if (refused) {
+						throw new Error("target is disabled")
 					}
 					if (tag === "select") {
+						const values = el.multiple && Array.isArray(value) ? value : [value]
+						const options = Array.from(el.options)
+						for (const v of values) {
+							if (!options.some((o) => o.value === v)) {
+								throw new Error("no option with value " + JSON.stringify(v))
+							}
+						}
 						if (el.multiple) {
-							const values = Array.isArray(value) ? value : [value]
-							for (const o of el.options) {
+							for (const o of options) {
 								o.selected = values.includes(o.value)
 							}
 						} else {
 							el.value = value
 						}
-						await $sys.emit(el, new Event("change", { bubbles: true }))
-						return {}
+						const n = await $sys.emit(el, new Event("change", { bubbles: true }))
+						return { handled: n > 0 }
 					}
+					const asked = String(value)
+					const old = el.value
 					el.value = value
-					await $sys.emit(el, new Event("input", { bubbles: true }))
-					await $sys.emit(el, new Event("change", { bubbles: true }))
-					return {}
+					const got = String(el.value)
+					const trim = (s) => s.replace(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g, "")
+					let accepted = got === asked || got === asked.replace(/^[\r\n]+|[\r\n]+$/g, "")
+					if (tag === "textarea") {
+						accepted = got === asked.replace(/\r\n?/g, "\n")
+					} else if (type === "range") {
+						accepted = trim(asked) !== "" && Number(got) === Number(asked)
+					} else if (type === "color") {
+						const paint = document.createElement("canvas").getContext("2d")
+						paint.fillStyle = "transparent"
+						paint.fillStyle = asked
+						accepted = got === paint.fillStyle
+					} else if (type === "email" || type === "url") {
+						accepted = got === (el.multiple ? asked.split(",").map(trim).join(",") : trim(asked))
+					} else if (type === "datetime-local") {
+						accepted = got !== "" || asked === ""
+					}
+					if (!accepted) {
+						el.value = old
+						throw new Error("the field did not accept this value")
+					}
+					const n =
+						(await $sys.emit(el, new Event("input", { bubbles: true }))) +
+						(await $sys.emit(el, new Event("change", { bubbles: true })))
+					return { handled: n > 0 }
 				}
 			}
-			throw "unknown action " + action
+			throw new Error("unknown action " + action)
 		})
 	</script>
 }
@@ -99,7 +160,7 @@ elem radioGroup(id string) {
 		$on(id, async ({ action, value }) => {
 			const els = Array.from(document.querySelectorAll('[data-neid="' + id + '"]'))
 			if (els.length === 0) {
-				throw "element is not rendered"
+				throw new Error("element is not rendered")
 			}
 			switch (action) {
 				case "focus": {
@@ -111,9 +172,15 @@ elem radioGroup(id string) {
 				case "read": {
 					const options = els.map((el) => ({
 						value: el.value,
-						label: el.labels && el.labels[0] ? el.labels[0].textContent.trim() : "",
+						label:
+							el.labels && el.labels[0]
+								? el.labels[0].textContent.trim()
+								: el.getAttribute("aria-label") || "",
 						selected: el.checked,
-						disabled: el.disabled,
+						disabled:
+							el.matches(":disabled") ||
+							el.closest("[inert]") !== null ||
+							el.getAttribute("aria-disabled") === "true",
 					}))
 					const checked = els.find((el) => el.checked)
 					return { value: checked ? checked.value : null, options }
@@ -121,14 +188,19 @@ elem radioGroup(id string) {
 				case "input": {
 					const el = els.find((el) => el.value === value)
 					if (!el) {
-						throw "no option with value " + JSON.stringify(value)
+						throw new Error("no option with value " + JSON.stringify(value))
 					}
-					el.checked = true
-					await $sys.emit(el, new Event("change", { bubbles: true }))
-					return {}
+					if (el.checked) {
+						return { handled: false }
+					}
+					const n = await $sys.emit(
+						el,
+						new PointerEvent("click", { bubbles: true, cancelable: true }),
+					)
+					return { handled: n > 0 }
 				}
 			}
-			throw "unknown action " + action
+			throw new Error("unknown action " + action)
 		})
 	</script>
 }

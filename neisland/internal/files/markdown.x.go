@@ -1,4 +1,4 @@
-// Managed by GoX v0.3.4
+// Managed by GoX v0.4.0
 
 //line markdown.gox:1
 package files
@@ -17,6 +17,7 @@ import (
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
 	xhtml "golang.org/x/net/html"
+	"neui.dev"
 	"neui.dev/api"
 	"neui.dev/internal/markdown"
 )
@@ -100,39 +101,42 @@ type markdownFile struct {
 	label string
 }
 
-//line markdown.gox:100
+//line markdown.gox:101
 func (m markdownFile) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line markdown.gox:102
+//line markdown.gox:103
 		entry, err := markdownStat(ctx, m.fs, m.name)
+	if errors.Is(err, api.ErrNotFound) {
+		neui.IslandReport(ctx, fmt.Errorf("linked file %q is not in the workspace", m.name))
+	}
 
-//line markdown.gox:104
+//line markdown.gox:108
 		if err != nil {
 			__e = __c.Init("span"); if __e != nil { return }
 			{
-//line markdown.gox:105
+//line markdown.gox:109
 				__e = __c.Set("class", "neisland-file neisland-file-gone not-prose"); if __e != nil { return }
-//line markdown.gox:105
+//line markdown.gox:109
 				__e = __c.Set("title", m.name); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Init("span"); if __e != nil { return }
 				{
-//line markdown.gox:106
+//line markdown.gox:110
 					__e = __c.Set("class", "neisland-file-name"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line markdown.gox:106
+//line markdown.gox:110
 					__e = __c.Any(m.label); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
-//line markdown.gox:107
+//line markdown.gox:111
 				__e = __c.Any(" "); if __e != nil { return }
 				__e = __c.Init("span"); if __e != nil { return }
 				{
-//line markdown.gox:108
+//line markdown.gox:112
 					__e = __c.Set("class", "neisland-file-meta"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line markdown.gox:109
+//line markdown.gox:113
 					__e = __c.Any(func() any {
 					if errors.Is(err, api.ErrNotFound) {
 						return "file is gone"
@@ -146,33 +150,33 @@ func (m markdownFile) Main() gox.Elem {
 		} else  {
 			__e = __c.Init("a"); if __e != nil { return }
 			{
-//line markdown.gox:118
+//line markdown.gox:122
 				__e = __c.Set("class", "neisland-file not-prose"); if __e != nil { return }
-//line markdown.gox:118
+//line markdown.gox:122
 				__e = __c.Set("href", MarkdownServe(m.fs, m.name, true)); if __e != nil { return }
-//line markdown.gox:118
+//line markdown.gox:122
 				__e = __c.Set("download", path.Base(m.name)); if __e != nil { return }
-//line markdown.gox:118
+//line markdown.gox:122
 				__e = __c.Set("title", m.name); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Init("svg"); if __e != nil { return }
 				{
-//line markdown.gox:119
+//line markdown.gox:123
 					__e = __c.Set("class", "neisland-file-icon"); if __e != nil { return }
-//line markdown.gox:119
+//line markdown.gox:123
 					__e = __c.Set("viewBox", "0 0 12 12"); if __e != nil { return }
-//line markdown.gox:119
+//line markdown.gox:123
 					__e = __c.Set("fill", "none"); if __e != nil { return }
-//line markdown.gox:119
+//line markdown.gox:123
 					__e = __c.Set("stroke", "currentColor"); if __e != nil { return }
-//line markdown.gox:119
+//line markdown.gox:123
 					__e = __c.Set("stroke-width", "1.4"); if __e != nil { return }
-//line markdown.gox:119
+//line markdown.gox:123
 					__e = __c.Set("aria-hidden", "true"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
 					__e = __c.Init("path"); if __e != nil { return }
 					{
-//line markdown.gox:120
+//line markdown.gox:124
 						__e = __c.Set("d", "M6 1.5v6M3.25 5 6 7.75 8.75 5M2 10.5h8"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 					}
@@ -181,21 +185,21 @@ func (m markdownFile) Main() gox.Elem {
 				__e = __c.Close(); if __e != nil { return }
 				__e = __c.Init("span"); if __e != nil { return }
 				{
-//line markdown.gox:122
+//line markdown.gox:126
 					__e = __c.Set("class", "neisland-file-name"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line markdown.gox:122
+//line markdown.gox:126
 					__e = __c.Any(m.label); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
-//line markdown.gox:123
+//line markdown.gox:127
 				__e = __c.Any(" "); if __e != nil { return }
 				__e = __c.Init("span"); if __e != nil { return }
 				{
-//line markdown.gox:124
+//line markdown.gox:128
 					__e = __c.Set("class", "neisland-file-meta"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line markdown.gox:124
+//line markdown.gox:128
 					__e = __c.Any(Size(entry.Size)); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
@@ -203,7 +207,7 @@ func (m markdownFile) Main() gox.Elem {
 			__e = __c.Close(); if __e != nil { return }
 		}
 	return })
-//line markdown.gox:127
+//line markdown.gox:131
 }
 
 type markdownImage struct {
@@ -213,25 +217,25 @@ type markdownImage struct {
 	title string
 }
 
-//line markdown.gox:136
+//line markdown.gox:140
 func (m markdownImage) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line markdown.gox:138
+//line markdown.gox:142
 		_, err := markdownStat(ctx, m.fs, m.name)
 
-//line markdown.gox:140
+//line markdown.gox:144
 		if err != nil {
-//line markdown.gox:141
+//line markdown.gox:145
 			__e = __c.Any(markdownFile{fs: m.fs, name: m.name, label: markdown.FileLabel(m.alt, "", m.name)}); if __e != nil { return }
 		} else  {
 			__e = __c.InitVoid("img"); if __e != nil { return }
 			{
-//line markdown.gox:144
+//line markdown.gox:148
 				__e = __c.Set("src", MarkdownServe(m.fs, m.name, false)); if __e != nil { return }
-//line markdown.gox:145
+//line markdown.gox:149
 				__e = __c.Set("alt", m.alt); if __e != nil { return }
-//line markdown.gox:146
+//line markdown.gox:150
 				__e = __c.Set("title", func() any {
 				if m.title == "" {
 					return nil
@@ -242,7 +246,7 @@ func (m markdownImage) Main() gox.Elem {
 			__e = __c.Submit(); if __e != nil { return }
 		}
 	return })
-//line markdown.gox:153
+//line markdown.gox:157
 }
 
 func markdownStat(ctx context.Context, fs api.FS, name string) (api.FSEntry, error) {

@@ -4,6 +4,8 @@ package island_test
 
 import (
 	"context"
+	"encoding/json"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -14,6 +16,7 @@ import (
 	"github.com/go-rod/rod/lib/proto"
 	"neui.dev"
 	"neui.dev/api"
+	"neui.dev/internal/devkit"
 	"neui.dev/internal/testkit"
 	"neui.dev/internal/testkit/stack"
 	"neui.dev/neisland"
@@ -376,31 +379,45 @@ func buttons(drawn chan<- struct{}) gox.Elem {
 	}
 }
 
-func TestIslandButtonWithAgentIsClickableAndSubmitsItsValue(t *testing.T) {
+func drawnThen(t *testing.T, drawn <-chan struct{}, then testkit.Turn) testkit.Turn {
+	return testkit.Then(func(api.Request) testkit.Turn {
+		select {
+		case <-drawn:
+		case <-time.After(10 * time.Second):
+			t.Error("the buttons were never drawn")
+		}
+		return then
+	})
+}
+
+func TestIslandButtonIsAnInputThatSubmitsItsValue(t *testing.T) {
 	drawn := make(chan struct{}, 1)
+	var goID string
 	p := testkit.NewProvider(api.Model{},
 		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
 		revised(t, func(revision string) testkit.Turn {
-			return start(revision, `ui.root.set(ui.column({}, ui.button({text: "Go", value: "v1", agent: "submits go"}), ui.button({text: "Plain", value: "v2"}))); ui.notify(ui.draw()); ui.draw(1)`)
+			return start(revision, `ui.root.set(ui.column({}, ui.button({text: "Go", value: "v1"}), ui.button({text: "Plain", value: "v2"}))); ui.notify(ui.draw()); ui.draw(1)`)
 		}),
-		testkit.Then(func(api.Request) testkit.Turn {
-			select {
-			case <-drawn:
-			case <-time.After(10 * time.Second):
-				t.Error("the buttons were never drawn")
-			}
-			return syncScreen("board.screen.button_1", "board.screen.button_2")
-		}),
+		drawnThen(t, drawn, syncScreen("board.screen.button_1", "board.screen.button_2")),
 		testkit.Then(func(r api.Request) testkit.Turn {
 			results := testkit.Results(r)
-			var agent, plain inputs
-			testkit.Decode(t, results[1], &agent)
+			var goButton, plain inputs
+			testkit.Decode(t, results[1], &goButton)
 			testkit.Decode(t, results[2], &plain)
-			if len(agent.Inputs) != 1 || agent.Inputs[0].Desc != "submits go" || len(plain.Inputs) != 0 {
-				t.Errorf("the buttons synced as %+v and %+v, want only the agent one as an input", agent, plain)
+			if len(goButton.Inputs) != 1 || goButton.Inputs[0].Desc != "Go" || len(plain.Inputs) != 1 || plain.Inputs[0].Desc != "Plain" {
+				t.Errorf("the buttons synced as %+v and %+v, want each an input described by its text", goButton, plain)
 				return testkit.Say("lost")
 			}
-			return testkit.Call("page__click", map[string]any{"path": "board.screen.button_1", "id": agent.Inputs[0].ID})
+			goID = goButton.Inputs[0].ID
+			return testkit.Call("page__read", map[string]any{"path": "board.screen.button_1", "id": goID})
+		}),
+		testkit.Then(func(r api.Request) testkit.Turn {
+			var read struct{ Value, Label string }
+			testkit.Decode(t, testkit.Results(r)[0], &read)
+			if read.Value != "v1" || read.Label != "Go" {
+				t.Errorf("the Go button read as %+v, want value v1 and label Go", read)
+			}
+			return testkit.Call("page__click", map[string]any{"path": "board.screen.button_1", "id": goID})
 		}),
 		testkit.Say("clicked"),
 		testkit.Say("noted"),
@@ -408,6 +425,49 @@ func TestIslandButtonWithAgentIsClickableAndSubmitsItsValue(t *testing.T) {
 	c := stack.Browser(t, stack.Host{Provider: p, Page: buttons(drawn)})
 	c.Send("click go")
 	c.Wait()
+	if r := testkit.Results(p.Request(t, 5))[0]; r.Error != api.ToolOk {
+		t.Fatalf("the click answered %#v, want the button's handler run", r.Content)
+	}
+	carries(t, lastText(p.Request(t, 5)), `<task_notify `, `script="1"`, `[{"id":1,"output":"v1"}]`)
+}
+
+func TestIslandClickReturnsWhenThePartEndsWithoutADraw(t *testing.T) {
+	drawn := make(chan struct{}, 1)
+	took := make(chan time.Duration, 1)
+	var clicked time.Time
+	p := testkit.NewProvider(api.Model{},
+		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
+		revised(t, func(revision string) testkit.Turn {
+			return start(revision, `ui.root.set(ui.button({text: "Go", value: "v1"})); ui.notify(ui.draw())`)
+		}),
+		drawnThen(t, drawn, testkit.Call("page__sync", map[string]any{"path": "board.screen.button_1"})),
+		testkit.Then(func(r api.Request) testkit.Turn {
+			var s inputs
+			testkit.Decode(t, testkit.Results(r)[0], &s)
+			if len(s.Inputs) != 1 {
+				t.Errorf("the button space synced as %+v, want one input", s)
+				return testkit.Say("lost")
+			}
+			clicked = time.Now()
+			return testkit.Call("page__click", map[string]any{"path": "board.screen.button_1", "id": s.Inputs[0].ID})
+		}),
+		testkit.Then(func(api.Request) testkit.Turn {
+			took <- time.Since(clicked)
+			return testkit.Say("clicked")
+		}),
+		testkit.Say("noted"),
+	)
+	c := stack.Browser(t, stack.Host{Provider: p, Page: buttons(drawn)})
+	c.Send("click go")
+	c.Wait()
+	select {
+	case d := <-took:
+		if d > 2*time.Second {
+			t.Fatalf("the click returned after %v, want it back once the part ends", d)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the click never returned to the agent")
+	}
 	if r := testkit.Results(p.Request(t, 4))[0]; r.Error != api.ToolOk {
 		t.Fatalf("the click answered %#v, want the button's handler run", r.Content)
 	}
@@ -548,4 +608,40 @@ func TestIslandThrowWhileHandlingAnOversizedActionKeepsItsID(t *testing.T) {
 	record := recorded(t, c, p, `kind="script_error"`)
 	carries(t, record, `script="1"`, "save failed", `last_action="{&#34;id&#34;:1,&#34;output_omitted&#34;:true}"`, actionNote)
 	lacks(t, record, "xxxx")
+}
+
+func TestIslandMarkdownReportsAMissingFileOncePerScript(t *testing.T) {
+	a := stack.Island(t, devkit.App{
+		Island: neui.Island{
+			Name:        "board",
+			Placeholder: func(cur gox.Cursor) error { return cur.Text("idle") },
+			Template: func(slot gox.Comp) gox.Elem {
+				return func(cur gox.Cursor) error { return cur.Comp(slot) }
+			},
+			Library: neisland.RegisterMarkdown,
+		},
+		Script: `ui.root.set(ui.markdown({text: "[a](file:///missing.txt), [b](file:///missing.txt) and ![c](file:///gone.png)"})); ui.draw(1); ui.notify("drawn")`,
+	})
+	reported := map[string]int{}
+	done := false
+	a.Until(func(r devkit.Report) bool {
+		switch r.Meta["kind"] {
+		case "widget_error":
+			var data struct{ Widget, Error string }
+			if err := json.Unmarshal(r.Data, &data); err != nil {
+				t.Fatal(err)
+			}
+			reported[data.Widget+": "+data.Error]++
+		case "notifications_list":
+			done = true
+		}
+		return done && len(reported) == 2
+	})
+	want := map[string]int{
+		`markdown: linked file "missing.txt" is not in the workspace`: 1,
+		`markdown: linked file "gone.png" is not in the workspace`:    1,
+	}
+	if !maps.Equal(reported, want) {
+		t.Fatalf("reported %v, want each missing file once", reported)
+	}
 }

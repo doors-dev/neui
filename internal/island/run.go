@@ -345,6 +345,7 @@ func (r *run) run() {
 			case err == nil:
 				r.state.FlushNotifications(false)
 			}
+			r.state.Release()
 		}
 	}()
 }

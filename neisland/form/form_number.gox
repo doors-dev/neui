@@ -10,6 +10,7 @@ import (
 	
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
+	"neui.dev"
 )
 
 func newNumberWidget(ctx context.Context, group group, params numberParams) (*numberWidget, error) {
@@ -149,7 +150,7 @@ elem (f *numberWidget) Main() {
 		})
 		~(if f.params.Type == "range" {
 			<div class="neisland-form-slider">
-				<input
+				~>(neui.Input{Desc: f.params.Label}) <input
 					(&f.invalid)
 					(&f.label)
 					(doors.AInput{
@@ -176,7 +177,7 @@ elem (f *numberWidget) Main() {
 				~>(&f.output) <output class="neisland-form-output" for=(f.id)>~(value)</output>
 			</div>
 		} else {
-			<input
+			~>(neui.Input{Desc: f.params.Label}) <input
 				(&f.invalid)
 				(&f.label)
 				(doors.AInput{
@@ -206,6 +207,7 @@ elem (f *numberWidget) Main() {
 				return <p class="neisland-form-error" id=(f.id + "-e")>~(err.Error())</p>
 			})),
 		))
+		~(errorData(f.params.Name, f.field.error))
 	</div>
 }
 

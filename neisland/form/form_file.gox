@@ -513,8 +513,7 @@ elem (f *fileWidget) Main() {
 		doors.Call(ctx, f.empty.Set("aria-invalid", aria(shownErr(err))))
 		return false
 	})
-	~~
-	<div class="neisland-form-field">
+	body := <div class="neisland-form-field">
 		~(if label == nil {
 			<span class="neisland-form-label" id=(f.id + "-l")>
 				~(f.params.Label)
@@ -545,6 +544,7 @@ elem (f *fileWidget) Main() {
 				return <p class="neisland-form-error" id=(f.id + "-e")>~(err.Error())</p>
 			})),
 		))
+		~(errorData(f.params.Name, f.field.error))
 		~(focus)
 		<script
 			(doors.AHook[[]filePicked]{
@@ -728,6 +728,12 @@ elem (f *fileWidget) Main() {
 			})
 		</script>
 	</div>
+	~~
+	~(if f.field.item != nil {
+		~(body)
+	} else {
+		~>(neui.Space{Name: f.params.Name, Desc: f.params.Label}) ~(body)
+	})
 }
 
 elem (f *fileWidget) zone(full bool) {
@@ -741,7 +747,7 @@ elem (f *fileWidget) zone(full bool) {
 		}
 		~~
 		<label class="neisland-form-file-zone">
-			<input
+			~>(neui.Input{Desc: "file chooser"}) <input
 				(&f.empty)
 				(&f.label)
 				class="neisland-form-file-input"
@@ -810,10 +816,13 @@ elem (f *fileWidget) chip(e fileEntry) {
 				<span class="neisland-form-file-reason">~(e.reason)</span>
 			})
 		</span>
+		~(if e.status == fileDone {
+			~(neui.Data{Text: "uploaded file", Object: map[string]any{"name": e.name, "size": e.size, "path": e.path}})
+		})
 		~(if e.retry {
 			<button type="button" class="neisland-form-file-retry" data-file-retry=(e.key) hidden>Retry</button>
 		})
-		<button
+		~>(neui.Input{Desc: "remove " + e.name}) <button
 			(doors.AClick{
 				Scope: f.field.scope(),
 				Batch: true,
@@ -825,6 +834,7 @@ elem (f *fileWidget) chip(e fileEntry) {
 			type="button"
 			class="neisland-form-remove"
 			id=(f.id + "-x" + e.key)
+			value=(e.key)
 			aria-label=({
 				switch e.status {
 				case fileUploading:

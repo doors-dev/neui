@@ -14,6 +14,7 @@ import (
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
 	xhtml "golang.org/x/net/html"
+	"neui.dev"
 	"neui.dev/api"
 	"neui.dev/internal/markdown"
 )
@@ -100,6 +101,9 @@ type markdownFile struct {
 elem (m markdownFile) Main() {
 	~~
 	entry, err := markdownStat(ctx, m.fs, m.name)
+	if errors.Is(err, api.ErrNotFound) {
+		neui.IslandReport(ctx, fmt.Errorf("linked file %q is not in the workspace", m.name))
+	}
 	~~
 	~(if err != nil {
 		<span class="neisland-file neisland-file-gone not-prose" title=(m.name)>

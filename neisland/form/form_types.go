@@ -329,7 +329,7 @@ type submitParams struct {
 var errDuplicateName = errors.New("duplicate field name")
 var errNovalidateValue = errors.New("a novalidate button needs a value that no button without novalidate has")
 var errRequired = errors.New("field is required")
-var errUploading = errors.New("files are still uploading")
+var errUploading = errors.New("still uploading")
 var errSystem = errors.New("couldn't check this value")
 var errMarker = errors.New("system error marker, not rendered")
 

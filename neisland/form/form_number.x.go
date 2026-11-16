@@ -13,6 +13,7 @@ import (
 	
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
+	"neui.dev"
 )
 
 func newNumberWidget(ctx context.Context, group group, params numberParams) (*numberWidget, error) {
@@ -111,11 +112,11 @@ func (f *numberWidget) setLocked(ctx context.Context, number *float64, err error
 	f.field.set(ctx, *number, err)
 }
 
-//line form_number.gox:111
+//line form_number.gox:112
 func (f *numberWidget) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line form_number.gox:113
+//line form_number.gox:114
 		f.field.mutex().Lock()
 	value := ""
 	if number, ok := f.field.value().(float64); ok {
@@ -144,21 +145,21 @@ func (f *numberWidget) Main() gox.Elem {
 
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line form_number.gox:139
+//line form_number.gox:140
 			__e = __c.Set("class", "neisland-form-field"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line form_number.gox:140
+//line form_number.gox:141
 			if label == nil {
 				__e = __c.Init("label"); if __e != nil { return }
 				{
-//line form_number.gox:141
+//line form_number.gox:142
 					__e = __c.Set("class", "neisland-form-label"); if __e != nil { return }
-//line form_number.gox:141
+//line form_number.gox:142
 					__e = __c.Set("for", f.id); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line form_number.gox:142
-					__e = __c.Any(f.params.Label); if __e != nil { return }
 //line form_number.gox:143
+					__e = __c.Any(f.params.Label); if __e != nil { return }
+//line form_number.gox:144
 					__e = __c.Any(f.field.error.RouteBeam(
 					doors.RouteBeamMatch(func(err error) bool {
 						return f.params.Required && err != nil
@@ -166,35 +167,38 @@ func (f *numberWidget) Main() gox.Elem {
 						ctx := __c.Context(); _ = ctx
 						__e = __c.Init("span"); if __e != nil { return }
 						{
-//line form_number.gox:146
+//line form_number.gox:147
 							__e = __c.Set("class", "neisland-form-required"); if __e != nil { return }
-//line form_number.gox:146
+//line form_number.gox:147
 							__e = __c.Set("aria-hidden", "true"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.Text("*"); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
-//line form_number.gox:146
+//line form_number.gox:147
 					return }))),
 				)); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
 			}
-//line form_number.gox:150
+//line form_number.gox:151
 			if f.params.Type == "range" {
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line form_number.gox:151
+//line form_number.gox:152
 					__e = __c.Set("class", "neisland-form-slider"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-					__e = __c.InitVoid("input"); if __e != nil { return }
-					{
 //line form_number.gox:153
-						__e = __c.Modify(&f.invalid); if __e != nil { return }
+					__e = (neui.Input{Desc: f.params.Label}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+						ctx := __c.Context(); _ = ctx
+						__e = __c.InitVoid("input"); if __e != nil { return }
+						{
 //line form_number.gox:154
-						__e = __c.Modify(&f.label); if __e != nil { return }
+							__e = __c.Modify(&f.invalid); if __e != nil { return }
 //line form_number.gox:155
-						__e = __c.Modify(doors.AInput{
+							__e = __c.Modify(&f.label); if __e != nil { return }
+//line form_number.gox:156
+							__e = __c.Modify(doors.AInput{
 						Scope: f.field.scope().And(&doors.ScopeDebounce{Duration: 250 * time.Millisecond, Limit: time.Second}),
 						Batch: true,
 						On: func(ctx context.Context, r doors.RequestInput) bool {
@@ -202,45 +206,46 @@ func (f *numberWidget) Main() gox.Elem {
 							return false
 						},
 					}); if __e != nil { return }
-//line form_number.gox:163
-						__e = __c.Set("class", "neisland-form-range"); if __e != nil { return }
 //line form_number.gox:164
-						__e = __c.Set("id", f.id); if __e != nil { return }
+							__e = __c.Set("class", "neisland-form-range"); if __e != nil { return }
 //line form_number.gox:165
-						__e = __c.Set("type", "range"); if __e != nil { return }
+							__e = __c.Set("id", f.id); if __e != nil { return }
 //line form_number.gox:166
-						__e = __c.Set("name", f.params.Name); if __e != nil { return }
+							__e = __c.Set("type", "range"); if __e != nil { return }
 //line form_number.gox:167
-						__e = __c.Set("value", value); if __e != nil { return }
+							__e = __c.Set("name", f.params.Name); if __e != nil { return }
 //line form_number.gox:168
-						__e = __c.Set("min", min); if __e != nil { return }
+							__e = __c.Set("value", value); if __e != nil { return }
 //line form_number.gox:169
-						__e = __c.Set("max", max); if __e != nil { return }
+							__e = __c.Set("min", min); if __e != nil { return }
 //line form_number.gox:170
-						__e = __c.Set("step", step); if __e != nil { return }
+							__e = __c.Set("max", max); if __e != nil { return }
 //line form_number.gox:171
-						__e = __c.Set("aria-required", aria(f.params.Required)); if __e != nil { return }
+							__e = __c.Set("step", step); if __e != nil { return }
 //line form_number.gox:172
-						__e = __c.Set("aria-label", label); if __e != nil { return }
+							__e = __c.Set("aria-required", aria(f.params.Required)); if __e != nil { return }
 //line form_number.gox:173
-						__e = __c.Set("aria-invalid", aria(shownErr(f.field.error.Get()))); if __e != nil { return }
+							__e = __c.Set("aria-label", label); if __e != nil { return }
 //line form_number.gox:174
-						__e = __c.Set("data-required-empty", errors.Is(f.field.error.Get(), errRequired)); if __e != nil { return }
+							__e = __c.Set("aria-invalid", aria(shownErr(f.field.error.Get()))); if __e != nil { return }
 //line form_number.gox:175
-						__e = __c.Set("aria-describedby", f.id + "-e"); if __e != nil { return }
-					}
-					__e = __c.Submit(); if __e != nil { return }
+							__e = __c.Set("data-required-empty", errors.Is(f.field.error.Get(), errRequired)); if __e != nil { return }
 //line form_number.gox:176
+							__e = __c.Set("aria-describedby", f.id + "-e"); if __e != nil { return }
+						}
+						__e = __c.Submit(); if __e != nil { return }
+					return })); if __e != nil { return }
+//line form_number.gox:177
 					__e = (&f.output).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 						ctx := __c.Context(); _ = ctx
 						__e = __c.Init("output"); if __e != nil { return }
 						{
-//line form_number.gox:176
+//line form_number.gox:177
 							__e = __c.Set("class", "neisland-form-output"); if __e != nil { return }
-//line form_number.gox:176
+//line form_number.gox:177
 							__e = __c.Set("for", f.id); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
-//line form_number.gox:176
+//line form_number.gox:177
 							__e = __c.Any(value); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
@@ -248,14 +253,17 @@ func (f *numberWidget) Main() gox.Elem {
 				}
 				__e = __c.Close(); if __e != nil { return }
 			} else  {
-				__e = __c.InitVoid("input"); if __e != nil { return }
-				{
 //line form_number.gox:180
-					__e = __c.Modify(&f.invalid); if __e != nil { return }
+				__e = (neui.Input{Desc: f.params.Label}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+					ctx := __c.Context(); _ = ctx
+					__e = __c.InitVoid("input"); if __e != nil { return }
+					{
 //line form_number.gox:181
-					__e = __c.Modify(&f.label); if __e != nil { return }
+						__e = __c.Modify(&f.invalid); if __e != nil { return }
 //line form_number.gox:182
-					__e = __c.Modify(doors.AInput{
+						__e = __c.Modify(&f.label); if __e != nil { return }
+//line form_number.gox:183
+						__e = __c.Modify(doors.AInput{
 					Scope: f.field.scope().And(&doors.ScopeDebounce{Duration: 250 * time.Millisecond, Limit: time.Second}),
 					Batch: true,
 					On: func(ctx context.Context, r doors.RequestInput) bool {
@@ -263,59 +271,62 @@ func (f *numberWidget) Main() gox.Elem {
 						return false
 					},
 				}); if __e != nil { return }
-//line form_number.gox:190
-					__e = __c.Set("class", "neisland-form-input"); if __e != nil { return }
 //line form_number.gox:191
-					__e = __c.Set("id", f.id); if __e != nil { return }
+						__e = __c.Set("class", "neisland-form-input"); if __e != nil { return }
 //line form_number.gox:192
-					__e = __c.Set("type", "number"); if __e != nil { return }
+						__e = __c.Set("id", f.id); if __e != nil { return }
 //line form_number.gox:193
-					__e = __c.Set("name", f.params.Name); if __e != nil { return }
+						__e = __c.Set("type", "number"); if __e != nil { return }
 //line form_number.gox:194
-					__e = __c.Set("value", value); if __e != nil { return }
+						__e = __c.Set("name", f.params.Name); if __e != nil { return }
 //line form_number.gox:195
-					__e = __c.Set("min", min); if __e != nil { return }
+						__e = __c.Set("value", value); if __e != nil { return }
 //line form_number.gox:196
-					__e = __c.Set("max", max); if __e != nil { return }
+						__e = __c.Set("min", min); if __e != nil { return }
 //line form_number.gox:197
-					__e = __c.Set("step", step); if __e != nil { return }
+						__e = __c.Set("max", max); if __e != nil { return }
 //line form_number.gox:198
-					__e = __c.Set("aria-required", aria(f.params.Required)); if __e != nil { return }
+						__e = __c.Set("step", step); if __e != nil { return }
 //line form_number.gox:199
-					__e = __c.Set("aria-label", label); if __e != nil { return }
+						__e = __c.Set("aria-required", aria(f.params.Required)); if __e != nil { return }
 //line form_number.gox:200
-					__e = __c.Set("aria-invalid", aria(shownErr(f.field.error.Get()))); if __e != nil { return }
+						__e = __c.Set("aria-label", label); if __e != nil { return }
 //line form_number.gox:201
-					__e = __c.Set("data-required-empty", errors.Is(f.field.error.Get(), errRequired)); if __e != nil { return }
+						__e = __c.Set("aria-invalid", aria(shownErr(f.field.error.Get()))); if __e != nil { return }
 //line form_number.gox:202
-					__e = __c.Set("aria-describedby", f.id + "-e"); if __e != nil { return }
-				}
-				__e = __c.Submit(); if __e != nil { return }
+						__e = __c.Set("data-required-empty", errors.Is(f.field.error.Get(), errRequired)); if __e != nil { return }
+//line form_number.gox:203
+						__e = __c.Set("aria-describedby", f.id + "-e"); if __e != nil { return }
+					}
+					__e = __c.Submit(); if __e != nil { return }
+				return })); if __e != nil { return }
 			}
-//line form_number.gox:204
+//line form_number.gox:205
 			__e = __c.Any(f.field.error.RouteBeam(
 			doors.RouteBeamMatch(shownErr, doors.RouteBind(func(err error) gox.Elem {
 				return gox.Elem(func(__c gox.Cursor) (__e error) {
 					ctx := __c.Context(); _ = ctx
 					__e = __c.Init("p"); if __e != nil { return }
 					{
-//line form_number.gox:206
+//line form_number.gox:207
 						__e = __c.Set("class", "neisland-form-error"); if __e != nil { return }
-//line form_number.gox:206
+//line form_number.gox:207
 						__e = __c.Set("id", f.id + "-e"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line form_number.gox:206
+//line form_number.gox:207
 						__e = __c.Any(err.Error()); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
-//line form_number.gox:206
+//line form_number.gox:207
 				return })
 			})),
 		)); if __e != nil { return }
+//line form_number.gox:210
+			__e = __c.Any(errorData(f.params.Name, f.field.error)); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line form_number.gox:210
+//line form_number.gox:212
 }
 
 func (f *numberWidget) validate(ctx context.Context, number *float64) error {

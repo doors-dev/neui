@@ -114,6 +114,11 @@ type change struct {
 	Spaces  int      `json:"spaces,omitempty" description:"on a folded entry, how many changed spaces it stands for: sync it to look inside"`
 }
 
+type actionReport struct {
+	Handled bool `json:"handled" description:"whether a server handler ran for the action. false is not a failure: the action was done on the page, and the application may use it later."`
+	report
+}
+
 type inputRef struct {
 	Path string `json:"path" required:"true" description:"space path: child names from the root joined with dots; \"\" is the page root"`
 	ID   string `json:"id" required:"true" description:"input id from the space inputs list"`
@@ -127,9 +132,10 @@ type writeArg struct {
 
 type readResult struct {
 	Value    any            `json:"value,omitempty" description:"the current value for input (select included) and radio kinds, the form value for buttons"`
-	Label    string         `json:"label,omitempty" description:"text the user sees on it, buttons and links only"`
+	Label    string         `json:"label,omitempty" description:"its text or its label"`
 	Href     string         `json:"href,omitempty" description:"link target, link only"`
 	Options  []selectOption `json:"options,omitempty" description:"choices, select and radio only"`
+	Files    []string       `json:"files,omitzero" description:"names of the chosen files, file input only; empty when none is chosen"`
 	Disabled bool           `json:"disabled,omitempty" description:"present and true when the element is disabled"`
 }
 

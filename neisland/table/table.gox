@@ -29,6 +29,7 @@ type widget struct {
 	params Params
 	state doors.Source[state]
 	body doors.Beam[int]
+	searchBox doors.Beam[int]
 	selected doors.Source[map[string]struct{}]
 	submit func(ctx context.Context, s Submit) bool
 }
@@ -44,8 +45,9 @@ type widget struct {
 // buttons submits the row id and the button's value, to the script waiting
 // in ui.draw(). With select, rows get checkboxes; the selection, at most
 // 1000 ids, survives page changes and reloads, and the select button submits
-// the selected ids, sorted. An
-// empty patch reloads the rows.
+// the selected ids, sorted. An empty patch reloads the rows. In the table's
+// space the agent gets tools that read the table and page, search, sort,
+// select and submit on the user's view, as the user does.
 func New(ctx context.Context, p Params, submit func(ctx context.Context, s Submit) bool) (api.Widget[Patch], error) {
 	p.initDefault()
 	source := doors.NewSourceEqual(p.state(), stateEqual)
@@ -54,6 +56,9 @@ func New(ctx context.Context, p Params, submit func(ctx context.Context, s Submi
 		state: source,
 		body: doors.DeriveBeam(source, func(s state) int {
 			return s.seq
+		}),
+		searchBox: doors.DeriveBeam(source, func(s state) int {
+			return s.searchSeq
 		}),
 		selected: doors.DeriveSourceEqual(source, func(s state) map[string]struct{} {
 			return s.selected
@@ -102,38 +107,94 @@ func (t widget) Update(ctx context.Context, patch Patch) {
 	})
 }
 
+func (t widget) search(ctx context.Context, text string, rewrite bool) state {
+	text = strings.TrimSpace(text)
+	if utf8.RuneCountInString(text) > 100 {
+		text = string([]rune(text)[:100])
+	}
+	var next state
+	t.state.Mutate(ctx, func(s state) state {
+		if s.search != text {
+			s.search, s.page = text, 1
+			s.seq += 1
+		}
+		if rewrite {
+			s.searchSeq += 1
+		}
+		next = s
+		return s
+	})
+	return next
+}
+
+func (t widget) showPage(ctx context.Context, page int) state {
+	var next state
+	t.state.Mutate(ctx, func(s state) state {
+		s.page = page
+		s.seq += 1
+		next = s
+		return s
+	})
+	return next
+}
+
+func (t widget) sortBy(ctx context.Context, column int, desc bool) state {
+	var next state
+	t.state.Mutate(ctx, func(s state) state {
+		s.sort = &sortSpec{Column: column, Desc: desc}
+		s.page = 1
+		s.seq += 1
+		next = s
+		return s
+	})
+	return next
+}
+
+func (t widget) mark(ctx context.Context, ids []string, selected bool) map[string]struct{} {
+	var next map[string]struct{}
+	t.selected.Mutate(ctx, func(sel map[string]struct{}) map[string]struct{} {
+		sel = maps.Clone(sel)
+		if sel == nil {
+			sel = make(map[string]struct{})
+		}
+		for _, id := range ids {
+			if !selected {
+				delete(sel, id)
+			} else if len(sel) < 1000 {
+				sel[id] = struct{}{}
+			}
+		}
+		next = sel
+		return sel
+	})
+	return next
+}
+
 elem (t widget) Main() {
-	~~
-	current, _ := t.state.Read(ctx)
-	~~
 	<div class="neisland-table-card">
+		~(t.tools())
 		~(if t.params.Search {
 			<div class="neisland-table-card-head">
-				<input
-					type="search"
-					class="neisland-form-search-input neisland-table-search"
-					value=(current.search)
-					placeholder="Search"
-					aria-label="Search"
-					maxlength="100"
-					(doors.AInput{
-						Scope: &doors.ScopeDebounce{Duration: 250 * time.Millisecond, Limit: time.Second},
-						Race: doors.RaceStrict,
-						On: func(ctx context.Context, r doors.RequestInput) bool {
-							text := strings.TrimSpace(r.Event().Value)
-							if utf8.RuneCountInString(text) > 100 {
-								text = string([]rune(text)[:100])
-							}
-							t.state.Mutate(ctx, func(s state) state {
-								if s.search != text {
-									s.search, s.page = text, 1
-									s.seq += 1
-								}
-								return s
-							})
-							return false
-						},
-					})/>
+				~(t.searchBox.Bind(elem(int) {
+					~~
+					current, _ := t.state.Read(ctx)
+					~~
+					<input
+						type="search"
+						class="neisland-form-search-input neisland-table-search"
+						value=(current.search)
+						placeholder="Search"
+						aria-label="Search"
+						maxlength="100"
+						(doors.AInput{
+							Scope: &doors.ScopeDebounce{Duration: 250 * time.Millisecond, Limit: time.Second},
+							Race: doors.RaceStrict,
+							On: func(ctx context.Context, r doors.RequestInput) bool {
+								t.search(ctx, r.Event().Value, false)
+								return false
+							},
+						})/>
+				}))
 			</div>
 		})
 		~(t.body.Bind(func(i int) gox.Elem {
@@ -334,12 +395,7 @@ elem (t widget) header(i int, c column, sort *sortSpec) {
 				class="neisland-table-sort"
 				(doors.AClick{
 					On: func(ctx context.Context, _ doors.RequestPointer) bool {
-						t.state.Mutate(ctx, func(s state) state {
-							s.sort = &sortSpec{Column: i, Desc: s.sort != nil && s.sort.Column == i && !s.sort.Desc}
-							s.page = 1
-							s.seq += 1
-							return s
-						})
+						t.sortBy(ctx, i, sort != nil && sort.Column == i && !sort.Desc)
 						return false
 					},
 				})>
@@ -390,20 +446,7 @@ elem (t widget) checkboxHeader(ids []string) {
 				PreventDefault: true,
 				Scope: new(doors.ScopeBlocking),
 				On: func(ctx context.Context, _ doors.RequestPointer) bool {
-					t.selected.Mutate(ctx, func(sel map[string]struct{}) map[string]struct{} {
-						sel = maps.Clone(sel)
-						if sel == nil {
-							sel = make(map[string]struct{})
-						}
-						for _, id := range ids {
-							if c == checkboxChecked {
-								delete(sel, id)
-							} else if len(sel) < 1000 {
-								sel[id] = struct{}{}
-							}
-						}
-						return sel
-					})
+					t.mark(ctx, ids, c != checkboxChecked)
 					return false
 				},
 			})>
@@ -433,18 +476,7 @@ elem (t widget) checkbox(label string, id string) {
 				PreventDefault: true,
 				Scope: new(doors.ScopeBlocking),
 				On: func(ctx context.Context, _ doors.RequestPointer) bool {
-					t.selected.Mutate(ctx, func(sel map[string]struct{}) map[string]struct{} {
-						sel = maps.Clone(sel)
-						if sel == nil {
-							sel = make(map[string]struct{})
-						}
-						if c == checkboxChecked {
-							delete(sel, id)
-						} else if len(sel) < 1000 {
-							sel[id] = struct{}{}
-						}
-						return sel
-					})
+					t.mark(ctx, []string{id}, c != checkboxChecked)
 					return false
 				},
 			})>
@@ -452,7 +484,7 @@ elem (t widget) checkbox(label string, id string) {
 }
 
 elem (t widget) status(sel map[string]struct{}, content result, page int, size int) {
-	~(if len(sel) > 0 {
+	~(if len(sel) > 0 && t.params.Select != nil {
 		<span class="neisland-table-status-text" role="status"><span class="neisland-table-count">~(len(sel))</span> selected</span>
 		<button
 			type="button"
@@ -528,11 +560,7 @@ elem (t widget) pageButton(label string, page int, enabled bool) {
 			class="neisland-button neisland-table-page neisland-button-secondary"
 			(doors.AClick{
 				On: func(ctx context.Context, _ doors.RequestPointer) bool {
-					t.state.Mutate(ctx, func(s state) state {
-						s.page = page
-						s.seq += 1
-						return s
-					})
+					t.showPage(ctx, page)
 					return false
 				},
 			})>

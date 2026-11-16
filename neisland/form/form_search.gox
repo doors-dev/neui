@@ -251,8 +251,7 @@ elem (f *searchWidget) Main() {
 		}
 		return false
 	})
-	~~
-	<div class="neisland-form-field">
+	body := <div class="neisland-form-field">
 		~(if label == nil {
 			<span class="neisland-form-label" id=(f.id + "-l")>
 				~(f.params.Label)
@@ -287,7 +286,14 @@ elem (f *searchWidget) Main() {
 				return <p class="neisland-form-error" id=(f.id + "-e")>~(err.Error())</p>
 			})),
 		))
+		~(errorData(f.params.Name, f.field.error))
 	</div>
+	~~
+	~(if f.field.item != nil {
+		~(body)
+	} else {
+		~>(neui.Space{Name: f.params.Name, Desc: f.params.Label}) ~(body)
+	})
 }
 
 elem (f *searchWidget) picked(chosen []option) {
@@ -315,7 +321,7 @@ elem (f *searchWidget) picked(chosen []option) {
 			~~
 			<li class="neisland-form-search-chip">
 				~(o.Label)
-				<button
+				~>(neui.Input{Desc: "remove " + o.Label}) <button
 					(doors.AClick{
 						Scope: f.field.scope(),
 						Batch: true,
@@ -326,6 +332,7 @@ elem (f *searchWidget) picked(chosen []option) {
 					})
 					type="button"
 					class="neisland-form-remove"
+					value=(string(key))
 					aria-label=("Remove " + o.Label)>
 					×
 				</button>
@@ -344,7 +351,7 @@ elem (f *searchWidget) entry(full bool) {
 			labelledby = nil
 		}
 		~~
-		<input
+		~>(neui.Input{Desc: "search"}) <input
 			(&f.controls)
 			(&f.invalid)
 			(&f.label)
@@ -394,6 +401,7 @@ elem (f *searchWidget) results(found searchFound) {
 			~(for i := range found.results {
 				~~
 				o := found.results[i]
+				key, _ := json.Marshal(o.Value)
 				before, match, after := o.Label, "", ""
 				for at := range o.Label {
 					if end := at + len(found.query); end <= len(o.Label) && strings.EqualFold(o.Label[at:end], found.query) {
@@ -403,7 +411,7 @@ elem (f *searchWidget) results(found searchFound) {
 				}
 				~~
 				<li>
-					<button
+					~>(neui.Input{Desc: "choose " + o.Label}) <button
 						(doors.AClick{
 							Scope: f.field.scope(),
 							Batch: true,
@@ -414,6 +422,7 @@ elem (f *searchWidget) results(found searchFound) {
 						})
 						type="button"
 						class="neisland-form-search-result"
+						value=(string(key))
 						aria-label=("Choose " + o.Label)>
 						<span>
 							~(before)

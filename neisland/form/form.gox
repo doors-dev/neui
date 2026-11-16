@@ -22,6 +22,11 @@ func New(ctx context.Context, p Params, submit func(ctx context.Context, s map[s
 		p.Submits = []submitParams{{Text: "Submit"}}
 	}
 	for i := range p.Submits {
+		if slices.ContainsFunc(p.Submits[:i], func(s submitParams) bool {
+			return s.Text == p.Submits[i].Text && s.Value == p.Submits[i].Value
+		}) {
+			return nil, fmt.Errorf("submits: two buttons have text %q and value %q", p.Submits[i].Text, p.Submits[i].Value)
+		}
 		switch {
 		case p.Submits[i].Style != "":
 		case i == 0:
@@ -155,25 +160,28 @@ elem (f *widget) Main() {
 				return false
 			},
 		})
-		class="neisland-form neisland-form-framed">
+		class="neisland-form neisland-form-framed"
+		novalidate>
 		~(for _, field := range f.fields {
 			~(field)
 		})
 		<div class="neisland-form-actions neisland-form-actions-band">
 			~(for _, s := range f.params.Submits {
 				~(if s.Novalidate {
-					<button
+					~>(neui.Input{Desc: s.Text}) <button
 						type="submit"
 						class=("neisland-button neisland-button-md neisland-button-" + s.Style)
+						value=(s.Value)
 						data-submit=(s.Value)
 						formnovalidate>
 						~(s.Text)
 					</button>
 				} else {
-					<button
+					~>(neui.Input{Desc: s.Text}) <button
 						(&f.locked)
 						type="submit"
 						class=("neisland-button neisland-button-md neisland-button-" + s.Style)
+						value=(s.Value)
 						data-submit=(s.Value)
 						disabled=(errs != errorsNone)
 						aria-describedby=(f.id + "-s")>
@@ -184,6 +192,7 @@ elem (f *widget) Main() {
 			~(f.errors.Bind(elem(errs errorKind) {
 				~(if errs != errorsNone {
 					<p class="neisland-form-help" id=(f.id + "-s")>form is not completed or contains errors</p>
+					~(neui.Data{Text: "submit blocked", Object: "form is not completed or contains errors"})
 				})
 			}))
 		</div>
@@ -205,6 +214,14 @@ elem (f *widget) Main() {
 
 func shownErr(err error) bool {
 	return err != nil && !errors.Is(err, errRequired) && !errors.Is(err, errUploading)
+}
+
+elem errorData(name string, err doors.Beam[error]) {
+	~(err.Bind(elem(err error) {
+		~(if err != nil {
+			~(neui.Data{Text: name + " validation error", Object: err.Error()})
+		})
+	}))
 }
 
 func aria(b bool) any {

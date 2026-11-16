@@ -7,6 +7,7 @@ import (
 
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
+	"neui.dev"
 )
 
 func newCheckboxWidget(ctx context.Context, group group, params checkboxParams) (*checkboxWidget, error) {
@@ -78,7 +79,7 @@ elem (f *checkboxWidget) Main() {
 	~~
 	<div class="neisland-form-field">
 		<label class="neisland-form-check neisland-form-check-single">
-			<input
+			~>(neui.Input{Desc: f.params.Label}) <input
 				(&f.invalid)
 				(&f.label)
 				(doors.AChange{
@@ -114,6 +115,7 @@ elem (f *checkboxWidget) Main() {
 				return <p class="neisland-form-error" id=(f.id + "-e")>~(err.Error())</p>
 			})),
 		))
+		~(errorData(f.params.Name, f.field.error))
 	</div>
 }
 

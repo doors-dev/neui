@@ -16,8 +16,10 @@ func newSeriesWidget(ctx context.Context, group group, params seriesParams) (*se
 		return nil, err
 	}
 	state := doors.NewSource(seriesState{})
+	_, item := group.(*listWidget)
 	series := &seriesWidget{
 		id: doors.IDRand(),
+		item: item,
 		params: params,
 		group: base,
 		fields: make([]*seriesStepWidget, len(params.Fields)),
@@ -44,6 +46,7 @@ type seriesState struct {
 
 type seriesWidget struct {
 	id string
+	item bool
 	params seriesParams
 	group *groupBase
 	system groupField
@@ -161,7 +164,7 @@ func (f *seriesWidget) setField(ctx context.Context, name string, value any, err
 	initial := f.defaults[widgetField.name()]
 	delete(f.defaults, widgetField.name())
 	err = widgetField.init(ctx, initial)
-	step.door.Outer(ctx, f.step(nextIndex, &step.current, widgetField))
+	step.door.Outer(ctx, f.step(nextIndex, &step.current, widgetField, field.v.label()))
 	if err != nil {
 		f.onSystemError(ctx, err)
 		return
@@ -245,11 +248,13 @@ elem (f *seriesWidget) Main() {
 	</ol>
 	errLine := f.system.error.RouteBeam(
 		doors.RouteBeamMatch(shownErr, doors.RouteBind(func(err error) gox.Elem {
-			return <p class="neisland-form-error" id=(f.id + "-e")>~(err.Error())</p>
+			return <p class="neisland-form-error" id=(f.id + "-e")>
+				~(err.Error())
+				~(neui.Data{Text: f.params.Name + " validation error", Object: err.Error()})
+			</p>
 		})),
 	)
-	~~
-	<fieldset class="neisland-form-box" aria-describedby=(f.id + "-e")>
+	body := <fieldset class="neisland-form-box" aria-describedby=(f.id + "-e")>
 		<legend class="neisland-form-box-legend">
 			<span>
 				~(f.params.Label)
@@ -263,9 +268,15 @@ elem (f *seriesWidget) Main() {
 		~(steps)
 		~(errLine)
 	</fieldset>
+	~~
+	~(if f.item {
+		~(body)
+	} else {
+		~>(neui.Space{Name: f.params.Name, Desc: f.params.Label}) ~(body)
+	})
 }
 
-elem (f *seriesWidget) step(index int, current *doors.Setter, field fieldWidget) {
+elem (f *seriesWidget) step(index int, current *doors.Setter, field fieldWidget, label string) {
 	~~
 	isCurrent, _ := doors.DeriveBeam(f.state, func(s seriesState) bool {
 		return !s.complete && s.steps == index + 1
@@ -273,10 +284,15 @@ elem (f *seriesWidget) step(index int, current *doors.Setter, field fieldWidget)
 		doors.Call(ctx, current.Set("aria-current", stepAttr(isCurrent)))
 		return false
 	})
+	_, search := field.(*searchWidget)
 	~~
 	<li class="neisland-form-step" (current) aria-current=(stepAttr(isCurrent))>
 		<span class="neisland-form-step-mark" aria-hidden="true"></span>
-		~(field)
+		~(if search {
+			~(field)
+		} else {
+			~>(neui.Space{Name: field.name(), Desc: label}) ~(field)
+		})
 	</li>
 }
 

@@ -10,6 +10,7 @@ import (
 	"math"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	
 	"github.com/doors-dev/doors"
@@ -42,8 +43,10 @@ func newListWidget(ctx context.Context, group group, params listParams) (*listWi
 	}
 	base.collector = listCollector{}
 	items := doors.NewSourceEqual([]*listItemWidget(nil), slices.Equal[[]*listItemWidget])
+	_, nested := group.(*listWidget)
 	list := &listWidget{
 		id: doors.IDRand(),
+		nested: nested,
 		group: base,
 		params: params,
 		append: new(doors.Door),
@@ -77,6 +80,7 @@ var _ groupCollector = listCollector{}
 
 type listWidget struct {
 	id string
+	nested bool
 	index int
 	next string
 	group *groupBase
@@ -178,13 +182,13 @@ func (f *listWidget) appendFieldLocked(ctx context.Context, value any) error {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.InitContainer(); if __e != nil { return }
 		{
-//line form_list.gox:175
+//line form_list.gox:179
 			__e = __c.Any(widgetField); if __e != nil { return }
-//line form_list.gox:176
+//line form_list.gox:180
 			__e = __c.Any(new); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
-//line form_list.gox:177
+//line form_list.gox:181
 	return })))
 	return nil
 }
@@ -289,11 +293,11 @@ func (f *listWidget) newField(name string) (groupField, error) {
 	return field, nil
 }
 
-//line form_list.gox:281
+//line form_list.gox:285
 func (f *listWidget) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line form_list.gox:283
+//line form_list.gox:287
 		f.group.mutex().Lock()
 	defer f.group.mutex().Unlock()
 	hi := 100
@@ -304,25 +308,26 @@ func (f *listWidget) Main() gox.Elem {
 		doors.Call(ctx, f.add.Set("aria-disabled", aria(count >= hi)))
 		return false
 	})
-
+	body := gox.Elem(func(__c gox.Cursor) (__e error) {
+		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("fieldset"); if __e != nil { return }
 		{
-//line form_list.gox:294
+//line form_list.gox:297
 			__e = __c.Set("class", "neisland-form-box"); if __e != nil { return }
-//line form_list.gox:294
+//line form_list.gox:297
 			__e = __c.Set("aria-describedby", f.id + "-m"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Init("legend"); if __e != nil { return }
 			{
-//line form_list.gox:295
+//line form_list.gox:298
 				__e = __c.Set("class", "neisland-form-box-legend"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Init("span"); if __e != nil { return }
 				{
 					__e = __c.Submit(); if __e != nil { return }
-//line form_list.gox:297
+//line form_list.gox:300
 					__e = __c.Any(f.params.label()); if __e != nil { return }
-//line form_list.gox:298
+//line form_list.gox:301
 					__e = __c.Any(doors.DeriveBeam(f.group.errors, func(m *map[string]any) bool {
 					return f.params.Min > 0 && m != nil && len(*m) > 0
 				}).RouteBeam(
@@ -330,46 +335,46 @@ func (f *listWidget) Main() gox.Elem {
 						ctx := __c.Context(); _ = ctx
 						__e = __c.Init("span"); if __e != nil { return }
 						{
-//line form_list.gox:301
+//line form_list.gox:304
 							__e = __c.Set("class", "neisland-form-required"); if __e != nil { return }
-//line form_list.gox:301
+//line form_list.gox:304
 							__e = __c.Set("aria-hidden", "true"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.Text("*"); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
-//line form_list.gox:301
+//line form_list.gox:304
 					return }))),
 				)); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
-//line form_list.gox:304
+//line form_list.gox:307
 				__e = __c.Any(" "); if __e != nil { return }
 				__e = __c.Init("span"); if __e != nil { return }
 				{
-//line form_list.gox:305
+//line form_list.gox:308
 					__e = __c.Set("class", "neisland-form-count"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line form_list.gox:306
+//line form_list.gox:309
 					__e = __c.Any(f.count.Bind(func(count int) gox.Elem {
 					return gox.Elem(func(__c gox.Cursor) (__e error) {
 						ctx := __c.Context(); _ = ctx
-//line form_list.gox:307
-						if count == 0 {
-//line form_list.gox:308
-						} else if f.params.Max != 0 && f.params.Min != 0 {
-//line form_list.gox:309
-							__e = __c.Many(count, " of ", f.params.Min, "–", f.params.Max); if __e != nil { return }
 //line form_list.gox:310
-						} else if f.params.Max != 0 {
+						if count == 0 {
 //line form_list.gox:311
+						} else if f.params.Max != 0 && f.params.Min != 0 {
+//line form_list.gox:312
+							__e = __c.Many(count, " of ", f.params.Min, "–", f.params.Max); if __e != nil { return }
+//line form_list.gox:313
+						} else if f.params.Max != 0 {
+//line form_list.gox:314
 							__e = __c.Many(count, " of ", f.params.Max); if __e != nil { return }
 						} else  {
-//line form_list.gox:313
+//line form_list.gox:316
 							__e = __c.Any(count); if __e != nil { return }
 						}
 					return })
-//line form_list.gox:315
+//line form_list.gox:318
 				})); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
@@ -377,29 +382,32 @@ func (f *listWidget) Main() gox.Elem {
 			__e = __c.Close(); if __e != nil { return }
 			__e = __c.Init("ol"); if __e != nil { return }
 			{
-//line form_list.gox:318
+//line form_list.gox:321
 				__e = __c.Set("class", "neisland-form-items"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line form_list.gox:319
+//line form_list.gox:322
 				for _, field := range f.fields {
-//line form_list.gox:320
+//line form_list.gox:323
 					__e = __c.Any(field); if __e != nil { return }
 				}
-//line form_list.gox:322
+//line form_list.gox:325
 				__e = __c.Any(f.append); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line form_list.gox:324
+//line form_list.gox:327
 				__e = __c.Set("class", "neisland-form-items-foot"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-				__e = __c.Init("button"); if __e != nil { return }
-				{
-//line form_list.gox:326
-					__e = __c.Modify(&f.add); if __e != nil { return }
-//line form_list.gox:327
-					__e = __c.Modify(doors.AClick{
+//line form_list.gox:328
+				__e = (neui.Input{Desc: "add an item"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+					ctx := __c.Context(); _ = ctx
+					__e = __c.Init("button"); if __e != nil { return }
+					{
+//line form_list.gox:329
+						__e = __c.Modify(&f.add); if __e != nil { return }
+//line form_list.gox:330
+						__e = __c.Modify(doors.AClick{
 					Scope: f.group.scope(),
 					Batch: true,
 					On: func(ctx context.Context, r doors.RequestPointer) bool {
@@ -407,69 +415,70 @@ func (f *listWidget) Main() gox.Elem {
 						return false
 					},
 				}); if __e != nil { return }
-//line form_list.gox:335
-					__e = __c.Set("type", "button"); if __e != nil { return }
-//line form_list.gox:336
-					__e = __c.Set("class", "neisland-form-item-add"); if __e != nil { return }
-//line form_list.gox:337
-					__e = __c.Set("aria-label", func() any {
+//line form_list.gox:338
+						__e = __c.Set("type", "button"); if __e != nil { return }
+//line form_list.gox:339
+						__e = __c.Set("class", "neisland-form-item-add"); if __e != nil { return }
+//line form_list.gox:340
+						__e = __c.Set("aria-label", func() any {
 					if f.params.label() == "" {
 						return "Add item"
 					}
 					return "Add to " + f.params.label()
 				}()); if __e != nil { return }
-//line form_list.gox:343
-					__e = __c.Set("aria-disabled", aria(count >= hi)); if __e != nil { return }
-//line form_list.gox:344
-					__e = __c.Set("aria-describedby", f.id + "-m"); if __e != nil { return }
-					__e = __c.Submit(); if __e != nil { return }
-					__e = __c.Text("Add"); if __e != nil { return }
-				}
-				__e = __c.Close(); if __e != nil { return }
+//line form_list.gox:346
+						__e = __c.Set("aria-disabled", aria(count >= hi)); if __e != nil { return }
 //line form_list.gox:347
+						__e = __c.Set("aria-describedby", f.id + "-m"); if __e != nil { return }
+						__e = __c.Submit(); if __e != nil { return }
+						__e = __c.Text("Add"); if __e != nil { return }
+					}
+					__e = __c.Close(); if __e != nil { return }
+				return })); if __e != nil { return }
+//line form_list.gox:350
 				__e = __c.Any(f.system.error.RouteBeam(
 				doors.RouteBeamMatch(shownErr, doors.RouteBind(func(err error) gox.Elem {
 					return gox.Elem(func(__c gox.Cursor) (__e error) {
 						ctx := __c.Context(); _ = ctx
 						__e = __c.Init("p"); if __e != nil { return }
 						{
-//line form_list.gox:349
+//line form_list.gox:352
 							__e = __c.Set("class", "neisland-form-error"); if __e != nil { return }
-//line form_list.gox:349
+//line form_list.gox:352
 							__e = __c.Set("id", f.id + "-m"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
-//line form_list.gox:349
+//line form_list.gox:352
 							__e = __c.Any(err.Error()); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
-//line form_list.gox:349
+//line form_list.gox:352
 					return })
 				})),
 				doors.RouteComp[error](f.count.Bind(func(count int) gox.Elem {
 					return gox.Elem(func(__c gox.Cursor) (__e error) {
 						ctx := __c.Context(); _ = ctx
-//line form_list.gox:352
+//line form_list.gox:355
 						if count >= hi {
 							__e = __c.Init("p"); if __e != nil { return }
 							{
-//line form_list.gox:353
+//line form_list.gox:356
 								__e = __c.Set("class", "neisland-form-help"); if __e != nil { return }
-//line form_list.gox:353
+//line form_list.gox:356
 								__e = __c.Set("id", f.id + "-m"); if __e != nil { return }
 								__e = __c.Submit(); if __e != nil { return }
 								__e = __c.Text("Maximum of "); if __e != nil { return }
-//line form_list.gox:353
+//line form_list.gox:356
 								__e = __c.Any(hi); if __e != nil { return }
 								__e = __c.Text(" reached."); if __e != nil { return }
 							}
 							__e = __c.Close(); if __e != nil { return }
-//line form_list.gox:354
+//line form_list.gox:357
 						} else if count == 0 {
 							__e = __c.Init("p"); if __e != nil { return }
 							{
-//line form_list.gox:355
+//line form_list.gox:358
 								__e = __c.Set("class", "neisland-form-help"); if __e != nil { return }
-//line form_list.gox:355
+//line form_list.gox:358
 								__e = __c.Set("id", f.id + "-m"); if __e != nil { return }
 								__e = __c.Submit(); if __e != nil { return }
 								__e = __c.Text("None added."); if __e != nil { return }
@@ -477,22 +486,39 @@ func (f *listWidget) Main() gox.Elem {
 							__e = __c.Close(); if __e != nil { return }
 						}
 					return })
-//line form_list.gox:357
+//line form_list.gox:360
 				})),
 			)); if __e != nil { return }
+//line form_list.gox:362
+				__e = __c.Any(errorData(f.params.name(), f.system.error)); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
+//line form_list.gox:364
 	return })
-//line form_list.gox:361
+
+//line form_list.gox:366
+		if f.nested {
+//line form_list.gox:367
+			__e = __c.Any(body); if __e != nil { return }
+		} else  {
+//line form_list.gox:369
+			__e = (neui.Space{Name: f.params.name(), Desc: f.params.label()}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+				ctx := __c.Context(); _ = ctx
+//line form_list.gox:369
+				__e = __c.Any(body); if __e != nil { return }
+			return })); if __e != nil { return }
+		}
+	return })
+//line form_list.gox:371
 }
 
-//line form_list.gox:363
+//line form_list.gox:373
 func (f *listWidget) item(field *listItemWidget) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line form_list.gox:365
+//line form_list.gox:375
 		_, group := field.field.(*groupWidget)
 	_, series := field.field.(*seriesWidget)
 	label := any(nil)
@@ -503,68 +529,79 @@ func (f *listWidget) item(field *listItemWidget) gox.Elem {
 		})
 		label = fmt.Sprintf("%s, item %d", f.params.label(), state.index)
 	}
+	remove := func(index int) string {
+		if f.params.label() == "" {
+			return fmt.Sprintf("Remove item %d", index)
+		}
+		return fmt.Sprintf("Remove item %d of %s", index, f.params.label())
+	}
+	removeState, _ := field.state.ReadAndSub(ctx, func(ctx context.Context, state listItemState) bool {
+		doors.Call(ctx, field.removeLabel.Set("aria-label", remove(state.index)))
+		return false
+	})
 
-		__e = __c.Init("li"); if __e != nil { return }
-		{
-//line form_list.gox:376
-			__e = __c.Set("class", "neisland-form-item"); if __e != nil { return }
-			__e = __c.Submit(); if __e != nil { return }
-			__e = __c.Init("div"); if __e != nil { return }
+//line form_list.gox:396
+		__e = (neui.Space{
+		Name: "item_" + strings.TrimLeft(field.name, "0"),
+		Desc: fmt.Sprintf("item %d of %s", field.state.Get().index, f.params.name()),
+	}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+			ctx := __c.Context(); _ = ctx
+			__e = __c.Init("li"); if __e != nil { return }
 			{
-//line form_list.gox:378
-				__e = __c.Modify(&field.body); if __e != nil { return }
-//line form_list.gox:379
-				__e = __c.Set("class", "neisland-form-item-body"); if __e != nil { return }
-//line form_list.gox:380
-				__e = __c.Set("role", func() any {
+//line form_list.gox:399
+				__e = __c.Set("class", "neisland-form-item"); if __e != nil { return }
+				__e = __c.Submit(); if __e != nil { return }
+				__e = __c.Init("div"); if __e != nil { return }
+				{
+//line form_list.gox:401
+					__e = __c.Modify(&field.body); if __e != nil { return }
+//line form_list.gox:402
+					__e = __c.Set("class", "neisland-form-item-body"); if __e != nil { return }
+//line form_list.gox:403
+					__e = __c.Set("role", func() any {
 				if label == nil {
 					return nil
 				}
 				return "group"
 			}()); if __e != nil { return }
-//line form_list.gox:386
-				__e = __c.Set("aria-label", label); if __e != nil { return }
-				__e = __c.Submit(); if __e != nil { return }
-//line form_list.gox:387
-				__e = __c.Any(field.field); if __e != nil { return }
-			}
-			__e = __c.Close(); if __e != nil { return }
-//line form_list.gox:389
-			__e = __c.Any(field.state.Bind(func(state listItemState) gox.Elem {
-			return gox.Elem(func(__c gox.Cursor) (__e error) {
-				ctx := __c.Context(); _ = ctx
-				__e = __c.Init("button"); if __e != nil { return }
-				{
-//line form_list.gox:391
-					__e = __c.Modify(doors.AClick{
-					Scope: f.group.scope(),
-					Batch: true,
-					On: func(ctx context.Context, r doors.RequestPointer) bool {
-						field.remove(ctx, field)
-						return false
-					},
-				}); if __e != nil { return }
-//line form_list.gox:399
-					__e = __c.Set("type", "button"); if __e != nil { return }
-//line form_list.gox:400
-					__e = __c.Set("class", "neisland-form-item-remove"); if __e != nil { return }
-//line form_list.gox:401
-					__e = __c.Set("aria-label", func() any {
-					if f.params.label() == "" {
-						return fmt.Sprintf("Remove item %d", state.index)
-					}
-					return fmt.Sprintf("Remove item %d of %s", state.index, f.params.label())
-				}()); if __e != nil { return }
+//line form_list.gox:409
+					__e = __c.Set("aria-label", label); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
+//line form_list.gox:410
+					__e = __c.Any(field.field); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
-			return })
-//line form_list.gox:408
-		})); if __e != nil { return }
-		}
-		__e = __c.Close(); if __e != nil { return }
+//line form_list.gox:412
+				__e = (neui.Input{Desc: "remove this item"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+					ctx := __c.Context(); _ = ctx
+					__e = __c.Init("button"); if __e != nil { return }
+					{
+//line form_list.gox:413
+						__e = __c.Modify(&field.removeLabel); if __e != nil { return }
+//line form_list.gox:414
+						__e = __c.Modify(doors.AClick{
+				Scope: f.group.scope(),
+				Batch: true,
+				On: func(ctx context.Context, r doors.RequestPointer) bool {
+					field.remove(ctx, field)
+					return false
+				},
+			}); if __e != nil { return }
+//line form_list.gox:422
+						__e = __c.Set("type", "button"); if __e != nil { return }
+//line form_list.gox:423
+						__e = __c.Set("class", "neisland-form-item-remove"); if __e != nil { return }
+//line form_list.gox:424
+						__e = __c.Set("aria-label", remove(removeState.index)); if __e != nil { return }
+						__e = __c.Submit(); if __e != nil { return }
+					}
+					__e = __c.Close(); if __e != nil { return }
+				return })); if __e != nil { return }
+			}
+			__e = __c.Close(); if __e != nil { return }
+		return })); if __e != nil { return }
 	return })
-//line form_list.gox:410
+//line form_list.gox:427
 }
 
 var _ group = (*listWidget)(nil)
@@ -580,6 +617,7 @@ type listItemWidget struct {
 	door doors.Door
 	state doors.Beam[listItemState]
 	body doors.Setter
+	removeLabel doors.Setter
 }
 
 func (f *listItemWidget) Main() gox.Elem {

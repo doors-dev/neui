@@ -9,6 +9,7 @@ import (
 
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
+	"neui.dev"
 )
 
 func newTextareaWidget(ctx context.Context, group group, params textareaParams) (*textareaWidget, error) {
@@ -101,7 +102,7 @@ elem (f *textareaWidget) Main() {
 				))
 			</label>
 		})
-		<textarea
+		~>(neui.Input{Desc: f.params.Label}) <textarea
 			(&f.invalid)
 			(&f.label)
 			(doors.AInput{
@@ -149,6 +150,7 @@ elem (f *textareaWidget) Main() {
 		} else {
 			~(errLine)
 		})
+		~(errorData(f.params.Name, f.field.error))
 	</div>
 }
 

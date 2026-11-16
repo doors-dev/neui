@@ -5,6 +5,7 @@ import (
 	"fmt"
 	
 	"github.com/doors-dev/gox"
+	"neui.dev"
 )
 
 func newGroupWidget(ctx context.Context, group group, params groupParams) (*groupWidget, error) {
@@ -70,7 +71,7 @@ elem (f *groupWidget) Main() {
 			~(field)
 		})
 	} else {
-		<fieldset class="neisland-form-box">
+		~>(neui.Space{Name: f.params.Name, Desc: f.params.Label}) <fieldset class="neisland-form-box">
 			~(if f.params.Label != "" {
 				<legend class="neisland-form-box-legend">~(f.params.Label)</legend>
 			})

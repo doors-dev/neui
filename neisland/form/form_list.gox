@@ -7,6 +7,7 @@ import (
 	"math"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	
 	"github.com/doors-dev/doors"
@@ -39,8 +40,10 @@ func newListWidget(ctx context.Context, group group, params listParams) (*listWi
 	}
 	base.collector = listCollector{}
 	items := doors.NewSourceEqual([]*listItemWidget(nil), slices.Equal[[]*listItemWidget])
+	_, nested := group.(*listWidget)
 	list := &listWidget{
 		id: doors.IDRand(),
+		nested: nested,
 		group: base,
 		params: params,
 		append: new(doors.Door),
@@ -74,6 +77,7 @@ var _ groupCollector = listCollector{}
 
 type listWidget struct {
 	id string
+	nested bool
 	index int
 	next string
 	group *groupBase
@@ -290,8 +294,7 @@ elem (f *listWidget) Main() {
 		doors.Call(ctx, f.add.Set("aria-disabled", aria(count >= hi)))
 		return false
 	})
-	~~
-	<fieldset class="neisland-form-box" aria-describedby=(f.id + "-m")>
+	body := <fieldset class="neisland-form-box" aria-describedby=(f.id + "-m")>
 		<legend class="neisland-form-box-legend">
 			<span>
 				~(f.params.label())
@@ -322,7 +325,7 @@ elem (f *listWidget) Main() {
 			~(f.append)
 		</ol>
 		<div class="neisland-form-items-foot">
-			<button
+			~>(neui.Input{Desc: "add an item"}) <button
 				(&f.add)
 				(doors.AClick{
 					Scope: f.group.scope(),
@@ -356,8 +359,15 @@ elem (f *listWidget) Main() {
 					})
 				})),
 			))
+			~(errorData(f.params.name(), f.system.error))
 		</div>
 	</fieldset>
+	~~
+	~(if f.nested {
+		~(body)
+	} else {
+		~>(neui.Space{Name: f.params.name(), Desc: f.params.label()}) ~(body)
+	})
 }
 
 elem (f *listWidget) item(field *listItemWidget) {
@@ -372,8 +382,21 @@ elem (f *listWidget) item(field *listItemWidget) {
 		})
 		label = fmt.Sprintf("%s, item %d", f.params.label(), state.index)
 	}
+	remove := func(index int) string {
+		if f.params.label() == "" {
+			return fmt.Sprintf("Remove item %d", index)
+		}
+		return fmt.Sprintf("Remove item %d of %s", index, f.params.label())
+	}
+	removeState, _ := field.state.ReadAndSub(ctx, func(ctx context.Context, state listItemState) bool {
+		doors.Call(ctx, field.removeLabel.Set("aria-label", remove(state.index)))
+		return false
+	})
 	~~
-	<li class="neisland-form-item">
+	~>(neui.Space{
+		Name: "item_" + strings.TrimLeft(field.name, "0"),
+		Desc: fmt.Sprintf("item %d of %s", field.state.Get().index, f.params.name()),
+	}) <li class="neisland-form-item">
 		<div
 			(&field.body)
 			class="neisland-form-item-body"
@@ -386,26 +409,20 @@ elem (f *listWidget) item(field *listItemWidget) {
 			aria-label=(label)>
 			~(field.field)
 		</div>
-		~(field.state.Bind(elem(state listItemState) {
-			<button
-				(doors.AClick{
-					Scope: f.group.scope(),
-					Batch: true,
-					On: func(ctx context.Context, r doors.RequestPointer) bool {
-						field.remove(ctx, field)
-						return false
-					},
-				})
-				type="button"
-				class="neisland-form-item-remove"
-				aria-label=({
-					if f.params.label() == "" {
-						return fmt.Sprintf("Remove item %d", state.index)
-					}
-					return fmt.Sprintf("Remove item %d of %s", state.index, f.params.label())
-				})>
-			</button>
-		}))
+		~>(neui.Input{Desc: "remove this item"}) <button
+			(&field.removeLabel)
+			(doors.AClick{
+				Scope: f.group.scope(),
+				Batch: true,
+				On: func(ctx context.Context, r doors.RequestPointer) bool {
+					field.remove(ctx, field)
+					return false
+				},
+			})
+			type="button"
+			class="neisland-form-item-remove"
+			aria-label=(remove(removeState.index))>
+		</button>
 	</li>
 }
 
@@ -422,6 +439,7 @@ type listItemWidget struct {
 	door doors.Door
 	state doors.Beam[listItemState]
 	body doors.Setter
+	removeLabel doors.Setter
 }
 
 func (f *listItemWidget) Main() gox.Elem {

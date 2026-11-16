@@ -12,6 +12,7 @@ import (
 
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
+	"neui.dev"
 )
 
 func newTextWidget(ctx context.Context, group group, params textParams) (*textWidget, error) {
@@ -94,6 +95,10 @@ elem (f *textWidget) Main() {
 			return false
 		})
 	}
+	rights := neui.RW
+	if f.params.Type == "password" {
+		rights = neui.W
+	}
 	~~
 	<div class="neisland-form-field">
 		~(if label == nil {
@@ -106,7 +111,7 @@ elem (f *textWidget) Main() {
 				))
 			</label>
 		})
-		<input
+		~>(neui.Input{Desc: f.params.Label, Rights: rights}) <input
 			(&f.invalid)
 			(&f.label)
 			(doors.AInput{
@@ -139,6 +144,7 @@ elem (f *textWidget) Main() {
 				return <p class="neisland-form-error" id=(f.id + "-e")>~(err.Error())</p>
 			})),
 		))
+		~(errorData(f.params.Name, f.field.error))
 	</div>
 }
 

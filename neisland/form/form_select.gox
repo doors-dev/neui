@@ -10,6 +10,7 @@ import (
 
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
+	"neui.dev"
 )
 
 func newSelectWidget(ctx context.Context, group group, params selectParams) (*selectWidget, error) {
@@ -211,7 +212,7 @@ elem (f *selectWidget) Main() {
 					~(required)
 				</label>
 			})
-			<select
+			~>(neui.Input{Desc: f.params.Label}) <select
 				(&f.invalid)
 				(&f.label)
 				(change)
@@ -248,7 +249,7 @@ elem (f *selectWidget) Main() {
 				aria-describedby=(f.id + "-e")>
 				~(if f.params.Min == 0 {
 					<label class="neisland-form-check">
-						<input
+						~>(neui.Input{Desc: f.params.Label}) <input
 							(&f.invalid)
 							(change)
 							class="neisland-form-radio"
@@ -263,7 +264,7 @@ elem (f *selectWidget) Main() {
 				})
 				~(for i, o := range f.params.Options {
 					<label class="neisland-form-check">
-						<input
+						~>(neui.Input{Desc: f.params.Label}) <input
 							(&f.invalid)
 							(change)
 							class="neisland-form-radio"
@@ -295,7 +296,7 @@ elem (f *selectWidget) Main() {
 				aria-describedby=(f.id + "-e")>
 				~(for i, o := range f.params.Options {
 					<label class="neisland-form-check">
-						<input
+						~>(neui.Input{Desc: f.params.Label + ": " + o.Label}) <input
 							(&f.invalid)
 							(change)
 							class="neisland-form-checkbox"
@@ -312,6 +313,7 @@ elem (f *selectWidget) Main() {
 			~(errorLine)
 		</fieldset>
 	})
+	~(errorData(f.params.Name, f.field.error))
 }
 
 func (f *selectWidget) validate(selected []int) error {
