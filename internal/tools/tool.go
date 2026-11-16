@@ -31,13 +31,16 @@ func NewTool[I any, O any](name string, desc string, f func(ctx context.Context,
 		var o O
 		switch o := any(o).(type) {
 		case api.Container:
-			hint = o.ContentType()
+			hint = "a " + o.ContentType() + " block"
+			if strings.IndexAny(o.ContentType(), "aeiou") == 0 {
+				hint = "an " + o.ContentType() + " block"
+			}
 		case api.MultiContainer:
 			output = schema.BlocksRawSchema.Raw()
 			outputSpec, outputDefs = output, nil
-			hint = "array of content blocks"
-		case string, fmt.Stringer:
-			hint = "text"
+			hint = "content blocks"
+		case fmt.Stringer:
+			hint = "a text block"
 		}
 	}
 	b := strings.Builder{}
@@ -90,7 +93,7 @@ func NewRawTool(
 	b.WriteString("\nOutput schema: ")
 	b.Write(outputSchema.Raw())
 	if bytes.Equal(outputSchema.Raw(), schema.BlocksRawSchema.Raw()) {
-		b.WriteString("\nOn a direct tool call the result arrives as array of content blocks")
+		b.WriteString("\nOn a direct tool call the result arrives as content blocks")
 	}
 	rawCall := func(ctx context.Context, input json.RawMessage) (any, error) {
 		if err := inputSchema.ValidateRaw(input); err != nil {

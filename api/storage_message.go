@@ -60,13 +60,12 @@ const (
 	// skipped on replay and can be retried.
 	RoundInput = RoundState("")
 	// RoundOk marks a round whose response completed (EventOk), with or
-	// without tool calls. On replay every tool call needs a result in the
-	// next message; a missing one is replaced by ContentToolUse.LostResult.
+	// without tool calls.
 	RoundOk = RoundState("ok")
-	// RoundRefuse marks a round the model refused to answer. It is not
-	// replayed, and the tool results it answered are replayed with their
-	// content replaced by ContentToolResult.Refused. It cannot be retried;
-	// Rewind it instead.
+	// RoundRefuse marks a round the model refused to answer. The model does
+	// not see it again, and the tool results it answered reach the model only
+	// as a note that they were omitted. It cannot be retried; Rewind it
+	// instead.
 	RoundRefuse = RoundState("refuse")
 	// RoundAbort marks a round the user aborted during response
 	// streaming; not replayed, has a retry option.
@@ -142,11 +141,8 @@ var NoCompaction = Compaction{
 // completed round when the compaction was made. ThreadCut at or before
 // Tail removes the compaction, so a rewind there replays the originals.
 //
-// Rounds up to Tail ran on the pre-compaction context, so their reported
-// usage says nothing about the compacted one. Until a round runs on the new
-// context, its size is estimated as Output + total(last tail round) - Base:
-// a lower bound, because the fixed prefix — system prompt and tool
-// definitions — is not part of the arithmetic.
+// Until a round runs on the compacted context, its reported usage is an
+// estimate, a lower bound.
 type Compaction struct {
 	Text   string  `json:"text"`   // the summary that replaces rounds before Target
 	Target RoundID `json:"target"` // first kept round
@@ -154,8 +150,7 @@ type Compaction struct {
 	// Output is the output token count of the compaction response — the
 	// summary's own size.
 	Output int `json:"output"`
-	// Base is the context total of the round replayed just before Target
-	// (estimated as above when an earlier compaction covers that round),
+	// Base is the context total of the round replayed just before Target,
 	// what the summarized part of the conversation cost.
 	Base int `json:"base"`
 }

@@ -1,4 +1,4 @@
-// Managed by GoX v0.3.4
+// Managed by GoX v0.4.0
 
 //line form_series.gox:1
 package form
@@ -214,6 +214,10 @@ func (f *seriesWidget) newGroup(name string) (*groupBase, error) {
 	return f.group.newGroup(name)
 }
 
+func (f *seriesWidget) value(name string) any {
+	return f.group.value(name)
+}
+
 func (f *seriesWidget) deleteField(ctx context.Context, name string) {
 	f.group.deleteField(ctx, name)
 }
@@ -222,47 +226,47 @@ func (f *seriesWidget) deleteGroup(ctx context.Context, name string) {
 	f.group.deleteGroup(ctx, name)
 }
 
-//line form_series.gox:222
+//line form_series.gox:226
 func (f *seriesWidget) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line form_series.gox:224
+//line form_series.gox:228
 		steps := gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("ol"); if __e != nil { return }
 		{
-//line form_series.gox:224
+//line form_series.gox:228
 			__e = __c.Set("class", "neisland-form-steps"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line form_series.gox:225
+//line form_series.gox:229
 			for _, field := range f.fields {
-//line form_series.gox:226
+//line form_series.gox:230
 				__e = __c.Any(field); if __e != nil { return }
 			}
-//line form_series.gox:228
+//line form_series.gox:232
 			__e = __c.Any(f.complete.Bind(func(complete bool) gox.Elem {
 			return gox.Elem(func(__c gox.Cursor) (__e error) {
 				ctx := __c.Context(); _ = ctx
-//line form_series.gox:229
+//line form_series.gox:233
 				if complete {
 					__e = __c.Init("li"); if __e != nil { return }
 					{
-//line form_series.gox:230
+//line form_series.gox:234
 						__e = __c.Set("class", "neisland-form-step"); if __e != nil { return }
 						__e = __c.Set("data-complete", true); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 						__e = __c.Init("span"); if __e != nil { return }
 						{
-//line form_series.gox:231
+//line form_series.gox:235
 							__e = __c.Set("class", "neisland-form-step-mark"); if __e != nil { return }
-//line form_series.gox:231
+//line form_series.gox:235
 							__e = __c.Set("aria-hidden", "true"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
 						__e = __c.Init("p"); if __e != nil { return }
 						{
-//line form_series.gox:232
+//line form_series.gox:236
 							__e = __c.Set("class", "neisland-form-help"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.Text("Completed."); if __e != nil { return }
@@ -273,22 +277,22 @@ func (f *seriesWidget) Main() gox.Elem {
 				} else  {
 					__e = __c.Init("li"); if __e != nil { return }
 					{
-//line form_series.gox:235
+//line form_series.gox:239
 						__e = __c.Set("class", "neisland-form-step"); if __e != nil { return }
 						__e = __c.Set("data-incomplete", true); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 						__e = __c.Init("span"); if __e != nil { return }
 						{
-//line form_series.gox:236
+//line form_series.gox:240
 							__e = __c.Set("class", "neisland-form-step-mark"); if __e != nil { return }
-//line form_series.gox:236
+//line form_series.gox:240
 							__e = __c.Set("aria-hidden", "true"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
 						__e = __c.Init("span"); if __e != nil { return }
 						{
-//line form_series.gox:237
+//line form_series.gox:241
 							__e = __c.Set("class", "neisland-form-step-status"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.Text("Answer to continue."); if __e != nil { return }
@@ -298,11 +302,11 @@ func (f *seriesWidget) Main() gox.Elem {
 					__e = __c.Close(); if __e != nil { return }
 				}
 			return })
-//line form_series.gox:240
+//line form_series.gox:244
 		})); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
-//line form_series.gox:241
+//line form_series.gox:245
 	return })
 	errLine := f.system.error.RouteBeam(
 		doors.RouteBeamMatch(shownErr, doors.RouteBind(func(err error) gox.Elem {
@@ -310,38 +314,38 @@ func (f *seriesWidget) Main() gox.Elem {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.Init("p"); if __e != nil { return }
 				{
-//line form_series.gox:244
+//line form_series.gox:248
 					__e = __c.Set("class", "neisland-form-error"); if __e != nil { return }
-//line form_series.gox:244
+//line form_series.gox:248
 					__e = __c.Set("id", f.id + "-e"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line form_series.gox:244
+//line form_series.gox:248
 					__e = __c.Any(err.Error()); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
-//line form_series.gox:244
+//line form_series.gox:248
 			return })
 		})),
 	)
 
 		__e = __c.Init("fieldset"); if __e != nil { return }
 		{
-//line form_series.gox:248
+//line form_series.gox:252
 			__e = __c.Set("class", "neisland-form-box"); if __e != nil { return }
-//line form_series.gox:248
+//line form_series.gox:252
 			__e = __c.Set("aria-describedby", f.id + "-e"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Init("legend"); if __e != nil { return }
 			{
-//line form_series.gox:249
+//line form_series.gox:253
 				__e = __c.Set("class", "neisland-form-box-legend"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Init("span"); if __e != nil { return }
 				{
 					__e = __c.Submit(); if __e != nil { return }
-//line form_series.gox:251
+//line form_series.gox:255
 					__e = __c.Any(f.params.Label); if __e != nil { return }
-//line form_series.gox:252
+//line form_series.gox:256
 					__e = __c.Any(f.system.error.RouteBeam(
 					doors.RouteBeamMatch(func(err error) bool {
 						return f.params.Required && err != nil
@@ -349,36 +353,36 @@ func (f *seriesWidget) Main() gox.Elem {
 						ctx := __c.Context(); _ = ctx
 						__e = __c.Init("span"); if __e != nil { return }
 						{
-//line form_series.gox:255
+//line form_series.gox:259
 							__e = __c.Set("class", "neisland-form-required"); if __e != nil { return }
-//line form_series.gox:255
+//line form_series.gox:259
 							__e = __c.Set("aria-hidden", "true"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.Text("*"); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
-//line form_series.gox:255
+//line form_series.gox:259
 					return }))),
 				)); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line form_series.gox:259
+//line form_series.gox:263
 			__e = __c.Any(steps); if __e != nil { return }
-//line form_series.gox:260
+//line form_series.gox:264
 			__e = __c.Any(errLine); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line form_series.gox:262
+//line form_series.gox:266
 }
 
-//line form_series.gox:264
+//line form_series.gox:268
 func (f *seriesWidget) step(index int, current *doors.Setter, field fieldWidget) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line form_series.gox:266
+//line form_series.gox:270
 		isCurrent, _ := doors.DeriveBeam(f.state, func(s seriesState) bool {
 		return !s.complete && s.steps == index + 1
 	}).ReadAndSub(ctx, func(ctx context.Context, isCurrent bool) bool {
@@ -388,28 +392,28 @@ func (f *seriesWidget) step(index int, current *doors.Setter, field fieldWidget)
 
 		__e = __c.Init("li"); if __e != nil { return }
 		{
-//line form_series.gox:273
+//line form_series.gox:277
 			__e = __c.Set("class", "neisland-form-step"); if __e != nil { return }
-//line form_series.gox:273
+//line form_series.gox:277
 			__e = __c.Modify(current); if __e != nil { return }
-//line form_series.gox:273
+//line form_series.gox:277
 			__e = __c.Set("aria-current", stepAttr(isCurrent)); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Init("span"); if __e != nil { return }
 			{
-//line form_series.gox:274
+//line form_series.gox:278
 				__e = __c.Set("class", "neisland-form-step-mark"); if __e != nil { return }
-//line form_series.gox:274
+//line form_series.gox:278
 				__e = __c.Set("aria-hidden", "true"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line form_series.gox:275
+//line form_series.gox:279
 			__e = __c.Any(field); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line form_series.gox:277
+//line form_series.gox:281
 }
 
 func stepAttr(current bool) any {

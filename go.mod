@@ -6,8 +6,8 @@ require (
 	code.dny.dev/ssrf v0.3.0
 	codeberg.org/readeck/go-readability/v2 v2.1.2
 	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.2
-	github.com/doors-dev/doors v0.19.0-rc1
-	github.com/doors-dev/gox v0.3.5
+	github.com/doors-dev/doors v0.19.0-rc6
+	github.com/doors-dev/gox v0.4.0
 	github.com/gammazero/deque v1.2.1
 	github.com/go-rod/rod v0.116.2
 	github.com/modelcontextprotocol/go-sdk v1.8.0

@@ -63,6 +63,23 @@ func TestIslandDrawReturnsAfterTimeout(t *testing.T) {
 	carries(t, lastText(p.Request(t, 3)), `<task_notify `, `kind="notifications_list"`, `script="1"`, `[{"drawn":null}]`)
 }
 
+func TestIslandEndCarriesValuesSinceLastDraw(t *testing.T) {
+	p := testkit.NewProvider(api.Model{},
+		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
+		revised(t, func(revision string) testkit.Turn {
+			return start(revision, `ui.root.set(ui.column({})); ui.notify(1); ui.draw(1); ui.notify(2); ui.end()`)
+		}),
+		testkit.Say("started"),
+		testkit.Say("noted"),
+		testkit.Say("ended"),
+	)
+	c := stack.Browser(t, stack.Host{Provider: p, Page: board(make(chan int, 1), nil)})
+	c.Send("open the board")
+	c.Wait()
+	carries(t, recorded(t, c, p, `kind="notifications_list"`), `script="1"`, `>[1]</task_notify>`)
+	carries(t, recorded(t, c, p, "<task_result "), `>{"ended":"the island's app ended: its script called ui.end()","notifications":[2]}</task_result>`)
+}
+
 func pressSynced(t *testing.T, then func(input string) testkit.Turn) testkit.Turn {
 	return testkit.Then(func(r api.Request) testkit.Turn {
 		var s struct{ Inputs []struct{ ID string } }
@@ -116,10 +133,8 @@ func TestIslandControlClickSubmits(t *testing.T) {
 	c := stack.Browser(t, stack.Host{Provider: p, Page: board(marks, shown)})
 	c.Send("press it")
 	c.Wait()
-	var clicked struct{ Hooks int }
-	testkit.Decode(t, testkit.Results(p.Request(t, 4))[0], &clicked)
-	if clicked.Hooks != 1 {
-		t.Fatalf("the click triggered %d hooks, want the press handler", clicked.Hooks)
+	if r := testkit.Results(p.Request(t, 4))[0]; r.Error != api.ToolOk {
+		t.Fatalf("the click answered %#v, want the press handler run", r.Content)
 	}
 	if n := <-marks; n != 21 {
 		t.Fatalf("value called app.mark with %d, want 21", n)
@@ -334,10 +349,8 @@ func TestIslandButtonWithAgentIsClickableAndSubmitsItsValue(t *testing.T) {
 	c := stack.Browser(t, stack.Host{Provider: p, Page: buttons(drawn)})
 	c.Send("click go")
 	c.Wait()
-	var clicked struct{ Hooks int }
-	testkit.Decode(t, testkit.Results(p.Request(t, 4))[0], &clicked)
-	if clicked.Hooks != 1 {
-		t.Fatalf("the click triggered %d hooks, want the button's handler", clicked.Hooks)
+	if r := testkit.Results(p.Request(t, 4))[0]; r.Error != api.ToolOk {
+		t.Fatalf("the click answered %#v, want the button's handler run", r.Content)
 	}
 	carries(t, lastText(p.Request(t, 4)), `<task_notify `, `script="1"`, `[{"id":1,"output":"v1"}]`)
 }

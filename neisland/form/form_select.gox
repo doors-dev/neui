@@ -70,7 +70,6 @@ type selectWidget struct {
 	params selectParams
 	keys map[string]int
 	defaults []int
-	value []int
 	invalid doors.Setter
 	label doors.Setter
 }
@@ -111,7 +110,6 @@ func (f *selectWidget) init(ctx context.Context, value any) error {
 		}
 		slices.Sort(selected)
 	}
-	f.value = selected
 	f.setLocked(ctx, selected, f.validate(selected))
 	return nil
 }
@@ -137,14 +135,14 @@ func (f *selectWidget) update(ctx context.Context, changed string, checked bool)
 			selected = []int{index}
 		}
 	} else {
+		current := f.selectedLocked()
 		for i := range f.params.Options {
-			if i == index && checked || i != index && slices.Contains(f.value, i) {
+			if i == index && checked || i != index && slices.Contains(current, i) {
 				selected = append(selected, i)
 			}
 		}
 	}
 	err := f.validate(selected)
-	f.value = selected
 	f.setLocked(ctx, selected, err)
 	doors.Call(ctx, f.invalid.Set("aria-invalid", aria(shownErr(err))))
 	doors.Call(ctx, f.invalid.Set("data-required-empty", errors.Is(err, errRequired)))
@@ -162,10 +160,20 @@ func (f *selectWidget) setLocked(ctx context.Context, selected []int, err error)
 	f.field.set(ctx, options, err)
 }
 
+func (f *selectWidget) selectedLocked() []int {
+	options, _ := f.field.value().([]option)
+	selected := make([]int, 0, len(options))
+	for _, o := range options {
+		key, _ := json.Marshal(o.Value)
+		selected = append(selected, f.keys[string(key)])
+	}
+	return selected
+}
+
 elem (f *selectWidget) Main() {
 	~~
 	f.field.mutex().Lock()
-	value := f.value
+	value := f.selectedLocked()
 	f.field.mutex().Unlock()
 	change := doors.A(ctx, doors.AChange{
 		Scope: f.field.scope(),

@@ -14,7 +14,7 @@ import (
 
 type textParams struct {
 	_           struct{}                        `additionalProperties:"false" description:"single-line text input; its value is the typed string; left out of the result when empty"`
-	Type        string                          `json:"type" required:"true" enum:"text,email,tel,url,password" description:"text for plain text; email, tel and url also check the format; password hides what is typed"`
+	Type        string                          `json:"type" required:"true" enum:"text,email,tel,url,password" description:"text for plain text, tel for a phone number; email and url also check the format; password hides what is typed"`
 	Label       string                          `json:"label" required:"true" minLength:"1" maxLength:"80" description:"text shown with the field"`
 	Name        string                          `json:"name" required:"true" minLength:"1" maxLength:"80" description:"key of the value in the result, unique among the fields beside it; in a list's template it is the key of the whole list"`
 	Required    bool                            `json:"required,omitempty" description:"true makes the user fill it before submitting"`
@@ -370,6 +370,7 @@ type group interface {
 	mutex() *sync.Mutex
 	scope() doors.Scopes
 	setField(ctx context.Context, name string, value any, err error)
+	value(name string) any
 	newField(name string) (groupField, error)
 	newGroup(name string) (*groupBase, error)
 	deleteField(ctx context.Context, name string)
@@ -379,7 +380,7 @@ type group interface {
 type root struct {
 	mu     sync.Mutex
 	values map[string]any
-	scope  *doors.ScopeFrame
+	scope  *doors.ScopeCheckpoint
 }
 
 type groupBase struct {
@@ -444,6 +445,10 @@ func (f *groupBase) destroy(ctx context.Context) {
 	f.parent.deleteGroup(ctx, f.name)
 }
 
+func (f *groupBase) value(name string) any {
+	return f.values[name]
+}
+
 func (f *groupBase) setField(ctx context.Context, name string, value any, err error) {
 	if _, has := f.reserved[name]; !has {
 		return
@@ -491,6 +496,10 @@ func (f groupField) destroy(ctx context.Context) {
 
 func (f groupField) set(ctx context.Context, value any, err error) {
 	f.parent.setField(ctx, f.name, value, err)
+}
+
+func (f groupField) value() any {
+	return f.parent.value(f.name)
 }
 
 func (f *groupBase) newField(name string) (groupField, error) {

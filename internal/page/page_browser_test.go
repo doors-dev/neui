@@ -21,11 +21,6 @@ type readOutput struct {
 	Label string
 }
 
-type hookOutput struct {
-	Hooks int
-	report
-}
-
 func order(changes chan<- string, clicks chan<- struct{}) gox.Elem {
 	return func(cur gox.Cursor) error {
 		return (neui.Space{Name: "order", Desc: "the order"}).Proxy(cur, func(cur gox.Cursor) error {
@@ -96,10 +91,10 @@ func TestInputDispatchReachesHandlers(t *testing.T) {
 	c := stack.Browser(t, stack.Host{Provider: p, Page: order(changes, clicks)})
 	c.Send("order three")
 	c.Wait()
-	var written hookOutput
+	var written json.RawMessage
 	testkit.Decode(t, testkit.Results(p.Request(t, 2))[0], &written)
-	if written.Hooks != 1 || !empty(written.Diff) || written.Changes != nil {
-		t.Fatalf("the write answered %+v, want the change handler and nothing changed", written)
+	if string(written) != `{"diff":{}}` {
+		t.Fatalf("the write answered %s, want nothing changed", written)
 	}
 	select {
 	case v := <-changes:
@@ -114,10 +109,10 @@ func TestInputDispatchReachesHandlers(t *testing.T) {
 	if read.Value != "3" {
 		t.Fatalf("the read answered %+v, want the written 3", read)
 	}
-	var clicked hookOutput
+	var clicked json.RawMessage
 	testkit.Decode(t, testkit.Results(p.Request(t, 4))[0], &clicked)
-	if clicked.Hooks != 1 {
-		t.Fatalf("the click answered %+v, want the click handler", clicked)
+	if string(clicked) != `{"diff":{}}` {
+		t.Fatalf("the click answered %s, want nothing changed", clicked)
 	}
 	select {
 	case <-clicks:
@@ -191,9 +186,9 @@ func TestRadioGroupStaysWritableAfterFirstMemberDoorIsRemoved(t *testing.T) {
 	c := stack.Browser(t, stack.Host{Provider: p, Page: sizes})
 	c.Send("pick medium")
 	c.Wait()
-	var before hookOutput
+	var before report
 	testkit.Decode(t, testkit.Results(p.Request(t, 2))[0], &before)
-	if before.Hooks != 1 || <-changes != "s" {
+	if !empty(before.Diff) || <-changes != "s" {
 		t.Fatalf("the write before the drop answered %+v, want the small radio's change handler", before)
 	}
 	var dropped toolOutput
@@ -201,10 +196,8 @@ func TestRadioGroupStaysWritableAfterFirstMemberDoorIsRemoved(t *testing.T) {
 	if dropped.Output != "dropped" || !empty(dropped.Diff) {
 		t.Fatalf("the drop answered %+v, want the group kept", dropped)
 	}
-	var after hookOutput
-	testkit.Decode(t, testkit.Results(p.Request(t, 4))[0], &after)
-	if after.Hooks != 1 {
-		t.Fatalf("the write after the drop answered %+v, want the medium radio's change handler", after)
+	if r := testkit.Results(p.Request(t, 4))[0]; r.Error != api.ToolOk {
+		t.Fatalf("the write after the drop answered %#v, want the medium radio's change handler", r.Content)
 	}
 	select {
 	case v := <-changes:
@@ -440,14 +433,14 @@ func TestFailedInputCallsReport(t *testing.T) {
 	c.Send("fill the ghost")
 	c.Wait()
 	results := testkit.Results(p.Request(t, 2))
-	for i, want := range []string{`{"hooks":0,"diff":{}}`, `{"hooks":0,"diff":{}}`, `{"diff":{}}`} {
+	for i, want := range []string{`{"diff":{}}`, `{"diff":{}}`, `{"diff":{}}`} {
 		r := results[i]
 		if r.Error == api.ToolOk || len(r.Content) != 2 {
 			t.Fatalf("the %s answered %#v, want its error and its result", r.ID, r.Content)
 		}
 		message, _ := r.Content[0].(api.ContentText)
 		value, _ := r.Content[1].(api.ContentText)
-		if !strings.HasSuffix(message.Text, "not found") || value.Text != want {
+		if !strings.Contains(message.Text, "not found; ") || value.Text != want {
 			t.Fatalf("the %s failed with %#v, want the message and then %s", r.ID, r.Content, want)
 		}
 	}

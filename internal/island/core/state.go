@@ -447,17 +447,25 @@ func (s *state) hasControl() bool {
 	return false
 }
 
-func (s *state) FlushNotifications(idle bool) {
-	if s.notificationsCount == 0 && !idle {
-		return
-	}
+func (s *state) TakeNotifications() json.RawMessage {
 	if s.notificationsCount == 0 {
-		s.notifications.WriteByte('[')
+		return nil
 	}
 	s.notifications.WriteByte(']')
 	data := json.RawMessage(s.notifications.Bytes())
 	s.notifications = bytes.Buffer{}
 	s.notificationsCount = 0
+	return data
+}
+
+func (s *state) FlushNotifications(idle bool) {
+	data := s.TakeNotifications()
+	if data == nil && !idle {
+		return
+	}
+	if data == nil {
+		data = json.RawMessage(`[]`)
+	}
 	s.run.Notify(s.run.Script(), data, idle)
 }
 

@@ -60,9 +60,8 @@ func (f Form) ExpectCancelEnabled() {
 	f.Find(".neisland-form-actions button[type=button]").WaitNoAttr("disabled")
 }
 
-// Settle waits out the moment after a submit, a cancel or a submit the form
-// turned down, while the form still rejects input until the script draws
-// again.
+// Settle waits out the moment after a submit or a cancel, while the app
+// still rejects submits until the script draws again.
 func (a *IslandApp) Settle() {
 	time.Sleep(500 * time.Millisecond)
 }

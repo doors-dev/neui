@@ -737,3 +737,41 @@ func TestFormFile(t *testing.T) {
 		t.Fatalf("the workspace has %q (%v), want hello", saved, err)
 	}
 }
+
+func TestFormEditsWhileASubmitIsHeldReachTheNextSubmit(t *testing.T) {
+	a := stack.Island(t, devkit.App{Island: widgets(), Script: `
+		var f = ui.form({fields: [
+			{type: "text", label: "Name", name: "name", required: true},
+			{type: "checkbox", label: "Agree", name: "agree"},
+			{type: "select", label: "Size", name: "size", options: [{value: "s", label: "S"}, {value: "l", label: "L"}]},
+			{type: "list", field: {type: "text", label: "Tags", name: "tags"}}
+		]})
+		ui.root.set(f)
+		var ev = ui.draw()
+		var t0 = Date.now()
+		while (Date.now() - t0 < 3000) {}
+		ui.notify(ev)
+		ui.notify(ui.draw(1500))
+		ui.notify(ui.draw())`})
+	f := a.Form()
+	f.Field("Name").Type("Ann")
+	f.Submit("Submit")
+	f.Field("Name").Type("Bea")
+	f.Field("Agree").Check()
+	f.Field("Size").Choose("L")
+	f.List("Tags").Add()
+	f.List("Tags").Item(0).Control().Type("t")
+	f.Submit("Submit")
+	stack.ExpectJSON(t, a.Submitted(), `{"data": {"name": "Ann", "agree": false, "tags": []}, "submit": ""}`)
+	stack.ExpectJSON(t, a.Notified().Data, `[null]`)
+	f.Submit("Submit")
+	stack.ExpectJSON(t, a.Submitted(), `{"data": {"name": "Bea", "agree": true, "size": [{"value": "l", "label": "L"}], "tags": ["t"]}, "submit": ""}`)
+}
+
+func TestFormSubmitRightAfterTypingSendsTheTypedText(t *testing.T) {
+	a, f := formApp(t, `{fields: [{type: "text", label: "Name", name: "name"}, {type: "textarea", label: "Notes", name: "notes"}]}`)
+	f.Field("Name").Type("Ann")
+	f.Field("Notes").Type("typed last")
+	f.Submit("Submit")
+	stack.ExpectJSON(t, a.Submitted(), `{"data": {"name": "Ann", "notes": "typed last"}, "submit": ""}`)
+}

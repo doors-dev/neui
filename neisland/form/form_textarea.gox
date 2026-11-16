@@ -27,7 +27,6 @@ type textareaWidget struct {
 	id string
 	field groupField
 	params textareaParams
-	value string
 	count doors.Source[int]
 	invalid doors.Setter
 	label doors.Setter
@@ -46,7 +45,6 @@ func (f *textareaWidget) init(ctx context.Context, value any) error {
 		}
 		str = v
 	}
-	f.value = str
 	f.count = doors.NewSource(utf8.RuneCountInString(str))
 	f.setLocked(ctx, str, f.validate(ctx, str))
 	return nil
@@ -76,6 +74,9 @@ func (f *textareaWidget) setLocked(ctx context.Context, str string, err error) {
 
 elem (f *textareaWidget) Main() {
 	~~
+	f.field.mutex().Lock()
+	value, _ := f.field.value().(string)
+	f.field.mutex().Unlock()
 	label := any(nil)
 	if f.field.item != nil {
 		label, _ = f.field.item.ReadAndSub(ctx, func(ctx context.Context, name string) bool {
@@ -131,7 +132,7 @@ elem (f *textareaWidget) Main() {
 			aria-label=(label)
 			aria-invalid=(aria(shownErr(f.field.error.Get())))
 			data-required-empty=(errors.Is(f.field.error.Get(), errRequired))
-			aria-describedby=(f.id + "-e")>~(f.value)</textarea>
+			aria-describedby=(f.id + "-e")>~(value)</textarea>
 		~(if f.params.MinLength > 0 || f.params.MaxLength > 0 {
 			<div class="neisland-form-foot">
 				~(errLine)

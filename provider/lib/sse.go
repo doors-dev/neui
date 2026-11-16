@@ -17,10 +17,8 @@ import (
 
 // Frame is one dispatched server sent event: the value of its event: line and
 // its data: lines joined with newlines. Data is valid only until
-// Converter.Convert returns: Stream then hands the buffer back to the reader,
-// which fills it with a later frame. A converter keeps nothing of Data past
-// Convert but copies, which is all json.Unmarshal ever stores in a string,
-// []byte or json.RawMessage.
+// Converter.Convert returns, so keep only copies of it; json.Unmarshal into a
+// string, []byte or json.RawMessage already copies.
 type Frame struct {
 	Event string // value of the event: line; "" when absent
 	Data  []byte // data: lines joined with "\n"; never empty

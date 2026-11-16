@@ -124,6 +124,39 @@ func TestAgentContentError(t *testing.T) {
 	}
 }
 
+type label string
+
+func (l label) String() string { return string(l) }
+
+type parts struct{}
+
+func (parts) Contents() []api.UserContent { return nil }
+
+func TestToolNotesHowResultsArrive(t *testing.T) {
+	m := NewModule("m", "")
+	_, err1 := m.Add("image", "", func(context.Context, struct{}) (api.Image, error) { return api.Image{}, nil })
+	_, err2 := m.Add("document", "", func(context.Context, struct{}) (api.Document, error) { return api.Document{}, nil })
+	_, err3 := m.Add("label", "", func(context.Context, struct{}) (label, error) { return "", nil })
+	_, err4 := m.Add("parts", "", func(context.Context, struct{}) (parts, error) { return parts{}, nil })
+	_, err5 := m.Add("string", "", func(context.Context, struct{}) (string, error) { return "", nil })
+	if err := errors.Join(err1, err2, err3, err4, err5); err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]string{
+		"image":    "\nOn a direct tool call the result arrives as an image block",
+		"document": "\nOn a direct tool call the result arrives as a document block",
+		"label":    "\nOn a direct tool call the result arrives as a text block",
+		"parts":    "\nOn a direct tool call the result arrives as content blocks",
+		"string":   "",
+	} {
+		tool, _ := m.Get(name)
+		_, note, _ := strings.Cut(tool.Summary(), "\nOn a direct")
+		if note != strings.TrimPrefix(want, "\nOn a direct") {
+			t.Errorf("%s: summary %q, want it to end with %q", name, tool.Summary(), want)
+		}
+	}
+}
+
 func TestRawToolNotesBlocks(t *testing.T) {
 	m := NewModule("m", "")
 	for name, output := range map[string]schema.Schema[any]{"blocks": schema.BlocksRawSchema, "any": schema.AnyRawSchema} {
@@ -133,7 +166,7 @@ func TestRawToolNotesBlocks(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	const note = "\nOn a direct tool call the result arrives as array of content blocks"
+	const note = "\nOn a direct tool call the result arrives as content blocks"
 	for name, want := range map[string]bool{"blocks": true, "any": false} {
 		tool, _ := m.Get(name)
 		if got := strings.HasSuffix(tool.Summary(), note); got != want {

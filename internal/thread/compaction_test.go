@@ -381,6 +381,12 @@ func compactionFailed(t *testing.T, th *thread, storage api.MessageStorage, ch c
 	if e, ok := events[len(events)-1].(api.ChatEventCriticalError); !ok || !errors.Is(e.Err, api.ErrCompactionFailed) {
 		t.Fatalf("the last event is %+v, want a critical error with ErrCompactionFailed", events[len(events)-1])
 	}
+	if i := slices.IndexFunc(events, func(e api.ChatEvent) bool {
+		_, ok := e.(api.ChatEventRoundEnd)
+		return ok
+	}); i >= 0 {
+		t.Fatalf("a round end %+v preceded the critical error", events[i])
+	}
 	if th.compaction.isActive() || th.compaction.chunk != 0 || th.pending {
 		t.Fatalf("after the critical error: compaction %v, chunk %d, pending %v", th.compaction.isActive(), th.compaction.chunk, th.pending)
 	}
@@ -409,7 +415,7 @@ func reopen(t *testing.T, th *thread, backend *common.Backend) func() []api.Chat
 }
 
 func TestOneRoundCompactionTooLongIsCompactionFailed(t *testing.T) {
-	th, r, events := compactionThread(t, "halve-full", api.Model{Name: "stub", Context: 1000}, 2)
+	th, r, events := compactionThread(t, "halve-one-round", api.Model{Name: "stub", Context: 1000}, 2)
 	backend := th.link.backend
 	round, _, err := r.RoundInit(api.Input{Text: "too long"})
 	if err != nil {

@@ -28,7 +28,6 @@ type numberWidget struct {
 	id string
 	field groupField
 	params numberParams
-	value string
 	invalid doors.Setter
 	label doors.Setter
 	output doors.Door
@@ -68,10 +67,6 @@ func (f *numberWidget) init(ctx context.Context, value any) error {
 			}
 		}
 		number = &v
-	}
-	f.value = ""
-	if number != nil {
-		f.value = strconv.FormatFloat(*number, 'f', -1, 64)
 	}
 	f.setLocked(ctx, number, f.validate(ctx, number))
 	return nil
@@ -115,6 +110,12 @@ func (f *numberWidget) setLocked(ctx context.Context, number *float64, err error
 
 elem (f *numberWidget) Main() {
 	~~
+	f.field.mutex().Lock()
+	value := ""
+	if number, ok := f.field.value().(float64); ok {
+		value = strconv.FormatFloat(number, 'f', -1, 64)
+	}
+	f.field.mutex().Unlock()
 	label := any(nil)
 	if f.field.item != nil {
 		label, _ = f.field.item.ReadAndSub(ctx, func(ctx context.Context, name string) bool {
@@ -163,7 +164,7 @@ elem (f *numberWidget) Main() {
 					id=(f.id)
 					type="range"
 					name=(f.params.Name)
-					value=(f.value)
+					value=(value)
 					min=(min)
 					max=(max)
 					step=(step)
@@ -172,7 +173,7 @@ elem (f *numberWidget) Main() {
 					aria-invalid=(aria(shownErr(f.field.error.Get())))
 					data-required-empty=(errors.Is(f.field.error.Get(), errRequired))
 					aria-describedby=(f.id + "-e")/>
-				~>(&f.output) <output class="neisland-form-output" for=(f.id)>~(f.value)</output>
+				~>(&f.output) <output class="neisland-form-output" for=(f.id)>~(value)</output>
 			</div>
 		} else {
 			<input
@@ -190,7 +191,7 @@ elem (f *numberWidget) Main() {
 				id=(f.id)
 				type="number"
 				name=(f.params.Name)
-				value=(f.value)
+				value=(value)
 				min=(min)
 				max=(max)
 				step=(step)

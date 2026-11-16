@@ -155,6 +155,7 @@ func Browser(t *testing.T, h Host) *Chat {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { page.Close() })
+	c.Page = page
 	c.Linked()
 	return c
 }

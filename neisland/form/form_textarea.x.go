@@ -1,4 +1,4 @@
-// Managed by GoX v0.3.4
+// Managed by GoX v0.4.0
 
 //line form_textarea.gox:1
 package form
@@ -30,7 +30,6 @@ type textareaWidget struct {
 	id string
 	field groupField
 	params textareaParams
-	value string
 	count doors.Source[int]
 	invalid doors.Setter
 	label doors.Setter
@@ -49,7 +48,6 @@ func (f *textareaWidget) init(ctx context.Context, value any) error {
 		}
 		str = v
 	}
-	f.value = str
 	f.count = doors.NewSource(utf8.RuneCountInString(str))
 	f.setLocked(ctx, str, f.validate(ctx, str))
 	return nil
@@ -77,12 +75,15 @@ func (f *textareaWidget) setLocked(ctx context.Context, str string, err error) {
 	f.field.set(ctx, str, err)
 }
 
-//line form_textarea.gox:77
+//line form_textarea.gox:75
 func (f *textareaWidget) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line form_textarea.gox:79
-		label := any(nil)
+//line form_textarea.gox:77
+		f.field.mutex().Lock()
+	value, _ := f.field.value().(string)
+	f.field.mutex().Unlock()
+	label := any(nil)
 	if f.field.item != nil {
 		label, _ = f.field.item.ReadAndSub(ctx, func(ctx context.Context, name string) bool {
 			doors.Call(ctx, f.label.Set("aria-label", name))
@@ -95,37 +96,37 @@ func (f *textareaWidget) Main() gox.Elem {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.Init("p"); if __e != nil { return }
 				{
-//line form_textarea.gox:88
+//line form_textarea.gox:89
 					__e = __c.Set("class", "neisland-form-error"); if __e != nil { return }
-//line form_textarea.gox:88
+//line form_textarea.gox:89
 					__e = __c.Set("id", f.id + "-e"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line form_textarea.gox:88
+//line form_textarea.gox:89
 					__e = __c.Any(err.Error()); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
-//line form_textarea.gox:88
+//line form_textarea.gox:89
 			return })
 		})),
 	)
 
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line form_textarea.gox:92
+//line form_textarea.gox:93
 			__e = __c.Set("class", "neisland-form-field"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line form_textarea.gox:93
+//line form_textarea.gox:94
 			if label == nil {
 				__e = __c.Init("label"); if __e != nil { return }
 				{
-//line form_textarea.gox:94
+//line form_textarea.gox:95
 					__e = __c.Set("class", "neisland-form-label"); if __e != nil { return }
-//line form_textarea.gox:94
+//line form_textarea.gox:95
 					__e = __c.Set("for", f.id); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line form_textarea.gox:95
-					__e = __c.Any(f.params.Label); if __e != nil { return }
 //line form_textarea.gox:96
+					__e = __c.Any(f.params.Label); if __e != nil { return }
+//line form_textarea.gox:97
 					__e = __c.Any(f.field.error.RouteBeam(
 					doors.RouteBeamMatch(func(err error) bool {
 						return f.params.Required && err != nil
@@ -133,15 +134,15 @@ func (f *textareaWidget) Main() gox.Elem {
 						ctx := __c.Context(); _ = ctx
 						__e = __c.Init("span"); if __e != nil { return }
 						{
-//line form_textarea.gox:99
+//line form_textarea.gox:100
 							__e = __c.Set("class", "neisland-form-required"); if __e != nil { return }
-//line form_textarea.gox:99
+//line form_textarea.gox:100
 							__e = __c.Set("aria-hidden", "true"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.Text("*"); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
-//line form_textarea.gox:99
+//line form_textarea.gox:100
 					return }))),
 				)); if __e != nil { return }
 				}
@@ -149,11 +150,11 @@ func (f *textareaWidget) Main() gox.Elem {
 			}
 			__e = __c.Init("textarea"); if __e != nil { return }
 			{
-//line form_textarea.gox:104
-				__e = __c.Modify(&f.invalid); if __e != nil { return }
 //line form_textarea.gox:105
-				__e = __c.Modify(&f.label); if __e != nil { return }
+				__e = __c.Modify(&f.invalid); if __e != nil { return }
 //line form_textarea.gox:106
+				__e = __c.Modify(&f.label); if __e != nil { return }
+//line form_textarea.gox:107
 				__e = __c.Modify(doors.AInput{
 				Scope: f.field.scope().And(&doors.ScopeDebounce{Duration: 250 * time.Millisecond, Limit: time.Second}),
 				Batch: true,
@@ -162,67 +163,67 @@ func (f *textareaWidget) Main() gox.Elem {
 					return false
 				},
 			}); if __e != nil { return }
-//line form_textarea.gox:114
-				__e = __c.Set("class", "neisland-form-textarea"); if __e != nil { return }
 //line form_textarea.gox:115
-				__e = __c.Set("id", f.id); if __e != nil { return }
+				__e = __c.Set("class", "neisland-form-textarea"); if __e != nil { return }
 //line form_textarea.gox:116
-				__e = __c.Set("name", f.params.Name); if __e != nil { return }
+				__e = __c.Set("id", f.id); if __e != nil { return }
 //line form_textarea.gox:117
+				__e = __c.Set("name", f.params.Name); if __e != nil { return }
+//line form_textarea.gox:118
 				__e = __c.Set("rows", func() any {
 				if f.params.Rows > 0 {
 					return f.params.Rows
 				}
 				return nil
 			}()); if __e != nil { return }
-//line form_textarea.gox:123
+//line form_textarea.gox:124
 				__e = __c.Set("maxlength", func() any {
 				if f.params.MaxLength > 0 {
 					return f.params.MaxLength
 				}
 				return nil
 			}()); if __e != nil { return }
-//line form_textarea.gox:129
-				__e = __c.Set("placeholder", f.params.Placeholder); if __e != nil { return }
 //line form_textarea.gox:130
-				__e = __c.Set("aria-required", aria(f.params.Required)); if __e != nil { return }
+				__e = __c.Set("placeholder", f.params.Placeholder); if __e != nil { return }
 //line form_textarea.gox:131
-				__e = __c.Set("aria-label", label); if __e != nil { return }
+				__e = __c.Set("aria-required", aria(f.params.Required)); if __e != nil { return }
 //line form_textarea.gox:132
-				__e = __c.Set("aria-invalid", aria(shownErr(f.field.error.Get()))); if __e != nil { return }
+				__e = __c.Set("aria-label", label); if __e != nil { return }
 //line form_textarea.gox:133
-				__e = __c.Set("data-required-empty", errors.Is(f.field.error.Get(), errRequired)); if __e != nil { return }
+				__e = __c.Set("aria-invalid", aria(shownErr(f.field.error.Get()))); if __e != nil { return }
 //line form_textarea.gox:134
+				__e = __c.Set("data-required-empty", errors.Is(f.field.error.Get(), errRequired)); if __e != nil { return }
+//line form_textarea.gox:135
 				__e = __c.Set("aria-describedby", f.id + "-e"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line form_textarea.gox:134
-				__e = __c.Any(f.value); if __e != nil { return }
+//line form_textarea.gox:135
+				__e = __c.Any(value); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line form_textarea.gox:135
+//line form_textarea.gox:136
 			if f.params.MinLength > 0 || f.params.MaxLength > 0 {
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line form_textarea.gox:136
+//line form_textarea.gox:137
 					__e = __c.Set("class", "neisland-form-foot"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line form_textarea.gox:137
-					__e = __c.Any(errLine); if __e != nil { return }
 //line form_textarea.gox:138
+					__e = __c.Any(errLine); if __e != nil { return }
+//line form_textarea.gox:139
 					__e = __c.Any(f.count.Bind(func(n int) gox.Elem {
 					if f.params.MinLength > 0 && n < f.params.MinLength {
 						return gox.Elem(func(__c gox.Cursor) (__e error) {
 							ctx := __c.Context(); _ = ctx
 							__e = __c.Init("span"); if __e != nil { return }
 							{
-//line form_textarea.gox:140
+//line form_textarea.gox:141
 								__e = __c.Set("class", "neisland-form-count"); if __e != nil { return }
 								__e = __c.Submit(); if __e != nil { return }
-//line form_textarea.gox:140
+//line form_textarea.gox:141
 								__e = __c.Many(n, " / ", f.params.MinLength, " min"); if __e != nil { return }
 							}
 							__e = __c.Close(); if __e != nil { return }
-//line form_textarea.gox:140
+//line form_textarea.gox:141
 						return })
 					}
 					if f.params.MaxLength > 0 {
@@ -230,14 +231,14 @@ func (f *textareaWidget) Main() gox.Elem {
 							ctx := __c.Context(); _ = ctx
 							__e = __c.Init("span"); if __e != nil { return }
 							{
-//line form_textarea.gox:143
+//line form_textarea.gox:144
 								__e = __c.Set("class", "neisland-form-count"); if __e != nil { return }
 								__e = __c.Submit(); if __e != nil { return }
-//line form_textarea.gox:143
+//line form_textarea.gox:144
 								__e = __c.Many(n, " / ", f.params.MaxLength); if __e != nil { return }
 							}
 							__e = __c.Close(); if __e != nil { return }
-//line form_textarea.gox:143
+//line form_textarea.gox:144
 						return })
 					}
 					return nil
@@ -245,13 +246,13 @@ func (f *textareaWidget) Main() gox.Elem {
 				}
 				__e = __c.Close(); if __e != nil { return }
 			} else  {
-//line form_textarea.gox:149
+//line form_textarea.gox:150
 				__e = __c.Any(errLine); if __e != nil { return }
 			}
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line form_textarea.gox:152
+//line form_textarea.gox:153
 }
 
 func (f *textareaWidget) validate(ctx context.Context, str string) error {

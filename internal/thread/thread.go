@@ -516,7 +516,6 @@ func (t *thread) applyCompaction(cmd commandApplyCompaction) bool {
 			if t.compaction.isActive() {
 				return false
 			}
-			t.compaction.chunk = 0
 		}
 		t.replay.CompactionFailed()
 		t.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}, Final: false, CanCompact: t.canCompact()}))

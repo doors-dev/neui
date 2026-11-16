@@ -15,7 +15,6 @@ import (
 	"neui.dev/api"
 	"neui.dev/internal/common"
 	"neui.dev/internal/island/core"
-	"neui.dev/internal/replay"
 )
 
 type Library = core.Library
@@ -61,23 +60,18 @@ type island struct {
 }
 
 func (i *island) Spec(ctx context.Context, space string) (string, []int, []string) {
-	c := common.AppIslandConfig(ctx)
 	b := strings.Builder{}
-	b.WriteString(specNotation)
-	b.WriteString("\n\nRuntime\n")
-	b.WriteString(specRuntime)
-	fmt.Fprintf(&b, "- console.log, info, warn and error append to the workspace file %s, emptied when an app starts.\n", logFile(space))
-	fmt.Fprintf(&b, "- Widgets keep their files, such as form uploads, under the workspace dir %s, emptied when an app starts; copy the files you want to keep elsewhere in the workspace.\n", islandDir(space))
-	ctrl := common.GetController(ctx)
-	fmt.Fprintf(&b, "- Limits: %d slots, views, controls and layouts alive at once; %d set, update and notify calls between ui.draw calls; %d bytes of ui.notify values between ui.draw calls; %s between ui.draw calls, app function and tool calls included; %d MiB memory; call depth %d; %d scripts queued; %s and %d MiB per function call.\n", c.MaxItems, c.MaxOps, replay.RoundItemBudget(ctrl.Config(), ctrl.Model())/2, c.TurnTime, c.Memory>>20, c.MaxCallDepth, c.MaxQueue, c.FnTime, c.FnMemory>>20)
+	fmt.Fprintf(&b, "Logs and files\nconsole.log, info, warn and error append to the workspace file %s, which is emptied when an app starts. Views and controls keep their files, such as uploads, under the workspace dir %s, also emptied when an app starts: copy the files you want to keep elsewhere in the workspace.\n", logFile(space), islandDir(space))
+	logs := b.Len()
+	b.WriteString(specReference)
 	spec, ends, items := i.lib.Spec()
 	start := b.Len()
 	b.WriteString(spec)
-	all := []int{start}
+	all := []int{logs, start}
 	for _, end := range ends {
 		all = append(all, start+end)
 	}
-	return b.String(), all, append([]string{"intro"}, items...)
+	return b.String(), all, append([]string{"logs and files", "reading the reference"}, items...)
 }
 
 func (i *island) Unmount() {
@@ -191,14 +185,14 @@ func (i *island) ContinueCode(code string, interrupt bool) (uint, uint, error) {
 
 func (i *island) ended(ctx context.Context, seq uint, task uint, err error) {
 	i.mu.Lock()
-	defer i.mu.Unlock()
 	if i.seq != seq {
+		i.mu.Unlock()
 		return
 	}
 	i.run = nil
 	i.seq++
 	newSeq := i.seq
-	close := func(ctx context.Context) {
+	dismiss := func(ctx context.Context) {
 		i.mu.Lock()
 		defer i.mu.Unlock()
 		if i.seq != newSeq {
@@ -207,16 +201,23 @@ func (i *island) ended(ctx context.Context, seq uint, task uint, err error) {
 		i.seq++
 		i.updateStatusScreen(ctx, noAppStatus, i.placeholder)
 	}
-	switch {
-	case errors.Is(err, api.ErrCanceledByUser):
-		i.updateStatusScreen(ctx, noAppStatus, i.placeholder)
-	case err == nil && i.success != nil:
-		i.updateStatusScreen(ctx, endedStatus(task), i.success(close))
-	case err != nil && i.failure != nil:
-		i.updateStatusScreen(ctx, failedStatus(task, err), i.failure(close, err))
-	default:
-		i.updateStatusScreen(ctx, noAppStatus, i.placeholder)
-	}
+	settled := make(chan struct{})
+	doors.OnSettle(ctx, func(context.Context) {
+		close(settled)
+	}, func(ctx context.Context) {
+		switch {
+		case errors.Is(err, api.ErrCanceledByUser):
+			i.updateStatusScreen(ctx, noAppStatus, i.placeholder)
+		case err == nil && i.success != nil:
+			i.updateStatusScreen(ctx, endedStatus(task), i.success(dismiss))
+		case err != nil && i.failure != nil:
+			i.updateStatusScreen(ctx, failedStatus(task, err), i.failure(dismiss, err))
+		default:
+			i.updateStatusScreen(ctx, noAppStatus, i.placeholder)
+		}
+	})
+	i.mu.Unlock()
+	<-settled
 }
 
 func (i *island) updateStatus(ctx context.Context, s string) {

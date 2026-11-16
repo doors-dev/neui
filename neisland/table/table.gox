@@ -103,12 +103,16 @@ func (t widget) Update(ctx context.Context, patch Patch) {
 }
 
 elem (t widget) Main() {
+	~~
+	current, _ := t.state.Read(ctx)
+	~~
 	<div class="neisland-table-card">
 		~(if t.params.Search {
 			<div class="neisland-table-card-head">
 				<input
 					type="search"
 					class="neisland-form-search-input neisland-table-search"
+					value=(current.search)
 					placeholder="Search"
 					aria-label="Search"
 					maxlength="100"

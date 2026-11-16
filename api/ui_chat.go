@@ -106,8 +106,7 @@ type Instance interface {
 	// moves to a fresh thread, so each entry is the one tab that has it.
 	Chats() doors.Beam[map[ThreadID]InstanceChat]
 	// Location is the session's time zone, a fixed UTC offset read from the
-	// client clock while an instance syncs and kept for the session once a
-	// reading succeeds; each instance that syncs before then tries again.
+	// browser's clock and kept for the session once one reading succeeds.
 	// Until then it is time.Local, the server's zone. When an instance's own
 	// reading succeeds, it is stored before that instance's Status leaves
 	// InstanceLoading.

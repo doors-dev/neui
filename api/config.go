@@ -18,8 +18,7 @@ type ThreadConfig struct {
 	// share is not checked. Default 0.2.
 	CompactionAllowed float32
 	// CompactionPreserve is the share of the conversation kept verbatim after
-	// the summary; when the model rejects the compaction as too long, the rest
-	// is compacted in smaller passes. Default 0.1.
+	// the summary. Default 0.1.
 	CompactionPreserve float32
 	// ReplayItemShare sets the round item budget, Model.Context * 4 *
 	// ReplayItemShare bytes (four bytes per token), assuming a 200,000-token
@@ -36,32 +35,28 @@ type ThreadConfig struct {
 	// replay each result's text, each record's body and the input's text are
 	// cut to the budget, keeping head and tail; an input is over it only when
 	// the budget shrank after it was sent, as after a switch to a smaller
-	// model. Media blocks are not counted. Half of it bounds an island's
-	// ui.notify values between draws and each part of island_spec. A
-	// non-positive value takes the default, 0.1; a value above 0.25 counts as
-	// 0.25.
+	// model. Media blocks are not counted. Half of it bounds the values an
+	// island script queues with ui.notify between draws. A non-positive value
+	// takes the default, 0.1; a value above 0.25 counts as 0.25.
 	ReplayItemShare float32
 	// ThreadMemoryLimit is the byte budget over everything a thread holds for
 	// replay: media counted raw, text counted as it stands. When
 	// Model.RequestBytes is known the budget is at most
 	// Model.RequestBytes*3/4 - ReplayHeadroom (the three quarters undo the
-	// base64 inflation media takes on the wire). The first time the provider
-	// refuses a request as too large without ErrMeasuredTooLarge, the budget
-	// is cut to 80% and the round is retried. Going over the budget starts
-	// compaction. Negative means no byte budget. Default 18 MiB.
+	// base64 inflation media takes on the wire). The first request the
+	// provider refuses as too large lowers the budget and retries the round.
+	// Going over the budget starts compaction. Negative means no byte budget.
+	// Default 18 MiB.
 	ThreadMemoryLimit int64
 	// ToolCallLimit is how many tool calls of one round are executed; a call
-	// past it is answered with an error result naming the limit, so every
-	// tool_use still gets a matching tool_result. Negative runs every call a
-	// round asks for. Default 32.
+	// past it is not run and is answered with an error naming the limit.
+	// Negative runs every call a round asks for. Default 32.
 	ToolCallLimit int
 }
 
-// ReplayHeadroom is what a thread's byte budget leaves free under the model's
-// request limit for the parts of a request the replay layer cannot measure: the
-// tool schemas and the JSON envelope are assembled past it, from the modules a
-// thread runs and the provider adapter's own encoding, so replay subtracts a
-// flat 1 MiB instead of counting them.
+// ReplayHeadroom is the part of the model's request limit, 1 MiB, that a
+// thread's byte budget leaves free for the tool schemas and the request
+// envelope, which the budget does not count.
 const ReplayHeadroom = 1 << 20
 
 // FilesConfig bounds the workspace filesystem and the files module: what the
@@ -130,8 +125,9 @@ type IslandConfig struct {
 	// MaxCallDepth is how many nested JS calls a script may make before a
 	// stack overflow is thrown. Default 1000.
 	MaxCallDepth int
-	// MaxQueue is how many scripts sent with island_continue may wait to run;
-	// the one past it is refused, unless it is sent with interrupt. Default 16.
+	// MaxQueue is how many of the agent's scripts may wait to run on one
+	// island; the one past it is refused, unless the agent sends it to replace
+	// the running and queued ones. Default 16.
 	MaxQueue int
 	// FnTime is how long one IslandCall may run, app function calls included,
 	// before it is stopped. Default 5s.

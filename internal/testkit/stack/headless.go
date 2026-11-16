@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/doors-dev/gox"
+	"github.com/go-rod/rod"
 	"neui.dev/api"
 	"neui.dev/internal/common"
 	"neui.dev/internal/page"
@@ -25,6 +26,7 @@ type Host struct {
 }
 
 type Chat struct {
+	Page    *rod.Page
 	t       *testing.T
 	guard   time.Duration
 	link    thread.Link

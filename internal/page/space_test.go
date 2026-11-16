@@ -137,6 +137,81 @@ func TestDiffShowsWhatChanged(t *testing.T) {
 	}
 }
 
+func TestDiffAndChangesShowToolsAndInputs(t *testing.T) {
+	kit := func(name string, version int) *tool {
+		k := &tool{Name: name}
+		k.raw, _ = json.Marshal(map[string]any{"name": name, "version": version})
+		k.hash = xxh3.Hash(k.raw)
+		return k
+	}
+	field := func(id string, rights Rights) input {
+		in := input{ID: id, Rights: rights}
+		in.raw, _ = json.Marshal(map[string]any{"id": id, "rights": rights})
+		in.hash = xxh3.Hash(in.raw)
+		return in
+	}
+	p := tree("form", "tools", "inputs", "all")
+	form := p.at("form")
+	form.tools = []*tool{kit("a", 1), kit("b", 1)}
+	form.list = []input{field("i1", RW), field("i2", RW)}
+	p.at("tools").tools = []*tool{kit("t", 1)}
+	p.at("inputs").list = []input{field("x", RW)}
+	p.at("all").tools = []*tool{kit("t", 1)}
+	p.restamp()
+	old := form.snapshot(0)
+	before := map[string][4]uint64{}
+	p.space.digests(before)
+	form.tools = []*tool{kit("b", 2), kit("c", 1)}
+	form.list = []input{field("i2", R), field("i3", RW)}
+	p.at("tools").tools = []*tool{kit("t", 2)}
+	p.at("inputs").list = nil
+	all := p.at("all")
+	all.tools = nil
+	all.list = []input{field("y", RW)}
+	all.data = []*data{note("new")}
+	p.restamp()
+	raw, err := json.Marshal(form.diff(old))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"tools":{"added":[{"name":"b","version":2},{"name":"c","version":1}],"removed":["a","b"]},"inputs":{"added":[{"id":"i2","rights":"R"},{"id":"i3","rights":"RW"}],"removed":["i1","i2"]}}`
+	if string(raw) != want {
+		t.Fatalf("the diff is %s, want %s: a changed tool or input is removed and added again", raw, want)
+	}
+	raw, err = json.Marshal(p.space.changes(before, "form"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = `[{"path":"all","changed":["tools","inputs","data"]},{"path":"inputs","changed":["inputs"]},{"path":"tools","changed":["tools"]}]`
+	if string(raw) != want {
+		t.Fatalf("the changes are %s, want %s", raw, want)
+	}
+}
+
+func TestFailureUnwrapsItsError(t *testing.T) {
+	err := fmt.Errorf("jam: %w", errToolNotFound)
+	f := failure{result: &report{Diff: &diff{}}, err: err}
+	if !errors.Is(f, errToolNotFound) || f.Error() != err.Error()+"; "+failedAfterRunMessage {
+		t.Fatalf("the failure reads %q and unwraps to %v, want the error it carries and the note that the call ran", f.Error(), errors.Unwrap(f))
+	}
+}
+
+func TestCleanedInputIsNoDuplicate(t *testing.T) {
+	s := tree("form").at("form")
+	s.ctx = context.Background()
+	gone, cancel := context.WithCancel(context.Background())
+	cancel()
+	s.list = []input{{ID: "a1", ctx: gone, elementID: "form-1", Rights: RW}, {ID: "a1", ctx: context.Background(), elementID: "form-2", Rights: RW}}
+	in, err := s.getInput("a1", "click")
+	if err != nil || in.elementID != "form-2" {
+		t.Fatalf("the input next to its cleaned twin answered %q, %v, want the live one", in.elementID, err)
+	}
+	s.list[0].ctx = context.Background()
+	if _, err := s.getInput("a1", "click"); !errors.Is(err, errRefusedDuplicate) || !strings.HasPrefix(err.Error(), `input "a1" in space "form": `) {
+		t.Fatalf("two live inputs with one id answered %v, want the duplicate refusal for the space", err)
+	}
+}
+
 func TestTreeMarksWhatItLeavesOut(t *testing.T) {
 	var paths []string
 	for i := range 25 {

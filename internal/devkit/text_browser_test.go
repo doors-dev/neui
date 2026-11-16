@@ -3,6 +3,7 @@
 package devkit_test
 
 import (
+	"context"
 	"strconv"
 	"strings"
 	"testing"
@@ -105,5 +106,39 @@ func TestTextSizeRejected(t *testing.T) {
 	a := stack.Island(t, devkit.App{Island: widgets(), Script: `ui.root.set(ui.markdown({text: "Title", size: "lg"})); ui.notify(ui.draw())`})
 	if got := a.ContainerScriptError(); !strings.Contains(got, "size") {
 		t.Fatalf("got %q, want an error naming size", got)
+	}
+}
+
+const emptyTextJS = `() => {
+	const boxes = Array.from(document.querySelectorAll(".neisland-text"))
+	const column = document.querySelector(".neisland-column")
+	const first = boxes[0], last = boxes[boxes.length - 1]
+	const oneGap = !!column && boxes.length > 1 && Math.abs(last.getBoundingClientRect().top - first.getBoundingClientRect().bottom - parseFloat(getComputedStyle(column).rowGap)) < 0.5
+	return boxes.map((n) => n.className.replace("neisland-text neisland-prose", "").trim() + ":" + (n.querySelector("p")?.textContent ?? "")).join("|") + " " + oneGap
+}`
+
+func TestTextEmptyShowsNothing(t *testing.T) {
+	a := stack.Island(t, devkit.App{Island: widgets()})
+	for i, step := range []struct{ code, want, what string }{
+		{`var styles = ["plain", "card", "info", "success", "warning", "danger"]
+			var m = ui.markdown({text: "", style: "card"})
+			ui.root.set(ui.column({}, ui.markdown({text: "Top"}), ...styles.map((s) => ui.markdown({text: "", style: s})), m, ui.markdown({text: "Bottom"})))`,
+			":Top|:Bottom true", "empty texts of every style show no box and take no gap"},
+		{`m.update({text: "Back"})`, ":Top|neisland-text-card:Back|:Bottom false", "a text patch shows the text"},
+		{`m.update({style: "info"})`, ":Top|neisland-text-card neisland-tone-info:Back|:Bottom false", "a patch without text keeps it"},
+		{`m.update({text: ""})`, ":Top|:Bottom true", "an empty text patch clears it"},
+	} {
+		code := step.code + "\nui.draw(1)\nui.notify(\"step " + strconv.Itoa(i) + "\")"
+		var err error
+		if i == 0 {
+			_, _, err = a.Start(context.Background(), code)
+		} else {
+			_, _, err = a.Continue(code, false)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		a.Until(func(r devkit.Report) bool { return strings.Contains(string(r.Data), `"step `+strconv.Itoa(i)+`"`) })
+		expectEval(t, a, emptyTextJS, step.want, step.what)
 	}
 }

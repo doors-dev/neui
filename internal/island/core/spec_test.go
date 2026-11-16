@@ -37,7 +37,7 @@ func TestBuildWritesSharedDefinitionOnce(t *testing.T) {
 	if !ok || strings.Count(head, `"$ref":"#/definitions/CoreSpecRow"`) != 3 || strings.Contains(head, `"definitions"`) || defs != "  CoreSpecRow "+`{"properties":{"name":{"type":"string"}},"type":"object"}`+"\n" {
 		t.Fatalf("spec:\n%s", spec)
 	}
-	if len(ends) != 5 || !strings.HasPrefix(spec, "\nViews: ") || !strings.HasPrefix(spec[ends[0]:], "ui.list\n") || !strings.HasPrefix(spec[ends[1]:], "\nApp functions: ") || spec[ends[2]:ends[3]] != "\nDefinitions\n" || ends[4] != len(spec) || !slices.Equal(items, []string{"ui.card", "ui.list", "app.find", "Definitions", "CoreSpecRow"}) {
+	if len(ends) != 5 || !strings.HasPrefix(spec, "\nViews show something: ") || !strings.HasPrefix(spec[ends[0]:], "ui.list\n") || !strings.HasPrefix(spec[ends[1]:], "\nApp functions: ") || spec[ends[2]:ends[3]] != "\nDefinitions\n" || ends[4] != len(spec) || !slices.Equal(items, []string{"ui.card", "ui.list", "app.find", "Definitions", "CoreSpecRow"}) {
 		t.Fatalf("ends %v of %d bytes, items %v:\n%s", ends, len(spec), items, spec)
 	}
 }

@@ -333,12 +333,12 @@ func (s Space) AddTool[I any, O any](ctx context.Context, name string, desc stri
 		Name:  utils.SanitizeName(name),
 		Desc:  desc + "\nOutput schema: " + string(outputSchema.Raw()),
 		Input: inputSchema.Raw(),
-		call: func(ctx context.Context, arg json.RawMessage) (any, error) {
-			input, err := inputSchema.Decode(arg)
-			if err != nil {
-				return nil, err
-			}
+		decode: func(arg json.RawMessage) (any, error) {
+			return inputSchema.Decode(arg)
+		},
+		call: func(ctx context.Context, input any) (any, error) {
 			var out O
+			var err error
 			settled := make(chan struct{})
 			doors.OnSettle(base, func(context.Context) {
 				close(settled)
@@ -349,7 +349,7 @@ func (s Space) AddTool[I any, O any](ctx context.Context, name string, desc stri
 				defer stop()
 				opCtx = tools.Attach(opCtx, ctx)
 				opCtx = common.AttachThread(opCtx, ctx)
-				out, err = f(opCtx, input)
+				out, err = f(opCtx, input.(I))
 			})
 			select {
 			case <-settled:

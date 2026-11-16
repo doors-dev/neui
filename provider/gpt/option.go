@@ -504,8 +504,8 @@ func WithMetadata(m map[string]string) Option {
 }
 
 // WithObfuscation sets whether the service adds its random padding field to
-// delta events to even out packet sizes. Off by default: the decoder ignores
-// the field, so it only costs bandwidth.
+// delta events to even out packet sizes. Off by default; turning it on costs
+// only bandwidth.
 func WithObfuscation(on bool) Option {
 	return func(p *Provider) error {
 		p.set.obfuscation = on

@@ -211,6 +211,10 @@ func (f *seriesWidget) newGroup(name string) (*groupBase, error) {
 	return f.group.newGroup(name)
 }
 
+func (f *seriesWidget) value(name string) any {
+	return f.group.value(name)
+}
+
 func (f *seriesWidget) deleteField(ctx context.Context, name string) {
 	f.group.deleteField(ctx, name)
 }

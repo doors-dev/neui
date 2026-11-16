@@ -32,6 +32,9 @@ const ui = (() => {
 			Widget.#reg.register(this, this.#id);
 		}
 		update(patch) {
+			if (patch === undefined) {
+				throw new TypeError("update needs a patch object that matches the view's or control's patch schema")
+			}
 			update({ id: this.#id, patch });
 		}
 		get id() {
@@ -60,7 +63,7 @@ const ui = (() => {
 				if (c instanceof Layout) {
 					return { kind: "layout", name: c.name, params: c.params, content: this.#buildContent(c.children) }
 				}
-				throw new TypeError("slot content must be a widget, layout or slot")
+				throw new TypeError("slot content must be a view, control, layout or slot")
 			})
 		}
 		set(...content) {

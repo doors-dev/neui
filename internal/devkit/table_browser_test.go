@@ -264,3 +264,26 @@ func TestTableCardCheckColumnKeepsPadding(t *testing.T) {
 		return [card.querySelector(".neisland-table-card-head") === null, getComputedStyle(box).borderTopLeftRadius, cell("tbody .neisland-table-check").paddingLeft, cell("tbody .neisland-table-cell:last-child").paddingRight].join(" ")
 	}`, "true 5px 6px 12px", "no search head so the box takes the card's top corners, the check column keeps its 6px padding and the last column takes the 12px inset")
 }
+
+func TestTableShownAgainShowsItsSearch(t *testing.T) {
+	a := stack.Island(t, devkit.App{Island: widgets(), Script: `
+		var table = ui.table({columns: [{title: "Name"}], search: true, rows: [
+			{id: "a", cells: ["Ann"]}, {id: "b", cells: ["Bob"]}, {id: "c", cells: ["Bea"]}, {id: "d", cells: ["Cid"]}
+		]})
+		var again = ui.button({text: "Again"})
+		ui.root.set(ui.column({}, table, again))
+		ui.draw()
+		ui.root.set(ui.column({}, ui.markdown({text: "Shown again"}), table, again))
+		ui.draw()`})
+	rows := `() => Array.from(document.querySelectorAll(".neisland-table-row")).map((r) => r.textContent.trim()).join("|")`
+	search := stack.Field{Locator: a.Find(".neisland-table-card-head")}
+	expectEval(t, a, rows, "Ann|Bob|Bea|Cid", "all rows")
+	search.Type(" b ")
+	expectEval(t, a, rows, "Bob|Bea", "rows matching b")
+	a.Find(".neisland-table-card").Element().MustEval(`() => { this.dataset.old = "" }`)
+	a.Find(".neisland-button").Click()
+	a.Find(".neisland-text").WaitText("Shown again")
+	a.Find("body").WaitCount(".neisland-table-card[data-old]", 0)
+	search.ExpectValue("b")
+	expectEval(t, a, rows, "Bob|Bea", "rows still matching b")
+}

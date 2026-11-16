@@ -16,8 +16,8 @@ import (
 )
 
 // Space marks a region of the page for the agent: the tools, inputs, data,
-// islands and spaces rendered inside it belong to it, and the agent reaches
-// them by the space's path. Wrap the region's markup with it:
+// islands and spaces rendered inside it belong to it. Wrap the region's markup
+// with it:
 //
 //	~>neui.Space{Name: "cart", Desc: "the user's shopping cart"} <section>...</section>
 //
@@ -25,12 +25,12 @@ import (
 // as long as its render: when that part of the page re-renders or unmounts,
 // the space and everything in it go away.
 type Space struct {
-	// Name is the space's segment of the path. Names are reduced to ASCII
-	// letters, digits and _ (runs of other characters become one _); names
-	// that reduce to the same value replace each other, and a name with no
-	// letter or digit is replaced by one made from its hash and logged. An
-	// empty name fails the render. A sibling rendered later with the same
-	// name replaces the earlier one.
+	// Name identifies the space among its siblings; the agent sees it with
+	// Desc. Names are reduced to ASCII letters, digits and _ (runs of other
+	// characters become one _); a sibling rendered later with the same
+	// reduced name replaces the earlier one. Give it at least one letter or
+	// digit: a name without one is replaced and a warning is logged. An empty
+	// name fails the render.
 	Name string
 	// Desc tells the agent what the region is and what it is for.
 	Desc string
@@ -62,17 +62,14 @@ type Tool[I any, O any] struct {
 	// input and output schemas the agent sees come from I and O. On a direct
 	// agent call to a module tool, a string or fmt.Stringer result reaches
 	// the agent as text, an api content value as itself and anything else as
-	// JSON; a script receives the value as JSON, and a page tool's output is
-	// the output field of the page call's result, next to what the call
-	// changed on the page. An error is reported to the agent as the call's
-	// failure, its message as text; one that is or wraps an api.Container or
-	// api.MultiContainer carries that content after the message, and a
-	// script finds it as JSON in the thrown error's value property. For a
-	// page tool that content, as JSON, is instead the output field of the
-	// result the failed page call carries next to what it changed on the
-	// page. ctx works with the Tool* functions; for a tool rendered on a page
-	// it is also a doors context of that render, so the handler can update
-	// the page, and it runs once the page has settled.
+	// JSON; a script gets the result as JSON, and so does the agent from a
+	// page tool, together with what the call changed on the page. An error
+	// fails the call with its message as text; when it is or wraps an
+	// api.Container or api.MultiContainer, that content goes with it, as JSON
+	// to a script or from a page tool. ctx works with the Tool* functions;
+	// for a tool rendered on a page it is also a doors context of that
+	// render, so the handler can update the page, and it runs once the page
+	// has settled.
 	Handler func(ctx context.Context, i I) (O, error)
 }
 
@@ -117,10 +114,9 @@ func (a Ask[I, O]) tool() (AnyTool, error) {
 func (a Ask[I, O]) ask() {}
 
 // Data attaches information for the agent to the space it is rendered in,
-// such as the records a view shows or hints on how to use it. The agent reads
-// it when it syncs the page; it need not match what the screen displays. It
-// is encoded once when it renders: render it again to change what the agent
-// sees.
+// such as the records a view shows or hints on how to use it. It need not
+// match what the screen displays. The agent sees it as it was at render:
+// render it again to change what the agent sees.
 type Data struct {
 	// Text is a note in plain words, on its own or saying what Object is.
 	Text string
@@ -140,7 +136,7 @@ func (d Data) Main() gox.Elem {
 
 var _ gox.Comp = Data{}
 
-// Rights sets which page calls the agent may make on an Input.
+// Rights sets what the agent may do with an Input.
 type Rights int
 
 const (
@@ -175,10 +171,10 @@ func (r Rights) rights() page.Rights {
 // submit, button, reset or image counts as a button, and a radio stands for
 // its whole same-name group. The input goes away with its render.
 //
-// The agent addresses it by an id made from Desc, the name attribute and,
-// for buttons, checkboxes and radios without a name, the value attribute, for
-// links the href; two inputs in one space that agree on these cannot be told
-// apart, and the agent's calls on them are refused.
+// Give the inputs of a space distinct descriptions. Inputs with the same
+// type, name and static value (a button's or checkbox's value, a link's href)
+// are told apart only by Desc; when two cannot be told apart, the agent's call
+// on them fails and the error is logged.
 type Input struct {
 	// Desc tells the agent what the element does or holds.
 	Desc string
@@ -297,11 +293,12 @@ var _ gox.Proxy = Input{}
 // reacts to what the user does there. It appears to the agent as a space
 // marked as an island. Template and Library are required.
 type Island struct {
-	// Name is the island space's segment of the path. Names are reduced to
-	// ASCII letters, digits and _ (runs of other characters become one _);
-	// names that reduce to the same value replace each other, and a name
-	// with no letter or digit is replaced by one made from its hash and
-	// logged. An empty name fails the render.
+	// Name identifies the island among the spaces next to it; the agent sees
+	// it with Desc. Names are reduced to ASCII letters, digits and _ (runs of
+	// other characters become one _); names that reduce to the same value
+	// replace each other. Give it at least one letter or digit: a name
+	// without one is replaced and a warning is logged. An empty name fails
+	// the render.
 	Name string
 	// Desc tells the agent what the island is for.
 	Desc string
@@ -322,7 +319,6 @@ type Island struct {
 }
 
 // Main renders the island and adds its space. When Library returns an error,
-// or two different types in the library's schemas share a definition name,
 // the error is logged and Placeholder renders with no island space. A running
 // app ends when the island unmounts.
 func (i Island) Main() gox.Elem {
@@ -366,18 +362,17 @@ func (i Island) Main() gox.Elem {
 // the app functions, console and the standard built-ins. ctx must come from
 // the island (a widget's render, Update or event handlers); elsewhere Call
 // returns an error. A failure caused by the function, including a result that
-// does not decode into O, is written to the app's log and, the first time for
-// each source during a script turn and for at most 16 sources, reported to
-// the agent as a call_error notification.
+// does not decode into O, is written to the app's log and reported to the
+// agent once per source in each script; past a limit on reports per script,
+// it is only logged.
 type IslandCall[I, O any] = island.Call[I, O]
 
-// IslandReport reports a runtime error of a widget to the agent, as a
-// widget_error notification naming the widget and its id. The widget keeps
-// running; the agent decides whether to update or replace it. Each widget
-// reports a given message once per script, within the same cap as
-// call_error, and every report is written to the app's log. ctx must come
-// from the island (a widget's render, Update or event handlers); elsewhere
-// IslandReport does nothing.
+// IslandReport reports a runtime error of a widget to the agent, naming the
+// widget. The widget keeps running; the agent decides whether to update or
+// replace it. A widget's repeated message is reported once per script, under
+// the same limit as IslandCall failures, and every report is written to the
+// app's log. ctx must come from the island (a widget's render, Update or
+// event handlers); elsewhere IslandReport does nothing.
 func IslandReport(ctx context.Context, err error) {
 	island.Report(ctx, err)
 }

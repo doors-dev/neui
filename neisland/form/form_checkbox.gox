@@ -25,7 +25,6 @@ type checkboxWidget struct {
 	id string
 	field groupField
 	params checkboxParams
-	value bool
 	invalid doors.Setter
 	label doors.Setter
 }
@@ -43,7 +42,6 @@ func (f *checkboxWidget) init(ctx context.Context, value any) error {
 		}
 		checked = v
 	}
-	f.value = checked
 	f.setLocked(ctx, checked, f.validate(ctx, checked))
 	return nil
 }
@@ -67,6 +65,9 @@ func (f *checkboxWidget) setLocked(ctx context.Context, checked bool, err error)
 
 elem (f *checkboxWidget) Main() {
 	~~
+	f.field.mutex().Lock()
+	checked, _ := f.field.value().(bool)
+	f.field.mutex().Unlock()
 	label := any(nil)
 	if f.field.item != nil {
 		label, _ = f.field.item.ReadAndSub(ctx, func(ctx context.Context, name string) bool {
@@ -91,7 +92,7 @@ elem (f *checkboxWidget) Main() {
 				type="checkbox"
 				id=(f.id)
 				name=(f.params.Name)
-				checked=(f.value)
+				checked=(checked)
 				aria-required=(aria(f.params.Required))
 				aria-label=(label)
 				aria-invalid=(aria(shownErr(f.field.error.Get())))

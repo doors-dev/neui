@@ -40,14 +40,14 @@
   ],
   "inputs": [
     {
-      "id": "a1a15737",
+      "id": "79585bbb",
       "kind": "input",
       "type": "text",
       "desc": "the order total",
       "rights": "R"
     },
     {
-      "id": "02f27711",
+      "id": "289a99b3",
       "kind": "button",
       "type": "button",
       "desc": "pays the order",

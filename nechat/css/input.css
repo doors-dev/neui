@@ -250,9 +250,6 @@
 
 	.nechat-toast {
 		@apply
-		relative
-		isolate
-		overflow-hidden
 		pointer-events-auto
 		flex
 		items-center

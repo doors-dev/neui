@@ -14,12 +14,8 @@ elem element(id string) {
 			const type = (el.getAttribute("type") || "").toLowerCase()
 			switch (action) {
 				case "click":
-					return {
-						hooks: await $sys.emit(
-							el,
-							new PointerEvent("click", { bubbles: true }),
-						),
-					}
+					await $sys.emit(el, new PointerEvent("click", { bubbles: true }))
+					return {}
 				case "focus":
 					el.focus({ preventScroll: true })
 					el.scrollIntoView({ behavior: "smooth", block: "nearest" })
@@ -71,9 +67,8 @@ elem element(id string) {
 					}
 					if (type === "checkbox") {
 						el.checked = !!value
-						return {
-							hooks: await $sys.emit(el, new Event("change", { bubbles: true })),
-						}
+						await $sys.emit(el, new Event("change", { bubbles: true }))
+						return {}
 					}
 					if (tag === "select") {
 						if (el.multiple) {
@@ -84,16 +79,13 @@ elem element(id string) {
 						} else {
 							el.value = value
 						}
-						return {
-							hooks: await $sys.emit(el, new Event("change", { bubbles: true })),
-						}
+						await $sys.emit(el, new Event("change", { bubbles: true }))
+						return {}
 					}
 					el.value = value
-					const n = await $sys.emit(el, new Event("input", { bubbles: true }))
-					return {
-						hooks:
-							n + (await $sys.emit(el, new Event("change", { bubbles: true }))),
-					}
+					await $sys.emit(el, new Event("input", { bubbles: true }))
+					await $sys.emit(el, new Event("change", { bubbles: true }))
+					return {}
 				}
 			}
 			throw "unknown action " + action
@@ -132,9 +124,8 @@ elem radioGroup(id string) {
 						throw "no option with value " + JSON.stringify(value)
 					}
 					el.checked = true
-					return {
-						hooks: await $sys.emit(el, new Event("change", { bubbles: true })),
-					}
+					await $sys.emit(el, new Event("change", { bubbles: true }))
+					return {}
 				}
 			}
 			throw "unknown action " + action

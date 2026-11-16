@@ -15,8 +15,9 @@ import (
 // New builds a form widget for Library.Control: the user fills the
 // fields and presses one of the submit buttons, which sends
 // {"data": values, "submit": button value} to the script waiting in
-// ui.draw(). Files upload into the island dir as they are picked, each under
-// <field id>/. The cancel button sends {"canceled": true}.
+// ui.draw(). Files upload into the island dir as they are picked; a file
+// field's value is their workspace paths. The cancel button sends
+// {"canceled": true}.
 func New(ctx context.Context, p Params, submit func(ctx context.Context, s map[string]any) bool) (api.Widget[struct{}], error) {
 	if len(p.Submits) == 0 {
 		p.Submits = []submitParams{{Text: "Submit"}}
@@ -33,7 +34,7 @@ func New(ctx context.Context, p Params, submit func(ctx context.Context, s map[s
 	m := make(map[string]any)
 	root := &root{
 		values: make(map[string]any),
-		scope: new(doors.ScopeFrame),
+		scope: new(doors.ScopeCheckpoint),
 	}
 	group := &groupBase{
 		root: root,
@@ -133,7 +134,7 @@ func (f *widget) onSubmit(ctx context.Context, r doors.RequestRawForm) {
 
 elem (f *widget) Main() {
 	~~
-	scope := f.root.scope.Scope(true).And(neui.IslandScope(ctx))
+	scope := doors.JoinScopes(neui.IslandScope(ctx), f.root.scope.Scope(true))
 	errs, _ := f.errors.ReadAndSub(ctx, func(ctx context.Context, errs errorKind) bool {
 		doors.Call(ctx, f.locked.Set("disabled", errs != errorsNone))
 		return false

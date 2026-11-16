@@ -52,16 +52,14 @@ var ErrMeasuredTooLarge = errors.New("provider refused a request measured as fit
 // ErrInputTooLarge reports an input over the round item budget
 // (ThreadConfig.ReplayItemShare), counting its text and the file links its
 // attachments turn into. It is refused where it is submitted, drafted or
-// rewound to, and nothing of it is drafted, stored or sent. Compaction keeps
-// the latest input whole, so it cannot shrink such a message; the error text
+// rewound to, and nothing of it is drafted, stored or sent. The error text
 // tells the user to split it or attach the content as a file.
 var ErrInputTooLarge = errors.New("message is too large to send, split it into smaller messages or attach the content as a file")
 
-// ErrCompactionFailed reports that compaction cannot make the conversation
-// fit the model's context window: compacting the oldest round alone is still
-// too long, or only the latest round is left and it does not fit. It arrives
-// as the Err of a ChatEventCriticalError after the failed round is stored, and
-// the chat link closes as with any critical error.
+// ErrCompactionFailed reports that the conversation no longer fits the model's
+// context window, even after compaction. It arrives as the Err of a
+// ChatEventCriticalError after the failed round is stored, and the chat link
+// closes as with any critical error.
 var ErrCompactionFailed = errors.New("the conversation no longer fits the model's context window, even after compaction")
 
 // ErrToolNotFound reports a tool call naming no registered tool.

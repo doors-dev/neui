@@ -117,7 +117,7 @@ func stateEqual(old state, new state) bool {
 type Params struct {
 	_          struct{}                      `additionalProperties:"false"`
 	Columns    []column                      `json:"columns" required:"true" nullable:"false" minItems:"1" maxItems:"12" description:"column headers, in order"`
-	Query      neui.IslandCall[page, result] `json:"query,omitempty" description:"returns the rows for a page, called when the table shows and on every page change"`
+	Query      neui.IslandCall[page, result] `json:"query,omitempty" description:"returns the rows for a page, called whenever the table needs rows"`
 	Rows       []row                         `json:"rows,omitempty" maxItems:"100" description:"fixed rows; the table pages, sorts and searches them itself"`
 	Sort       *sortSpec                     `json:"sort,omitempty" description:"sort when the table shows; ignored when the column is out of range or not sortable"`
 	Search     bool                          `json:"search,omitempty" description:"true lets the user search; with rows, only rows with a cell containing the text show, case-insensitive"`
@@ -218,7 +218,7 @@ type Submit struct {
 
 // Patch is what a script passes to update a table.
 type Patch struct {
-	_        struct{}                      `additionalProperties:"false" description:"an empty patch reloads the rows: the current page of query, or the rows as they are"`
+	_        struct{}                      `additionalProperties:"false" description:"{} reloads the rows: the current page of query, or the rows as they are"`
 	Query    neui.IslandCall[page, result] `json:"query,omitempty" description:"new function that returns the rows; replaces rows, and the table reloads from the first page with the sort and search kept"`
 	Rows     []row                         `json:"rows,omitempty" maxItems:"100" description:"new fixed rows; replaces query, and the table goes back to the first page"`
 	Sort     *sortSpec                     `json:"sort,omitempty" description:"new sort; ignored when the column is out of range or not sortable; the table goes back to the first page and keeps the selection"`

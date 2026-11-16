@@ -22,8 +22,7 @@
 //
 // Failures reach the thread as api.EventErr with an api.ErrCode, and an error
 // response from the API carries an *APIError, read with errors.As. The
-// adapter talks to the wire directly, without an SDK, so thinking blocks
-// replay byte for byte.
+// adapter talks to the wire directly, with no SDK dependency.
 package claude
 
 import (
@@ -108,9 +107,8 @@ func (t Thinking) summarized() bool {
 	return t.Display == DisplaySummarized
 }
 
-// Breakpoint names a place a cache_control marker goes. The three mirror the
-// tools then system then messages hierarchy the API invalidates in, which is
-// the same order api.Request lists its fields in.
+// Breakpoint names a place a cache_control marker goes. The three follow the
+// order the API invalidates the cache in: tools, then system, then messages.
 type Breakpoint string
 
 const (

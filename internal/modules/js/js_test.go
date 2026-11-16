@@ -159,6 +159,11 @@ func (blocksError) Error() string { return "render failed" }
 
 func (b blocksError) Contents() []api.UserContent { return b }
 
+type wiredError struct {
+	imageError
+	Wire chan int
+}
+
 func TestRunToolContentErrorReachesScript(t *testing.T) {
 	image := imageError{api.Image{Data: []byte{1, 2}, Mime: api.ImagePNG}}
 	blocks := blocksError{api.ContentText{Text: "a"}, api.ContentText{Text: "b"}}
@@ -184,10 +189,16 @@ func TestRunToolContentErrorReachesScript(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := fail.Add("wired", "", func(ctx context.Context, _ struct{}) (struct{}, error) {
+		return struct{}{}, wiredError{imageError: image, Wire: make(chan int)}
+	}); err != nil {
+		t.Fatal(err)
+	}
 	ctx := testkit.NewController(t, testkit.Setup{Modules: []common.Module{fail}}).Ctx()
 	m := &module{runtime: getRuntime(context.Background())}
 	res, err := m.run(ctx, RunArg{Code: `const caught = (f) => { try { f({}); } catch (e) { return [e instanceof TypeError, e.message, e.stack.length > 0, e.value]; } };
-return [caught(fail__image), caught(fail__blocks), caught(fail__nested), fail__nil({}) === null];`})
+const wired = (() => { try { fail__wired({}); } catch (e) { return [e instanceof TypeError, e.message, "value" in e]; } })();
+return [caught(fail__image), caught(fail__blocks), caught(fail__nested), fail__nil({}) === null, wired];`})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,6 +207,7 @@ return [caught(fail__image), caught(fail__blocks), caught(fail__nested), fail__n
 		[]any{true, "blocks: render failed", true, blocks},
 		[]any{true, "nested: image: x: render failed", true, image},
 		true,
+		[]any{true, "wired: render failed", false},
 	})
 	var got, wanted any
 	if err := json.Unmarshal(res.Output, &got); err != nil {

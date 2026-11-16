@@ -75,20 +75,20 @@ func newRun(ctx context.Context, island *island, seq uint, space string, comment
 	r.state = core.NewState(r)
 	for m := range ctrl.Modules() {
 		if err := js.RegisterTools(vm, r.TurnContext, m.Name()+"__", m.List()); err != nil {
-			r.clean(false)
+			r.clean()
 			return nil, err
 		}
 	}
 	if err := island.lib.RegisterApp(r.TurnContext, vm); err != nil {
-		r.clean(false)
+		r.clean()
 		return nil, err
 	}
 	if err := r.state.RegisterTools(vm); err != nil {
-		r.clean(false)
+		r.clean()
 		return nil, err
 	}
 	if _, err := vm.Eval(core.UIJS, quickjs.EvalGlobal); err != nil {
-		r.clean(false)
+		r.clean()
 		return nil, err
 	}
 	task, err := ctrl.Task(comment, map[string]any{
@@ -96,7 +96,7 @@ func newRun(ctx context.Context, island *island, seq uint, space string, comment
 		"log":  log,
 	}, cancel)
 	if err != nil {
-		r.clean(false)
+		r.clean()
 		return nil, err
 	}
 	r.task = task
@@ -222,31 +222,39 @@ func (r *run) unmount() {
 	r.cancel(errUnmounted)
 }
 
-func (r *run) clean(end bool) {
+func (r *run) clean() {
 	r.cancel(context.Canceled)
 	r.vm.Close()
 	r.state.Release()
-	close(r.end)
-	if end {
-		r.island.ended(r.pageContext, r.seq, r.task.ID(), r.endErr)
-	}
 }
 
 func (r *run) run() {
 	go func() {
-		defer r.clean(true)
+		var result json.RawMessage
+		defer func() {
+			r.clean()
+			r.island.ended(r.pageContext, r.seq, r.task.ID(), r.endErr)
+			if r.endErr != nil {
+				r.task.Err(r.endErr)
+			} else {
+				r.task.Ok(result)
+			}
+			close(r.end)
+		}()
 		for {
 			if r.ctx.Err() != nil {
 				switch cause := context.Cause(r.ctx); {
 				case errors.Is(cause, errStopped):
-					r.task.Ok(stoppedResult)
+					result = stoppedResult
 				case errors.Is(cause, errEnded):
-					r.task.Ok(endedResult)
+					result, _ = json.Marshal(struct {
+						Ended         string          `json:"ended"`
+						Notifications json.RawMessage `json:"notifications,omitempty"`
+					}{endedMessage, r.state.TakeNotifications()})
 				case errors.Is(cause, errOvertaken):
-					r.task.Ok(overtakenResult)
+					result = overtakenResult
 				default:
 					r.endErr = cause
-					r.task.Err(cause)
 				}
 				return
 			}
@@ -304,7 +312,6 @@ func (r *run) run() {
 				err = fmt.Errorf("script %d: %w", eval.script, err)
 				r.endErr = err
 				r.cancel(err)
-				r.task.Err(err)
 				return
 			case err != nil && !r.handover:
 				if logErr := js.Log(r.fs, r.log, "ERROR", err.Error()); logErr != nil {
@@ -317,7 +324,7 @@ func (r *run) run() {
 					dropped = append(dropped, r.queue.PopFront().script)
 				}
 				r.mu.Unlock()
-				meta := map[string]any{"script": eval.script, "kind": "script_error"}
+				meta := map[string]any{"script": eval.script, "kind": "script_error", "note": scriptErrorNote}
 				if len(dropped) > 0 {
 					meta["dropped"] = dropped
 				}

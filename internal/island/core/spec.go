@@ -111,9 +111,9 @@ func (l Library) Build() error {
 			if first {
 				first = false
 				if control {
-					b.WriteString("\nControls: c = ui.<name>(params); c.update(patch); ui.draw() -> {id: c.id, output}\n")
+					b.WriteString("\nControls are what the user acts on: c = ui.<name>(params); c.update(patch)\n")
 				} else {
-					b.WriteString("\nViews: v = ui.<name>(params); v.update(patch)\n")
+					b.WriteString("\nViews show something: v = ui.<name>(params); v.update(patch)\n")
 				}
 			}
 			desc, specs := f.spec()
@@ -123,7 +123,7 @@ func (l Library) Build() error {
 		}
 	}
 	if len(l.layouts) > 0 {
-		b.WriteString("\nLayouts: ui.<name>(params, ...children)\n")
+		b.WriteString("\nLayouts arrange content and have no update; to change one, set its slot again: ui.<name>(params, ...children)\n")
 		for _, name := range slices.Sorted(maps.Keys(l.layouts)) {
 			desc, specs := l.layouts[name].spec()
 			if err := write("ui."+name, desc, specs); err != nil {

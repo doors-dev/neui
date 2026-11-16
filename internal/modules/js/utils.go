@@ -94,13 +94,16 @@ func RegisterTools(vm *quickjs.VM, ctx func() context.Context, prefix string, li
 			if err == nil {
 				return hostResult{Value: out}, nil
 			}
+			var value any
 			var container api.Container
 			var multi api.MultiContainer
 			if errors.As(err, &container) {
-				return hostResult{Value: container, Error: err.Error()}, nil
+				value = container
+			} else if errors.As(err, &multi) {
+				value = multi
 			}
-			if errors.As(err, &multi) {
-				return hostResult{Value: multi, Error: err.Error()}, nil
+			if raw, merr := json.Marshal(value); value != nil && merr == nil {
+				return hostResult{Value: json.RawMessage(raw), Error: err.Error()}, nil
 			}
 			return hostResult{Error: err.Error()}, nil
 		}); err != nil {

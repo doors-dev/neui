@@ -252,15 +252,12 @@
   }
   .nechat-toast {
     pointer-events: auto;
-    position: relative;
-    isolation: isolate;
     box-sizing: border-box;
     display: flex;
     min-height: calc(var(--spacing, 0.25rem) * 7);
     max-width: 100%;
     align-items: center;
     gap: calc(var(--spacing, 0.25rem) * 2);
-    overflow: hidden;
     border-radius: var(--_nechat-radius-control);
     border-style: var(--nechat-tw-border-style);
     border-width: 1px;

@@ -81,7 +81,11 @@ func (p *page) Module() Module {
 		if err != nil {
 			return toolResult{}, err
 		}
-		out, err := a.item.call(ctx, arg.Arg)
+		in, err := a.item.decode(arg.Arg)
+		if err != nil {
+			return toolResult{}, err
+		}
+		out, err := a.item.call(ctx, in)
 		if err != nil {
 			var res toolResult
 			var value any
@@ -94,7 +98,7 @@ func (p *page) Module() Module {
 			}
 			if raw, merr := json.Marshal(value); value != nil && merr == nil {
 				res.Output = json.RawMessage(raw)
-				if !fits(ctx, res.Output) {
+				if !fits(ctx, "", res.Output) {
 					res.Output = replay.OmittedNote(len(raw))
 				}
 			}
@@ -106,10 +110,10 @@ func (p *page) Module() Module {
 			return toolResult{}, a.fail(ctx, arg.Path, err, &res, &res.report)
 		}
 		res := toolResult{Output: json.RawMessage(raw)}
-		if !fits(ctx, res.Output) {
+		if !fits(ctx, "", res.Output) {
 			res.Output = replay.OmittedNote(len(raw))
 		}
-		err = a.report(ctx, arg.Path, &res, &res.report)
+		err = a.report(ctx, arg.Path, "", &res, &res.report)
 		return res, err
 	})
 	if err != nil {
@@ -127,35 +131,35 @@ func (p *page) Module() Module {
 	if err != nil {
 		panic(err)
 	}
-	_, err = m.Add(writeName, writeDesc, func(ctx context.Context, arg writeArg) (hookResult, error) {
+	_, err = m.Add(writeName, writeDesc, func(ctx context.Context, arg writeArg) (report, error) {
 		a, err := m.act(ctx, arg.Path, func(s *space) (input, error) {
 			return s.getInput(arg.ID, "input")
 		})
 		if err != nil {
-			return hookResult{}, err
+			return report{}, err
 		}
-		res, err := dispatch[hookResult](ctx, a.item, "input", arg.Value)
-		if err != nil {
-			return hookResult{}, a.fail(ctx, arg.Path, err, &res, &res.report)
+		var res report
+		if _, err := dispatch[struct{}](ctx, a.item, "input", arg.Value); err != nil {
+			return report{}, a.fail(ctx, arg.Path, err, &res, &res)
 		}
-		err = a.report(ctx, arg.Path, &res, &res.report)
+		err = a.report(ctx, arg.Path, "", &res, &res)
 		return res, err
 	})
 	if err != nil {
 		panic(err)
 	}
-	_, err = m.Add(clickName, clickDesc, func(ctx context.Context, arg inputRef) (hookResult, error) {
+	_, err = m.Add(clickName, clickDesc, func(ctx context.Context, arg inputRef) (report, error) {
 		a, err := m.act(ctx, arg.Path, func(s *space) (input, error) {
 			return s.getInput(arg.ID, "click")
 		})
 		if err != nil {
-			return hookResult{}, err
+			return report{}, err
 		}
-		res, err := dispatch[hookResult](ctx, a.item, "click", nil)
-		if err != nil {
-			return hookResult{}, a.fail(ctx, arg.Path, err, &res, &res.report)
+		var res report
+		if _, err := dispatch[struct{}](ctx, a.item, "click", nil); err != nil {
+			return report{}, a.fail(ctx, arg.Path, err, &res, &res)
 		}
-		err = a.report(ctx, arg.Path, &res, &res.report)
+		err = a.report(ctx, arg.Path, "", &res, &res)
 		return res, err
 	})
 	if err != nil {
@@ -172,7 +176,7 @@ func (p *page) Module() Module {
 		if _, err := dispatch[struct{}](ctx, a.item, "focus", nil); err != nil {
 			return report{}, a.fail(ctx, arg.Path, err, &res, &res)
 		}
-		err = a.report(ctx, arg.Path, &res, &res)
+		err = a.report(ctx, arg.Path, "", &res, &res)
 		return res, err
 	})
 	if err != nil {
@@ -208,7 +212,7 @@ func (p *page) Module() Module {
 			return state{}, err
 		}
 		live := s.snapshot(tools.RunID(ctx))
-		if !fits(ctx, live.state) {
+		if !fits(ctx, "", live.state) {
 			return state{}, fmt.Errorf("space %q: %w", s.path, errSpaceTooLarge)
 		}
 		m.store(s, live)
@@ -369,7 +373,7 @@ func (m *module) act[T any](ctx context.Context, path string, find func(s *space
 	if ok && old.by == by {
 		r = refusal{reason: refusedChangedMessage, Diff: s.diff(old)}
 	}
-	if !fits(ctx, r) {
+	if !fits(ctx, r.reason, r) {
 		return permit[T]{}, errRefusedTooLarge
 	}
 	m.store(s, live)
@@ -394,7 +398,7 @@ func (m *module) store(s *space, snap snapshot) {
 	}
 }
 
-func (a permit[T]) report(ctx context.Context, path string, res any, rep *report) error {
+func (a permit[T]) report(ctx context.Context, path string, message string, res any, rep *report) error {
 	p := a.module.page
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -408,7 +412,7 @@ func (a permit[T]) report(ctx context.Context, path string, res any, rep *report
 		rep.Diff = s.diff(a.old)
 	}
 	rep.Changes = p.space.changes(a.before, path)
-	if !fits(ctx, res) {
+	if !fits(ctx, message, res) {
 		*rep = report{}
 		return nil
 	}
@@ -419,19 +423,20 @@ func (a permit[T]) report(ctx context.Context, path string, res any, rep *report
 }
 
 func (a permit[T]) fail(ctx context.Context, path string, err error, res any, rep *report) error {
-	if a.report(ctx, path, res, rep) != nil || rep.Diff == nil {
+	f := failure{result: res, err: err}
+	if a.report(ctx, path, f.Error(), res, rep) != nil || rep.Diff == nil {
 		return err
 	}
-	return failure{result: res, err: err}
+	return f
 }
 
-func fits(ctx context.Context, v any) bool {
+func fits(ctx context.Context, message string, v any) bool {
 	if !tools.FromAgent(ctx) {
 		return true
 	}
 	raw, err := json.Marshal(v)
 	ctrl := common.GetController(ctx)
-	return err == nil && len(raw) <= replay.RoundItemBudget(ctrl.Config(), ctrl.Model())
+	return err == nil && len(message)+len(raw) <= replay.RoundItemBudget(ctrl.Config(), ctrl.Model())
 }
 
 func dispatch[T any](ctx context.Context, in input, action string, value any) (T, error) {

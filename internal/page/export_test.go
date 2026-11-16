@@ -36,6 +36,8 @@ func (s *space) fresh() [4]uint64 {
 	return out
 }
 
+const FailedAfterRunMessage = failedAfterRunMessage
+
 func StaleDigests(s Space) []string {
 	s.root.mu.Lock()
 	defer s.root.mu.Unlock()

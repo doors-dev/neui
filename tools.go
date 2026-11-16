@@ -34,9 +34,9 @@ func ToolThreadID(ctx context.Context) api.ThreadID {
 
 // ToolThreadContext returns a context that outlives the tool call: for a
 // module tool it ends when the thread closes, for a page tool when the thread
-// is no longer linked to the page that rendered it. ToolFS, ToolTask and the
-// other controller-backed Tool* functions work on it; ToolFromJS and
-// ToolFromAgent report false on it. Run background work registered with
+// is no longer linked to the page that rendered it. ToolFS, ToolThreadID,
+// ToolConfig, ToolModel, ToolFilesConfig and ToolTask work on it; ToolFromJS
+// and ToolFromAgent report false on it. Run background work registered with
 // ToolTask on it. It panics when ctx comes from neither a tool call nor
 // ToolThreadContext.
 func ToolThreadContext(ctx context.Context) context.Context {
@@ -83,10 +83,10 @@ type Task = common.Task
 // when ToolThreadContext ends; cancel must not be nil. Run the work on
 // ToolThreadContext, not the call's ctx, which ends with the call. Call it
 // before the tool returns: it fails with context.Canceled when the thread is
-// closed, with an error when cancel is nil or the thread is not running tool
-// calls, and with an error when the tool was called from a script
-// (ToolFromJS), since scripts cannot start background tasks. It panics when ctx comes from neither a tool call nor
-// ToolThreadContext.
+// closed, with an error when cancel is nil or the round of tool calls it
+// belongs to has ended, and with an error when the tool was called from a
+// script (ToolFromJS), since scripts cannot start background tasks. It panics
+// when ctx comes from neither a tool call nor ToolThreadContext.
 func ToolTask(ctx context.Context, comment string, attrs map[string]any, cancel context.CancelCauseFunc) (Task, error) {
 	if tools.FromJS(ctx) {
 		return nil, errors.New("a background task cannot be started from a script")
@@ -306,10 +306,11 @@ type WebConfig struct {
 	UserAgent string
 	// MaxBytes caps one response body, aborted mid-stream. Default 5<<20.
 	MaxBytes int64
-	// Timeout bounds a fetch that passes no timeoutMs, and every search.
+	// Timeout bounds a fetch the agent sets no timeout for, and every search.
 	// Default 30s; a value above MaxTimeout is lowered to it.
 	Timeout time.Duration
-	// MaxTimeout clamps timeoutMs and Timeout. Default 120s.
+	// MaxTimeout caps the timeout the agent sets for a fetch, and Timeout.
+	// Default 120s.
 	MaxTimeout time.Duration
 	// CacheTTL is how long a converted page stays pageable without a second
 	// request. Default 15m.
@@ -431,9 +432,8 @@ func (m Module) Get(name string) (AnyTool, bool) {
 	return m.inner.Get(name)
 }
 
-// ToolID identifies a tool within its own module, for Remove. A module numbers
-// the tools it is given from 1, so an ID is only meaningful against the module
-// that issued it.
+// ToolID identifies a tool within its own module, for Remove. An ID is only
+// meaningful to the module that issued it.
 type ToolID = tools.ToolID
 
 // Add adds the tool t defines and returns its ID; a tool with the same name is

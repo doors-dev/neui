@@ -282,7 +282,7 @@ func TestCallThrow(t *testing.T) {
 	if err := json.Unmarshal(notes[0].Data, &data); err != nil {
 		t.Fatal(err)
 	}
-	if notes[0].Meta["kind"] != "call_error" || !strings.Contains(data["error"], "boom 7") || data["src"] != string(throws) {
+	if notes[0].Meta["kind"] != "call_error" || notes[0].Meta["note"] != callErrorNote || !strings.Contains(data["error"], "boom 7") || data["src"] != string(throws) {
 		t.Fatalf("note: %v", notes[0])
 	}
 	if log := readLog(t, r); strings.Count(log, "ERROR function: ") != 3 || !strings.Contains(log, "boom 7") {
@@ -577,7 +577,7 @@ func TestReportWidget(t *testing.T) {
 	if err := json.Unmarshal(notes[0].Data, &data); err != nil {
 		t.Fatal(err)
 	}
-	if notes[0].Meta["kind"] != "widget_error" || data["widget"] != "form" || data["id"] != float64(3) || data["error"] != "query failed" {
+	if notes[0].Meta["kind"] != "widget_error" || notes[0].Meta["note"] != widgetErrorNote || data["widget"] != "form" || data["id"] != float64(3) || data["error"] != "query failed" {
 		t.Fatalf("note: %v %v", notes[0].Meta, data)
 	}
 	if n := reported(r); n != 2 {

@@ -237,6 +237,10 @@ func (f *listWidget) setField(ctx context.Context, name string, value any, err e
 	f.sync(ctx)
 }
 
+func (f *listWidget) value(name string) any {
+	return f.group.value(name)
+}
+
 var maxIntWidth = len(strconv.Itoa(math.MaxInt))
 
 func (f *listWidget) nextName() string {

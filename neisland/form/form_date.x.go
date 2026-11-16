@@ -1,4 +1,4 @@
-// Managed by GoX v0.3.4
+// Managed by GoX v0.4.0
 
 //line form_date.gox:1
 package form
@@ -29,7 +29,6 @@ type dateWidget struct {
 	id string
 	field groupField
 	params dateParams
-	value string
 	invalid doors.Setter
 	label doors.Setter
 }
@@ -47,7 +46,6 @@ func (f *dateWidget) init(ctx context.Context, value any) error {
 		}
 		str = v
 	}
-	f.value = str
 	f.setLocked(ctx, str, f.validate(ctx, str))
 	return nil
 }
@@ -73,12 +71,15 @@ func (f *dateWidget) setLocked(ctx context.Context, str string, err error) {
 	f.field.set(ctx, str, err)
 }
 
-//line form_date.gox:73
+//line form_date.gox:71
 func (f *dateWidget) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line form_date.gox:75
-		label := any(nil)
+//line form_date.gox:73
+		f.field.mutex().Lock()
+	value, _ := f.field.value().(string)
+	f.field.mutex().Unlock()
+	label := any(nil)
 	if f.field.item != nil {
 		label, _ = f.field.item.ReadAndSub(ctx, func(ctx context.Context, name string) bool {
 			doors.Call(ctx, f.label.Set("aria-label", name))
@@ -88,21 +89,21 @@ func (f *dateWidget) Main() gox.Elem {
 
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line form_date.gox:83
+//line form_date.gox:84
 			__e = __c.Set("class", "neisland-form-field"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line form_date.gox:84
+//line form_date.gox:85
 			if label == nil {
 				__e = __c.Init("label"); if __e != nil { return }
 				{
-//line form_date.gox:85
+//line form_date.gox:86
 					__e = __c.Set("class", "neisland-form-label"); if __e != nil { return }
-//line form_date.gox:85
+//line form_date.gox:86
 					__e = __c.Set("for", f.id); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line form_date.gox:86
-					__e = __c.Any(f.params.Label); if __e != nil { return }
 //line form_date.gox:87
+					__e = __c.Any(f.params.Label); if __e != nil { return }
+//line form_date.gox:88
 					__e = __c.Any(f.field.error.RouteBeam(
 					doors.RouteBeamMatch(func(err error) bool {
 						return f.params.Required && err != nil
@@ -110,15 +111,15 @@ func (f *dateWidget) Main() gox.Elem {
 						ctx := __c.Context(); _ = ctx
 						__e = __c.Init("span"); if __e != nil { return }
 						{
-//line form_date.gox:90
+//line form_date.gox:91
 							__e = __c.Set("class", "neisland-form-required"); if __e != nil { return }
-//line form_date.gox:90
+//line form_date.gox:91
 							__e = __c.Set("aria-hidden", "true"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.Text("*"); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
-//line form_date.gox:90
+//line form_date.gox:91
 					return }))),
 				)); if __e != nil { return }
 				}
@@ -126,11 +127,11 @@ func (f *dateWidget) Main() gox.Elem {
 			}
 			__e = __c.InitVoid("input"); if __e != nil { return }
 			{
-//line form_date.gox:95
-				__e = __c.Modify(&f.invalid); if __e != nil { return }
 //line form_date.gox:96
-				__e = __c.Modify(&f.label); if __e != nil { return }
+				__e = __c.Modify(&f.invalid); if __e != nil { return }
 //line form_date.gox:97
+				__e = __c.Modify(&f.label); if __e != nil { return }
+//line form_date.gox:98
 				__e = __c.Modify(doors.AInput{
 				Scope: f.field.scope().And(&doors.ScopeDebounce{Duration: 250 * time.Millisecond, Limit: time.Second}),
 				Batch: true,
@@ -139,56 +140,56 @@ func (f *dateWidget) Main() gox.Elem {
 					return false
 				},
 			}); if __e != nil { return }
-//line form_date.gox:105
-				__e = __c.Set("class", "neisland-form-input"); if __e != nil { return }
 //line form_date.gox:106
-				__e = __c.Set("id", f.id); if __e != nil { return }
+				__e = __c.Set("class", "neisland-form-input"); if __e != nil { return }
 //line form_date.gox:107
-				__e = __c.Set("type", f.params.Type); if __e != nil { return }
+				__e = __c.Set("id", f.id); if __e != nil { return }
 //line form_date.gox:108
-				__e = __c.Set("name", f.params.Name); if __e != nil { return }
+				__e = __c.Set("type", f.params.Type); if __e != nil { return }
 //line form_date.gox:109
-				__e = __c.Set("value", f.value); if __e != nil { return }
+				__e = __c.Set("name", f.params.Name); if __e != nil { return }
 //line form_date.gox:110
-				__e = __c.Set("min", f.params.Min); if __e != nil { return }
+				__e = __c.Set("value", value); if __e != nil { return }
 //line form_date.gox:111
-				__e = __c.Set("max", f.params.Max); if __e != nil { return }
+				__e = __c.Set("min", f.params.Min); if __e != nil { return }
 //line form_date.gox:112
-				__e = __c.Set("aria-required", aria(f.params.Required)); if __e != nil { return }
+				__e = __c.Set("max", f.params.Max); if __e != nil { return }
 //line form_date.gox:113
-				__e = __c.Set("aria-label", label); if __e != nil { return }
+				__e = __c.Set("aria-required", aria(f.params.Required)); if __e != nil { return }
 //line form_date.gox:114
-				__e = __c.Set("aria-invalid", aria(shownErr(f.field.error.Get()))); if __e != nil { return }
+				__e = __c.Set("aria-label", label); if __e != nil { return }
 //line form_date.gox:115
-				__e = __c.Set("data-required-empty", errors.Is(f.field.error.Get(), errRequired)); if __e != nil { return }
+				__e = __c.Set("aria-invalid", aria(shownErr(f.field.error.Get()))); if __e != nil { return }
 //line form_date.gox:116
+				__e = __c.Set("data-required-empty", errors.Is(f.field.error.Get(), errRequired)); if __e != nil { return }
+//line form_date.gox:117
 				__e = __c.Set("aria-describedby", f.id + "-e"); if __e != nil { return }
 			}
 			__e = __c.Submit(); if __e != nil { return }
-//line form_date.gox:117
+//line form_date.gox:118
 			__e = __c.Any(f.field.error.RouteBeam(
 			doors.RouteBeamMatch(shownErr, doors.RouteBind(func(err error) gox.Elem {
 				return gox.Elem(func(__c gox.Cursor) (__e error) {
 					ctx := __c.Context(); _ = ctx
 					__e = __c.Init("p"); if __e != nil { return }
 					{
-//line form_date.gox:119
+//line form_date.gox:120
 						__e = __c.Set("class", "neisland-form-error"); if __e != nil { return }
-//line form_date.gox:119
+//line form_date.gox:120
 						__e = __c.Set("id", f.id + "-e"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line form_date.gox:119
+//line form_date.gox:120
 						__e = __c.Any(err.Error()); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
-//line form_date.gox:119
+//line form_date.gox:120
 				return })
 			})),
 		)); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line form_date.gox:123
+//line form_date.gox:124
 }
 
 func (f *dateWidget) validate(ctx context.Context, str string) error {

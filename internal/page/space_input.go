@@ -22,7 +22,7 @@ const (
 )
 
 type input struct {
-	ID        string                   `json:"id" description:"pass to read, write, click and focus"`
+	ID        string                   `json:"id"`
 	Kind      kind                     `json:"kind" description:"button, link, input or radio; button and link take click, input and radio take write; a radio entry stands for its whole same-name group"`
 	Type      string                   `json:"type" description:"html flavor of the element"`
 	Desc      string                   `json:"desc"`
@@ -108,7 +108,7 @@ func (s Space) Radio(ctx context.Context, permissios Rights, desc string, attrs 
 		elementID = s.elementID()
 		in := input{
 			ctx:       memberCtx,
-			ID:        fmt.Sprintf("%08x", uint32(xxh3.HashString(desc+"\x00"+name+"\x00"+value))),
+			ID:        fmt.Sprintf("%08x", uint32(xxh3.HashString(string(kindRadio)+"\x00radio\x00"+desc+"\x00"+name+"\x00"+value))),
 			Kind:      kindRadio,
 			elementID: elementID,
 			members:   map[uint]context.Context{member: memberCtx},
@@ -181,7 +181,7 @@ func (s Space) element(ctx context.Context, permissios Rights, desc string, attr
 	}
 	in := input{
 		ctx:       doors.DetachedContext(ctx),
-		ID:        fmt.Sprintf("%08x", uint32(xxh3.HashString(desc+"\x00"+name+"\x00"+value))),
+		ID:        fmt.Sprintf("%08x", uint32(xxh3.HashString(string(kind)+"\x00"+typ+"\x00"+desc+"\x00"+name+"\x00"+value))),
 		Kind:      kind,
 		elementID: elementID,
 		Desc:      desc,
@@ -225,7 +225,8 @@ func (s *space) getInput(id string, action string) (input, error) {
 	case n == 0:
 		return input{}, fmt.Errorf("input %q in space %q: %w", id, s.path, errInputNotFound)
 	case n > 1:
-		return input{}, errRefusedDuplicate
+		doors.Logger(s.ctx).Error("neui: inputs in a space cannot be told apart, a call on them was refused", "space", s.path, "id", id, "desc", in.Desc)
+		return input{}, fmt.Errorf("input %q in space %q: %w", id, s.path, errRefusedDuplicate)
 	}
 	switch action {
 	case "read":

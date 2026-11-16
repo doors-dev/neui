@@ -131,7 +131,7 @@ func (r *runner) report(code string, err error) {
 	r.reported[code] = true
 	r.mu.Unlock()
 	data, _ := json.Marshal(map[string]string{"error": err.Error(), "src": code})
-	go r.owner.task.Notify(data, map[string]any{"kind": "call_error"})
+	go r.owner.task.Notify(data, map[string]any{"kind": "call_error", "note": callErrorNote})
 }
 
 func Report(ctx context.Context, err error) {
@@ -160,7 +160,7 @@ func (r *runner) reportWidget(widget common.IslandWidget, err error) {
 	r.reported[key] = true
 	r.mu.Unlock()
 	data, _ := json.Marshal(map[string]any{"widget": widget.Name, "id": widget.ID, "error": err.Error()})
-	go r.owner.task.Notify(data, map[string]any{"kind": "widget_error"})
+	go r.owner.task.Notify(data, map[string]any{"kind": "widget_error", "note": widgetErrorNote})
 }
 
 func (r *runner) newVM() (*quickjs.VM, error) {

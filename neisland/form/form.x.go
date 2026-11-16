@@ -1,4 +1,4 @@
-// Managed by GoX v0.3.6-0.20261113082228-02db5fed593a
+// Managed by GoX v0.4.0
 
 //line form.gox:1
 package form
@@ -18,8 +18,9 @@ import (
 // New builds a form widget for Library.Control: the user fills the
 // fields and presses one of the submit buttons, which sends
 // {"data": values, "submit": button value} to the script waiting in
-// ui.draw(). Files upload into the island dir as they are picked, each under
-// <field id>/. The cancel button sends {"canceled": true}.
+// ui.draw(). Files upload into the island dir as they are picked; a file
+// field's value is their workspace paths. The cancel button sends
+// {"canceled": true}.
 func New(ctx context.Context, p Params, submit func(ctx context.Context, s map[string]any) bool) (api.Widget[struct{}], error) {
 	if len(p.Submits) == 0 {
 		p.Submits = []submitParams{{Text: "Submit"}}
@@ -36,7 +37,7 @@ func New(ctx context.Context, p Params, submit func(ctx context.Context, s map[s
 	m := make(map[string]any)
 	root := &root{
 		values: make(map[string]any),
-		scope: new(doors.ScopeFrame),
+		scope: new(doors.ScopeCheckpoint),
 	}
 	group := &groupBase{
 		root: root,
@@ -134,12 +135,12 @@ func (f *widget) onSubmit(ctx context.Context, r doors.RequestRawForm) {
 	f.submit(ctx, map[string]any{"data": data, "submit": choice})
 }
 
-//line form.gox:134
+//line form.gox:135
 func (f *widget) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line form.gox:136
-		scope := f.root.scope.Scope(true).And(neui.IslandScope(ctx))
+//line form.gox:137
+		scope := doors.JoinScopes(neui.IslandScope(ctx), f.root.scope.Scope(true))
 	errs, _ := f.errors.ReadAndSub(ctx, func(ctx context.Context, errs errorKind) bool {
 		doors.Call(ctx, f.locked.Set("disabled", errs != errorsNone))
 		return false
@@ -147,7 +148,7 @@ func (f *widget) Main() gox.Elem {
 
 		__e = __c.Init("form"); if __e != nil { return }
 		{
-//line form.gox:143
+//line form.gox:144
 			__e = __c.Modify(doors.ARawSubmit{
 			Scope: scope,
 			On: func(ctx context.Context, r doors.RequestRawForm) bool {
@@ -155,46 +156,46 @@ func (f *widget) Main() gox.Elem {
 				return false
 			},
 		}); if __e != nil { return }
-//line form.gox:150
+//line form.gox:151
 			__e = __c.Set("class", "neisland-form neisland-form-framed"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line form.gox:151
-			for _, field := range f.fields {
 //line form.gox:152
+			for _, field := range f.fields {
+//line form.gox:153
 				__e = __c.Any(field); if __e != nil { return }
 			}
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line form.gox:154
+//line form.gox:155
 				__e = __c.Set("class", "neisland-form-actions neisland-form-actions-band"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line form.gox:155
+//line form.gox:156
 				for _, s := range f.params.Submits {
 					__e = __c.Init("button"); if __e != nil { return }
 					{
-//line form.gox:157
-						__e = __c.Modify(&f.locked); if __e != nil { return }
 //line form.gox:158
-						__e = __c.Set("type", "submit"); if __e != nil { return }
+						__e = __c.Modify(&f.locked); if __e != nil { return }
 //line form.gox:159
-						__e = __c.Set("class", "neisland-button neisland-button-md neisland-button-" + s.Style); if __e != nil { return }
+						__e = __c.Set("type", "submit"); if __e != nil { return }
 //line form.gox:160
-						__e = __c.Set("data-submit", s.Value); if __e != nil { return }
+						__e = __c.Set("class", "neisland-button neisland-button-md neisland-button-" + s.Style); if __e != nil { return }
 //line form.gox:161
-						__e = __c.Set("disabled", errs != errorsNone); if __e != nil { return }
+						__e = __c.Set("data-submit", s.Value); if __e != nil { return }
 //line form.gox:162
+						__e = __c.Set("disabled", errs != errorsNone); if __e != nil { return }
+//line form.gox:163
 						__e = __c.Set("aria-describedby", f.id + "-s"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line form.gox:163
+//line form.gox:164
 						__e = __c.Any(s.Text); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
 				}
-//line form.gox:166
+//line form.gox:167
 				if f.params.Cancel != "" {
 					__e = __c.Init("button"); if __e != nil { return }
 					{
-//line form.gox:168
+//line form.gox:169
 						__e = __c.Modify(doors.AClick{
 						Scope: scope,
 						On: func(ctx context.Context, r doors.RequestPointer) bool {
@@ -202,27 +203,27 @@ func (f *widget) Main() gox.Elem {
 							return false
 						},
 					}); if __e != nil { return }
-//line form.gox:175
-						__e = __c.Set("type", "button"); if __e != nil { return }
 //line form.gox:176
+						__e = __c.Set("type", "button"); if __e != nil { return }
+//line form.gox:177
 						__e = __c.Set("class", "neisland-form-cancel"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line form.gox:177
+//line form.gox:178
 						__e = __c.Any(f.params.Cancel); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
 				}
-//line form.gox:180
+//line form.gox:181
 				__e = __c.Any(f.errors.Bind(func(errs errorKind) gox.Elem {
 				return gox.Elem(func(__c gox.Cursor) (__e error) {
 					ctx := __c.Context(); _ = ctx
-//line form.gox:181
+//line form.gox:182
 					if errs != errorsNone {
 						__e = __c.Init("p"); if __e != nil { return }
 						{
-//line form.gox:182
+//line form.gox:183
 							__e = __c.Set("class", "neisland-form-help"); if __e != nil { return }
-//line form.gox:182
+//line form.gox:183
 							__e = __c.Set("id", f.id + "-s"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.Text("form is not completed or contains errors"); if __e != nil { return }
@@ -230,23 +231,23 @@ func (f *widget) Main() gox.Elem {
 						__e = __c.Close(); if __e != nil { return }
 					}
 				return })
-//line form.gox:184
+//line form.gox:185
 			})); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 			__e = __c.InitVoid("input"); if __e != nil { return }
 			{
-//line form.gox:186
+//line form.gox:187
 				__e = __c.Set("type", "hidden"); if __e != nil { return }
-//line form.gox:186
+//line form.gox:187
 				__e = __c.Set("name", f.id); if __e != nil { return }
-//line form.gox:186
+//line form.gox:187
 				__e = __c.Set("value", f.params.Submits[0].Value); if __e != nil { return }
 			}
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Init("script"); if __e != nil { return }
 			{
-//line form.gox:187
+//line form.gox:188
 				__e = __c.Set("data:name", f.id); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Raw("const form = document.currentScript.parentElement\n\t\t\tconst choice = form.querySelector(\n\t\t\t\t`input[type=\"hidden\"][name=\"${$data(\"name\")}\"]`,\n\t\t\t)\n\t\t\tform.addEventListener(\"click\", (event) => {\n\t\t\t\tconst button = event.target.closest(\"button[type=submit][data-submit]\")\n\t\t\t\tif (button && button.form === form) {\n\t\t\t\t\tchoice.value = button.dataset.submit\n\t\t\t\t}\n\t\t\t})"); if __e != nil { return }
@@ -255,7 +256,7 @@ func (f *widget) Main() gox.Elem {
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line form.gox:200
+//line form.gox:201
 }
 
 func shownErr(err error) bool {

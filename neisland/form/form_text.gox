@@ -40,7 +40,6 @@ type textWidget struct {
 	field groupField
 	params textParams
 	pattern *regexp.Regexp
-	value string
 	invalid doors.Setter
 	label doors.Setter
 }
@@ -58,7 +57,6 @@ func (f *textWidget) init(ctx context.Context, value any) error {
 		}
 		str = v
 	}
-	f.value = str
 	f.setLocked(ctx, str, f.validate(ctx, str))
 	return nil
 }
@@ -86,6 +84,9 @@ func (f *textWidget) setLocked(ctx context.Context, str string, err error) {
 
 elem (f *textWidget) Main() {
 	~~
+	f.field.mutex().Lock()
+	value, _ := f.field.value().(string)
+	f.field.mutex().Unlock()
 	label := any(nil)
 	if f.field.item != nil {
 		label, _ = f.field.item.ReadAndSub(ctx, func(ctx context.Context, name string) bool {
@@ -120,7 +121,7 @@ elem (f *textWidget) Main() {
 			id=(f.id)
 			type=(f.params.Type)
 			name=(f.params.Name)
-			value=(f.value)
+			value=(value)
 			maxlength=({
 				if f.params.MaxLength > 0 {
 					return f.params.MaxLength

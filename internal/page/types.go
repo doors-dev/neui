@@ -28,12 +28,13 @@ type treeArg struct {
 }
 
 type tool struct {
-	Name  string          `json:"name"`
-	Desc  string          `json:"desc"`
-	Input json.RawMessage `json:"inputSchema" description:"JSON schema of the tool call arg"`
-	call  func(ctx context.Context, arg json.RawMessage) (any, error)
-	raw   json.RawMessage
-	hash  uint64
+	Name   string          `json:"name"`
+	Desc   string          `json:"desc"`
+	Input  json.RawMessage `json:"inputSchema" description:"JSON schema of the tool call arg"`
+	decode func(arg json.RawMessage) (any, error)
+	call   func(ctx context.Context, input any) (any, error)
+	raw    json.RawMessage
+	hash   uint64
 }
 
 func (t tool) MarshalJSON() ([]byte, error) {
@@ -56,9 +57,9 @@ type state struct {
 	Desc     string  `json:"desc"`
 	Island   bool    `json:"island,omitempty" description:"this space is an island: run an app in it with the island tools"`
 	Tools    []tool  `json:"tools,omitempty" description:"tools callable in this space"`
-	Inputs   []input `json:"inputs,omitempty" description:"interactive inputs, address them with the input tool"`
-	Data     []data  `json:"data,omitempty" description:"information the developer attached for you: anything that helps serve the user here — objects, hints, notes; it is context for you, not a copy of the screen, and may describe things the page does not display"`
-	Children []child `json:"children,omitempty" description:"child spaces; a child's path is this path and its name joined with a dot"`
+	Inputs   []input `json:"inputs,omitempty" description:"interactive elements in this space"`
+	Data     []data  `json:"data,omitempty" description:"context the developer attached for you, such as objects, hints and notes; not a copy of the screen, it may describe things the page does not display"`
+	Children []child `json:"children,omitempty" description:"child spaces"`
 }
 
 type child struct {
@@ -74,8 +75,8 @@ type node struct {
 }
 
 type report struct {
-	Diff    *diff    `json:"diff,omitempty" description:"what changed in the called space while the call ran, whatever caused it: this call, the user or the application; {} when nothing did; absent only when it and changes would not fit in a result, and the space then counts as unread"`
-	Changes []change `json:"changes,omitempty" description:"other spaces that changed while the call ran, whatever caused it. When many spaces change at once, the densest groups are folded into their common ancestor; spaces counts the changed spaces it stands for, so sync it to look inside. Newly added spaces stay listed unless a whole region re-rendered."`
+	Diff    *diff    `json:"diff,omitempty" description:"what changed in the called space while the call ran, whatever caused it: this call, the user or the application; {} when nothing did. It brings your read of the space up to date, so no sync is needed after the call. Absent only when it and changes would not fit in a result; your read then stays as it was before the call."`
+	Changes []change `json:"changes,omitempty" description:"other spaces that changed while the call ran, whatever caused it. When many spaces change at once, the densest groups are folded into their common ancestor; added spaces stay listed one by one unless very many appeared at once."`
 }
 
 type diff struct {
@@ -107,7 +108,7 @@ type change struct {
 	Added   bool     `json:"added,omitempty" description:"the space appeared"`
 	Desc    string   `json:"desc,omitempty"`
 	Removed bool     `json:"removed,omitempty" description:"the space went"`
-	Spaces  int      `json:"spaces,omitempty"`
+	Spaces  int      `json:"spaces,omitempty" description:"on a folded entry, how many changed spaces it stands for: sync it to look inside"`
 }
 
 type inputRef struct {
@@ -118,29 +119,24 @@ type inputRef struct {
 type writeArg struct {
 	Path  string `json:"path" required:"true" description:"space path: child names from the root joined with dots; \"\" is the page root"`
 	ID    string `json:"id" required:"true" description:"input id from the space inputs list"`
-	Value any    `json:"value" required:"true" description:"string for text, boolean for checkbox, option value for select and radio, array of option values for multiple select"`
+	Value any    `json:"value" required:"true" description:"string for text, boolean for checkbox, an option's value from read for select and radio, array of option values for multiple select"`
 }
 
 type readResult struct {
-	Value    any            `json:"value,omitempty" description:"the current value for input, select and radio kinds, the form value for buttons"`
+	Value    any            `json:"value,omitempty" description:"the current value for input (select included) and radio kinds, the form value for buttons"`
 	Label    string         `json:"label,omitempty" description:"text the user sees on it, buttons and links only"`
 	Href     string         `json:"href,omitempty" description:"link target, link only"`
 	Options  []selectOption `json:"options,omitempty" description:"choices, select and radio only"`
 	Disabled bool           `json:"disabled,omitempty" description:"present and true when the element is disabled"`
 }
 
-type hookResult struct {
-	Hooks int `json:"hooks" description:"how many server handlers the call triggered; the client-side action is performed regardless, 0 only means no server handler listened"`
-	report
-}
-
 type toolResult struct {
-	Output any `json:"output,omitempty" description:"what the page tool returned"`
+	Output any `json:"output,omitempty" description:"what the page tool returned; on a failed call, what its error carried"`
 	report
 }
 
 type selectOption struct {
-	Value    string `json:"value" description:"pass to the input action to choose this option"`
+	Value    string `json:"value" description:"the option's value"`
 	Label    string `json:"label" description:"text the user sees"`
 	Selected bool   `json:"selected" description:"whether this option is currently chosen"`
 	Disabled bool   `json:"disabled,omitempty" description:"present and true when this option is disabled"`
@@ -154,16 +150,16 @@ type inputArg struct {
 type islandStartArg struct {
 	Path     string `json:"path" required:"true" description:"space path: child names from the root joined with dots; \"\" is the page root"`
 	Revision string `json:"revision" required:"true" description:"the revision from the first line of island_spec"`
-	File     string `json:"file,omitempty" description:"workspace path of the script file; set exactly one of file and code"`
-	Code     string `json:"code,omitempty" description:"script source; set exactly one of file and code"`
+	File     string `json:"file,omitempty" description:"workspace path of a file holding this part; set exactly one of file and code"`
+	Code     string `json:"code,omitempty" description:"source of this part; set exactly one of file and code"`
 	Comment  string `json:"comment" description:"short description of what the app does; shown to the user while it runs and echoed in its task records"`
 }
 
 type islandContinueArg struct {
 	Path      string `json:"path" required:"true" description:"space path: child names from the root joined with dots; \"\" is the page root"`
-	File      string `json:"file,omitempty" description:"workspace path of the script file; set exactly one of file and code"`
-	Code      string `json:"code,omitempty" description:"script source; set exactly one of file and code"`
-	Interrupt bool   `json:"interrupt,omitempty" description:"drop queued scripts and stop the running one at its next ui.draw; otherwise this script runs after the queued ones"`
+	File      string `json:"file,omitempty" description:"workspace path of a file holding this part; set exactly one of file and code"`
+	Code      string `json:"code,omitempty" description:"source of this part; set exactly one of file and code"`
+	Interrupt bool   `json:"interrupt,omitempty" description:"true: this part interrupts the running one instead of running after the parts sent before it"`
 }
 
 type islandStopArg struct {
@@ -172,7 +168,7 @@ type islandStopArg struct {
 
 type islandRunResult struct {
 	Task   uint `json:"task" description:"id of the app's task: its task_notify records and its task_result carry it"`
-	Script uint `json:"script" description:"id of this script: task_notify records from it carry it as script, and an error that ends the app names it"`
+	Script uint `json:"script" description:"id of this part: its notifications_list and script_error records carry it as script, and an error that ends the app names it"`
 }
 
 type refusal struct {
@@ -203,7 +199,7 @@ type failure struct {
 }
 
 func (f failure) Error() string {
-	return f.err.Error()
+	return f.err.Error() + "; " + failedAfterRunMessage
 }
 
 func (f failure) Unwrap() error {
