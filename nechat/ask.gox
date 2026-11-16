@@ -218,7 +218,7 @@ elem (a *ask) form() {
 			return false
 		},
 		OnError: notify.OnError,
-	} <div class="nechat-ask">
+	} <div class="nechat-ask" role="group" aria-label=(a.input.Question)>
 		<p class="nechat-ask-q">~(a.input.Question)</p>
 		~(for i, option := range a.input.Options {
 			<label class="nechat-pick">

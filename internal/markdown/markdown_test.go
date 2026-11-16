@@ -137,3 +137,29 @@ func TestConvertKeepsChatOutput(t *testing.T) {
 		t.Fatalf("Convert\n got: %q\nwant: %q", got, want)
 	}
 }
+
+func TestConvertLabelsTasks(t *testing.T) {
+	var buf bytes.Buffer
+	if err := Convert([]byte("- [x] ship **the** `fix`\n  today\n- [ ] say \"hi\"\n- [ ]"), &buf); err != nil {
+		t.Fatal(err)
+	}
+	want := "<ul>\n<li><input checked=\"\" disabled=\"\" type=\"checkbox\" aria-label=\"ship the fix today\"> ship <strong>the</strong> <code>fix</code>\ntoday</li>\n<li><input disabled=\"\" type=\"checkbox\" aria-label=\"say &quot;hi&quot;\"> say &quot;hi&quot;</li>\n<li><input disabled=\"\" type=\"checkbox\"> </li>\n</ul>\n"
+	if got := buf.String(); got != want {
+		t.Fatalf("Convert\n got: %q\nwant: %q", got, want)
+	}
+	for src, label := range map[string]string{
+		"- [ ] Tom &amp; Jerry":             `aria-label="Tom &amp; Jerry"`,
+		"- [ ] use \\*args\\*":              `aria-label="use *args*"`,
+		"- [ ] run `a\\*b`":                 `aria-label="run a\*b"`,
+		"- [ ] see <https://example.com>":   `aria-label="see https://example.com"`,
+		"- [ ] see https://example.com now": `aria-label="see https://example.com now"`,
+	} {
+		buf.Reset()
+		if err := Convert([]byte(src), &buf); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(buf.String(), label) {
+			t.Fatalf("%q renders %q, want the label as the user sees the text: %s", src, buf.String(), label)
+		}
+	}
+}

@@ -40,21 +40,25 @@
 		--button-ink: var(--nechat-dark-button-ink, --theme(--color-zinc-300 inline));
 		--button-bg-hover: var(--secondary-bg-hover);
 		--button-ink-hover: var(--app-ink);
-		--button-bg-active: var(--panel-border-focus);
+		--button-bg-active: var(--secondary-bg-active);
 		--button-border-off: var(--app-border);
 		--button-ink-off: var(--nechat-dark-button-ink-off, --theme(--color-zinc-500 inline));
 		--secondary-bg: var(--nechat-dark-secondary-bg, --theme(--color-zinc-900 inline));
 		--secondary-ink: var(--app-ink-quiet);
 		--secondary-bg-hover: var(--app-border);
 		--secondary-ink-hover: var(--app-ink);
+		--secondary-ink-quiet-hover: var(--nechat-dark-app-ink-quiet, --theme(--color-zinc-300 inline));
 		--secondary-bg-active: var(--button-border);
 		--secondary-bg-selected: var(--secondary-bg-hover);
-		--secondary-ink-off: var(--button-ink-off);
-		--danger-ink: var(--nechat-dark-danger-ink, --theme(--color-red-500 inline));
-		--danger-bg-active: var(--nechat-dark-danger-bg-active, --theme(--color-red-600 inline));
+		--secondary-ink-off: var(--nechat-dark-button-ink-off, var(--app-ink-quiet));
+		--danger-ink: var(--nechat-dark-danger-ink, --theme(--color-red-400 inline));
+		--danger-bg-hover: var(--nechat-dark-danger-bg-hover, --theme(--color-red-600 inline));
+		--danger-bg-active: var(--nechat-dark-danger-bg-active, --theme(--color-red-700 inline));
 		--danger-ink-on-fill: var(--nechat-dark-danger-ink-on-fill, --theme(--color-white inline));
 		--figure-value: var(--app-ink);
 		--figure-track: color-mix(in srgb, transparent, currentColor 35%);
+		--field-border: var(--panel-border-focus);
+		--focus-ring: var(--app-ink-quiet);
 		accent-color: var(--app-ink-quiet);
 
 		@apply scheme-dark
@@ -72,21 +76,25 @@
 			--button-ink: var(--nechat-light-button-ink, --theme(--color-zinc-700 inline));
 			--button-bg-hover: var(--secondary-bg-hover);
 			--button-ink-hover: var(--app-ink);
-			--button-bg-active: var(--panel-border-focus);
+			--button-bg-active: var(--secondary-bg-active);
 			--button-border-off: var(--app-border);
 			--button-ink-off: var(--nechat-light-button-ink-off, --theme(--color-zinc-500 inline));
 			--secondary-bg: var(--nechat-light-secondary-bg, --theme(--color-zinc-200 inline));
 			--secondary-ink: var(--app-ink-quiet);
 			--secondary-bg-hover: var(--app-border);
 			--secondary-ink-hover: var(--app-ink);
+			--secondary-ink-quiet-hover: var(--app-ink-quiet);
 			--secondary-bg-active: var(--button-border);
 			--secondary-bg-selected: var(--secondary-bg-hover);
 			--secondary-ink-off: var(--button-ink-off);
-			--danger-ink: var(--nechat-light-danger-ink, --theme(--color-red-600 inline));
-			--danger-bg-active: var(--nechat-light-danger-bg-active, --theme(--color-red-700 inline));
+			--danger-ink: var(--nechat-light-danger-ink, --theme(--color-red-700 inline));
+			--danger-bg-hover: var(--nechat-light-danger-bg-hover, var(--danger-ink));
+			--danger-bg-active: var(--nechat-light-danger-bg-active, --theme(--color-red-800 inline));
 			--danger-ink-on-fill: var(--nechat-light-danger-ink-on-fill, --theme(--color-white inline));
 			--figure-value: var(--app-ink);
 			--figure-track: color-mix(in srgb, transparent, currentColor 35%);
+			--field-border: var(--panel-border-focus);
+			--focus-ring: var(--app-ink-quiet);
 			accent-color: var(--app-ink-quiet);
 
 			@apply scheme-light
@@ -105,21 +113,25 @@
 		--button-ink: var(--nechat-light-button-ink, --theme(--color-zinc-700 inline));
 		--button-bg-hover: var(--secondary-bg-hover);
 		--button-ink-hover: var(--app-ink);
-		--button-bg-active: var(--panel-border-focus);
+		--button-bg-active: var(--secondary-bg-active);
 		--button-border-off: var(--app-border);
 		--button-ink-off: var(--nechat-light-button-ink-off, --theme(--color-zinc-500 inline));
 		--secondary-bg: var(--nechat-light-secondary-bg, --theme(--color-zinc-200 inline));
 		--secondary-ink: var(--app-ink-quiet);
 		--secondary-bg-hover: var(--app-border);
 		--secondary-ink-hover: var(--app-ink);
+		--secondary-ink-quiet-hover: var(--app-ink-quiet);
 		--secondary-bg-active: var(--button-border);
 		--secondary-bg-selected: var(--secondary-bg-hover);
 		--secondary-ink-off: var(--button-ink-off);
-		--danger-ink: var(--nechat-light-danger-ink, --theme(--color-red-600 inline));
-		--danger-bg-active: var(--nechat-light-danger-bg-active, --theme(--color-red-700 inline));
+		--danger-ink: var(--nechat-light-danger-ink, --theme(--color-red-700 inline));
+		--danger-bg-hover: var(--nechat-light-danger-bg-hover, var(--danger-ink));
+		--danger-bg-active: var(--nechat-light-danger-bg-active, --theme(--color-red-800 inline));
 		--danger-ink-on-fill: var(--nechat-light-danger-ink-on-fill, --theme(--color-white inline));
 		--figure-value: var(--app-ink);
 		--figure-track: color-mix(in srgb, transparent, currentColor 35%);
+		--field-border: var(--panel-border-focus);
+		--focus-ring: var(--app-ink-quiet);
 		accent-color: var(--app-ink-quiet);
 
 		@apply scheme-light
@@ -472,10 +484,17 @@
 		text-(--danger-ink)
 	}
 
+	.nechat-btn_del:focus-visible {
+		@apply
+		border-(--danger-ink)
+		text-(--danger-ink)
+		[--_nechat-ring:var(--danger-ink)]
+	}
+
 	.nechat-btn_del:hover {
 		@apply
-		bg-(--danger-ink)
-		border-(--danger-ink)
+		bg-(--danger-bg-hover)
+		border-(--danger-bg-hover)
 		text-(--danger-ink-on-fill)
 	}
 
@@ -484,12 +503,6 @@
 		bg-(--danger-bg-active)
 		border-(--danger-bg-active)
 		text-(--danger-ink-on-fill)
-	}
-
-	.nechat-btn_del:focus-visible {
-		@apply
-		border-(--danger-bg-active)
-		text-(--danger-bg-active)
 	}
 
 	.nechat-btn_2nd {
@@ -555,6 +568,7 @@
 
 	.nechat-ctl {
 		@apply
+		relative
 		inline-flex
 		items-center
 		justify-center
@@ -647,7 +661,7 @@
 		min-w-0
 		bg-(--panel-bg)
 		border
-		border-(--panel-border)
+		border-(--field-border)
 		rounded-(--_nechat-radius-control)
 	}
 
@@ -687,7 +701,7 @@
 		box-border
 		bg-(--panel-bg)
 		border
-		border-(--panel-border)
+		border-(--field-border)
 		rounded-(--_nechat-radius-surface)
 	}
 
@@ -754,6 +768,8 @@
 			max-w-full;
 			border-inline: 0;
 		}
+		.nechat-widget:has(.nechat-aside) .nechat-pane { @apply invisible }
+		.nechat-widget:has(.nechat-aside) .nechat-toasts { @apply visible }
 	}
 
 	.nechat-side-body { @apply flex flex-col flex-1 min-h-0 gap-0.5 overflow-y-auto overscroll-y-contain }
@@ -846,15 +862,15 @@
 	.nechat-thread-name { @apply min-w-0 overflow-hidden whitespace-nowrap text-ellipsis }
 	.nechat-thread:hover { @apply bg-(--secondary-bg-hover) text-(--secondary-ink-hover) }
 	.nechat-thread:focus-visible { @apply border-(--panel-border-focus) }
-	.nechat-thread_active { @apply bg-(--secondary-bg-selected) text-(--secondary-ink-hover) cursor-default }
+	.nechat-thread_active { @apply bg-(--secondary-bg-selected) text-(--secondary-ink-hover) font-medium cursor-default }
 	.nechat-thread_new { @apply text-(--secondary-ink-off) }
-	.nechat-thread_new:hover { @apply bg-transparent text-(--app-ink-quiet) }
+	.nechat-thread_new:hover { @apply bg-transparent text-(--secondary-ink-quiet-hover) }
 	.nechat-dot { @apply flex items-center justify-center w-4 h-4 flex-none text-(--app-ink-quiet) }
 	.nechat-dot::before { @apply content-[''] w-1.5 h-1.5 rounded-full bg-current }
 	.nechat-dot_off::before { @apply bg-transparent inset-ring inset-ring-current }
 	.nechat-thread_active > .nechat-dot { @apply text-(--secondary-ink-hover) }
-	.nechat-row > .nechat-iconbtn { @apply hidden }
-	.nechat-row:hover > .nechat-iconbtn, .nechat-row:focus-within > .nechat-iconbtn { @apply inline-flex }
+	.nechat-row > .nechat-iconbtn { @apply absolute end-0 w-px h-px overflow-hidden border-0 [clip-path:inset(50%)] }
+	.nechat-row:hover > .nechat-iconbtn, .nechat-row:focus-within > .nechat-iconbtn { @apply static w-7 h-7 border [clip-path:none] }
 	.nechat-row:has(.nechat-form) > :is(.nechat-thread, .nechat-iconbtn) { @apply hidden }
 
 	.nechat-burger {
@@ -941,7 +957,7 @@
 		bg-(--panel-bg)
 		rounded-(--_nechat-radius-surface)
 		border
-		border-(--panel-border)
+		border-(--field-border)
 		flex
 		flex-col
 	}
@@ -1061,7 +1077,7 @@
 		margin-block-start: calc((1lh - 1rem) / 2);
 		@apply
 		border
-		border-(--button-border)
+		border-(--field-border)
 		text-transparent
 	}
 
@@ -1075,6 +1091,8 @@
 	.nechat-pick-label { @apply flex flex-col gap-0.5 min-w-0 }
 	.nechat-pick-name { @apply font-medium }
 	.nechat-pick-desc { @apply font-normal text-(--app-ink-quiet) }
+	.nechat-pick:is(:hover, :has(> input:checked)) .nechat-pick-desc,
+	.nechat-entry:hover .nechat-entry-detail { @apply text-(--secondary-ink-quiet-hover) }
 
 	.nechat-pick_own textarea {
 		@apply
@@ -1149,7 +1167,7 @@
 	.nechat-gauge:has(> .nechat-gauge-lead > .nechat-ctl) { @apply ps-1 }
 	.nechat-gauge_opens { @apply cursor-pointer }
 	.nechat-gauge_opens:hover { @apply bg-(--secondary-bg-hover) }
-	.nechat-gauge_opens:active { @apply bg-(--secondary-bg-active) }
+	.nechat-gauge_opens:active { @apply bg-(--secondary-bg-active) text-(--secondary-ink-hover) }
 	.nechat-gauge_opens.nechat-gauge_open { @apply bg-(--secondary-bg-selected) text-(--secondary-ink-hover) }
 	.nechat-gauge:focus-visible { @apply border-(--panel-border-focus) }
 
@@ -1162,10 +1180,11 @@
 		w-0
 		h-0
 		mx-1.5
-		opacity-55
+		opacity-75
 	}
 
 	.nechat-gauge_open > .nechat-gauge-body::after { transform: rotate(180deg); @apply opacity-90 }
+	.nechat-gauge_opens:is(:hover, :active) > .nechat-gauge-body::after { @apply opacity-90 }
 	.nechat-gauge_err > .nechat-gauge-lead { @apply text-(--danger-ink) }
 
 	.nechat-pop {
@@ -1295,7 +1314,7 @@
 
 	.nechat-top_menu { @apply relative }
 	.nechat-top_menu > .nechat-rowmenu { @apply end-3 max-w-[calc(100%-1.5rem)] }
-	.nechat-files { @apply w-72 }
+	.nechat-files { @apply w-72 max-w-full }
 
 	.nechat-entry {
 		@apply
@@ -1552,9 +1571,10 @@
 
 	.nechat-think[open]:has(> .nechat-think-head:focus-visible) {
 		@apply
-		outline-1
+		outline-solid
+		outline-2
 		outline-offset-2
-		outline-(--panel-border-focus)
+		outline-(--focus-ring)
 	}
 
 	.nechat-think-body .nechat-prose { @apply text-sm }
@@ -1624,5 +1644,44 @@
 
 		> :is(:first-child, d0-r:first-child + *), > :is(d0-r:first-child, d0-r:first-child + d0-r) > :first-child { @apply mt-0; }
 		> :is(:nth-last-child(1 of :not(d0-r:empty))), > :is(d0-r:nth-last-child(1 of :not(d0-r:empty))) > :last-child { @apply mb-0; }
+	}
+
+	:is(.nechat-btn, .nechat-iconbtn, .nechat-ctl, .nechat-act, .nechat-thread, .nechat-hit, .nechat-gauge, .nechat-file, .nechat-log_scroll):focus-visible,
+	.nechat-field:focus-within,
+	.nechat-form:has(.nechat-text:focus-visible),
+	.nechat-composer:has(> .nechat-draft:focus-visible),
+	.nechat-pick:has(> input:focus-visible, textarea:focus-visible),
+	label.nechat-iconbtn:has(> input:focus-visible),
+	.nechat-entry:has(.nechat-entry-name:focus-visible) {
+		@apply
+		outline-solid
+		outline-2
+		-outline-offset-1
+		outline-(--_nechat-ring,var(--focus-ring))
+	}
+	.nechat-ctl::after {
+		content: "";
+		@apply
+		absolute
+		top-1/2
+		left-1/2
+		w-6
+		h-6
+		-translate-x-1/2
+		-translate-y-1/2
+	}
+	label.nechat-iconbtn > input[type=file] { @apply absolute w-px h-px opacity-0 pointer-events-none }
+
+	@media (forced-colors: active) {
+		.nechat-dot, .nechat-thread_active > .nechat-dot { forced-color-adjust: none; color: CanvasText }
+		.nechat-mark, .nechat-pick:hover > .nechat-mark { forced-color-adjust: none; border-color: CanvasText; background-color: Canvas; color: transparent }
+		.nechat-pick:has(> input:checked) > .nechat-mark { color: CanvasText; border-color: CanvasText }
+		.nechat-ring { forced-color-adjust: none }
+		.nechat-ring-track { stroke: GrayText }
+		.nechat-ring-fill { stroke: CanvasText }
+		.nechat-file-fill { forced-color-adjust: none; inset-block-start: auto; height: 0.125rem; background-color: Highlight }
+		.nechat-thread_active, .nechat-gauge_open, .nechat-iconbtn_open, .nechat-pick:has(> input:checked) { border-color: Highlight }
+		.nechat-btn:disabled, .nechat-iconbtn:disabled { color: GrayText; border-color: GrayText }
+		.nechat-gauge_opens > .nechat-gauge-body::after { forced-color-adjust: none; border-inline-color: transparent; border-block-end-color: CanvasText }
 	}
 }

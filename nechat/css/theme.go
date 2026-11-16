@@ -20,13 +20,14 @@ type Theme struct {
 	AppBorder string
 	// AppInk is the main text colour.
 	AppInk string
-	// AppInkQuiet is the colour of secondary text and form accents.
+	// AppInkQuiet is the colour of secondary text, form accents and focus rings.
 	AppInkQuiet string
 	// PanelBg is the background of the composer, popovers, form fields and message bubbles.
 	PanelBg string
-	// PanelBorderFocus is the border of a focused surface and the background of a pressed button.
+	// PanelBorderFocus is the border of input fields, the composer, checkboxes and radio buttons,
+	// hovered and pressed buttons, and focused surfaces.
 	PanelBorderFocus string
-	// ButtonBorder is the border of buttons.
+	// ButtonBorder is the border of buttons and the background of pressed buttons and controls.
 	ButtonBorder string
 	// ButtonInk is the text and icon colour of buttons.
 	ButtonInk string
@@ -36,6 +37,8 @@ type Theme struct {
 	SecondaryBg string
 	// DangerInk is the text colour of destructive actions and errors.
 	DangerInk string
+	// DangerBgHover is the fill of a hovered destructive button.
+	DangerBgHover string
 	// DangerBgActive is the fill of a pressed destructive button.
 	DangerBgActive string
 	// DangerInkOnFill is the text colour on a danger fill.
@@ -59,6 +62,7 @@ func (t Theme) write(b *bytes.Buffer, face string) {
 		{"button-ink-off", t.ButtonInkOff},
 		{"secondary-bg", t.SecondaryBg},
 		{"danger-ink", t.DangerInk},
+		{"danger-bg-hover", t.DangerBgHover},
 		{"danger-bg-active", t.DangerBgActive},
 		{"danger-ink-on-fill", t.DangerInkOnFill},
 	} {

@@ -1,4 +1,4 @@
-// Managed by GoX v0.3.4
+// Managed by GoX v0.4.0
 
 //line composer.gox:1
 package composer
@@ -692,11 +692,13 @@ func (c *Composer) contextChip(toggle func(ctx context.Context), open bool) gox.
 		window := c.Controller.Model().Context
 	config := c.Controller.Config()
 	class := "nechat-gauge nechat-gauge_opens"
+	expanded := "false"
 	if open {
 		class = "nechat-gauge nechat-gauge_opens nechat-gauge_open"
+		expanded = "true"
 	}
 
-//line composer.gox:271
+//line composer.gox:273
 		__e = (doors.AClick{
 		Scope: new(doors.ScopeBlocking),
 		On: func(ctx context.Context, rp doors.RequestPointer) bool {
@@ -708,69 +710,71 @@ func (c *Composer) contextChip(toggle func(ctx context.Context), open bool) gox.
 			ctx := __c.Context(); _ = ctx
 			__e = __c.Init("button"); if __e != nil { return }
 			{
-//line composer.gox:278
+//line composer.gox:280
 				__e = __c.Set("type", "button"); if __e != nil { return }
-//line composer.gox:278
+//line composer.gox:280
 				__e = __c.Set("class", class); if __e != nil { return }
-//line composer.gox:278
+//line composer.gox:280
 				__e = __c.Set("title", "Context size"); if __e != nil { return }
+//line composer.gox:280
+				__e = __c.Set("aria-expanded", expanded); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line composer.gox:279
+//line composer.gox:281
 				if window != 0 {
 					__e = __c.Init("span"); if __e != nil { return }
 					{
-//line composer.gox:280
+//line composer.gox:282
 						__e = __c.Set("class", "nechat-gauge-lead"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line composer.gox:281
+//line composer.gox:283
 						__e = __c.Any(c.Controller.Bar().Bind(func(b controller.Bar) gox.Elem {
 					return gox.Elem(func(__c gox.Cursor) (__e error) {
 						ctx := __c.Context(); _ = ctx
 						__e = __c.Init("svg"); if __e != nil { return }
 						{
-//line composer.gox:282
+//line composer.gox:284
 							__e = __c.Set("class", "nechat-ring"); if __e != nil { return }
-//line composer.gox:282
+//line composer.gox:284
 							__e = __c.Set("data-compacting", b.Compaction); if __e != nil { return }
-//line composer.gox:282
+//line composer.gox:284
 							__e = __c.Set("viewBox", "0 0 16 16"); if __e != nil { return }
-//line composer.gox:282
+//line composer.gox:284
 							__e = __c.Set("aria-hidden", "true"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.Init("circle"); if __e != nil { return }
 							{
-//line composer.gox:283
+//line composer.gox:285
 								__e = __c.Set("class", "nechat-ring-track"); if __e != nil { return }
-//line composer.gox:283
+//line composer.gox:285
 								__e = __c.Set("cx", "8"); if __e != nil { return }
-//line composer.gox:283
+//line composer.gox:285
 								__e = __c.Set("cy", "8"); if __e != nil { return }
-//line composer.gox:283
+//line composer.gox:285
 								__e = __c.Set("r", "6"); if __e != nil { return }
-//line composer.gox:283
+//line composer.gox:285
 								__e = __c.Set("pathLength", "100"); if __e != nil { return }
-//line composer.gox:283
+//line composer.gox:285
 								__e = __c.Set("stroke-dasharray", fmt.Sprintf("%.1f 100", min(config.CompactionTrigger, 1) * 100)); if __e != nil { return }
-//line composer.gox:283
+//line composer.gox:285
 								__e = __c.Set("transform", "rotate(-90 8 8)"); if __e != nil { return }
 								__e = __c.Submit(); if __e != nil { return }
 							}
 							__e = __c.Close(); if __e != nil { return }
 							__e = __c.Init("circle"); if __e != nil { return }
 							{
-//line composer.gox:284
+//line composer.gox:286
 								__e = __c.Set("class", "nechat-ring-fill"); if __e != nil { return }
-//line composer.gox:284
+//line composer.gox:286
 								__e = __c.Set("cx", "8"); if __e != nil { return }
-//line composer.gox:284
+//line composer.gox:286
 								__e = __c.Set("cy", "8"); if __e != nil { return }
-//line composer.gox:284
+//line composer.gox:286
 								__e = __c.Set("r", "6"); if __e != nil { return }
-//line composer.gox:284
+//line composer.gox:286
 								__e = __c.Set("pathLength", "100"); if __e != nil { return }
-//line composer.gox:284
+//line composer.gox:286
 								__e = __c.Set("stroke-dasharray", fmt.Sprintf("%d 100", min((b.Settled + b.Unsettled) * 100 / window, 100))); if __e != nil { return }
-//line composer.gox:284
+//line composer.gox:286
 								__e = __c.Set("transform", "rotate(-90 8 8)"); if __e != nil { return }
 								__e = __c.Submit(); if __e != nil { return }
 							}
@@ -778,25 +782,25 @@ func (c *Composer) contextChip(toggle func(ctx context.Context), open bool) gox.
 						}
 						__e = __c.Close(); if __e != nil { return }
 					return })
-//line composer.gox:286
+//line composer.gox:288
 				})); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
 				}
 				__e = __c.Init("span"); if __e != nil { return }
 				{
-//line composer.gox:289
+//line composer.gox:291
 					__e = __c.Set("class", "nechat-gauge-body"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line composer.gox:290
+//line composer.gox:292
 					__e = __c.Any(c.Controller.Bar().Bind(func(b controller.Bar) gox.Elem {
 				return gox.Elem(func(__c gox.Cursor) (__e error) {
 					ctx := __c.Context(); _ = ctx
-//line composer.gox:291
+//line composer.gox:293
 					if b.Compaction {
 						__e = __c.Init("span"); if __e != nil { return }
 						{
-//line composer.gox:292
+//line composer.gox:294
 							__e = __c.Set("class", "nechat-gauge-val"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.Text("compacting"); if __e != nil { return }
@@ -805,16 +809,16 @@ func (c *Composer) contextChip(toggle func(ctx context.Context), open bool) gox.
 					} else  {
 						__e = __c.Init("span"); if __e != nil { return }
 						{
-//line composer.gox:294
+//line composer.gox:296
 							__e = __c.Set("class", "nechat-gauge-val"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
-//line composer.gox:294
+//line composer.gox:296
 							__e = __c.Any(tokens(b.Settled)); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
 					}
 				return })
-//line composer.gox:296
+//line composer.gox:298
 			})); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
@@ -822,33 +826,33 @@ func (c *Composer) contextChip(toggle func(ctx context.Context), open bool) gox.
 			__e = __c.Close(); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
-//line composer.gox:299
+//line composer.gox:301
 }
 
-//line composer.gox:301
+//line composer.gox:303
 func stat(label string, n int) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line composer.gox:302
+//line composer.gox:304
 		if n != 0 {
 			__e = __c.Init("span"); if __e != nil { return }
 			{
-//line composer.gox:303
+//line composer.gox:305
 				__e = __c.Set("class", "nechat-pop-stat"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Init("span"); if __e != nil { return }
 				{
-//line composer.gox:304
+//line composer.gox:306
 					__e = __c.Set("class", "nechat-pop-label"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line composer.gox:304
+//line composer.gox:306
 					__e = __c.Any(label); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
 				__e = __c.Init("span"); if __e != nil { return }
 				{
 					__e = __c.Submit(); if __e != nil { return }
-//line composer.gox:305
+//line composer.gox:307
 					__e = __c.Any(tokens(n)); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
@@ -856,29 +860,29 @@ func stat(label string, n int) gox.Elem {
 			__e = __c.Close(); if __e != nil { return }
 		}
 	return })
-//line composer.gox:308
+//line composer.gox:310
 }
 
-//line composer.gox:310
+//line composer.gox:312
 func (c *Composer) generated(b controller.Bar) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line composer.gox:311
+//line composer.gox:313
 		if b.Unsettled != 0 {
 			__e = __c.Init("span"); if __e != nil { return }
 			{
-//line composer.gox:312
+//line composer.gox:314
 				__e = __c.Set("class", "nechat-gauge-val"); if __e != nil { return }
-//line composer.gox:312
+//line composer.gox:314
 				__e = __c.Set("title", "Tokens generated"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line composer.gox:312
+//line composer.gox:314
 				__e = __c.Any(tokens(b.Unsettled)); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 			__e = __c.Init("span"); if __e != nil { return }
 			{
-//line composer.gox:313
+//line composer.gox:315
 				__e = __c.Set("class", "nechat-gauge-sep"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Text("·"); if __e != nil { return }
@@ -886,41 +890,41 @@ func (c *Composer) generated(b controller.Bar) gox.Elem {
 			__e = __c.Close(); if __e != nil { return }
 		}
 	return })
-//line composer.gox:315
+//line composer.gox:317
 }
 
-//line composer.gox:317
+//line composer.gox:319
 func (c *Composer) queued(pending bool) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line composer.gox:318
+//line composer.gox:320
 		if pending {
 			__e = __c.Init("span"); if __e != nil { return }
 			{
-//line composer.gox:319
+//line composer.gox:321
 				__e = __c.Set("class", "nechat-gauge"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Init("span"); if __e != nil { return }
 				{
-//line composer.gox:320
+//line composer.gox:322
 					__e = __c.Set("class", "nechat-gauge-lead"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line composer.gox:320
+//line composer.gox:322
 					__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 						ctx := __c.Context(); _ = ctx
-//line composer.gox:320
+//line composer.gox:322
 						__e = __c.Any(icons.Clock()); if __e != nil { return }
 					return })); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
 				__e = __c.Init("span"); if __e != nil { return }
 				{
-//line composer.gox:321
+//line composer.gox:323
 					__e = __c.Set("class", "nechat-gauge-body"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
 					__e = __c.Init("span"); if __e != nil { return }
 					{
-//line composer.gox:321
+//line composer.gox:323
 						__e = __c.Set("class", "nechat-gauge-val"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 						__e = __c.Text("queued"); if __e != nil { return }
@@ -930,10 +934,10 @@ func (c *Composer) queued(pending bool) gox.Elem {
 				__e = __c.Close(); if __e != nil { return }
 				__e = __c.Init("span"); if __e != nil { return }
 				{
-//line composer.gox:322
+//line composer.gox:324
 					__e = __c.Set("class", "nechat-gauge-trail"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line composer.gox:323
+//line composer.gox:325
 					__e = (doors.AClick{
 					Scope: new(doors.ScopeBlocking),
 					On: func(ctx context.Context, rp doors.RequestPointer) bool {
@@ -945,17 +949,17 @@ func (c *Composer) queued(pending bool) gox.Elem {
 						ctx := __c.Context(); _ = ctx
 						__e = __c.Init("button"); if __e != nil { return }
 						{
-//line composer.gox:330
+//line composer.gox:332
 							__e = __c.Set("type", "button"); if __e != nil { return }
-//line composer.gox:330
+//line composer.gox:332
 							__e = __c.Set("class", "nechat-ctl"); if __e != nil { return }
-//line composer.gox:330
+//line composer.gox:332
 							__e = __c.Set("title", "Cancel queued message"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
-//line composer.gox:331
+//line composer.gox:333
 							__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 								ctx := __c.Context(); _ = ctx
-//line composer.gox:331
+//line composer.gox:333
 								__e = __c.Any(icons.Close()); if __e != nil { return }
 							return })); if __e != nil { return }
 						}
@@ -967,63 +971,63 @@ func (c *Composer) queued(pending bool) gox.Elem {
 			__e = __c.Close(); if __e != nil { return }
 		}
 	return })
-//line composer.gox:336
+//line composer.gox:338
 }
 
-//line composer.gox:338
+//line composer.gox:340
 func (c *Composer) tasks(has bool) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line composer.gox:339
+//line composer.gox:341
 		if has {
 			__e = __c.Init("span"); if __e != nil { return }
 			{
-//line composer.gox:340
+//line composer.gox:342
 				__e = __c.Set("class", "nechat-pops"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line composer.gox:341
+//line composer.gox:343
 				__e = __c.Any(c.Pops.BindControls("tasks",
 				func(show func(ctx context.Context)) gox.Elem {
 					return gox.Elem(func(__c gox.Cursor) (__e error) {
 						ctx := __c.Context(); _ = ctx
-//line composer.gox:343
+//line composer.gox:345
 						__e = __c.Any(c.tasksChip(show, false)); if __e != nil { return }
 					return })
-//line composer.gox:344
+//line composer.gox:346
 				},
 				func(hide func(ctx context.Context)) gox.Elem {
 					return gox.Elem(func(__c gox.Cursor) (__e error) {
 						ctx := __c.Context(); _ = ctx
-//line composer.gox:346
+//line composer.gox:348
 						__e = __c.Any(c.tasksChip(hide, true)); if __e != nil { return }
 					return })
-//line composer.gox:347
+//line composer.gox:349
 				},
 			)); if __e != nil { return }
-//line composer.gox:349
+//line composer.gox:351
 				__e = __c.Any(c.Pops.BindPop("tasks", func(hide func(context.Context)) gox.Elem {
 				return gox.Elem(func(__c gox.Cursor) (__e error) {
 					ctx := __c.Context(); _ = ctx
 					__e = __c.Init("span"); if __e != nil { return }
 					{
-//line composer.gox:350
+//line composer.gox:352
 						__e = __c.Set("class", "nechat-pop"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 						__e = __c.Init("span"); if __e != nil { return }
 						{
-//line composer.gox:351
+//line composer.gox:353
 							__e = __c.Set("class", "nechat-pop-group"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
-//line composer.gox:352
+//line composer.gox:354
 							__e = __c.Any(c.Controller.Tasks().Bind(c.taskRows)); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
 						__e = __c.Init("span"); if __e != nil { return }
 						{
-//line composer.gox:354
+//line composer.gox:356
 							__e = __c.Set("class", "nechat-pop-foot"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
-//line composer.gox:355
+//line composer.gox:357
 							__e = (doors.AClick{
 							Scope: new(doors.ScopeBlocking),
 							On: func(ctx context.Context, rp doors.RequestPointer) bool {
@@ -1036,9 +1040,9 @@ func (c *Composer) tasks(has bool) gox.Elem {
 								ctx := __c.Context(); _ = ctx
 								__e = __c.Init("button"); if __e != nil { return }
 								{
-//line composer.gox:363
+//line composer.gox:365
 									__e = __c.Set("type", "button"); if __e != nil { return }
-//line composer.gox:363
+//line composer.gox:365
 									__e = __c.Set("class", "nechat-btn"); if __e != nil { return }
 									__e = __c.Submit(); if __e != nil { return }
 									__e = __c.Text("Cancel all"); if __e != nil { return }
@@ -1050,26 +1054,28 @@ func (c *Composer) tasks(has bool) gox.Elem {
 					}
 					__e = __c.Close(); if __e != nil { return }
 				return })
-//line composer.gox:366
+//line composer.gox:368
 			})); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		}
 	return })
-//line composer.gox:369
+//line composer.gox:371
 }
 
-//line composer.gox:371
+//line composer.gox:373
 func (c *Composer) tasksChip(toggle func(ctx context.Context), open bool) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line composer.gox:373
+//line composer.gox:375
 		class := "nechat-gauge nechat-gauge_opens"
+	expanded := "false"
 	if open {
 		class = "nechat-gauge nechat-gauge_opens nechat-gauge_open"
+		expanded = "true"
 	}
 
-//line composer.gox:378
+//line composer.gox:382
 		__e = (doors.AClick{
 		Scope: new(doors.ScopeBlocking),
 		On: func(ctx context.Context, rp doors.RequestPointer) bool {
@@ -1081,38 +1087,40 @@ func (c *Composer) tasksChip(toggle func(ctx context.Context), open bool) gox.El
 			ctx := __c.Context(); _ = ctx
 			__e = __c.Init("button"); if __e != nil { return }
 			{
-//line composer.gox:385
+//line composer.gox:389
 				__e = __c.Set("type", "button"); if __e != nil { return }
-//line composer.gox:385
+//line composer.gox:389
 				__e = __c.Set("class", class); if __e != nil { return }
+//line composer.gox:389
+				__e = __c.Set("aria-expanded", expanded); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Init("span"); if __e != nil { return }
 				{
-//line composer.gox:386
+//line composer.gox:390
 					__e = __c.Set("class", "nechat-gauge-lead"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line composer.gox:386
+//line composer.gox:390
 					__e = (doors.Class("nechat-ic nechat-ic_line nechat-ic_beams")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 						ctx := __c.Context(); _ = ctx
-//line composer.gox:386
+//line composer.gox:390
 						__e = __c.Any(icons.Beams()); if __e != nil { return }
 					return })); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
 				__e = __c.Init("span"); if __e != nil { return }
 				{
-//line composer.gox:387
+//line composer.gox:391
 					__e = __c.Set("class", "nechat-gauge-body"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line composer.gox:388
+//line composer.gox:392
 					__e = __c.Any(c.Controller.TaskCount().Bind(func(n int) gox.Elem {
 				return gox.Elem(func(__c gox.Cursor) (__e error) {
 					ctx := __c.Context(); _ = ctx
-//line composer.gox:389
+//line composer.gox:393
 					if n == 1 {
 						__e = __c.Init("span"); if __e != nil { return }
 						{
-//line composer.gox:390
+//line composer.gox:394
 							__e = __c.Set("class", "nechat-gauge-val"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.Text("1 task"); if __e != nil { return }
@@ -1121,16 +1129,16 @@ func (c *Composer) tasksChip(toggle func(ctx context.Context), open bool) gox.El
 					} else  {
 						__e = __c.Init("span"); if __e != nil { return }
 						{
-//line composer.gox:392
+//line composer.gox:396
 							__e = __c.Set("class", "nechat-gauge-val"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
-//line composer.gox:392
+//line composer.gox:396
 							__e = __c.Any(fmt.Sprintf("%d tasks", n)); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
 					}
 				return })
-//line composer.gox:394
+//line composer.gox:398
 			})); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
@@ -1138,61 +1146,61 @@ func (c *Composer) tasksChip(toggle func(ctx context.Context), open bool) gox.El
 			__e = __c.Close(); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
-//line composer.gox:397
+//line composer.gox:401
 }
 
-//line composer.gox:399
+//line composer.gox:403
 func (c *Composer) taskRows(tasks []api.Task) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line composer.gox:400
+//line composer.gox:404
 		for _, t := range tasks {
 			__e = __c.Init("span"); if __e != nil { return }
 			{
-//line composer.gox:401
+//line composer.gox:405
 				__e = __c.Set("class", "nechat-task"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Init("span"); if __e != nil { return }
 				{
-//line composer.gox:402
+//line composer.gox:406
 					__e = __c.Set("class", "nechat-task-body"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line composer.gox:403
+//line composer.gox:407
 					if t.Comment != "" {
 						__e = __c.Init("span"); if __e != nil { return }
 						{
-//line composer.gox:404
+//line composer.gox:408
 							__e = __c.Set("class", "nechat-task-comment"); if __e != nil { return }
-//line composer.gox:404
+//line composer.gox:408
 							__e = __c.Set("title", t.Comment); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
-//line composer.gox:404
+//line composer.gox:408
 							__e = __c.Any(t.Comment); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
 					} else  {
 						__e = __c.Init("span"); if __e != nil { return }
 						{
-//line composer.gox:406
+//line composer.gox:410
 							__e = __c.Set("class", "nechat-task-comment"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
-//line composer.gox:406
+//line composer.gox:410
 							__e = __c.Any(t.Name); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
 					}
 					__e = __c.Init("span"); if __e != nil { return }
 					{
-//line composer.gox:408
+//line composer.gox:412
 						__e = __c.Set("class", "nechat-task-detail"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line composer.gox:408
+//line composer.gox:412
 						__e = __c.Any(t.Module); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
-//line composer.gox:410
+//line composer.gox:414
 				__e = (doors.AClick{
 				Scope: new(doors.ScopeBlocking),
 				On: func(ctx context.Context, rp doors.RequestPointer) bool {
@@ -1204,19 +1212,19 @@ func (c *Composer) taskRows(tasks []api.Task) gox.Elem {
 					ctx := __c.Context(); _ = ctx
 					__e = __c.Init("button"); if __e != nil { return }
 					{
-//line composer.gox:417
+//line composer.gox:421
 						__e = __c.Set("type", "button"); if __e != nil { return }
-//line composer.gox:417
+//line composer.gox:421
 						__e = __c.Set("class", "nechat-ctl"); if __e != nil { return }
-//line composer.gox:417
+//line composer.gox:421
 						__e = __c.Set("title", "Cancel task"); if __e != nil { return }
-//line composer.gox:417
+//line composer.gox:421
 						__e = __c.Set("aria-label", "Cancel " + t.Module + " task"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line composer.gox:418
+//line composer.gox:422
 						__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 							ctx := __c.Context(); _ = ctx
-//line composer.gox:418
+//line composer.gox:422
 							__e = __c.Any(icons.Close()); if __e != nil { return }
 						return })); if __e != nil { return }
 					}
@@ -1226,27 +1234,27 @@ func (c *Composer) taskRows(tasks []api.Task) gox.Elem {
 			__e = __c.Close(); if __e != nil { return }
 		}
 	return })
-//line composer.gox:422
+//line composer.gox:426
 }
 
-//line composer.gox:424
+//line composer.gox:428
 func (c *Composer) running() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line composer.gox:426
+//line composer.gox:430
 		start := time.Now()
 
 		__e = __c.Init("span"); if __e != nil { return }
 		{
-//line composer.gox:428
+//line composer.gox:432
 			__e = __c.Set("class", "nechat-gauge"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Init("span"); if __e != nil { return }
 			{
-//line composer.gox:429
+//line composer.gox:433
 				__e = __c.Set("class", "nechat-gauge-lead"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line composer.gox:430
+//line composer.gox:434
 				__e = (doors.AClick{
 				Scope: new(doors.ScopeBlocking),
 				On: func(ctx context.Context, rp doors.RequestPointer) bool {
@@ -1258,17 +1266,17 @@ func (c *Composer) running() gox.Elem {
 					ctx := __c.Context(); _ = ctx
 					__e = __c.Init("button"); if __e != nil { return }
 					{
-//line composer.gox:437
+//line composer.gox:441
 						__e = __c.Set("type", "button"); if __e != nil { return }
-//line composer.gox:437
+//line composer.gox:441
 						__e = __c.Set("class", "nechat-ctl"); if __e != nil { return }
-//line composer.gox:437
+//line composer.gox:441
 						__e = __c.Set("title", "Stop"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line composer.gox:438
+//line composer.gox:442
 						__e = (doors.Class("nechat-ic nechat-icon_breathe")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 							ctx := __c.Context(); _ = ctx
-//line composer.gox:438
+//line composer.gox:442
 							__e = __c.Any(icons.Stop()); if __e != nil { return }
 						return })); if __e != nil { return }
 					}
@@ -1278,20 +1286,20 @@ func (c *Composer) running() gox.Elem {
 			__e = __c.Close(); if __e != nil { return }
 			__e = __c.Init("span"); if __e != nil { return }
 			{
-//line composer.gox:441
+//line composer.gox:445
 				__e = __c.Set("class", "nechat-gauge-body"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line composer.gox:442
+//line composer.gox:446
 				if !c.Params.Off(params.Tokens) {
-//line composer.gox:443
+//line composer.gox:447
 					__e = __c.Any(c.Controller.Bar().Bind(c.generated)); if __e != nil { return }
 				}
 				__e = __c.Init("span"); if __e != nil { return }
 				{
-//line composer.gox:445
+//line composer.gox:449
 					__e = __c.Set("class", "nechat-gauge-meta"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line composer.gox:445
+//line composer.gox:449
 					__e = __c.Any(fmt.Sprintf("%.1fs", time.Since(start).Seconds())); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
@@ -1301,50 +1309,50 @@ func (c *Composer) running() gox.Elem {
 		__e = __c.Close(); if __e != nil { return }
 		__e = __c.Init("script"); if __e != nil { return }
 		{
-//line composer.gox:448
+//line composer.gox:452
 			__e = __c.Set("data:start", start.UnixMilli()); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Raw("const el =\n\t\t\tdocument.currentScript.previousElementSibling.querySelector(\n\t\t\t\t\".nechat-gauge-meta\",\n\t\t\t)\n\t\tconst start = $data(\"start\")\n\t\tconst t = setInterval(() => {\n\t\t\tel.textContent = ((Date.now() - start) / 1000).toFixed(1) + \"s\"\n\t\t}, 50)\n\t\t$sys.clean(() => clearInterval(t))"); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line composer.gox:459
+//line composer.gox:463
 }
 
-//line composer.gox:461
+//line composer.gox:465
 func (c *Composer) overshoot(excess int) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line composer.gox:462
+//line composer.gox:466
 		if excess > 0 {
 			__e = __c.Init("span"); if __e != nil { return }
 			{
-//line composer.gox:463
+//line composer.gox:467
 				__e = __c.Set("class", "nechat-gauge nechat-gauge_err"); if __e != nil { return }
-//line composer.gox:463
+//line composer.gox:467
 				__e = __c.Set("title", "Message too long to send; text past the limit is not kept"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Init("span"); if __e != nil { return }
 				{
-//line composer.gox:464
+//line composer.gox:468
 					__e = __c.Set("class", "nechat-gauge-lead"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line composer.gox:464
+//line composer.gox:468
 					__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 						ctx := __c.Context(); _ = ctx
-//line composer.gox:464
+//line composer.gox:468
 						__e = __c.Any(icons.WarningFill()); if __e != nil { return }
 					return })); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
 				__e = __c.Init("span"); if __e != nil { return }
 				{
-//line composer.gox:465
+//line composer.gox:469
 					__e = __c.Set("class", "nechat-gauge-body"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
 					__e = __c.Init("span"); if __e != nil { return }
 					{
-//line composer.gox:466
+//line composer.gox:470
 						__e = __c.Set("class", "nechat-gauge-val"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 						__e = __c.Text("too long"); if __e != nil { return }
@@ -1352,7 +1360,7 @@ func (c *Composer) overshoot(excess int) gox.Elem {
 					__e = __c.Close(); if __e != nil { return }
 					__e = __c.Init("span"); if __e != nil { return }
 					{
-//line composer.gox:467
+//line composer.gox:471
 						__e = __c.Set("class", "nechat-gauge-sep"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 						__e = __c.Text("·"); if __e != nil { return }
@@ -1360,10 +1368,10 @@ func (c *Composer) overshoot(excess int) gox.Elem {
 					__e = __c.Close(); if __e != nil { return }
 					__e = __c.Init("span"); if __e != nil { return }
 					{
-//line composer.gox:468
+//line composer.gox:472
 						__e = __c.Set("class", "nechat-gauge-meta"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line composer.gox:468
+//line composer.gox:472
 						__e = __c.Any(byteCount(excess) + " over"); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
@@ -1373,7 +1381,7 @@ func (c *Composer) overshoot(excess int) gox.Elem {
 			__e = __c.Close(); if __e != nil { return }
 		}
 	return })
-//line composer.gox:472
+//line composer.gox:476
 }
 
 func byteCount(n int) string {
@@ -1398,13 +1406,13 @@ func tokens(n int) string {
 	return fmt.Sprintf("%.1fM", float64(n) / 1000000)
 }
 
-//line composer.gox:496
+//line composer.gox:500
 func (c *Composer) send(enabled bool) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line composer.gox:497
+//line composer.gox:501
 		if enabled {
-//line composer.gox:498
+//line composer.gox:502
 			__e = (doors.AClick{
 			Scope: c.scope.Scope(true),
 			Indicator: c.sendIndication(),
@@ -1417,25 +1425,25 @@ func (c *Composer) send(enabled bool) gox.Elem {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.Init("button"); if __e != nil { return }
 				{
-//line composer.gox:506
+//line composer.gox:510
 					__e = __c.Set("type", "button"); if __e != nil { return }
-//line composer.gox:506
+//line composer.gox:510
 					__e = __c.Set("id", "send" + c.id()); if __e != nil { return }
-//line composer.gox:506
+//line composer.gox:510
 					__e = __c.Set("class", "nechat-iconbtn"); if __e != nil { return }
-//line composer.gox:506
+//line composer.gox:510
 					__e = __c.Set("aria-label", "Send"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line composer.gox:507
+//line composer.gox:511
 					__e = (doors.Class("nechat-ic nechat-icon_idle")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 						ctx := __c.Context(); _ = ctx
-//line composer.gox:507
+//line composer.gox:511
 						__e = __c.Any(icons.Submit()); if __e != nil { return }
 					return })); if __e != nil { return }
-//line composer.gox:508
+//line composer.gox:512
 					__e = (doors.Class("nechat-ic nechat-icon_busy")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 						ctx := __c.Context(); _ = ctx
-//line composer.gox:508
+//line composer.gox:512
 						__e = __c.Any(icons.Spinner()); if __e != nil { return }
 					return })); if __e != nil { return }
 				}
@@ -1444,32 +1452,32 @@ func (c *Composer) send(enabled bool) gox.Elem {
 		} else  {
 			__e = __c.Init("button"); if __e != nil { return }
 			{
-//line composer.gox:511
+//line composer.gox:515
 				__e = __c.Set("type", "button"); if __e != nil { return }
-//line composer.gox:511
+//line composer.gox:515
 				__e = __c.Set("class", "nechat-iconbtn"); if __e != nil { return }
-//line composer.gox:511
+//line composer.gox:515
 				__e = __c.Set("aria-label", "Send"); if __e != nil { return }
 				__e = __c.Set("disabled", true); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line composer.gox:512
+//line composer.gox:516
 				__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 					ctx := __c.Context(); _ = ctx
-//line composer.gox:512
+//line composer.gox:516
 					__e = __c.Any(icons.Submit()); if __e != nil { return }
 				return })); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		}
 	return })
-//line composer.gox:515
+//line composer.gox:519
 }
 
-//line composer.gox:517
+//line composer.gox:521
 func (c *Composer) textarea(input api.Input) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line composer.gox:519
+//line composer.gox:523
 		s := new(doors.Setter)
 	pending, _ := c.Controller.Pending().ReadAndSub(ctx, func(ctx context.Context, b bool) bool {
 		value := "false"
@@ -1481,7 +1489,7 @@ func (c *Composer) textarea(input api.Input) gox.Elem {
 		return false
 	})
 
-//line composer.gox:530
+//line composer.gox:534
 		__e = (doors.AKeyDown{
 		Key: doors.Key{
 			Key: "Enter",
@@ -1497,7 +1505,7 @@ func (c *Composer) textarea(input api.Input) gox.Elem {
 		OnError: notify.OnError,
 	}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
-//line composer.gox:543
+//line composer.gox:547
 			__e = (doors.AInput{
 		Scope: c.scope.Scope(false).And(&doors.ScopeRate{
 			Tick: 100 * time.Millisecond,
@@ -1512,17 +1520,19 @@ func (c *Composer) textarea(input api.Input) gox.Elem {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.Init("textarea"); if __e != nil { return }
 				{
-//line composer.gox:554
-					__e = __c.Set("id", "text" + c.id()); if __e != nil { return }
-//line composer.gox:555
-					__e = __c.Set("class", "nechat-draft"); if __e != nil { return }
-//line composer.gox:556
-					__e = __c.Set("rows", "2"); if __e != nil { return }
-//line composer.gox:557
-					__e = __c.Modify(s); if __e != nil { return }
 //line composer.gox:558
-					__e = __c.Set("readonly", pending); if __e != nil { return }
+					__e = __c.Set("id", "text" + c.id()); if __e != nil { return }
 //line composer.gox:559
+					__e = __c.Set("class", "nechat-draft"); if __e != nil { return }
+//line composer.gox:560
+					__e = __c.Set("rows", "2"); if __e != nil { return }
+//line composer.gox:561
+					__e = __c.Set("aria-label", "Message"); if __e != nil { return }
+//line composer.gox:562
+					__e = __c.Modify(s); if __e != nil { return }
+//line composer.gox:563
+					__e = __c.Set("readonly", pending); if __e != nil { return }
+//line composer.gox:564
 					__e = __c.Set("aria-busy", func() any {
 			if pending {
 				return "true"
@@ -1530,21 +1540,21 @@ func (c *Composer) textarea(input api.Input) gox.Elem {
 			return "false"
 		}()); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line composer.gox:565
+//line composer.gox:570
 					__e = __c.Any(input.Text); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
 			return })); if __e != nil { return }
 		return })); if __e != nil { return }
-//line composer.gox:567
+//line composer.gox:572
 		__e = __c.Any(c.Controller.Pending().Bind(func(pending bool) gox.Elem {
 		return gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
-//line composer.gox:568
+//line composer.gox:573
 			if !pending {
 				__e = __c.Init("script"); if __e != nil { return }
 				{
-//line composer.gox:569
+//line composer.gox:574
 					__e = __c.Set("data:id", "text" + c.id()); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
 					__e = __c.Raw("const el = document.getElementById($data(\"id\"))\n\t\t\t\tel.focus()\n\t\t\t\tel.setSelectionRange(el.value.length, el.value.length)"); if __e != nil { return }
@@ -1552,10 +1562,10 @@ func (c *Composer) textarea(input api.Input) gox.Elem {
 				__e = __c.Close(); if __e != nil { return }
 			}
 		return })
-//line composer.gox:575
+//line composer.gox:580
 	})); if __e != nil { return }
 	return })
-//line composer.gox:576
+//line composer.gox:581
 }
 
 func (c *Composer) sendIndication() doors.Indicators {

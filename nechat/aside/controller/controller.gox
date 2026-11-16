@@ -79,6 +79,10 @@ func (s Controller) searchRoute(kind SearchKind, el searchElem) doors.BeamRoute[
 	})))
 }
 
+func (s Controller) Expanded() doors.Beam[bool] {
+	return s.expanded
+}
+
 func (s Controller) Show(el gox.Elem) gox.Elem {
 	return s.expanded.Bind(func(show bool) gox.Elem {
 		if show {

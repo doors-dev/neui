@@ -1,4 +1,4 @@
-// Managed by GoX v0.3.4
+// Managed by GoX v0.4.0
 
 //line row.gox:1
 package aside
@@ -195,6 +195,8 @@ func (r *row) kebab(toggle func(ctx context.Context)) gox.Elem {
 				__e = __c.Set("class", "nechat-iconbtn"); if __e != nil { return }
 //line row.gox:92
 				__e = __c.Set("aria-label", "Chat actions"); if __e != nil { return }
+//line row.gox:92
+				__e = __c.Set("aria-haspopup", "menu"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 //line row.gox:93
 				__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {

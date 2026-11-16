@@ -84,11 +84,11 @@ elem (c Chat) Placeholder(enabled doors.Beam[bool]) {
 			<div class="nechat-composer">
 				<div class="nechat-tray">
 				</div>
-				<textarea class="nechat-draft" rows="2" disabled></textarea>
+				<textarea class="nechat-draft" rows="2" aria-label="Message" disabled></textarea>
 				<div class="nechat-barrow">
 					<div class="nechat-barrow-left">
 						~(if !c.Params.Off(params.Attachments) {
-							<button class="nechat-iconbtn" disabled>
+							<button class="nechat-iconbtn" aria-label="Attach files" disabled>
 								~>(doors.Class("nechat-ic")) ~(icons.Attach())
 							</button>
 						})
@@ -253,7 +253,7 @@ elem (c *chat) Main() {
 
 elem (c *chat) body(kind closedKind) {
 	~(if kind == alive {
-		<div class="nechat-log nechat-log_scroll" role="log" aria-label="Chat messages" data-seeding="">
+		<div class="nechat-log nechat-log_scroll" role="log" aria-label="Chat messages" tabindex="0" data-seeding="">
 			~(c.list.Main())
 			~(c.list.Script())
 		</div>

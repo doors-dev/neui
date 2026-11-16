@@ -129,6 +129,8 @@ func (c Chat) Placeholder(enabled doors.Beam[bool]) gox.Elem {
 						__e = __c.Set("class", "nechat-draft"); if __e != nil { return }
 //line chat.gox:87
 						__e = __c.Set("rows", "2"); if __e != nil { return }
+//line chat.gox:87
+						__e = __c.Set("aria-label", "Message"); if __e != nil { return }
 						__e = __c.Set("disabled", true); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 					}
@@ -149,6 +151,8 @@ func (c Chat) Placeholder(enabled doors.Beam[bool]) gox.Elem {
 								{
 //line chat.gox:91
 									__e = __c.Set("class", "nechat-iconbtn"); if __e != nil { return }
+//line chat.gox:91
+									__e = __c.Set("aria-label", "Attach files"); if __e != nil { return }
 									__e = __c.Set("disabled", true); if __e != nil { return }
 									__e = __c.Submit(); if __e != nil { return }
 //line chat.gox:92
@@ -322,6 +326,8 @@ func (c *chat) body(kind closedKind) gox.Elem {
 				__e = __c.Set("role", "log"); if __e != nil { return }
 //line chat.gox:256
 				__e = __c.Set("aria-label", "Chat messages"); if __e != nil { return }
+//line chat.gox:256
+				__e = __c.Set("tabindex", "0"); if __e != nil { return }
 //line chat.gox:256
 				__e = __c.Set("data-seeding", ""); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }

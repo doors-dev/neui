@@ -56,24 +56,28 @@
     --button-ink: var(--nechat-dark-button-ink, oklch(87.1% 0.006 286.286));
     --button-bg-hover: var(--secondary-bg-hover);
     --button-ink-hover: var(--app-ink);
-    --button-bg-active: var(--panel-border-focus);
+    --button-bg-active: var(--secondary-bg-active);
     --button-border-off: var(--app-border);
     --button-ink-off: var(--nechat-dark-button-ink-off, oklch(55.2% 0.016 285.938));
     --secondary-bg: var(--nechat-dark-secondary-bg, oklch(21% 0.006 285.885));
     --secondary-ink: var(--app-ink-quiet);
     --secondary-bg-hover: var(--app-border);
     --secondary-ink-hover: var(--app-ink);
+    --secondary-ink-quiet-hover: var(--nechat-dark-app-ink-quiet, oklch(87.1% 0.006 286.286));
     --secondary-bg-active: var(--button-border);
     --secondary-bg-selected: var(--secondary-bg-hover);
-    --secondary-ink-off: var(--button-ink-off);
-    --danger-ink: var(--nechat-dark-danger-ink, oklch(63.7% 0.237 25.331));
-    --danger-bg-active: var(--nechat-dark-danger-bg-active, oklch(57.7% 0.245 27.325));
+    --secondary-ink-off: var(--nechat-dark-button-ink-off, var(--app-ink-quiet));
+    --danger-ink: var(--nechat-dark-danger-ink, oklch(70.4% 0.191 22.216));
+    --danger-bg-hover: var(--nechat-dark-danger-bg-hover, oklch(57.7% 0.245 27.325));
+    --danger-bg-active: var(--nechat-dark-danger-bg-active, oklch(50.5% 0.213 27.518));
     --danger-ink-on-fill: var(--nechat-dark-danger-ink-on-fill, #fff);
     --figure-value: var(--app-ink);
     --figure-track: transparent;
     @supports (color: color-mix(in lab, red, red)) {
       --figure-track: color-mix(in srgb, transparent, currentColor 35%);
     }
+    --field-border: var(--panel-border-focus);
+    --focus-ring: var(--app-ink-quiet);
     accent-color: var(--app-ink-quiet);
     color-scheme: dark;
   }
@@ -90,24 +94,28 @@
       --button-ink: var(--nechat-light-button-ink, oklch(37% 0.013 285.805));
       --button-bg-hover: var(--secondary-bg-hover);
       --button-ink-hover: var(--app-ink);
-      --button-bg-active: var(--panel-border-focus);
+      --button-bg-active: var(--secondary-bg-active);
       --button-border-off: var(--app-border);
       --button-ink-off: var(--nechat-light-button-ink-off, oklch(55.2% 0.016 285.938));
       --secondary-bg: var(--nechat-light-secondary-bg, oklch(92% 0.004 286.32));
       --secondary-ink: var(--app-ink-quiet);
       --secondary-bg-hover: var(--app-border);
       --secondary-ink-hover: var(--app-ink);
+      --secondary-ink-quiet-hover: var(--app-ink-quiet);
       --secondary-bg-active: var(--button-border);
       --secondary-bg-selected: var(--secondary-bg-hover);
       --secondary-ink-off: var(--button-ink-off);
-      --danger-ink: var(--nechat-light-danger-ink, oklch(57.7% 0.245 27.325));
-      --danger-bg-active: var(--nechat-light-danger-bg-active, oklch(50.5% 0.213 27.518));
+      --danger-ink: var(--nechat-light-danger-ink, oklch(50.5% 0.213 27.518));
+      --danger-bg-hover: var(--nechat-light-danger-bg-hover, var(--danger-ink));
+      --danger-bg-active: var(--nechat-light-danger-bg-active, oklch(44.4% 0.177 26.899));
       --danger-ink-on-fill: var(--nechat-light-danger-ink-on-fill, #fff);
       --figure-value: var(--app-ink);
       --figure-track: transparent;
       @supports (color: color-mix(in lab, red, red)) {
         --figure-track: color-mix(in srgb, transparent, currentColor 35%);
       }
+      --field-border: var(--panel-border-focus);
+      --focus-ring: var(--app-ink-quiet);
       accent-color: var(--app-ink-quiet);
       color-scheme: light;
     }
@@ -124,24 +132,28 @@
     --button-ink: var(--nechat-light-button-ink, oklch(37% 0.013 285.805));
     --button-bg-hover: var(--secondary-bg-hover);
     --button-ink-hover: var(--app-ink);
-    --button-bg-active: var(--panel-border-focus);
+    --button-bg-active: var(--secondary-bg-active);
     --button-border-off: var(--app-border);
     --button-ink-off: var(--nechat-light-button-ink-off, oklch(55.2% 0.016 285.938));
     --secondary-bg: var(--nechat-light-secondary-bg, oklch(92% 0.004 286.32));
     --secondary-ink: var(--app-ink-quiet);
     --secondary-bg-hover: var(--app-border);
     --secondary-ink-hover: var(--app-ink);
+    --secondary-ink-quiet-hover: var(--app-ink-quiet);
     --secondary-bg-active: var(--button-border);
     --secondary-bg-selected: var(--secondary-bg-hover);
     --secondary-ink-off: var(--button-ink-off);
-    --danger-ink: var(--nechat-light-danger-ink, oklch(57.7% 0.245 27.325));
-    --danger-bg-active: var(--nechat-light-danger-bg-active, oklch(50.5% 0.213 27.518));
+    --danger-ink: var(--nechat-light-danger-ink, oklch(50.5% 0.213 27.518));
+    --danger-bg-hover: var(--nechat-light-danger-bg-hover, var(--danger-ink));
+    --danger-bg-active: var(--nechat-light-danger-bg-active, oklch(44.4% 0.177 26.899));
     --danger-ink-on-fill: var(--nechat-light-danger-ink-on-fill, #fff);
     --figure-value: var(--app-ink);
     --figure-track: transparent;
     @supports (color: color-mix(in lab, red, red)) {
       --figure-track: color-mix(in srgb, transparent, currentColor 35%);
     }
+    --field-border: var(--panel-border-focus);
+    --focus-ring: var(--app-ink-quiet);
     accent-color: var(--app-ink-quiet);
     color-scheme: light;
   }
@@ -499,19 +511,20 @@
     border-color: var(--danger-ink);
     color: var(--danger-ink);
   }
-  .nechat-btn_del:hover {
+  .nechat-btn_del:focus-visible {
     border-color: var(--danger-ink);
-    background-color: var(--danger-ink);
+    color: var(--danger-ink);
+    --_nechat-ring: var(--danger-ink);
+  }
+  .nechat-btn_del:hover {
+    border-color: var(--danger-bg-hover);
+    background-color: var(--danger-bg-hover);
     color: var(--danger-ink-on-fill);
   }
   .nechat-btn_del:active {
     border-color: var(--danger-bg-active);
     background-color: var(--danger-bg-active);
     color: var(--danger-ink-on-fill);
-  }
-  .nechat-btn_del:focus-visible {
-    border-color: var(--danger-bg-active);
-    color: var(--danger-bg-active);
   }
   .nechat-btn_2nd {
     border-color: transparent;
@@ -557,6 +570,7 @@
     color: var(--button-ink-off);
   }
   .nechat-ctl {
+    position: relative;
     box-sizing: border-box;
     display: inline-flex;
     height: calc(var(--spacing, 0.25rem) * 5);
@@ -648,7 +662,7 @@
     border-radius: var(--_nechat-radius-control);
     border-style: var(--nechat-tw-border-style);
     border-width: 1px;
-    border-color: var(--panel-border);
+    border-color: var(--field-border);
     background-color: var(--panel-bg);
     padding-inline: calc(var(--spacing, 0.25rem) * 2);
   }
@@ -698,7 +712,7 @@
     border-radius: var(--_nechat-radius-surface);
     border-style: var(--nechat-tw-border-style);
     border-width: 1px;
-    border-color: var(--panel-border);
+    border-color: var(--field-border);
     background-color: var(--panel-bg);
     padding-inline: var(--spacing, 0.25rem);
     padding-top: calc(var(--spacing, 0.25rem) * 2);
@@ -782,6 +796,12 @@
       width: 100%;
       max-width: 100%;
       border-inline: 0;
+    }
+    .nechat-widget:has(.nechat-aside) .nechat-pane {
+      visibility: hidden;
+    }
+    .nechat-widget:has(.nechat-aside) .nechat-toasts {
+      visibility: visible;
     }
   }
   .nechat-side-body {
@@ -892,6 +912,8 @@
   .nechat-thread_active {
     cursor: default;
     background-color: var(--secondary-bg-selected);
+    --nechat-tw-font-weight: var(--font-weight-medium, 500);
+    font-weight: var(--font-weight-medium, 500);
     color: var(--secondary-ink-hover);
   }
   .nechat-thread_new {
@@ -899,7 +921,7 @@
   }
   .nechat-thread_new:hover {
     background-color: transparent;
-    color: var(--app-ink-quiet);
+    color: var(--secondary-ink-quiet-hover);
   }
   .nechat-dot {
     display: flex;
@@ -928,10 +950,22 @@
     color: var(--secondary-ink-hover);
   }
   .nechat-row > .nechat-iconbtn {
-    display: none;
+    position: absolute;
+    inset-inline-end: calc(var(--spacing, 0.25rem) * 0);
+    height: 1px;
+    width: 1px;
+    overflow: hidden;
+    border-style: var(--nechat-tw-border-style);
+    border-width: 0px;
+    clip-path: inset(50%);
   }
   .nechat-row:hover > .nechat-iconbtn, .nechat-row:focus-within > .nechat-iconbtn {
-    display: inline-flex;
+    position: static;
+    height: calc(var(--spacing, 0.25rem) * 7);
+    width: calc(var(--spacing, 0.25rem) * 7);
+    border-style: var(--nechat-tw-border-style);
+    border-width: 1px;
+    clip-path: none;
   }
   .nechat-row:has(.nechat-form) > :is(.nechat-thread, .nechat-iconbtn) {
     display: none;
@@ -1032,7 +1066,7 @@
     border-radius: var(--_nechat-radius-surface);
     border-style: var(--nechat-tw-border-style);
     border-width: 1px;
-    border-color: var(--panel-border);
+    border-color: var(--field-border);
     background-color: var(--panel-bg);
   }
   .nechat-composer:focus-within {
@@ -1179,7 +1213,7 @@
     margin-block-start: calc((1lh - 1rem) / 2);
     border-style: var(--nechat-tw-border-style);
     border-width: 1px;
-    border-color: var(--button-border);
+    border-color: var(--field-border);
     color: transparent;
   }
   .nechat-mark_radio {
@@ -1220,6 +1254,9 @@
     --nechat-tw-font-weight: var(--font-weight-normal, 400);
     font-weight: var(--font-weight-normal, 400);
     color: var(--app-ink-quiet);
+  }
+  .nechat-pick:is(:hover, :has(> input:checked)) .nechat-pick-desc,	.nechat-entry:hover .nechat-entry-detail {
+    color: var(--secondary-ink-quiet-hover);
   }
   .nechat-pick_own textarea {
     margin: 0px;
@@ -1332,6 +1369,7 @@
   }
   .nechat-gauge_opens:active {
     background-color: var(--secondary-bg-active);
+    color: var(--secondary-ink-hover);
   }
   .nechat-gauge_opens.nechat-gauge_open {
     background-color: var(--secondary-bg-selected);
@@ -1349,10 +1387,13 @@
     height: 0px;
     width: 0px;
     flex: none;
-    opacity: 55%;
+    opacity: 75%;
   }
   .nechat-gauge_open > .nechat-gauge-body::after {
     transform: rotate(180deg);
+    opacity: 90%;
+  }
+  .nechat-gauge_opens:is(:hover, :active) > .nechat-gauge-body::after {
     opacity: 90%;
   }
   .nechat-gauge_err > .nechat-gauge-lead {
@@ -1579,6 +1620,7 @@
   }
   .nechat-files {
     width: calc(var(--spacing, 0.25rem) * 72);
+    max-width: 100%;
   }
   .nechat-entry {
     position: relative;
@@ -1866,9 +1908,11 @@
   }
   .nechat-think[open]:has(> .nechat-think-head:focus-visible) {
     outline-style: var(--nechat-tw-outline-style);
-    outline-width: 1px;
+    outline-width: 2px;
     outline-offset: 2px;
-    outline-color: var(--panel-border-focus);
+    outline-color: var(--focus-ring);
+    --nechat-tw-outline-style: solid;
+    outline-style: solid;
   }
   .nechat-think-body .nechat-prose {
     font-size: var(--text-sm, 0.875rem);
@@ -2643,6 +2687,75 @@
     }
     > :is(:nth-last-child(1 of :not(d0-r:empty))), > :is(d0-r:nth-last-child(1 of :not(d0-r:empty))) > :last-child {
       margin-bottom: 0px;
+    }
+  }
+  :is(.nechat-btn, .nechat-iconbtn, .nechat-ctl, .nechat-act, .nechat-thread, .nechat-hit, .nechat-gauge, .nechat-file, .nechat-log_scroll):focus-visible,	.nechat-field:focus-within,	.nechat-form:has(.nechat-text:focus-visible),	.nechat-composer:has(> .nechat-draft:focus-visible),	.nechat-pick:has(> input:focus-visible, textarea:focus-visible),	label.nechat-iconbtn:has(> input:focus-visible),	.nechat-entry:has(.nechat-entry-name:focus-visible) {
+    outline-style: var(--nechat-tw-outline-style);
+    outline-width: 2px;
+    outline-offset: calc(1px * -1);
+    outline-color: var(--_nechat-ring,var(--focus-ring));
+    --nechat-tw-outline-style: solid;
+    outline-style: solid;
+  }
+  .nechat-ctl::after {
+    content: "";
+    position: absolute;
+    top: calc(1 / 2 * 100%);
+    left: calc(1 / 2 * 100%);
+    height: calc(var(--spacing, 0.25rem) * 6);
+    width: calc(var(--spacing, 0.25rem) * 6);
+    --nechat-tw-translate-x: calc(calc(1 / 2 * 100%) * -1);
+    --nechat-tw-translate-y: calc(calc(1 / 2 * 100%) * -1);
+    translate: var(--nechat-tw-translate-x) var(--nechat-tw-translate-y);
+  }
+  label.nechat-iconbtn > input[type=file] {
+    pointer-events: none;
+    position: absolute;
+    height: 1px;
+    width: 1px;
+    opacity: 0%;
+  }
+  @media (forced-colors: active) {
+    .nechat-dot, .nechat-thread_active > .nechat-dot {
+      forced-color-adjust: none;
+      color: CanvasText;
+    }
+    .nechat-mark, .nechat-pick:hover > .nechat-mark {
+      forced-color-adjust: none;
+      border-color: CanvasText;
+      background-color: Canvas;
+      color: transparent;
+    }
+    .nechat-pick:has(> input:checked) > .nechat-mark {
+      color: CanvasText;
+      border-color: CanvasText;
+    }
+    .nechat-ring {
+      forced-color-adjust: none;
+    }
+    .nechat-ring-track {
+      stroke: GrayText;
+    }
+    .nechat-ring-fill {
+      stroke: CanvasText;
+    }
+    .nechat-file-fill {
+      forced-color-adjust: none;
+      inset-block-start: auto;
+      height: 0.125rem;
+      background-color: Highlight;
+    }
+    .nechat-thread_active, .nechat-gauge_open, .nechat-iconbtn_open, .nechat-pick:has(> input:checked) {
+      border-color: Highlight;
+    }
+    .nechat-btn:disabled, .nechat-iconbtn:disabled {
+      color: GrayText;
+      border-color: GrayText;
+    }
+    .nechat-gauge_opens > .nechat-gauge-body::after {
+      forced-color-adjust: none;
+      border-inline-color: transparent;
+      border-block-end-color: CanvasText;
     }
   }
 }

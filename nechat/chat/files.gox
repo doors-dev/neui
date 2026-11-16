@@ -45,8 +45,10 @@ elem (c *chat) files() {
 elem filesButton(toggle func(ctx context.Context), open bool) {
 	~~
 	class := "nechat-iconbtn"
+	expanded := "false"
 	if open {
 		class = "nechat-iconbtn nechat-iconbtn_open"
+		expanded = "true"
 	}
 	~~
 	~>doors.AClick{
@@ -56,7 +58,7 @@ elem filesButton(toggle func(ctx context.Context), open bool) {
 			return false
 		},
 		OnError: notify.OnError,
-	} <button class=(class) title="Files" aria-label="Files">
+	} <button class=(class) title="Files" aria-label="Files" aria-expanded=(expanded)>
 		~>(doors.Class("nechat-ic")) ~(icons.Files())
 	</button>
 }

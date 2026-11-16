@@ -1,6 +1,7 @@
 package markdown
 
 import (
+	"bufio"
 	"bytes"
 	"html"
 	"io"
@@ -24,7 +25,7 @@ const FileScheme = "file:///"
 var chat = goldmark.New(
 	goldmark.WithExtensions(extension.GFM, extension.TaskList),
 	goldmark.WithRendererOptions(
-		renderer.WithNodeRenderers(util.Prioritized(fileLinkRenderer{}, 100)),
+		renderer.WithNodeRenderers(util.Prioritized(fileLinkRenderer{}, 100), util.Prioritized(taskRenderer{}, 100)),
 	),
 )
 
@@ -230,6 +231,59 @@ func renderImage(w util.BufWriter, source []byte, node ast.Node, entering bool) 
 	}
 	w.WriteString(">")
 	return ast.WalkSkipChildren, nil
+}
+
+type taskRenderer struct{}
+
+func (taskRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
+	reg.Register(east.KindTaskCheckBox, renderTaskCheckBox)
+}
+
+func renderTaskCheckBox(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	if !entering {
+		return ast.WalkContinue, nil
+	}
+	var b bytes.Buffer
+	text := bufio.NewWriter(&b)
+	for n := node.NextSibling(); n != nil; n = n.NextSibling() {
+		ast.Walk(n, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+			if !entering {
+				return ast.WalkContinue, nil
+			}
+			switch t := n.(type) {
+			case *ast.CodeSpan:
+				for c := t.FirstChild(); c != nil; c = c.NextSibling() {
+					if s, ok := c.(*ast.Text); ok {
+						gmhtml.DefaultWriter.RawWrite(text, s.Value(source))
+					}
+				}
+				return ast.WalkSkipChildren, nil
+			case *ast.Text:
+				gmhtml.DefaultWriter.Write(text, t.Value(source))
+				if t.SoftLineBreak() || t.HardLineBreak() {
+					text.WriteByte(' ')
+				}
+			case *ast.String:
+				gmhtml.DefaultWriter.Write(text, t.Value)
+			case *ast.AutoLink:
+				gmhtml.DefaultWriter.Write(text, t.Label(source))
+			}
+			return ast.WalkContinue, nil
+		})
+	}
+	text.Flush()
+	w.WriteString("<input")
+	if node.(*east.TaskCheckBox).IsChecked {
+		w.WriteString(` checked=""`)
+	}
+	w.WriteString(` disabled="" type="checkbox"`)
+	if label := strings.Join(strings.Fields(b.String()), " "); label != "" {
+		w.WriteString(` aria-label="`)
+		w.WriteString(label)
+		w.WriteByte('"')
+	}
+	w.WriteString("> ")
+	return ast.WalkContinue, nil
 }
 
 type islandRenderer struct {

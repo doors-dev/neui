@@ -89,7 +89,7 @@ elem (r *row) kebab(toggle func(ctx context.Context)) {
 			return false
 		},
 		OnError: notify.OnError,
-	} <button class="nechat-iconbtn" aria-label="Chat actions">
+	} <button class="nechat-iconbtn" aria-label="Chat actions" aria-haspopup="menu">
 		~>(doors.Class("nechat-ic")) ~(icons.DotsThreeVertical())
 	</button>
 }

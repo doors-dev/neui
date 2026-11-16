@@ -166,14 +166,14 @@ elem (u *uploader) List() {
 elem (u *uploader) Form(pending doors.Beam[bool]) {
 	~(pending.Bind(elem(pending bool) {
 		~(if pending {
-			<button class="nechat-iconbtn" disabled>
+			<button class="nechat-iconbtn" aria-label="Attach files" disabled>
 				~>(doors.Class("nechat-ic")) ~(icons.Attach())
 			</button>
 		} else {
 			<label id=("attach" + u.params.ID) class="nechat-iconbtn">
 				~>(doors.Class("nechat-ic nechat-icon_idle")) ~(icons.Attach())
 				~>(doors.Class("nechat-ic nechat-icon_busy")) ~(icons.Spinner())
-				<input type="file" multiple hidden>
+				<input type="file" multiple aria-label="Attach files">
 			</label>
 			~>doors.ARawHook{
 				Name: "upload",

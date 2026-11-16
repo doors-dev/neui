@@ -1,4 +1,4 @@
-// Managed by GoX v0.3.3
+// Managed by GoX v0.4.0
 
 //line controller.gox:1
 package controller
@@ -87,6 +87,10 @@ func (s Controller) searchRoute(kind SearchKind, el searchElem) doors.BeamRoute[
 	})))
 }
 
+func (s Controller) Expanded() doors.Beam[bool] {
+	return s.expanded
+}
+
 func (s Controller) Show(el gox.Elem) gox.Elem {
 	return s.expanded.Bind(func(show bool) gox.Elem {
 		if show {
@@ -95,27 +99,27 @@ func (s Controller) Show(el gox.Elem) gox.Elem {
 		return nil
 	})
 }
-//line controller.gox:90
+//line controller.gox:94
 func (s Controller) Input(render func(v string) gox.Elem) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line controller.gox:91
+//line controller.gox:95
 		__e = __c.Any(s.inputReset.Bind(func(int) gox.Elem {
 		return gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
-//line controller.gox:93
+//line controller.gox:97
 			s, ok := s.state.Read(ctx)
 		if !ok {
 			return
 		}
 
-//line controller.gox:98
+//line controller.gox:102
 			__e = __c.Any(render(s.searchInput)); if __e != nil { return }
 		return })
-//line controller.gox:99
+//line controller.gox:103
 	})); if __e != nil { return }
 	return })
-//line controller.gox:100
+//line controller.gox:104
 }
 
 func (s Controller) Collapse(ctx context.Context) {
@@ -194,19 +198,19 @@ func (s Controller) RouteList(
 			ctx := __c.Context(); _ = ctx
 			__e = __c.InitContainer(); if __e != nil { return }
 			{
-//line controller.gox:176
+//line controller.gox:180
 				state, ok := s.state.Read(ctx)
 
-//line controller.gox:178
+//line controller.gox:182
 				if ok {
-//line controller.gox:179
+//line controller.gox:183
 					__e = __c.Any(days(state.window, func(ctx context.Context, w Window) {
 					s.saveWindow(ctx, searchNone, w)
 				})); if __e != nil { return }
 				}
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line controller.gox:183
+//line controller.gox:187
 		return }))),
 		s.searchRoute(searchAll, func(input string, _ Window, _ func(context.Context, Window)) gox.Elem {
 			return all(input, func(ctx context.Context, kind SearchKind) {

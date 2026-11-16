@@ -264,8 +264,10 @@ elem (c *Composer) contextChip(toggle func(ctx context.Context), open bool) {
 	window := c.Controller.Model().Context
 	config := c.Controller.Config()
 	class := "nechat-gauge nechat-gauge_opens"
+	expanded := "false"
 	if open {
 		class = "nechat-gauge nechat-gauge_opens nechat-gauge_open"
+		expanded = "true"
 	}
 	~~
 	~>doors.AClick{
@@ -275,7 +277,7 @@ elem (c *Composer) contextChip(toggle func(ctx context.Context), open bool) {
 			return false
 		},
 		OnError: notify.OnError,
-	} <button type="button" class=(class) title="Context size">
+	} <button type="button" class=(class) title="Context size" aria-expanded=(expanded)>
 		~(if window != 0 {
 			<span class="nechat-gauge-lead">
 				~(c.Controller.Bar().Bind(elem(b controller.Bar) {
@@ -371,8 +373,10 @@ elem (c *Composer) tasks(has bool) {
 elem (c *Composer) tasksChip(toggle func(ctx context.Context), open bool) {
 	~~
 	class := "nechat-gauge nechat-gauge_opens"
+	expanded := "false"
 	if open {
 		class = "nechat-gauge nechat-gauge_opens nechat-gauge_open"
+		expanded = "true"
 	}
 	~~
 	~>doors.AClick{
@@ -382,7 +386,7 @@ elem (c *Composer) tasksChip(toggle func(ctx context.Context), open bool) {
 			return false
 		},
 		OnError: notify.OnError,
-	} <button type="button" class=(class)>
+	} <button type="button" class=(class) aria-expanded=(expanded)>
 		<span class="nechat-gauge-lead">~>(doors.Class("nechat-ic nechat-ic_line nechat-ic_beams")) ~(icons.Beams())</span>
 		<span class="nechat-gauge-body">
 			~(c.Controller.TaskCount().Bind(elem(n int) {
@@ -554,6 +558,7 @@ elem (c *Composer) textarea(input api.Input) {
 		id=("text" + c.id())
 		class="nechat-draft"
 		rows="2"
+		aria-label="Message"
 		(s)
 		readonly=(pending)
 		aria-busy=({

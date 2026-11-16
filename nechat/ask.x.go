@@ -1,4 +1,4 @@
-// Managed by GoX v0.3.4
+// Managed by GoX v0.4.0
 
 //line ask.gox:1
 package nechat
@@ -234,6 +234,10 @@ func (a *ask) form() gox.Elem {
 				{
 //line ask.gox:221
 					__e = __c.Set("class", "nechat-ask"); if __e != nil { return }
+//line ask.gox:221
+					__e = __c.Set("role", "group"); if __e != nil { return }
+//line ask.gox:221
+					__e = __c.Set("aria-label", a.input.Question); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
 					__e = __c.Init("p"); if __e != nil { return }
 					{

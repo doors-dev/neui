@@ -2,6 +2,7 @@ package aside
 
 import (
 	"context"
+	"strconv"
 	"time"
 	
 	"github.com/doors-dev/doors"
@@ -40,6 +41,11 @@ elem (p Aside) Main() {
 	~~
 	p.controller = controller.New(p.Params.Off(params.MessageSearch))
 	p.menu = p.Pops.Popup[chatMenu]()
+	burger := new(doors.Setter)
+	expanded, _ := p.controller.Expanded().ReadAndSub(ctx, func(ctx context.Context, v bool) bool {
+		doors.Call(ctx, burger.Set("aria-expanded", strconv.FormatBool(v)))
+		return false
+	})
 	~~
 	~(p.controller.Show(p.aside()))
 	~>doors.AClick{
@@ -49,7 +55,7 @@ elem (p Aside) Main() {
 			return false
 		},
 		OnError: notify.OnError,
-	} <button class="nechat-iconbtn nechat-burger" title="Menu">
+	} <button class="nechat-iconbtn nechat-burger" title="Menu" (burger) aria-expanded=(strconv.FormatBool(expanded))>
 		~(p.controller.RouteToggle(
 			<>~>(doors.Class("nechat-ic")) ~(icons.List())</>,
 			<>~>(doors.Class("nechat-ic")) ~(icons.Close())</>,

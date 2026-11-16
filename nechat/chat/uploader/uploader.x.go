@@ -1,4 +1,4 @@
-// Managed by GoX v0.3.4
+// Managed by GoX v0.4.0
 
 //line uploader.gox:1
 package uploader
@@ -201,6 +201,8 @@ func (u *uploader) Form(pending doors.Beam[bool]) gox.Elem {
 				{
 //line uploader.gox:169
 					__e = __c.Set("class", "nechat-iconbtn"); if __e != nil { return }
+//line uploader.gox:169
+					__e = __c.Set("aria-label", "Attach files"); if __e != nil { return }
 					__e = __c.Set("disabled", true); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
 //line uploader.gox:170
@@ -236,7 +238,8 @@ func (u *uploader) Form(pending doors.Beam[bool]) gox.Elem {
 //line uploader.gox:176
 						__e = __c.Set("type", "file"); if __e != nil { return }
 						__e = __c.Set("multiple", true); if __e != nil { return }
-						__e = __c.Set("hidden", true); if __e != nil { return }
+//line uploader.gox:176
+						__e = __c.Set("aria-label", "Attach files"); if __e != nil { return }
 					}
 					__e = __c.Submit(); if __e != nil { return }
 				}
