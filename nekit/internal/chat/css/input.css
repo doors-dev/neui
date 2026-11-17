@@ -339,6 +339,8 @@
 		flex
 		items-center
 		flex-none
+		box-content
+		min-h-7
 		pt-3
 		ps-10
 		pe-3
@@ -1703,6 +1705,145 @@
 		-translate-y-1/2
 	}
 	label.nechat-iconbtn > input[type=file] { @apply absolute w-px h-px opacity-0 pointer-events-none }
+
+	.nechat-widget[data-mode] {
+		@apply
+		fixed
+		z-50
+		bottom-4
+		right-4
+		w-100
+		h-160
+		max-w-[calc(100vw-2rem)]
+		max-h-[calc(100dvh-2rem)]
+		border
+		border-(--panel-border)
+		rounded-(--_nechat-radius-surface)
+		shadow-xl
+	}
+
+	.nechat-widget[data-mode="collapsed"] { @apply invisible }
+	.nechat-widget[data-mode="collapsed"] .nechat-toasts { @apply invisible }
+
+	@media (width < 40rem) {
+		.nechat-widget[data-mode] {
+			@apply
+			inset-0
+			w-auto
+			h-auto
+			max-w-none
+			max-h-none
+			border-0
+			rounded-none
+		}
+	}
+
+	.nechat-wctl {
+		@apply
+		absolute
+		z-20
+		top-3
+		right-3
+		h-7
+		flex
+		items-center
+		gap-1
+	}
+
+	.nechat-widget_aside-right > .nechat-wctl {
+		@apply
+		right-auto
+		left-3
+	}
+
+	.nechat-wctl > .nechat-iconbtn {
+		@apply
+		w-6
+		h-6
+		rounded-full
+	}
+
+	.nechat-wctl .nechat-ic { @apply w-3.5 h-3.5 }
+	.nechat-widget:not([data-mode="dock"]) .nechat-wctl-undock { @apply hidden }
+	.nechat-widget[data-mode="dock"] .nechat-wctl-dock { @apply hidden }
+
+	@media (width >= 40rem) {
+		.nechat-widget[data-mode="dock"] {
+			@apply
+			top-0
+			right-0
+			bottom-0
+			w-[var(--nechat-dock-w,28rem)]
+			h-auto
+			max-w-none
+			max-h-none
+			border-0
+			border-s
+			rounded-none
+			shadow-none
+		}
+		html:has(.nechat-widget[data-mode="dock"]) { padding-right: var(--nechat-dock-w, 28rem) }
+	}
+
+	@media (width < 40rem) {
+		.nechat-wctl-dock, .nechat-wctl-undock { @apply hidden }
+	}
+
+	.nechat-widget[data-mode] .nechat-pane > .nechat-top { @apply pe-20 }
+	.nechat-widget[data-mode].nechat-widget_aside-right .nechat-pane > .nechat-top { @apply ps-20 }
+
+	@container (width < 36rem) {
+		.nechat-widget[data-mode] .nechat-aside > .nechat-top { @apply pe-20 }
+		.nechat-widget[data-mode].nechat-widget_aside-right .nechat-aside > .nechat-top { @apply ps-20 }
+	}
+
+	@media (width < 40rem) {
+		.nechat-widget[data-mode] .nechat-pane > .nechat-top { @apply pe-10 }
+		.nechat-widget[data-mode].nechat-widget_aside-right .nechat-pane > .nechat-top { @apply ps-10 }
+		.nechat-widget[data-mode] .nechat-aside > .nechat-top { @apply pe-10 }
+		.nechat-widget[data-mode].nechat-widget_aside-right .nechat-aside > .nechat-top { @apply ps-10 }
+	}
+
+	.nechat-launcher {
+		@apply
+		hidden
+		absolute
+		bottom-0
+		right-0
+		box-border
+		w-12
+		h-12
+		p-0
+		items-center
+		justify-center
+		appearance-none
+		border
+		border-(--button-border)
+		rounded-full
+		bg-(--app-bg)
+		text-(--button-ink)
+		shadow-lg
+		cursor-pointer
+		outline-none
+		visible
+	}
+
+	.nechat-widget[data-mode="collapsed"] > .nechat-launcher { @apply inline-flex }
+	.nechat-launcher > .nechat-ic { @apply w-6 h-6 }
+
+	.nechat-launcher:hover, .nechat-launcher:active, .nechat-launcher:focus-visible {
+		@apply
+		border-(--panel-border-focus)
+		text-(--button-ink-hover)
+	}
+
+	@media (width < 40rem) {
+		.nechat-launcher {
+			@apply
+			bottom-4
+			right-4
+		}
+	}
 
 	@media (forced-colors: active) {
 		.nechat-dot, .nechat-thread_active > .nechat-dot { forced-color-adjust: none; color: CanvasText }

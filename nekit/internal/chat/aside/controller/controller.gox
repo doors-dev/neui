@@ -25,8 +25,8 @@ type state struct {
 	window Window
 }
 
-func New(namesOnly bool) Controller {
-	s := doors.NewSource(state{})
+func New(namesOnly bool, open bool) Controller {
+	s := doors.NewSource(state{expanded: open})
 	input := doors.DeriveBeam(s, func(s state) int {
 		return s.searchInputReset
 	})

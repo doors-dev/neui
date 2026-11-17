@@ -1,4 +1,4 @@
-// Managed by GoX v0.3.3
+// Managed by GoX v0.4.0
 
 //line icons.gox:1
 package icons
@@ -1166,4 +1166,134 @@ func CheckSquareFill() gox.Elem {
 		__e = __c.Close(); if __e != nil { return }
 	return })
 //line icons.gox:192
+}
+
+//line icons.gox:194
+func ChatCircle() gox.Elem {
+	return gox.Elem(func(__c gox.Cursor) (__e error) {
+		ctx := __c.Context(); _ = ctx
+		__e = __c.Init("svg"); if __e != nil { return }
+		{
+//line icons.gox:195
+			__e = __c.Modify(svgAttrs); if __e != nil { return }
+//line icons.gox:195
+			__e = __c.Set("viewBox", "0 0 256 256"); if __e != nil { return }
+			__e = __c.Submit(); if __e != nil { return }
+			__e = __c.Init("path"); if __e != nil { return }
+			{
+//line icons.gox:195
+				__e = __c.Set("d", "M128,24A104,104,0,0,0,36.18,176.88L24.83,210.93a16,16,0,0,0,20.24,20.24l34.05-11.35A104,104,0,1,0,128,24Zm0,192a87.87,87.87,0,0,1-44.06-11.81,8,8,0,0,0-6.54-.67L40,216,52.47,178.6a8,8,0,0,0-.66-6.54A88,88,0,1,1,128,216Z"); if __e != nil { return }
+				__e = __c.Submit(); if __e != nil { return }
+			}
+			__e = __c.Close(); if __e != nil { return }
+		}
+		__e = __c.Close(); if __e != nil { return }
+	return })
+//line icons.gox:196
+}
+
+//line icons.gox:198
+func DockRight() gox.Elem {
+	return gox.Elem(func(__c gox.Cursor) (__e error) {
+		ctx := __c.Context(); _ = ctx
+		__e = __c.Init("svg"); if __e != nil { return }
+		{
+//line icons.gox:199
+			__e = __c.Modify(svgAttrs); if __e != nil { return }
+//line icons.gox:199
+			__e = __c.Set("viewBox", "0 0 256 256"); if __e != nil { return }
+			__e = __c.Submit(); if __e != nil { return }
+			__e = __c.Init("rect"); if __e != nil { return }
+			{
+//line icons.gox:199
+				__e = __c.Set("x", "28"); if __e != nil { return }
+//line icons.gox:199
+				__e = __c.Set("y", "44"); if __e != nil { return }
+//line icons.gox:199
+				__e = __c.Set("width", "200"); if __e != nil { return }
+//line icons.gox:199
+				__e = __c.Set("height", "168"); if __e != nil { return }
+//line icons.gox:199
+				__e = __c.Set("rx", "16"); if __e != nil { return }
+//line icons.gox:199
+				__e = __c.Set("fill", "none"); if __e != nil { return }
+//line icons.gox:199
+				__e = __c.Set("stroke", "currentColor"); if __e != nil { return }
+//line icons.gox:199
+				__e = __c.Set("stroke-width", "16"); if __e != nil { return }
+				__e = __c.Submit(); if __e != nil { return }
+			}
+			__e = __c.Close(); if __e != nil { return }
+			__e = __c.Init("rect"); if __e != nil { return }
+			{
+//line icons.gox:199
+				__e = __c.Set("x", "152"); if __e != nil { return }
+//line icons.gox:199
+				__e = __c.Set("y", "44"); if __e != nil { return }
+//line icons.gox:199
+				__e = __c.Set("width", "76"); if __e != nil { return }
+//line icons.gox:199
+				__e = __c.Set("height", "168"); if __e != nil { return }
+//line icons.gox:199
+				__e = __c.Set("rx", "16"); if __e != nil { return }
+				__e = __c.Submit(); if __e != nil { return }
+			}
+			__e = __c.Close(); if __e != nil { return }
+		}
+		__e = __c.Close(); if __e != nil { return }
+	return })
+//line icons.gox:200
+}
+
+//line icons.gox:202
+func Undock() gox.Elem {
+	return gox.Elem(func(__c gox.Cursor) (__e error) {
+		ctx := __c.Context(); _ = ctx
+		__e = __c.Init("svg"); if __e != nil { return }
+		{
+//line icons.gox:203
+			__e = __c.Modify(svgAttrs); if __e != nil { return }
+//line icons.gox:203
+			__e = __c.Set("viewBox", "0 0 256 256"); if __e != nil { return }
+			__e = __c.Submit(); if __e != nil { return }
+			__e = __c.Init("rect"); if __e != nil { return }
+			{
+//line icons.gox:203
+				__e = __c.Set("x", "28"); if __e != nil { return }
+//line icons.gox:203
+				__e = __c.Set("y", "44"); if __e != nil { return }
+//line icons.gox:203
+				__e = __c.Set("width", "200"); if __e != nil { return }
+//line icons.gox:203
+				__e = __c.Set("height", "168"); if __e != nil { return }
+//line icons.gox:203
+				__e = __c.Set("rx", "16"); if __e != nil { return }
+//line icons.gox:203
+				__e = __c.Set("fill", "none"); if __e != nil { return }
+//line icons.gox:203
+				__e = __c.Set("stroke", "currentColor"); if __e != nil { return }
+//line icons.gox:203
+				__e = __c.Set("stroke-width", "16"); if __e != nil { return }
+				__e = __c.Submit(); if __e != nil { return }
+			}
+			__e = __c.Close(); if __e != nil { return }
+			__e = __c.Init("rect"); if __e != nil { return }
+			{
+//line icons.gox:203
+				__e = __c.Set("x", "124"); if __e != nil { return }
+//line icons.gox:203
+				__e = __c.Set("y", "116"); if __e != nil { return }
+//line icons.gox:203
+				__e = __c.Set("width", "80"); if __e != nil { return }
+//line icons.gox:203
+				__e = __c.Set("height", "72"); if __e != nil { return }
+//line icons.gox:203
+				__e = __c.Set("rx", "8"); if __e != nil { return }
+				__e = __c.Submit(); if __e != nil { return }
+			}
+			__e = __c.Close(); if __e != nil { return }
+		}
+		__e = __c.Close(); if __e != nil { return }
+	return })
+//line icons.gox:204
 }

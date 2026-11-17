@@ -7,7 +7,7 @@ import (
 
 func TestNamesOnlySearchSkipsOverview(t *testing.T) {
 	ctx := context.Background()
-	c := New(true)
+	c := New(true, false)
 	c.Toggle(ctx)
 	c.SearchInput(ctx, "plan")
 	if got := c.state.Get().searchKind; got != SearchNames {
@@ -27,7 +27,7 @@ func TestNamesOnlySearchSkipsOverview(t *testing.T) {
 
 func TestFullSearchKeepsOverview(t *testing.T) {
 	ctx := context.Background()
-	c := New(false)
+	c := New(false, false)
 	c.Toggle(ctx)
 	c.SearchInput(ctx, "plan")
 	if got := c.state.Get().searchKind; got != searchAll {

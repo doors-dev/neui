@@ -13,19 +13,12 @@ const event = "nechat_error"
 
 var OnError doors.Actions = doors.ActionEmit[any]{Name: event}
 
-type rootKey struct{}
-
-func Root(ctx context.Context) context.Context {
-	return context.WithValue(ctx, rootKey{}, doors.DetachedContext(ctx))
-}
-
 func Error(ctx context.Context, err error) {
-	root, ok := ctx.Value(rootKey{}).(context.Context)
 	k := kind(err)
-	if !ok || k == "" {
+	if k == "" || ctx.Err() != nil {
 		return
 	}
-	doors.Call(root, doors.ActionEmit[any]{Name: event, Arg: k})
+	doors.Call(ctx, doors.ActionEmit[any]{Name: event, Arg: k})
 }
 
 func kind(err error) string {

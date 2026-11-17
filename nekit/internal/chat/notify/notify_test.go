@@ -24,7 +24,3 @@ func TestKind(t *testing.T) {
 		}
 	}
 }
-
-func TestErrorWithoutRootDoesNothing(t *testing.T) {
-	Error(context.Background(), errors.New("disk full"))
-}

@@ -1,8 +1,9 @@
 package chat
 
 import (
+	"context"
 	"time"
-	
+
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
 	"neui.dev/api"
@@ -10,6 +11,8 @@ import (
 	"neui.dev/nekit/internal/chat/aside"
 	"neui.dev/nekit/internal/chat/chat"
 	"neui.dev/nekit/internal/chat/css"
+	"neui.dev/nekit/internal/chat/icons"
+	"neui.dev/nekit/internal/chat/layout"
 	"neui.dev/nekit/internal/chat/notify"
 	"neui.dev/nekit/internal/chat/params"
 	"neui.dev/nekit/internal/chat/pops"
@@ -48,6 +51,12 @@ type Chat struct {
 	Disable []params.Feature
 }
 
+type windowStateWrapper struct {
+	State *layout.State
+}
+
+type windowStateKey struct{}
+
 // Main renders the widget for the doors instance (browser tab) being
 // rendered. It shows a disabled chat until neui.Enable succeeds for the
 // session, and again after neui.Disable.
@@ -66,26 +75,96 @@ func (k Chat) Main() gox.Elem {
 	params.InitDefault()
 	params.Disable(k.Disable)
 	return gox.Elem(func(cur gox.Cursor) error {
-		inst := instance.GetInstance(cur.Context())
-		return cur.Comp(&widget{
-			params: params,
-			inst: inst,
-			synced: inst.Synced(),
-			pops: pops.NewPopups(),
+		state := doors.TabState[windowStateWrapper](cur.Context(), "neui-chat")
+		initlialized := false
+		state.Sub(cur.Context(), func(ctx context.Context, ws *windowStateWrapper) bool {
+			if ws == nil {
+				return false
+			}
+			if !initlialized && ws.State != nil {
+				initlialized = true
+				return false
+			}
+			if initlialized {
+				doors.SessionStore(ctx).Save(windowStateKey{}, *ws.State)
+				return false
+			}
+			s, _ := doors.SessionStore(ctx).Load(windowStateKey{}).(layout.State)
+			state.Update(ctx, &windowStateWrapper{State: &s})
+			return false
 		})
+		inst := instance.GetInstance(cur.Context())
+		return cur.Comp(state.Route(
+			doors.RouteMatch(
+				func(ws *windowStateWrapper) bool {
+					return ws != nil && ws.State != nil
+				},
+				doors.RouteDerive(func(source doors.Source[*windowStateWrapper]) doors.Source[layout.State] {
+					return doors.DeriveSource(source, func(w *windowStateWrapper) layout.State {
+						if w == nil || w.State == nil {
+							return layout.State{}
+						}
+						return *w.State
+					}, func(_ *windowStateWrapper, w layout.State) *windowStateWrapper {
+						return &windowStateWrapper{State: &w}
+					})
+				}, doors.RouteSource(func(s doors.Source[layout.State]) gox.Elem {
+					return (&widget{
+						params: params,
+						state: s,
+						inst: inst,
+						synced: inst.Synced(),
+						pops: pops.NewPopups(),
+					}).Main()
+				})),
+			),
+		))
 	})
 }
 
 type widget struct {
 	params params.Params
+	state doors.Source[layout.State]
 	inst api.Instance
 	synced doors.Beam[bool]
 	pops pops.Popups
 }
 
 elem (k *widget) Main() {
+	~~
+	shell := new(doors.Setter)
+	mode, _ := doors.DeriveBeam(k.state, layout.Mode).ReadAndSub(ctx, func(ctx context.Context, m string) bool {
+		doors.Call(ctx, shell.Set("data-mode", m))
+		return false
+	})
+	scope := new(doors.ScopeBlocking)
+	toggle := doors.AClick{
+		Scope: scope,
+		On: func(ctx context.Context, _ doors.RequestPointer) bool {
+			k.state.Mutate(ctx, func(s layout.State) layout.State {
+				s.Expanded = !s.Expanded
+				return s
+			})
+			return false
+		},
+		OnError: notify.OnError,
+	}
+	dock := doors.AClick{
+		Scope: scope,
+		On: func(ctx context.Context, _ doors.RequestPointer) bool {
+			k.state.Mutate(ctx, func(s layout.State) layout.State {
+				s.Dock = !s.Dock
+				return s
+			})
+			return false
+		},
+		OnError: notify.OnError,
+	}
+	~~
 	~(css.Style(k.params.ThemeDark, k.params.ThemeLight))
-	~>(doors.Ctx(notify.Root(ctx))) <div
+	<div
+		(shell)
+		data-mode=(mode)
 		class=({
 			class := "nechat-widget nechat-widget_split"
 			if k.params.Off(params.Sidebar) {
@@ -105,6 +184,17 @@ elem (k *widget) Main() {
 			}
 			return key
 		})>
+		<div class="nechat-wctl">
+			~>(dock) <button type="button" class="nechat-iconbtn nechat-wctl-dock" title="Dock to the side" aria-label="Dock to the side">
+				~>(doors.Class("nechat-ic")) ~(icons.DockRight())
+			</button>
+			~>(dock) <button type="button" class="nechat-iconbtn nechat-wctl-undock" title="Undock" aria-label="Undock">
+				~>(doors.Class("nechat-ic")) ~(icons.Undock())
+			</button>
+			~>(toggle) <button type="button" class="nechat-iconbtn" title="Collapse" aria-label="Collapse">
+				~>(doors.Class("nechat-ic")) ~(icons.Close())
+			</button>
+		</div>
 		~(if !k.params.Off(params.Sidebar) {
 			~(k.synced.Bind(elem(synced bool) {
 				~(if synced {
@@ -112,6 +202,7 @@ elem (k *widget) Main() {
 						Params: k.params,
 						Instance: k.inst,
 						Pops: k.pops,
+						Layout: k.state,
 					}
 				})
 			}))
@@ -123,5 +214,20 @@ elem (k *widget) Main() {
 		}
 		~(k.pops.Script())
 		~(notify.Script())
+		~>(toggle) <button type="button" class="nechat-launcher" title="Open chat" aria-label="Open chat">
+			~>(doors.Class("nechat-ic")) ~(icons.ChatCircle())
+		</button>
+		<script>
+			const widget = document.currentScript.closest(".nechat-widget")
+			const observer = new MutationObserver(() => {
+				if (widget.dataset.mode === "collapsed") {
+					widget.querySelector(".nechat-launcher").focus()
+					return
+				}
+				widget.querySelector(".nechat-draft")?.focus({ preventScroll: true })
+			})
+			observer.observe(widget, { attributes: true, attributeFilter: ["data-mode"] })
+			$sys.clean(() => observer.disconnect())
+		</script>
 	</div>
 }

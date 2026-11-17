@@ -11,6 +11,7 @@ import (
 	"neui.dev/nekit/internal/chat/aside/controller"
 	"neui.dev/nekit/internal/chat/pops"
 	"neui.dev/nekit/internal/chat/icons"
+	"neui.dev/nekit/internal/chat/layout"
 	"neui.dev/nekit/internal/chat/params"
 	"neui.dev/nekit/internal/chat/notify"
 )
@@ -33,17 +34,22 @@ type Aside struct {
 	Params params.Params
 	Instance api.Instance
 	Pops pops.Popups
+	Layout doors.Source[layout.State]
 	menu pops.Popup[chatMenu]
 	controller controller.Controller
 }
 
 elem (p Aside) Main() {
 	~~
-	p.controller = controller.New(p.Params.Off(params.MessageSearch))
+	p.controller = controller.New(p.Params.Off(params.MessageSearch), p.Layout.Get().Aside)
 	p.menu = p.Pops.Popup[chatMenu]()
 	burger := new(doors.Setter)
 	expanded, _ := p.controller.Expanded().ReadAndSub(ctx, func(ctx context.Context, v bool) bool {
 		doors.Call(ctx, burger.Set("aria-expanded", strconv.FormatBool(v)))
+		p.Layout.Mutate(ctx, func(s layout.State) layout.State {
+			s.Aside = v
+			return s
+		})
 		return false
 	})
 	~~
@@ -58,7 +64,7 @@ elem (p Aside) Main() {
 	} <button class="nechat-iconbtn nechat-burger" title="Menu" (burger) aria-expanded=(strconv.FormatBool(expanded))>
 		~(p.controller.RouteToggle(
 			<>~>(doors.Class("nechat-ic")) ~(icons.List())</>,
-			<>~>(doors.Class("nechat-ic")) ~(icons.Close())</>,
+			<>~>(doors.Class("nechat-ic")) ~(icons.List())</>,
 			<>~>(doors.Class("nechat-ic")) ~(icons.ArrowLeft())</>,
 		))
 	</button>

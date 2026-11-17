@@ -332,7 +332,9 @@
     opacity: 50%;
   }
   .nechat-top {
+    box-sizing: content-box;
     display: flex;
+    min-height: calc(var(--spacing, 0.25rem) * 7);
     flex: none;
     align-items: center;
     gap: calc(var(--spacing, 0.25rem) * 2);
@@ -2752,6 +2754,165 @@
     height: 1px;
     width: 1px;
     opacity: 0%;
+  }
+  .nechat-widget[data-mode] {
+    position: fixed;
+    right: calc(var(--spacing, 0.25rem) * 4);
+    bottom: calc(var(--spacing, 0.25rem) * 4);
+    z-index: 50;
+    height: calc(var(--spacing, 0.25rem) * 160);
+    max-height: calc(100dvh - 2rem);
+    width: calc(var(--spacing, 0.25rem) * 100);
+    max-width: calc(100vw - 2rem);
+    border-radius: var(--_nechat-radius-surface);
+    border-style: var(--nechat-tw-border-style);
+    border-width: 1px;
+    border-color: var(--panel-border);
+    --nechat-tw-shadow: 0 20px 25px -5px var(--nechat-tw-shadow-color, rgb(0 0 0 / 0.1)), 0 8px 10px -6px var(--nechat-tw-shadow-color, rgb(0 0 0 / 0.1));
+    box-shadow: var(--nechat-tw-inset-shadow), var(--nechat-tw-inset-ring-shadow), var(--nechat-tw-ring-offset-shadow), var(--nechat-tw-ring-shadow), var(--nechat-tw-shadow);
+  }
+  .nechat-widget[data-mode="collapsed"] {
+    visibility: hidden;
+  }
+  .nechat-widget[data-mode="collapsed"] .nechat-toasts {
+    visibility: hidden;
+  }
+  @media (width < 40rem) {
+    .nechat-widget[data-mode] {
+      inset: 0px;
+      height: auto;
+      max-height: none;
+      width: auto;
+      max-width: none;
+      border-radius: 0;
+      border-style: var(--nechat-tw-border-style);
+      border-width: 0px;
+    }
+  }
+  .nechat-wctl {
+    position: absolute;
+    top: calc(var(--spacing, 0.25rem) * 3);
+    right: calc(var(--spacing, 0.25rem) * 3);
+    z-index: 20;
+    display: flex;
+    height: calc(var(--spacing, 0.25rem) * 7);
+    align-items: center;
+    gap: var(--spacing, 0.25rem);
+  }
+  .nechat-widget_aside-right > .nechat-wctl {
+    right: auto;
+    left: calc(var(--spacing, 0.25rem) * 3);
+  }
+  .nechat-wctl > .nechat-iconbtn {
+    height: calc(var(--spacing, 0.25rem) * 6);
+    width: calc(var(--spacing, 0.25rem) * 6);
+    border-radius: calc(infinity * 1px);
+  }
+  .nechat-wctl .nechat-ic {
+    height: calc(var(--spacing, 0.25rem) * 3.5);
+    width: calc(var(--spacing, 0.25rem) * 3.5);
+  }
+  .nechat-widget:not([data-mode="dock"]) .nechat-wctl-undock {
+    display: none;
+  }
+  .nechat-widget[data-mode="dock"] .nechat-wctl-dock {
+    display: none;
+  }
+  @media (width >= 40rem) {
+    .nechat-widget[data-mode="dock"] {
+      top: 0px;
+      right: 0px;
+      bottom: 0px;
+      height: auto;
+      max-height: none;
+      width: var(--nechat-dock-w,28rem);
+      max-width: none;
+      border-radius: 0;
+      border-style: var(--nechat-tw-border-style);
+      border-width: 0px;
+      border-inline-start-style: var(--nechat-tw-border-style);
+      border-inline-start-width: 1px;
+      --nechat-tw-shadow: 0 0 #0000;
+      box-shadow: var(--nechat-tw-inset-shadow), var(--nechat-tw-inset-ring-shadow), var(--nechat-tw-ring-offset-shadow), var(--nechat-tw-ring-shadow), var(--nechat-tw-shadow);
+    }
+    html:has(.nechat-widget[data-mode="dock"]) {
+      padding-right: var(--nechat-dock-w, 28rem);
+    }
+  }
+  @media (width < 40rem) {
+    .nechat-wctl-dock, .nechat-wctl-undock {
+      display: none;
+    }
+  }
+  .nechat-widget[data-mode] .nechat-pane > .nechat-top {
+    padding-inline-end: calc(var(--spacing, 0.25rem) * 20);
+  }
+  .nechat-widget[data-mode].nechat-widget_aside-right .nechat-pane > .nechat-top {
+    padding-inline-start: calc(var(--spacing, 0.25rem) * 20);
+  }
+  @container (width < 36rem) {
+    .nechat-widget[data-mode] .nechat-aside > .nechat-top {
+      padding-inline-end: calc(var(--spacing, 0.25rem) * 20);
+    }
+    .nechat-widget[data-mode].nechat-widget_aside-right .nechat-aside > .nechat-top {
+      padding-inline-start: calc(var(--spacing, 0.25rem) * 20);
+    }
+  }
+  @media (width < 40rem) {
+    .nechat-widget[data-mode] .nechat-pane > .nechat-top {
+      padding-inline-end: calc(var(--spacing, 0.25rem) * 10);
+    }
+    .nechat-widget[data-mode].nechat-widget_aside-right .nechat-pane > .nechat-top {
+      padding-inline-start: calc(var(--spacing, 0.25rem) * 10);
+    }
+    .nechat-widget[data-mode] .nechat-aside > .nechat-top {
+      padding-inline-end: calc(var(--spacing, 0.25rem) * 10);
+    }
+    .nechat-widget[data-mode].nechat-widget_aside-right .nechat-aside > .nechat-top {
+      padding-inline-start: calc(var(--spacing, 0.25rem) * 10);
+    }
+  }
+  .nechat-launcher {
+    visibility: visible;
+    position: absolute;
+    right: 0px;
+    bottom: 0px;
+    box-sizing: border-box;
+    display: none;
+    height: calc(var(--spacing, 0.25rem) * 12);
+    width: calc(var(--spacing, 0.25rem) * 12);
+    cursor: pointer;
+    appearance: none;
+    align-items: center;
+    justify-content: center;
+    border-radius: calc(infinity * 1px);
+    border-style: var(--nechat-tw-border-style);
+    border-width: 1px;
+    border-color: var(--button-border);
+    background-color: var(--app-bg);
+    padding: 0px;
+    color: var(--button-ink);
+    --nechat-tw-shadow: 0 10px 15px -3px var(--nechat-tw-shadow-color, rgb(0 0 0 / 0.1)), 0 4px 6px -4px var(--nechat-tw-shadow-color, rgb(0 0 0 / 0.1));
+    box-shadow: var(--nechat-tw-inset-shadow), var(--nechat-tw-inset-ring-shadow), var(--nechat-tw-ring-offset-shadow), var(--nechat-tw-ring-shadow), var(--nechat-tw-shadow);
+    --nechat-tw-outline-style: none;
+    outline-style: none;
+  }
+  .nechat-widget[data-mode="collapsed"] > .nechat-launcher {
+    display: inline-flex;
+  }
+  .nechat-launcher > .nechat-ic {
+    height: calc(var(--spacing, 0.25rem) * 6);
+    width: calc(var(--spacing, 0.25rem) * 6);
+  }
+  .nechat-launcher:hover, .nechat-launcher:active, .nechat-launcher:focus-visible {
+    border-color: var(--panel-border-focus);
+    color: var(--button-ink-hover);
+  }
+  @media (width < 40rem) {
+    .nechat-launcher {
+      right: calc(var(--spacing, 0.25rem) * 4);
+      bottom: calc(var(--spacing, 0.25rem) * 4);
+    }
   }
   @media (forced-colors: active) {
     .nechat-dot, .nechat-thread_active > .nechat-dot {
