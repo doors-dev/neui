@@ -13,6 +13,7 @@ import (
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
 	"neui.dev"
+	"neui.dev/neisland/internal/pending"
 	"neui.dev/api"
 	"neui.dev/internal/markdown"
 	"neui.dev/neisland/internal/files"
@@ -310,8 +311,10 @@ elem (t widget) render() {
 											<button
 												type="button"
 												class="neisland-table-link"
+												data-neui="submit"
 												(doors.AClick{
 													Scope: neui.IslandScope(ctx),
+													Indicator: pending.Indicator(ctx),
 													On: func(ctx context.Context, _ doors.RequestPointer) bool {
 														t.submit(ctx, Submit{ID: r.ID})
 														return false
@@ -330,8 +333,10 @@ elem (t widget) render() {
 											<button
 												type="button"
 												class=("neisland-button neisland-table-action neisland-button-" + cmp.Or(a.Style, "secondary"))
+												data-neui="submit"
 												(doors.AClick{
 													Scope: neui.IslandScope(ctx),
+													Indicator: pending.Indicator(ctx),
 													On: func(ctx context.Context, _ doors.RequestPointer) bool {
 														t.submit(ctx, Submit{ID: r.ID, Value: a.Value})
 														return false
@@ -489,8 +494,10 @@ elem (t widget) status(sel map[string]struct{}, content result, page int, size i
 		<button
 			type="button"
 			class=("neisland-button neisland-button-sm neisland-button-" + t.params.Select.Style)
+			data-neui="submit"
 			(doors.AClick{
 				Scope: neui.IslandScope(ctx),
+				Indicator: pending.Indicator(ctx),
 				On: func(ctx context.Context, _ doors.RequestPointer) bool {
 					t.submit(ctx, Submit{IDs: slices.Sorted(maps.Keys(sel))})
 					return false

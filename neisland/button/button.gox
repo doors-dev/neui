@@ -6,6 +6,7 @@ import (
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
 	"neui.dev"
+	"neui.dev/neisland/internal/pending"
 	"neui.dev/api"
 )
 
@@ -67,6 +68,7 @@ elem (b widget) Main() {
 elem (b widget) render(p Params) {
 	~>neui.Input{Desc: p.Text} ~>doors.AClick{
 		Scope: neui.IslandScope(ctx),
+		Indicator: pending.Indicator(ctx),
 		On: func(ctx context.Context, rp doors.RequestPointer) bool {
 			if b.state.Get().Disabled {
 				return false
@@ -78,7 +80,8 @@ elem (b widget) render(p Params) {
 		type="button"
 		class=("neisland-button neisland-button-" + p.Size + " neisland-button-" + p.Style)
 		value=(p.Value)
-		disabled=(p.Disabled)>
+		disabled=(p.Disabled)
+		data-neui="submit">
 		~(p.Text)
 	</button>
 }

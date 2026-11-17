@@ -34,7 +34,7 @@ type SubmitButton struct {
 // SubmitButtons lists the submit buttons in display order.
 func (f Form) SubmitButtons() []SubmitButton {
 	f.a.t.Helper()
-	raw := f.Find(".neisland-form-actions").Element().MustEval(`() => JSON.stringify(Array.from(this.querySelectorAll("button[type=submit]")).map((b) => ({text: b.textContent.replace(/\s+/g, " ").trim(), value: b.dataset.submit, class: b.className})))`).Str()
+	raw := f.Find(".neisland-form-actions").Element().MustEval(`() => JSON.stringify(Array.from(this.querySelectorAll("button[type=submit]")).map((b) => ({text: b.textContent.replace(/\s+/g, " ").trim(), value: b.value, class: b.className})))`).Str()
 	var buttons []SubmitButton
 	if err := json.Unmarshal([]byte(raw), &buttons); err != nil {
 		f.a.t.Fatal(err)

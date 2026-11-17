@@ -24,8 +24,8 @@ func novalidateExpectDisabled(t *testing.T, button stack.Locator, want bool) {
 
 func TestNovalidateSubmitGivesTheDataAsEntered(t *testing.T) {
 	a, f := covSubmitApp(t, "", novalidateSpec)
-	save := f.Find(`button[data-submit="save"]`)
-	skip := f.Find(`button[data-submit="skip"]`)
+	save := f.Find(`button[type=submit][value="save"]`)
+	skip := f.Find(`button[type=submit][value="skip"]`)
 	novalidateExpectDisabled(t, save, true)
 	novalidateExpectDisabled(t, skip, false)
 	if !skip.Element().MustEval(`() => this.formNoValidate`).Bool() || save.Element().MustEval(`() => this.formNoValidate`).Bool() {
@@ -60,7 +60,7 @@ func TestNovalidateSubmitGivesTheDataAsEntered(t *testing.T) {
 
 func TestNovalidateLeavesTheValidatedButtonLocked(t *testing.T) {
 	a, f := covSubmitApp(t, "", novalidateSpec)
-	save := f.Find(`button[data-submit="save"]`)
+	save := f.Find(`button[type=submit][value="save"]`)
 	f.Element().MustEval(`() => {
 		window.novalidateSubmits = 0
 		this.addEventListener("submit", () => window.novalidateSubmits++)

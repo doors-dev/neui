@@ -245,7 +245,7 @@ func TestSubmitMessageNamesTheButtons(t *testing.T) {
 	f.ExpectSubmitMessage("form is not completed or contains errors")
 	id := f.Find(".neisland-form-help").Element().MustAttribute("id")
 	for _, b := range []string{"save", "publish"} {
-		f.Find(`button[data-submit="`+b+`"]`).WaitAttr("aria-describedby", *id)
+		f.Find(`button[type=submit][value="`+b+`"]`).WaitAttr("aria-describedby", *id)
 	}
 }
 

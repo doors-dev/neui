@@ -40,8 +40,10 @@
 			aria-busy:after:absolute aria-busy:after:inset-0 aria-busy:after:m-auto aria-busy:after:size-3.5 aria-busy:after:rounded-full
 			aria-busy:after:border-2 aria-busy:after:border-current aria-busy:after:border-r-transparent aria-busy:after:animate-spin motion-reduce:aria-busy:after:animate-pulse
 			aria-disabled:opacity-45 aria-disabled:cursor-not-allowed aria-disabled:pointer-events-none aria-disabled:focus-visible:opacity-100
+			aria-busy:aria-disabled:opacity-100 aria-busy:aria-disabled:cursor-progress
 			forced-colors:disabled:opacity-100 forced-colors:disabled:text-[GrayText] forced-colors:disabled:border-[GrayText]
 			forced-colors:aria-disabled:opacity-100 forced-colors:aria-disabled:text-[GrayText] forced-colors:aria-disabled:border-[GrayText]
+			forced-colors:aria-busy:aria-disabled:text-[ButtonText] forced-colors:aria-busy:aria-disabled:border-[ButtonText]
 	}
 	.neisland-button-sm { @apply min-h-6 px-2 text-xs }
 	.neisland-button-md { @apply min-h-7 px-2.5 text-sm }
@@ -190,6 +192,12 @@
 		@apply inline-flex items-center w-max max-w-72 min-h-6 min-w-6 p-0 m-0 border-0 bg-transparent cursor-pointer text-left font-[inherit] text-[length:inherit] font-medium wrap-break-word rounded-xs
 			text-[color-mix(in_oklab,var(--neisland-primary,var(--color-blue-600,#2563eb))_62%,currentColor)] underline decoration-current/35 underline-offset-2 hover:decoration-current
 			focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--neisland-focus,light-dark(var(--color-blue-600,#2563eb),var(--color-blue-400,#60a5fa)))
+			aria-busy:relative aria-busy:pointer-events-none aria-busy:cursor-progress aria-busy:decoration-transparent aria-busy:[-webkit-text-fill-color:transparent]
+			aria-busy:after:absolute aria-busy:after:inset-0 aria-busy:after:m-auto aria-busy:after:size-3.5 aria-busy:after:rounded-full
+			aria-busy:after:border-2 aria-busy:after:border-current aria-busy:after:border-r-transparent aria-busy:after:animate-spin motion-reduce:aria-busy:after:animate-pulse
+			aria-disabled:opacity-45 aria-disabled:cursor-not-allowed aria-disabled:pointer-events-none aria-disabled:focus-visible:opacity-100
+			aria-busy:aria-disabled:opacity-100 aria-busy:aria-disabled:cursor-progress
+			forced-colors:aria-disabled:opacity-100 forced-colors:aria-disabled:text-[GrayText] forced-colors:aria-busy:aria-disabled:text-[ButtonText]
 	}
 	.neisland-table-check { @apply w-px min-w-0 px-1.5 text-center }
 	.neisland-table-check-target {

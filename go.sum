@@ -18,6 +18,8 @@ github.com/dlclark/regexp2 v1.11.0 h1:G/nrcoOa7ZXlpoa/91N3X7mM3r8eIlMBBJZvsz/mxK
 github.com/dlclark/regexp2 v1.11.0/go.mod h1:DHkYz0B9wPfa6wondMfaivmHpzrQ3v9q8cnmRbL6yW8=
 github.com/doors-dev/doors v0.19.0-rc10 h1:8KYwzSW0mrSXmJuZWOGaXoR+3fvDS3s8jpEpSf1RzJE=
 github.com/doors-dev/doors v0.19.0-rc10/go.mod h1:1MWoOLtE8oSASpB3xXo7DFnBZLQxKy8EVmAVvmjjeGs=
+github.com/doors-dev/doors v0.19.0-rc11 h1:KTHPcL9uRQ4cmqm9xWW612orgJDk/rMjF7mprJFB1vw=
+github.com/doors-dev/doors v0.19.0-rc11/go.mod h1:1MWoOLtE8oSASpB3xXo7DFnBZLQxKy8EVmAVvmjjeGs=
 github.com/doors-dev/gox v0.4.0 h1:5JZS0BlsBsPU+KDAPLnrjrcKC0W13ZPEXvt6A6LY5jg=
 github.com/doors-dev/gox v0.4.0/go.mod h1:3T4sLrlkipWdizQ52OQymSR5FZBUboksWJQpzYdd3jw=
 github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=

@@ -46,7 +46,7 @@ func TestDevkitFormSubmitsTypedText(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.Page.MustElement(`input[name="name"]`).MustInput("Ada")
-	button := a.Page.MustElement(`button[data-submit="save"]`)
+	button := a.Page.MustElement(`button[type=submit][value="save"]`)
 	button.MustWaitEnabled().MustClick()
 	var got []struct {
 		ID     uint
@@ -74,7 +74,7 @@ func TestDevkitFormSubmitsSelectedOptions(t *testing.T) {
 	a.Page.MustElement(`input.neisland-form-radio[value="1"]`).MustClick()
 	a.Page.MustElement(`input.neisland-form-checkbox[value="2"]`).MustClick()
 	a.Page.MustElement(`input.neisland-form-checkbox[value="1"]`).MustClick()
-	a.Page.MustElement(`button[data-submit="save"]`).MustWaitEnabled().MustClick()
+	a.Page.MustElement(`button[type=submit][value="save"]`).MustWaitEnabled().MustClick()
 	var got []struct {
 		Output struct {
 			Data   map[string]any
@@ -131,7 +131,7 @@ func TestDevkitFormSearchPicksInOrder(t *testing.T) {
 	a.Page.MustElement(`input.neisland-form-search-input`).MustInput("ada")
 	a.Page.MustElement(`button[aria-label="Choose Ada Lovelace"]`).MustClick()
 	a.Page.MustElement(`button[aria-label="Remove Ada Lovelace"]`)
-	a.Page.MustElement(`button[data-submit="save"]`).MustWaitEnabled().MustClick()
+	a.Page.MustElement(`button[type=submit][value="save"]`).MustWaitEnabled().MustClick()
 	var got []struct {
 		Output struct {
 			Data   map[string]any

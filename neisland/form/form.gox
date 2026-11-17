@@ -9,6 +9,7 @@ import (
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
 	"neui.dev"
+	"neui.dev/neisland/internal/pending"
 	"neui.dev/api"
 )
 
@@ -155,6 +156,7 @@ elem (f *widget) Main() {
 	<form
 		(doors.ARawSubmit{
 			Scope: scope,
+			Indicator: pending.FormIndicator(ctx),
 			On: func(ctx context.Context, r doors.RequestRawForm) bool {
 				f.onSubmit(ctx, r)
 				return false
@@ -171,8 +173,9 @@ elem (f *widget) Main() {
 					~>(neui.Input{Desc: s.Text}) <button
 						type="submit"
 						class=("neisland-button neisland-button-md neisland-button-" + s.Style)
+						name=(f.id)
 						value=(s.Value)
-						data-submit=(s.Value)
+						data-neui="submit"
 						formnovalidate>
 						~(s.Text)
 					</button>
@@ -181,8 +184,9 @@ elem (f *widget) Main() {
 						(&f.locked)
 						type="submit"
 						class=("neisland-button neisland-button-md neisland-button-" + s.Style)
+						name=(f.id)
 						value=(s.Value)
-						data-submit=(s.Value)
+						data-neui="submit"
 						disabled=(errs != errorsNone)
 						aria-describedby=(f.id + "-s")>
 						~(s.Text)
@@ -196,19 +200,6 @@ elem (f *widget) Main() {
 				})
 			}))
 		</div>
-		<input type="hidden" name=(f.id) value=(f.params.Submits[0].Value)/>
-		<script data:name=(f.id)>
-			const form = document.currentScript.parentElement
-			const choice = form.querySelector(
-				`input[type="hidden"][name="${$data("name")}"]`,
-			)
-			form.addEventListener("click", (event) => {
-				const button = event.target.closest("button[type=submit][data-submit]")
-				if (button && button.form === form) {
-					choice.value = button.dataset.submit
-				}
-			})
-		</script>
 	</form>
 }
 

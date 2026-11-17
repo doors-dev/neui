@@ -34,6 +34,7 @@ func NewIsland(
 	lib Library,
 ) Island {
 	island := &island{
+		id:          doors.IDRand(),
 		placeholder: placeholder,
 		template:    template,
 		success:     success,
@@ -48,6 +49,7 @@ func NewIsland(
 
 type island struct {
 	mu          sync.Mutex
+	id          string
 	placeholder gox.Elem
 	template    func(slot gox.Comp) gox.Elem
 	success     func(close func(ctx context.Context)) gox.Elem
@@ -305,7 +307,12 @@ func (i *island) Main() gox.Elem {
 			if err := cur.Comp(i.status); err != nil {
 				return err
 			}
-			return cur.Comp(i.screen)
+			return doors.ProxyMod(gox.ModifyFunc(func(_ context.Context, _ string, attrs gox.Attrs) error {
+				attrs.Get(common.IslandIDAttr).Set(i.id)
+				return nil
+			})).Proxy(cur, func(cur gox.Cursor) error {
+				return cur.Comp(i.screen)
+			})
 		})
 	}
 }

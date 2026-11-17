@@ -26,6 +26,10 @@ type IslandFilesConfigKey struct{}
 
 type IslandScopeKey struct{}
 
+type IslandIDKey struct{}
+
+const IslandIDAttr = "data-neui-island"
+
 type ProviderKey struct{}
 
 func AppProvider(ctx context.Context) api.Provider {

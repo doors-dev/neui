@@ -115,7 +115,8 @@ type change struct {
 }
 
 type actionReport struct {
-	Handled bool `json:"handled" description:"whether a server handler ran for the action. false is not a failure: the action was done on the page, and the application may use it later."`
+	Handled bool   `json:"handled" description:"whether a server handler ran for the action. false is not a failure: the action was done on the page, and the application may use it later."`
+	Note    string `json:"note,omitempty" description:"set when the action's server handlers ran in part: some of them failed or were canceled"`
 	report
 }
 

@@ -9,6 +9,7 @@ import (
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
 	"neui.dev"
+	"neui.dev/neisland/internal/pending"
 	"neui.dev/api"
 )
 
@@ -63,26 +64,27 @@ func (b widget) Update(ctx context.Context, patch Patch) {
 }
 
 
-//line button.gox:63
+//line button.gox:64
 func (b widget) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line button.gox:64
+//line button.gox:65
 		__e = __c.Any(b.state.Bind(b.render)); if __e != nil { return }
 	return })
-//line button.gox:65
+//line button.gox:66
 }
 
-//line button.gox:67
+//line button.gox:68
 func (b widget) render(p Params) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line button.gox:68
+//line button.gox:69
 		__e = (neui.Input{Desc: p.Text}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
-//line button.gox:68
+//line button.gox:69
 			__e = (doors.AClick{
 		Scope: neui.IslandScope(ctx),
+		Indicator: pending.Indicator(ctx),
 		On: func(ctx context.Context, rp doors.RequestPointer) bool {
 			if b.state.Get().Disabled {
 				return false
@@ -94,21 +96,23 @@ func (b widget) render(p Params) gox.Elem {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.Init("button"); if __e != nil { return }
 				{
-//line button.gox:78
-					__e = __c.Set("type", "button"); if __e != nil { return }
-//line button.gox:79
-					__e = __c.Set("class", "neisland-button neisland-button-" + p.Size + " neisland-button-" + p.Style); if __e != nil { return }
 //line button.gox:80
-					__e = __c.Set("value", p.Value); if __e != nil { return }
+					__e = __c.Set("type", "button"); if __e != nil { return }
 //line button.gox:81
-					__e = __c.Set("disabled", p.Disabled); if __e != nil { return }
-					__e = __c.Submit(); if __e != nil { return }
+					__e = __c.Set("class", "neisland-button neisland-button-" + p.Size + " neisland-button-" + p.Style); if __e != nil { return }
 //line button.gox:82
+					__e = __c.Set("value", p.Value); if __e != nil { return }
+//line button.gox:83
+					__e = __c.Set("disabled", p.Disabled); if __e != nil { return }
+//line button.gox:84
+					__e = __c.Set("data-neui", "submit"); if __e != nil { return }
+					__e = __c.Submit(); if __e != nil { return }
+//line button.gox:85
 					__e = __c.Any(p.Text); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
 			return })); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
-//line button.gox:84
+//line button.gox:87
 }

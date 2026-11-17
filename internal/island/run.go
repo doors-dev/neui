@@ -69,6 +69,7 @@ func newRun(ctx context.Context, island *island, seq uint, space string, comment
 	r.store.Save(common.IslandDirKey{}, islandDir(space))
 	r.store.Save(common.IslandFilesConfigKey{}, ctrl.FilesConfig())
 	r.store.Save(common.IslandScopeKey{}, new(doors.ScopeBlocking))
+	r.store.Save(common.IslandIDKey{}, island.id)
 	r.runner = newRunner(r)
 	r.store.Save(runnerKey{}, r.runner)
 	r.state = core.NewState(r)

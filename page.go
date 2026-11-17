@@ -422,6 +422,20 @@ func IslandScope(ctx context.Context) doors.Scopes {
 	return scope
 }
 
+// IslandID returns the id of the island ctx renders or handles events for.
+// The element holding the island's content carries it as data-neui-island,
+// so [data-neui-island="<id>"] selects inside one island when a page has
+// several. It stays the same across the island's app runs. It is "" outside
+// an island.
+func IslandID(ctx context.Context) string {
+	store := IslandStore(ctx)
+	if store == nil {
+		return ""
+	}
+	id, _ := store.Load(common.IslandIDKey{}).(string)
+	return id
+}
+
 // Library is what an island's scripts may use: app functions, views,
 // controls, layouts and head elements. Island.Library fills it. Names of
 // views, controls and layouts must be JavaScript identifiers, unique among
