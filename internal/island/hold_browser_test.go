@@ -13,7 +13,7 @@ import (
 	"neui.dev/api"
 	"neui.dev/internal/testkit"
 	"neui.dev/internal/testkit/stack"
-	"neui.dev/neisland"
+	"neui.dev/nekit"
 )
 
 type holderParams struct {
@@ -80,7 +80,7 @@ func holdBoard(settled chan<- struct{}) gox.Elem {
 				return func(cur gox.Cursor) error { return cur.Comp(slot) }
 			},
 			Library: func(l neui.Library) error {
-				if err := neisland.RegisterLayout(l); err != nil {
+				if err := nekit.IslandRegisterLayout(l); err != nil {
 					return err
 				}
 				return l.Control("hold", "a button that answers with its label", func(_ context.Context, p holderParams, submit func(ctx context.Context, s string) bool) (api.Widget[struct{}], error) {

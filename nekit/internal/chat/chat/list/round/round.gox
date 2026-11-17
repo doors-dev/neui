@@ -1,0 +1,386 @@
+package round
+
+import (
+	"context"
+	"time"
+	
+	"github.com/doors-dev/doors"
+	"github.com/doors-dev/gox"
+	"neui.dev/api"
+	"neui.dev/nekit/internal/chat/icons"
+	"neui.dev/nekit/internal/chat/chat/rower"
+	"neui.dev/nekit/internal/chat/chat/uploader"
+	"neui.dev/nekit/internal/chat/params"
+	"neui.dev/nekit/internal/chat/notify"
+)
+
+type Rewinder interface {
+	Rewind() doors.Beam[api.RoundID]
+	InitRewind(ctx context.Context, round api.RoundID, input api.Input)
+}
+
+type rewindState string
+
+const (
+	rewindNone rewindState = ""
+	rewindTarget rewindState = "target"
+	rewindAfter rewindState = "after"
+)
+
+func deriveRewind(rewinder Rewinder, id api.RoundID) doors.Beam[rewindState] {
+	return doors.DeriveBeam(rewinder.Rewind(), func(target api.RoundID) rewindState {
+		switch {
+		case target == api.NoRoundID || id < target:
+			return rewindNone
+		case id == target:
+			return rewindTarget
+		default:
+			return rewindAfter
+		}
+	})
+}
+
+type LiveRound = *liveRound
+
+func NewLiveRound(params params.Params, thread api.ChatThread, rewinder Rewinder, latest doors.Beam[api.RoundID], r api.Round, span bool) *liveRound {
+	state := doors.NewSource(api.RoundInput)
+	return &liveRound{
+		params: params,
+		tools: rower.NewTools(r.Response, false),
+		rewind: deriveRewind(rewinder, r.ID),
+		rewinder: rewinder,
+		errored: doors.DeriveBeam(state, func(s api.RoundState) bool {
+			return s == api.RoundAbort || s == api.RoundError
+		}),
+		last: doors.DeriveBeam(latest, func(latest api.RoundID) bool {
+			return latest == r.ID
+		}),
+		state: state,
+		id: r.ID,
+		input: r.Input,
+		records: r.PinnedRecords,
+		response: rower.NewResponse(params, r.Response, thread.FS()),
+		thread: thread,
+		span: span,
+	}
+}
+
+type liveRound struct {
+	params params.Params
+	last doors.Beam[bool]
+	errored doors.Beam[bool]
+	rewind doors.Beam[rewindState]
+	rewinder Rewinder
+	state doors.Source[api.RoundState]
+	id api.RoundID
+	input api.Input
+	records []api.Record
+	response rower.Response
+	tools rower.Tools
+	thread api.ChatThread
+	span bool
+}
+
+func (l LiveRound) Tools() rower.Tools {
+	return l.tools
+}
+
+func (l LiveRound) IsEmpty() bool {
+	return l.input.Len() == 0 && len(l.records) == 0 && l.response.IsEmpty()
+}
+
+func (l LiveRound) IsErr() bool {
+	switch l.state.Get() {
+	case api.RoundAbort, api.RoundError, api.RoundRefuse:
+		return true
+	}
+	return false
+}
+
+func (l LiveRound) Done(ctx context.Context, state api.RoundState) {
+	l.state.Update(ctx, state)
+	l.response.Close()
+	l.tools.Close(ctx)
+}
+
+func (l LiveRound) On(e api.IndexedEvent) {
+	tool, ok := e.(api.EventTool)
+	if !ok {
+		l.response.On(e)
+		return
+	}
+	l.tools.Append(tool)
+}
+
+elem (r LiveRound) Main() {
+	~~
+	s := new(doors.Setter)
+	state, _ := r.state.ReadAndSub(ctx, func(ctx context.Context, rs api.RoundState) bool {
+		doors.Call(ctx, s.Set("data-state", string(rs)))
+		return false
+	})
+	rewind, _ := r.rewind.ReadAndSub(ctx, func(ctx context.Context, rs rewindState) bool {
+		doors.Call(ctx, s.Set("data-rewind", string(rs)))
+		return false
+	})
+	~~
+	<div class="nechat-turn" (s) data-state=(string(state)) data-rewind=(string(rewind))>
+		~(if r.input.Len() != 0 {
+			<div class="nechat-user">
+				~(if r.span {
+					~(span())
+				})
+				~(bubble(r.input, r.thread.FS()))
+				<div class="nechat-gut">
+					~(if !r.params.Off(params.Edit) {
+						~(rewindButton(r.rewinder, r.rewind, r.id, r.input))
+					})
+				</div>
+			</div>
+		})
+		<div class="nechat-agent">
+			~(if !r.params.Off(params.Tools) {
+				~(records(r.records))
+			})
+			~(r.response)
+			~(if !r.params.Off(params.Tools) {
+				~(r.tools)
+			})
+		</div>
+		~(r.state.Bind(elem(rs api.RoundState) {
+			~(if r.params.Off(params.Retry) {
+				~(status(rs, time.Now(), nil))
+			} else {
+				~(status(rs, time.Now(), r.retry()))
+			})
+		}))
+	</div>
+}
+
+elem (r LiveRound) retry() {
+	~>(new(doors.Door)) ~({
+		errored, ok := r.errored.Effect(ctx)
+		if !ok || !errored {
+			return nil
+		}
+		last, ok := r.last.Effect(ctx)
+		if !ok || !last {
+			return nil
+		}
+		return retryButton(r.thread)
+	})
+}
+
+type Round = *round
+
+func NewRound(params params.Params, thread api.ChatThread, rewinder Rewinder, latest doors.Beam[api.RoundID], r api.Round, tools rower.Tools, span bool) Round {
+	errored := r.State == api.RoundAbort || r.State == api.RoundError || r.State == api.RoundInput
+	return &round{
+		params: params,
+		errored: errored,
+		last: doors.DeriveBeam(latest, func(latest api.RoundID) bool {
+			return latest == r.ID
+		}),
+		round: r,
+		thread: thread,
+		span: span,
+		rewind: deriveRewind(rewinder, r.ID),
+		rewinder: rewinder,
+		tools: tools,
+	}
+}
+
+type round struct {
+	params params.Params
+	errored bool
+	last doors.Beam[bool]
+	round api.Round
+	thread api.ChatThread
+	span bool
+	rewind doors.Beam[rewindState]
+	rewinder Rewinder
+	tools rower.Tools
+}
+
+elem (r Round) Main() {
+	~~
+	s := new(doors.Setter)
+	rewind, _ := r.rewind.ReadAndSub(ctx, func(ctx context.Context, rs rewindState) bool {
+		doors.Call(ctx, s.Set("data-rewind", string(rs)))
+		return false
+	})
+	~~
+	<div class="nechat-turn" (s) data-state=(string(r.state())) data-rewind=(string(rewind))>
+		~(if r.round.Input.Len() != 0 {
+			<div class="nechat-user">
+				~(if r.span {
+					~(span())
+				})
+				~(bubble(r.round.Input, r.thread.FS()))
+				<div class="nechat-gut">
+					~(if !r.params.Off(params.Edit) {
+						~(rewindButton(r.rewinder, r.rewind, r.round.ID, r.round.Input))
+					})
+				</div>
+			</div>
+		})
+		<div class="nechat-agent">
+			~(if !r.params.Off(params.Tools) {
+				~(records(r.round.PinnedRecords))
+			})
+			~({
+				r := rower.NewResponse(r.params, r.round.Response, r.thread.FS())
+				r.Close()
+				return r
+			})
+			~(if !r.params.Off(params.Tools) {
+				~(r.tools)
+			})
+		</div>
+		~(if r.params.Off(params.Retry) {
+			~(status(r.round.State, time.Time{}, nil))
+		} else {
+			~(status(r.round.State, time.Time{}, r.retry()))
+		})
+	</div>
+}
+
+func (r Round) state() api.RoundState {
+	if r.round.State == api.RoundInput {
+		return api.RoundError
+	}
+	return r.round.State
+}
+
+elem (r Round) retry() {
+	~(if r.errored {
+		~(r.last.Bind(elem(b bool) {
+			~(if b {
+				~(retryButton(r.thread))
+			})
+		}))
+	})
+}
+
+elem warnMark() {
+	~>(doors.Class("nechat-ic")) ~(icons.Warning())
+}
+
+elem stopMark() {
+	~>(doors.Class("nechat-ic")) ~(icons.Square())
+}
+
+elem rewindButton(composer Rewinder, rewind doors.Beam[rewindState], id api.RoundID, input api.Input) {
+	~(rewind.Bind(elem(rs rewindState) {
+		~(if rs != rewindTarget {
+			~>doors.AClick{
+				Scope: new(doors.ScopeBlocking),
+				On: func(ctx context.Context, rp doors.RequestPointer) bool {
+					composer.InitRewind(ctx, id, input)
+					return false
+				},
+				OnError: notify.OnError,
+			} <button class="nechat-iconbtn" type="button" title="Edit and resend this message" aria-label="Edit and resend this message">
+				~>(doors.Class("nechat-ic")) ~(icons.Pencil())
+			</button>
+		})
+	}))
+}
+
+elem retryButton(thread api.ChatThread) {
+	<i class="nechat-rule" aria-hidden="true"></i>
+	~>doors.AClick{
+		Scope: new(doors.ScopeBlocking),
+		On: func(ctx context.Context, rp doors.RequestPointer) bool {
+			thread.Retry(ctx)
+			return false
+		},
+		OnError: notify.OnError,
+	} <button class="nechat-iconbtn" type="button" aria-label="Run this round again">
+		~>(doors.Class("nechat-ic")) ~(icons.Retry())
+	</button>
+}
+
+elem status(s api.RoundState, live time.Time, retry gox.Elem) {
+	~(if s == api.RoundInput && live.IsZero() {
+		~(statusBlock(warnMark(), <>no response received</>, retry))
+	} else if s == api.RoundAbort {
+		~(statusBlock(stopMark(), <>stopped</>, retry))
+	} else if s == api.RoundError {
+		~(statusBlock(warnMark(), <>request failed</>, retry))
+	} else if s == api.RoundRefuse {
+		~(statusBlock(warnMark(), <>provider declined to answer</>, retry))
+	})
+}
+
+elem records(recs []api.Record) {
+	~(if len(recs) == 1 {
+		~(recordsBlock(<>1 record</>))
+	} else if len(recs) > 1 {
+		~(recordsBlock(<>~(len(recs)) records</>))
+	})
+}
+
+elem recordsBlock(text any) {
+	<div class="nechat-blk">
+		<div class="nechat-gut" aria-hidden="true">
+			~>(doors.Class("nechat-ic")) ~(icons.FloppyDisk())
+		</div>
+		<div class="nechat-col nechat-records">~(text)</div>
+	</div>
+}
+
+elem statusBlock(mark gox.Elem, text any, retry gox.Elem) {
+	<div class="nechat-blk">
+		<div class="nechat-gut" aria-hidden="true">~(mark)</div>
+		<div class="nechat-col">
+			<div class="nechat-status">
+				<span>~(text)</span>
+				~(retry)
+			</div>
+		</div>
+	</div>
+}
+
+elem span() {
+	<div class="nechat-span">
+		<script>
+			const span = document.currentScript.closest(".nechat-span")
+			span.scrollIntoView({ block: "start", behavior: "smooth" })
+			let seen = false
+			const observer = new IntersectionObserver(
+				([entry]) => {
+					if (entry.isIntersecting) {
+						seen = true
+						return
+					}
+					if (!seen) return
+					observer.disconnect()
+					span.remove()
+				},
+				{ root: span.closest(".nechat-log") },
+			)
+			observer.observe(span)
+			$sys.clean(() => observer.disconnect())
+		</script>
+	</div>
+}
+
+elem bubble(input api.Input, fs api.FS) {
+	<div class="nechat-bubble">
+		~(if input.Text != "" {
+			<div class="nechat-bubble-text">~(input.Text)</div>
+		})
+		~(files(input.Attachments, fs))
+	</div>
+}
+
+elem files(names []string, fs api.FS) {
+	~(if len(names) != 0 {
+		<div class="nechat-bubble-files">
+			~(for _, name := range names {
+				~uploader.Sent{FS: fs, Name: name}
+			})
+		</div>
+	})
+}

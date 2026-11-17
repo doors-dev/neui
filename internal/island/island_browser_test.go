@@ -19,7 +19,7 @@ import (
 	"neui.dev/internal/devkit"
 	"neui.dev/internal/testkit"
 	"neui.dev/internal/testkit/stack"
-	"neui.dev/neisland"
+	"neui.dev/nekit"
 )
 
 func shownThen(t *testing.T, shown <-chan string, then testkit.Turn) testkit.Turn {
@@ -370,10 +370,10 @@ func buttons(drawn chan<- struct{}) gox.Elem {
 				}
 			},
 			Library: func(l neui.Library) error {
-				if err := l.Layout("column", neisland.ColumnDesc, neisland.Column); err != nil {
+				if err := l.Layout("column", nekit.IslandColumnDesc, nekit.IslandColumn); err != nil {
 					return err
 				}
-				return neisland.RegisterButton(l)
+				return nekit.IslandRegisterButton(l)
 			},
 		})
 	}
@@ -618,7 +618,7 @@ func TestIslandMarkdownReportsAMissingFileOncePerScript(t *testing.T) {
 			Template: func(slot gox.Comp) gox.Elem {
 				return func(cur gox.Cursor) error { return cur.Comp(slot) }
 			},
-			Library: neisland.RegisterMarkdown,
+			Library: nekit.IslandRegisterMarkdown,
 		},
 		Script: `ui.root.set(ui.markdown({text: "[a](file:///missing.txt), [b](file:///missing.txt) and ![c](file:///gone.png)"})); ui.draw(1); ui.notify("drawn")`,
 	})

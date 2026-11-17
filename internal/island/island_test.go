@@ -19,7 +19,7 @@ import (
 	"neui.dev/internal/replay"
 	"neui.dev/internal/testkit"
 	"neui.dev/internal/testkit/stack"
-	"neui.dev/neisland"
+	"neui.dev/nekit"
 )
 
 type started struct {
@@ -98,7 +98,7 @@ func board(marks chan<- int, shown chan<- string) gox.Elem {
 				return func(cur gox.Cursor) error { return cur.Comp(slot) }
 			},
 			Library: func(l neui.Library) error {
-				if err := neisland.RegisterLayout(l); err != nil {
+				if err := nekit.IslandRegisterLayout(l); err != nil {
 					return err
 				}
 				if err := l.Tool("mark", "marks a number", func(ctx context.Context, in struct{ N int }) (int, error) {
@@ -160,7 +160,7 @@ func fullBoard() gox.Elem {
 			Template: func(slot gox.Comp) gox.Elem {
 				return func(cur gox.Cursor) error { return cur.Comp(slot) }
 			},
-			Library: neisland.RegisterAll,
+			Library: nekit.IslandRegister,
 		})
 	}
 }
@@ -272,7 +272,7 @@ func TestIslandSpecKeepsDefinitionsAtTheEnd(t *testing.T) {
 			t.Fatalf("%s is not under Definitions:\n%s", name, spec)
 		}
 	}
-	t.Logf("island_spec of neisland.RegisterAll: %d bytes", len(spec))
+	t.Logf("island_spec of nekit.IslandRegister: %d bytes", len(spec))
 }
 
 func TestIslandSpecComesInPages(t *testing.T) {

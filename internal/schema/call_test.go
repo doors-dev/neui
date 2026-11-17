@@ -11,7 +11,7 @@ import (
 	jsonreflect "github.com/swaggest/jsonschema-go"
 	"neui.dev/internal/island"
 	"neui.dev/internal/schema"
-	"neui.dev/neisland/form"
+	"neui.dev/nekit"
 )
 
 type callSelf struct {
@@ -129,7 +129,7 @@ func TestCallChain(t *testing.T) {
 }
 
 func TestCallFormSearch(t *testing.T) {
-	s := checkCalls[form.Params](t)
+	s := checkCalls[nekit.IslandFormParams](t)
 	var search struct {
 		Properties struct {
 			Search struct {

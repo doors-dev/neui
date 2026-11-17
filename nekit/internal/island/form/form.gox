@@ -1,0 +1,230 @@
+package form
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"slices"
+	
+	"github.com/doors-dev/doors"
+	"github.com/doors-dev/gox"
+	"neui.dev"
+	"neui.dev/nekit/internal/island/internal/pending"
+	"neui.dev/api"
+)
+
+// New builds a form widget for Library.Control: the user fills the
+// fields and presses one of the submit buttons, which sends
+// {"data": values, "submit": button value} to the script waiting in
+// ui.draw(). Files upload into the island dir as they are picked; a file
+// field's value is their workspace paths.
+func New(ctx context.Context, p Params, submit func(ctx context.Context, s map[string]any) bool) (api.Widget[Patch], error) {
+	if len(p.Submits) == 0 {
+		p.Submits = []submitParams{{Text: "Submit"}}
+	}
+	for i := range p.Submits {
+		if slices.ContainsFunc(p.Submits[:i], func(s submitParams) bool {
+			return s.Text == p.Submits[i].Text && s.Value == p.Submits[i].Value
+		}) {
+			return nil, fmt.Errorf("submits: two buttons have text %q and value %q", p.Submits[i].Text, p.Submits[i].Value)
+		}
+		switch {
+		case p.Submits[i].Style != "":
+		case i == 0:
+			p.Submits[i].Style = "primary"
+		default:
+			p.Submits[i].Style = "secondary"
+		}
+	}
+	for _, s := range p.Submits {
+		if s.Novalidate && slices.ContainsFunc(p.Submits, func(o submitParams) bool {
+			return !o.Novalidate && o.Value == s.Value
+		}) {
+			return nil, fmt.Errorf("submit %q: %w", s.Text, errNovalidateValue)
+		}
+	}
+	m := make(map[string]any)
+	root := &root{
+		values: make(map[string]any),
+		scope: new(doors.ScopeCheckpoint),
+	}
+	group := &groupBase{
+		root: root,
+		collector: defaultCollector{},
+		errors: doors.NewSource(&m),
+		reserved: make(map[string]struct{}),
+		values: root.values,
+	}
+	fields := make([]fieldWidget, 0, len(p.Fields))
+	for _, field := range p.Fields {
+		widget, err := newFieldWidget(ctx, group, field.v)
+		if err != nil {
+			return nil, err
+		}
+		if err := widget.init(ctx, nil); err != nil {
+			return nil, err
+		}
+		fields = append(fields, widget)
+	}
+	return &widget{
+		id: doors.IDRand(),
+		params: p,
+		root: root,
+		group: group,
+		fields: fields,
+		errors: doors.DeriveBeam(group.errors, func(m *map[string]any) errorKind {
+			return errorsOf(*m)
+		}),
+		submit: submit,
+	}, nil
+}
+
+func newFieldWidget(ctx context.Context, group group, field anyParams) (fieldWidget, error) {
+	switch field := field.(type) {
+	case *textParams:
+		return newTextWidget(ctx, group, *field)
+	case *numberParams:
+		return newNumberWidget(ctx, group, *field)
+	case *dateParams:
+		return newDateWidget(ctx, group, *field)
+	case *textareaParams:
+		return newTextareaWidget(ctx, group, *field)
+	case *selectParams:
+		return newSelectWidget(ctx, group, *field)
+	case *searchParams:
+		return newSearchWidget(ctx, group, *field)
+	case *checkboxParams:
+		return newCheckboxWidget(ctx, group, *field)
+	case *fileParams:
+		return newFileWidget(ctx, group, *field)
+	case *groupParams:
+		return newGroupWidget(ctx, group, *field)
+	case *listParams:
+		return newListWidget(ctx, group, *field)
+	case *seriesParams:
+		return newSeriesWidget(ctx, group, *field)
+	default:
+		return nil, fmt.Errorf("unknown field %T", field)
+	}
+}
+
+type widget struct {
+	id string
+	params Params
+	root *root
+	group *groupBase
+	fields []fieldWidget
+	errors doors.Beam[errorKind]
+	locked doors.Setter
+	submit func(ctx context.Context, s map[string]any) bool
+}
+
+func (f *widget) Update(context.Context, Patch) {
+}
+
+func (f *widget) onSubmit(ctx context.Context, r doors.RequestRawForm) {
+	parsed, err := r.ParseForm(64 << 10)
+	if err != nil {
+		neui.IslandReport(ctx, fmt.Errorf("form submit: %w", err))
+		return
+	}
+	choice := f.params.Submits[0]
+	value := parsed.FormValue(f.id)
+	if i := slices.IndexFunc(f.params.Submits, func(s submitParams) bool {
+		return s.Value == value
+	}); i >= 0 {
+		choice = f.params.Submits[i]
+	}
+	f.root.mu.Lock()
+	if !choice.Novalidate && errorsOf(*f.group.errors.Get()) != errorsNone {
+		f.root.mu.Unlock()
+		return
+	}
+	data := f.group.collect()
+	f.root.mu.Unlock()
+	f.submit(ctx, map[string]any{"data": data, "submit": choice.Value})
+}
+
+elem (f *widget) Main() {
+	~~
+	scope := doors.JoinScopes(neui.IslandScope(ctx), f.root.scope.Scope(true))
+	errs, _ := f.errors.ReadAndSub(ctx, func(ctx context.Context, errs errorKind) bool {
+		doors.Call(ctx, f.locked.Set("disabled", errs != errorsNone))
+		return false
+	})
+	~~
+	<form
+		(doors.ARawSubmit{
+			Scope: scope,
+			Indicator: pending.FormIndicator(ctx),
+			On: func(ctx context.Context, r doors.RequestRawForm) bool {
+				f.onSubmit(ctx, r)
+				return false
+			},
+		})
+		class="neisland-form neisland-form-framed"
+		novalidate>
+		~(for _, field := range f.fields {
+			~(field)
+		})
+		<div class="neisland-form-actions neisland-form-actions-band">
+			~(for _, s := range f.params.Submits {
+				~(if s.Novalidate {
+					~>(neui.Input{Desc: s.Text}) <button
+						type="submit"
+						class=("neisland-button neisland-button-md neisland-button-" + s.Style)
+						name=(f.id)
+						value=(s.Value)
+						data-neui="submit"
+						formnovalidate>
+						~(s.Text)
+					</button>
+				} else {
+					~>(neui.Input{Desc: s.Text}) <button
+						(&f.locked)
+						type="submit"
+						class=("neisland-button neisland-button-md neisland-button-" + s.Style)
+						name=(f.id)
+						value=(s.Value)
+						data-neui="submit"
+						disabled=(errs != errorsNone)
+						aria-describedby=(f.id + "-s")>
+						~(s.Text)
+					</button>
+				})
+			})
+			~(f.errors.Bind(elem(errs errorKind) {
+				~(if errs != errorsNone {
+					<p class="neisland-form-help" id=(f.id + "-s")>form is not completed or contains errors</p>
+					~(neui.Data{Text: "submit blocked", Object: "form is not completed or contains errors"})
+				})
+			}))
+		</div>
+	</form>
+}
+
+func shownErr(err error) bool {
+	return err != nil && !errors.Is(err, errRequired) && !errors.Is(err, errUploading)
+}
+
+elem errorData(name string, err doors.Beam[error]) {
+	~(err.Bind(elem(err error) {
+		~(if err != nil {
+			~(neui.Data{Text: name + " validation error", Object: err.Error()})
+		})
+	}))
+}
+
+func aria(b bool) any {
+	if b {
+		return "true"
+	}
+	return nil
+}
+
+type fieldWidget interface {
+	gox.Comp
+	init(ctx context.Context, value any) error
+	destroy(ctx context.Context)
+	name() string
+}

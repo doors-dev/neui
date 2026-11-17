@@ -17,7 +17,7 @@ type ChatInput struct {
 
 // ChatAsk is a question a tool puts to the user, returned by an Ask handler
 // (neui.Module.Ask) and shown by the chat in place of its composer until the
-// handler answers. nechat.AskOptions is a ready-made one.
+// handler answers. nekit.AskOptions is a ready-made one.
 type ChatAsk struct {
 	// Form is the question and its inputs, shown where the message box
 	// normally is.

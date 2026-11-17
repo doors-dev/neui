@@ -13,7 +13,7 @@ import (
 	"neui.dev/api"
 	"neui.dev/internal/testkit"
 	"neui.dev/internal/testkit/stack"
-	"neui.dev/neisland"
+	"neui.dev/nekit"
 )
 
 func twoIslands() gox.Elem {
@@ -26,7 +26,7 @@ func twoIslands() gox.Elem {
 				Template: func(slot gox.Comp) gox.Elem {
 					return func(cur gox.Cursor) error { return cur.Comp(slot) }
 				},
-				Library: neisland.RegisterAll,
+				Library: nekit.IslandRegister,
 			}); err != nil {
 				return err
 			}

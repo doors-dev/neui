@@ -8,10 +8,7 @@ import (
 
 	jsonreflect "github.com/swaggest/jsonschema-go"
 	"neui.dev/internal/schema"
-	"neui.dev/neisland/button"
-	"neui.dev/neisland/form"
-	"neui.dev/neisland/markdown"
-	"neui.dev/neisland/table"
+	"neui.dev/nekit"
 )
 
 func checkRaw[T any](t *testing.T) {
@@ -63,10 +60,10 @@ func checkRaw[T any](t *testing.T) {
 }
 
 func TestNeislandParamsRaw(t *testing.T) {
-	checkRaw[form.Params](t)
-	checkRaw[table.Params](t)
-	checkRaw[button.Params](t)
-	checkRaw[markdown.Params](t)
+	checkRaw[nekit.IslandFormParams](t)
+	checkRaw[nekit.IslandTableParams](t)
+	checkRaw[nekit.IslandButtonParams](t)
+	checkRaw[nekit.IslandMarkdownParams](t)
 }
 
 func dropCalls(v any) any {

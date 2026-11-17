@@ -77,7 +77,7 @@ type Task = common.Task
 // Task. comment is a short description shown to the user while the task runs
 // and stored with its result; attrs become the task's meta, nil meaning none.
 // cancel is what a chat UI calls through api.Task.Cancel to stop the task
-// (nechat passes api.ErrCanceledByUser), and the cause it receives is what the
+// (nekit.Chat passes api.ErrCanceledByUser), and the cause it receives is what the
 // task should report with Err; the runtime calls it with ErrCanceledByUser
 // when the round that started the task is rewound, and the work must also stop
 // when ToolThreadContext ends; cancel must not be nil. Run the work on

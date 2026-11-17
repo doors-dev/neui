@@ -1,0 +1,462 @@
+package window
+
+import (
+	"context"
+	"slices"
+	"sync"
+	"time"
+	
+	"github.com/doors-dev/doors"
+	"github.com/doors-dev/gox"
+	"github.com/gammazero/deque"
+	"neui.dev/nekit/internal/chat/aside/controller"
+	"neui.dev/nekit/internal/chat/notify"
+)
+
+type Section struct {
+	Key string
+	Content gox.Comp
+}
+
+type Driver interface {
+	Compare(a string, b string) int
+	Sections(ctx context.Context, from string, inclusive bool, asc bool, limit int) ([]Section, bool, error)
+}
+
+type slot struct {
+	key string
+	batch int
+	after any
+	door *doors.Door
+	content gox.Comp
+}
+
+func (s *slot) remove(ctx context.Context) {
+	s.door.Static(ctx, nil)
+}
+
+elem (s *slot) Main() {
+	~~
+	var batch any
+	if s.batch != 0 {
+		batch = s.batch
+	}
+	~~
+	<div class="nechat-day" data-id=(s.key) data-batch=(batch) data-pending=(s.batch != 0)>
+		~(s.content)
+		~(s.after)
+	</div>
+}
+
+type layout struct {
+	prepender gox.Comp
+	history []*slot
+	appender gox.Comp
+}
+
+elem (l *layout) Main() {
+	~(l.prepender)
+	~(for _, s := range l.history {
+		~(s.door)
+	})
+	~(l.appender)
+}
+
+type List struct {
+	InitialWindow controller.Window
+	SaveWindow func(context.Context, controller.Window)
+	Driver Driver
+	Margin int
+	Empty gox.Comp
+	mu *sync.Mutex
+	ctx context.Context
+	history deque.Deque[*slot]
+	prepender *doors.Door
+	appender *doors.Door
+	first string
+	last string
+	batch int
+	scrollState struct {
+		first string
+		last string
+		synced bool
+		spawned bool
+		newestReached bool
+		oldestReached bool
+	}
+}
+
+elem (w List) Main() {
+	~~
+	body := new(doors.Door)
+	body.Inner(ctx, w.body(body))
+	~~
+	~(body)
+}
+
+elem (w List) body(door *doors.Door) {
+	~~
+	w.mu = new(sync.Mutex)
+	s, err := w.seed(ctx)
+	~~
+	~(if err == nil && w.Empty != nil && w.history.Len() == 0 {
+		~(w.Empty)
+	} else if err == nil {
+		~(s)
+		~(w.script())
+	} else {
+		~~
+		doors.Logger(ctx).Error("window: seed", "err", err)
+		~~
+		<div class="nechat-side-retry" role="alert">
+			<span>Couldn't load.</span>
+			~>doors.AClick{
+				Scope: new(doors.ScopeBlocking),
+				On: func(ctx context.Context, rp doors.RequestPointer) bool {
+					door.Reload(ctx)
+					return false
+				},
+				OnError: notify.OnError,
+			} <button type="button" class="nechat-btn nechat-btn_2nd">Retry</button>
+		</div>
+	})
+}
+
+func (w *List) seed(ctx context.Context) (gox.Comp, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	
+	w.ctx = doors.DetachedContext(ctx)
+	w.first, w.last = w.InitialWindow.First, w.InitialWindow.Last
+	w.prepender = new(doors.Door)
+	w.appender = new(doors.Door)
+	w.scrollState.synced = true
+	w.scrollState.newestReached = true
+	above := []Section{}
+	if w.last != "" {
+		newer, ended, err := w.Driver.Sections(ctx, w.last, false, true, w.Margin)
+		if err != nil {
+			return nil, err
+		}
+		slices.Reverse(newer)
+		above = newer
+		w.scrollState.newestReached = ended
+	}
+	sections := []Section{}
+	if w.last == "" {
+		fresh, ended, err := w.Driver.Sections(ctx, "", true, false, 2 * w.Margin)
+		if err != nil {
+			return nil, err
+		}
+		sections = fresh
+		w.scrollState.oldestReached = ended
+	} else {
+		from := w.last
+		take := true
+		beyond := 0
+		for {
+			fresh, ended, err := w.Driver.Sections(ctx, from, take, false, w.Margin)
+			if err != nil {
+				return nil, err
+			}
+			for _, s := range fresh {
+				sections = append(sections, s)
+				if w.Driver.Compare(s.Key, w.first) < 0 {
+					beyond++
+				}
+			}
+			if ended {
+				w.scrollState.oldestReached = true
+				break
+			}
+			if len(fresh) == 0 || beyond >= w.Margin {
+				break
+			}
+			from = sections[len(sections) - 1].Key
+			take = false
+		}
+	}
+	for _, s := range above {
+		w.history.PushBack(w.intoSlot(w.ctx, s, 0, nil))
+	}
+	for _, s := range sections {
+		w.history.PushBack(w.intoSlot(w.ctx, s, 0, nil))
+	}
+	if w.scrollState.newestReached && w.history.Len() != 0 && w.history.Front().key == w.last {
+		w.first, w.last = "", ""
+	}
+	return doors.Once(&layout{
+		prepender: w.prepender,
+		history: slices.Collect(w.history.Iter()),
+		appender: w.appender,
+	}), nil
+}
+
+func (w *List) intoSlot(ctx context.Context, s Section, batch int, after any) *slot {
+	slot := &slot{
+		key: s.Key,
+		batch: batch,
+		after: after,
+		door: new(doors.Door),
+		content: s.Content,
+	}
+	slot.door.Outer(ctx, doors.Once(slot))
+	return slot
+}
+
+func (w *List) updateRange(ctx context.Context, first string, last string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if first == w.scrollState.first && last == w.scrollState.last {
+		return
+	}
+	w.scrollState.first = first
+	w.scrollState.last = last
+	if w.SaveWindow != nil {
+		w.SaveWindow(ctx, controller.Window{First: first, Last: last})
+	}
+	w.scrollState.synced = false
+	if w.scrollState.spawned {
+		return
+	}
+	w.scrollState.spawned = true
+	go w.syncLoop()
+}
+
+func (w *List) syncLoop() {
+	for {
+		applied := make(chan struct{})
+		more := false
+		doors.OnBatch(w.ctx, func(context.Context) {
+			close(applied)
+		}, func(ctx context.Context) {
+			w.mu.Lock()
+			more = w.sync(ctx)
+			if !more {
+				w.scrollState.spawned = false
+			}
+			w.mu.Unlock()
+		})
+		if !more {
+			return
+		}
+		<-applied
+	}
+}
+
+func (w *List) sync(ctx context.Context) (more bool) {
+	if w.scrollState.synced {
+		return
+	}
+	first, last := w.scrollState.first, w.scrollState.last
+	if first == "" {
+		w.scrollState.synced = true
+		return
+	}
+	newer, older := 0, 0
+	for s := range w.history.Iter() {
+		if w.Driver.Compare(s.key, last) > 0 {
+			newer++
+		}
+		if w.Driver.Compare(s.key, first) < 0 {
+			older++
+		}
+	}
+	wantNewer, wantOlder := w.Margin, w.Margin
+	if w.scrollState.newestReached && newer < w.Margin {
+		wantOlder += w.Margin - newer
+	}
+	if w.scrollState.oldestReached && older < w.Margin {
+		wantNewer += w.Margin - older
+	}
+	if older < wantOlder && !w.scrollState.oldestReached && w.history.Len() != 0 {
+		anchor := w.history.Back().key
+		w.mu.Unlock()
+		sections, ended, err := w.Driver.Sections(ctx, anchor, false, false, wantOlder - older)
+		w.mu.Lock()
+		if err != nil {
+			doors.Logger(ctx).Error("window: load older", "err", err)
+			notify.Error(ctx, err)
+			w.scrollState.first = ""
+			w.scrollState.last = ""
+			w.scrollState.synced = true
+			return
+		}
+		w.batch++
+		w.scrollState.oldestReached = ended || len(sections) == 0
+		fresh := make([]*slot, 0, len(sections))
+		for i, s := range sections {
+			var after any
+			if i == len(sections) - 1 {
+				after = restoreScroll(w.batch, "bottom")
+			}
+			fresh = append(fresh, w.intoSlot(ctx, s, w.batch, after))
+		}
+		for _, s := range fresh {
+			w.history.PushBack(s)
+		}
+		if len(fresh) != 0 {
+			old := w.appender
+			w.appender = new(doors.Door)
+			old.Static(ctx, doors.Once(&layout{
+				history: fresh,
+				appender: w.appender,
+			}))
+		}
+		return true
+	}
+	if newer < wantNewer && !w.scrollState.newestReached && w.history.Len() != 0 {
+		anchor := w.history.Front().key
+		w.mu.Unlock()
+		sections, ended, err := w.Driver.Sections(ctx, anchor, false, true, wantNewer - newer)
+		w.mu.Lock()
+		if err != nil {
+			doors.Logger(ctx).Error("window: load newer", "err", err)
+			notify.Error(ctx, err)
+			w.scrollState.first = ""
+			w.scrollState.last = ""
+			w.scrollState.synced = true
+			return
+		}
+		w.batch++
+		w.scrollState.newestReached = ended || len(sections) == 0
+		fresh := make([]*slot, 0, len(sections))
+		for i, s := range slices.Backward(sections) {
+			var after any
+			if i == len(sections) - 1 {
+				after = restoreScroll(w.batch, "top")
+			}
+			fresh = append(fresh, w.intoSlot(ctx, s, w.batch, after))
+		}
+		for _, f := range slices.Backward(fresh) {
+			w.history.PushFront(f)
+		}
+		if len(fresh) != 0 {
+			old := w.prepender
+			w.prepender = new(doors.Door)
+			old.Static(ctx, doors.Once(&layout{
+				prepender: w.prepender,
+				history: fresh,
+			}))
+		}
+		return true
+	}
+	for newer > wantNewer {
+		w.history.PopFront().remove(ctx)
+		newer--
+		w.scrollState.newestReached = false
+	}
+	for older > wantOlder {
+		w.history.PopBack().remove(ctx)
+		older--
+		w.scrollState.oldestReached = false
+	}
+	w.scrollState.synced = true
+	return
+}
+
+elem (w *List) script() {
+	~>doors.AHook[syncMsg]{
+		Name: "sync",
+		Scope: &doors.ScopeRate{Tick: 100 * time.Millisecond},
+		Race: doors.RaceStrict,
+		On: func(ctx context.Context, r doors.RequestHook[syncMsg]) (any, bool) {
+			msg := r.Data()
+			w.updateRange(ctx, msg.First, msg.Last)
+			return nil, false
+		},
+	} <script data:first=(w.first) data:last=(w.last)>
+		const script = document.currentScript
+		const body = script.closest(".nechat-side-body")
+		const seedFirst = $data("first")
+		const seedLast = $data("last")
+		let sent = seedLast ? `${seedFirst}:${seedLast}` : ""
+		const widget = body.closest(".nechat-widget")
+		let reported = false
+		const report = () => {
+			const b = body.getBoundingClientRect()
+			let first = ""
+			let last = ""
+			for (const s of body.querySelectorAll(".nechat-day[data-id]")) {
+				if (s.hasAttribute("data-pending")) continue
+				const r = s.getBoundingClientRect()
+				if (r.height === 0 || r.bottom <= b.top || r.top >= b.bottom) continue
+				if (last === "") last = s.dataset.id
+				first = s.dataset.id
+			}
+			if (first === "") return
+			const key = `${first}:${last}`
+			if (key === sent) return
+			sent = key
+			$hook("sync", { first, last }).then(
+				() => {
+					reported = false
+				},
+				(err) => {
+					sent = ""
+					if (reported || !(err instanceof HookErr) || !err.network()) return
+					reported = true
+					widget.dispatchEvent(new CustomEvent("nechat_error", { detail: err.kind }))
+				},
+			)
+		}
+		const edge = (e) => {
+			const top = e.deltaY < 0 && body.scrollTop <= 0
+			const bottom =
+				e.deltaY > 0 && body.scrollTop + body.clientHeight >= body.scrollHeight - 1
+			if (!top && !bottom) return
+			sent = ""
+			report()
+		}
+		$sys.clean(() => {
+			body.removeEventListener("scroll", report)
+			body.removeEventListener("wheel", edge)
+		})
+		await $sys.ready()
+		requestAnimationFrame(() => {
+			const top = body.querySelector(`.nechat-day[data-id="${seedLast}"]`)
+			if (seedLast && top) {
+				const base = body.scrollTop - body.getBoundingClientRect().top
+				const t = top.getBoundingClientRect()
+				let lo = t.top + base
+				let hi = t.bottom + base
+				const bottom = body.querySelector(`.nechat-day[data-id="${seedFirst}"]`)
+				if (bottom) {
+					const f = bottom.getBoundingClientRect()
+					lo = Math.max(lo, f.top + base - body.clientHeight)
+					hi = Math.min(hi, f.bottom + base - body.clientHeight)
+				}
+				body.scrollTop = lo <= hi ? (lo + hi) / 2 : t.top + base
+			}
+			body.addEventListener("scroll", report, { passive: true })
+			body.addEventListener("wheel", edge, { passive: true })
+			report()
+		})
+	</script>
+}
+
+type syncMsg struct {
+	First string `json:"first"`
+	Last string `json:"last"`
+}
+
+elem restoreScroll(batch int, edge string) {
+	<script data:batch=(batch) data:edge=(edge)>
+		const script = document.currentScript
+		const body = script.closest(".nechat-side-body")
+		const top = body.scrollTop
+		const h0 = body.scrollHeight
+		for (const s of body.querySelectorAll(
+			`.nechat-day[data-batch="${$data("batch")}"]`,
+		)) {
+			s.removeAttribute("data-pending")
+		}
+		const grew = body.scrollHeight - h0
+		if ($data("edge") === "top") {
+			body.scrollTo({ top: top + grew, behavior: "instant" })
+		} else {
+			body.scrollTo({ top, behavior: "instant" })
+		}
+		body.dispatchEvent(new Event("scroll"))
+	</script>
+}
