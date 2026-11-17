@@ -42,6 +42,19 @@ type widget struct {
 	state doors.Source[Params]
 }
 
+type textView struct {
+	Text  string `json:"text" required:"true" description:"the text, as markdown"`
+	Style string `json:"style" required:"true" description:"plain, card, or the card's tone"`
+}
+
+func (t widget) getText(ctx context.Context, _ struct{}) (textView, error) {
+	p, ok := t.state.Read(ctx)
+	if !ok {
+		return textView{}, context.Canceled
+	}
+	return textView{Text: p.Text, Style: p.Style}, nil
+}
+
 func (t widget) Update(ctx context.Context, patch Patch) {
 	t.state.Mutate(ctx, func(p Params) Params {
 		if patch.Text != nil {
@@ -55,6 +68,7 @@ func (t widget) Update(ctx context.Context, patch Patch) {
 }
 
 elem (t widget) Main() {
+	~neui.Tool[struct{}, textView]{Name: getTextName, Desc: getTextDesc, Handler: t.getText}
 	~(t.state.Bind(t.render))
 }
 

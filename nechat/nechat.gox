@@ -45,6 +45,8 @@ const (
 	ThreadEdit = Feature(params.ThreadEdit)
 	// MessageSearch limits search to chat names; message contents are not searched.
 	MessageSearch = Feature(params.MessageSearch)
+	// Greeting hides the greeting a new chat shows before its first message.
+	Greeting = Feature(params.Greeting)
 )
 
 // Simple is the preset for non-technical users. It grows as technical features are added.
@@ -71,6 +73,13 @@ type Chat struct {
 	// ThemeLight recolours the light face, shown under a light system scheme or
 	// inside data-theme="light". The zero value keeps the built-in palette.
 	ThemeLight Theme
+	// GreetingTitle is the heading a new chat shows before its first message:
+	// a string or a GoX element. nil shows "How can I help?"; "" leaves it out.
+	GreetingTitle any
+	// GreetingBody is what shows under GreetingTitle: a string or a GoX element,
+	// such as the host's own template. nil shows "Ask a question or describe
+	// what you need."; "" leaves it out.
+	GreetingBody any
 	// Disable lists features hidden from the user; nil shows everything.
 	// Simple is the preset for non-technical users and grows with technical features added later.
 	Disable []Feature
@@ -88,6 +97,8 @@ func (k Chat) Main() gox.Elem {
 		Framed: k.Framed,
 		ThemeDark: k.ThemeDark,
 		ThemeLight: k.ThemeLight,
+		GreetingTitle: k.GreetingTitle,
+		GreetingBody: k.GreetingBody,
 	}
 	params.InitDefault()
 	params.Disable(k.Disable)

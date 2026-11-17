@@ -344,3 +344,12 @@ ui.root.set(ui.table({columns: [{title: "Name"}, {title: "Spec"}], rows: rows, p
 	}
 	a.shows(".neisland-table-status-text", "1000 selected")
 }
+func TestTableSubmitReturnsWhenThePartEndsWithoutADraw(t *testing.T) {
+	a := open(t, twelve+`ui.root.set(ui.table({columns: [{title: "Name"}, {title: "Spec"}], rows: rows, pageSize: 5, clickable: true})); app.got(ui.draw().output)`)
+	began := time.Now()
+	a.call("click_row", map[string]any{"id": "r3"})
+	if d := time.Since(began); d > 2*time.Second {
+		t.Fatalf("click_row returned after %v, want it back once the part ends", d)
+	}
+	a.submitted(table.Submit{ID: "r3"})
+}

@@ -45,6 +45,19 @@ type widget struct {
 	state doors.Source[Params]
 }
 
+type textView struct {
+	Text  string `json:"text" required:"true" description:"the text, as markdown"`
+	Style string `json:"style" required:"true" description:"plain, card, or the card's tone"`
+}
+
+func (t widget) getText(ctx context.Context, _ struct{}) (textView, error) {
+	p, ok := t.state.Read(ctx)
+	if !ok {
+		return textView{}, context.Canceled
+	}
+	return textView{Text: p.Text, Style: p.Style}, nil
+}
+
 func (t widget) Update(ctx context.Context, patch Patch) {
 	t.state.Mutate(ctx, func(p Params) Params {
 		if patch.Text != nil {
@@ -57,28 +70,30 @@ func (t widget) Update(ctx context.Context, patch Patch) {
 	})
 }
 
-//line markdown.gox:57
+//line markdown.gox:70
 func (t widget) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line markdown.gox:58
+//line markdown.gox:71
+		__e = __c.Any(neui.Tool[struct{}, textView]{Name: getTextName, Desc: getTextDesc, Handler: t.getText}); if __e != nil { return }
+//line markdown.gox:72
 		__e = __c.Any(t.state.Bind(t.render)); if __e != nil { return }
 	return })
-//line markdown.gox:59
+//line markdown.gox:73
 }
 
-//line markdown.gox:61
+//line markdown.gox:75
 func (t widget) render(p Params) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line markdown.gox:63
+//line markdown.gox:77
 		if p.Text == "" {
 		return nil
 	}
 
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line markdown.gox:68
+//line markdown.gox:82
 			__e = __c.Set("class", func() any {
 			switch p.Style {
 			case "plain":
@@ -88,7 +103,7 @@ func (t widget) render(p Params) gox.Elem {
 			}
 			return "neisland-text neisland-prose neisland-text-card neisland-tone-" + p.Style
 		}()); if __e != nil { return }
-//line markdown.gox:77
+//line markdown.gox:91
 			__e = __c.Set("role", func() any {
 			switch p.Style {
 			case "warning", "danger":
@@ -99,22 +114,22 @@ func (t widget) render(p Params) gox.Elem {
 			return nil
 		}()); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line markdown.gox:86
+//line markdown.gox:100
 			if label := toneLabels[p.Style]; label != "" {
 				__e = __c.Init("span"); if __e != nil { return }
 				{
-//line markdown.gox:87
+//line markdown.gox:101
 					__e = __c.Set("class", "neisland-tone-label"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line markdown.gox:87
+//line markdown.gox:101
 					__e = __c.Any(label); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
 			}
-//line markdown.gox:89
+//line markdown.gox:103
 			__e = __c.Any(files.MarkdownBody(neui.IslandFS(ctx), markdown.Block(p.Text))); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line markdown.gox:91
+//line markdown.gox:105
 }

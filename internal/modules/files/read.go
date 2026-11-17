@@ -13,6 +13,7 @@ import (
 
 	"neui.dev/api"
 	"neui.dev/internal/common"
+	"neui.dev/internal/tools"
 )
 
 const (
@@ -21,7 +22,7 @@ const (
 	bytesCap     = 8 << 20
 )
 
-const readDesc = `Read a text file as numbered lines; everything after "N: " is file content. Output stops at the line limit or at the configured byte limit, whichever comes first, and the last line of the result says where to continue from. Line breaks show as \n whatever the file uses; edit, replace, insert, write and append keep the file's own CRLF or LF endings. Binary files are refused, use readBytes.`
+const readDesc = `Read a text file as numbered lines; everything after "N: " is file content. Output stops at the line limit or at the configured byte limit, whichever comes first, and the last line of the result says where to continue from. Line breaks show as \n whatever the file uses; edit, replace, insert, write and append keep the file's own CRLF or LF endings. Binary files are refused, use readBytes. From a script, it returns the file's text as it is, up to 8MB: no line numbers, no closing line, no truncated lines, and without limit the whole file.`
 const readBytesDesc = `Read raw bytes of a file, base64 in the result. Reads over 8MB must be ranged.`
 const writeBytesDesc = `Write raw bytes to a file, replacing existing content, creating parent directories. Plain text goes through write.`
 
@@ -56,6 +57,31 @@ func readTool(ctx context.Context, arg readArg) (string, error) {
 	}
 	if bytes.HasPrefix(head, []byte("\ufeff")) {
 		br.Discard(3)
+	}
+	if tools.FromJS(ctx) {
+		data, err := io.ReadAll(io.LimitReader(br, bytesCap+1))
+		if err != nil {
+			return "", err
+		}
+		if len(data) > bytesCap {
+			return "", fmt.Errorf("%q is larger than 8MB, read it in ranges with readBytes", arg.Path)
+		}
+		if arg.Offset <= 1 && arg.Limit == 0 {
+			return string(data), nil
+		}
+		lines := strings.SplitAfter(string(data), "\n")
+		if lines[len(lines)-1] == "" {
+			lines = lines[:len(lines)-1]
+		}
+		start := max(arg.Offset, 1)
+		if start > uint(len(lines)) {
+			return "", fmt.Errorf("offset %d is beyond the end of %q, %d lines", start, arg.Path, len(lines))
+		}
+		end := uint(len(lines))
+		if arg.Limit > 0 {
+			end = min(end, start-1+arg.Limit)
+		}
+		return strings.Join(lines[start-1:end], ""), nil
 	}
 	offset := max(arg.Offset, 1)
 	limit := arg.Limit

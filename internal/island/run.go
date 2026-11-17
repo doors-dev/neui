@@ -345,7 +345,9 @@ func (r *run) run() {
 			case err == nil:
 				r.state.FlushNotifications(false)
 			}
-			r.state.Release()
+			if r.island.entered.Load() > 0 {
+				r.state.Release()
+			}
 		}
 	}()
 }

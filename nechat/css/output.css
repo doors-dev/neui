@@ -218,7 +218,7 @@
     flex: none;
     color: var(--danger-ink);
   }
-  .nechat-closed-title {
+  .nechat-closed-title, .nechat-greet-title {
     margin-inline: 0px;
     margin-top: var(--spacing, 0.25rem);
     margin-bottom: 0px;
@@ -238,6 +238,31 @@
     line-height: var(--leading-normal, 1.5);
     text-wrap: balance;
     color: var(--app-ink-quiet);
+  }
+  .nechat-greet {
+    box-sizing: border-box;
+    display: flex;
+    min-height: 100%;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: calc(var(--spacing, 0.25rem) * 1.5);
+    padding: calc(var(--spacing, 0.25rem) * 4);
+    text-align: center;
+  }
+  .nechat-greet-body {
+    max-width: 100%;
+    min-width: 0px;
+    font-size: var(--text-sm, 0.875rem);
+    line-height: var(--nechat-tw-leading, var(--text-sm--line-height, calc(1.25 / 0.875)));
+    --nechat-tw-leading: var(--leading-normal, 1.5);
+    line-height: var(--leading-normal, 1.5);
+    color: var(--app-ink-quiet);
+  }
+  .nechat-greet-body_text {
+    margin: 0px;
+    max-width: 30ch;
+    text-wrap: balance;
   }
   .nechat-closed-acts {
     margin-top: calc(var(--spacing, 0.25rem) * 2);
@@ -1685,7 +1710,8 @@
     scroll-behavior: smooth;
     border-radius: var(--_nechat-radius-surface);
     background-color: var(--app-bg);
-    padding-inline: calc(var(--spacing, 0.25rem) * 3);
+    padding-inline-start: calc(var(--spacing, 0.25rem) * 3);
+    padding-inline-end: calc(var(--spacing, 0.25rem) * 4);
     padding-top: 0px;
     padding-bottom: calc(var(--spacing, 0.25rem) * 4);
     font-size: var(--text-base, 1rem);

@@ -1,4 +1,4 @@
-// Managed by GoX v0.3.4
+// Managed by GoX v0.4.0
 
 //line nechat.gox:1
 package nechat
@@ -48,6 +48,8 @@ const (
 	ThreadEdit = Feature(params.ThreadEdit)
 	// MessageSearch limits search to chat names; message contents are not searched.
 	MessageSearch = Feature(params.MessageSearch)
+	// Greeting hides the greeting a new chat shows before its first message.
+	Greeting = Feature(params.Greeting)
 )
 
 // Simple is the preset for non-technical users. It grows as technical features are added.
@@ -74,6 +76,13 @@ type Chat struct {
 	// ThemeLight recolours the light face, shown under a light system scheme or
 	// inside data-theme="light". The zero value keeps the built-in palette.
 	ThemeLight Theme
+	// GreetingTitle is the heading a new chat shows before its first message:
+	// a string or a GoX element. nil shows "How can I help?"; "" leaves it out.
+	GreetingTitle any
+	// GreetingBody is what shows under GreetingTitle: a string or a GoX element,
+	// such as the host's own template. nil shows "Ask a question or describe
+	// what you need."; "" leaves it out.
+	GreetingBody any
 	// Disable lists features hidden from the user; nil shows everything.
 	// Simple is the preset for non-technical users and grows with technical features added later.
 	Disable []Feature
@@ -91,6 +100,8 @@ func (k Chat) Main() gox.Elem {
 		Framed: k.Framed,
 		ThemeDark: k.ThemeDark,
 		ThemeLight: k.ThemeLight,
+		GreetingTitle: k.GreetingTitle,
+		GreetingBody: k.GreetingBody,
 	}
 	params.InitDefault()
 	params.Disable(k.Disable)
@@ -112,18 +123,18 @@ type widget struct {
 	pops pops.Popups
 }
 
-//line nechat.gox:112
+//line nechat.gox:123
 func (k *widget) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line nechat.gox:113
+//line nechat.gox:124
 		__e = __c.Any(css.Style(k.params.ThemeDark, k.params.ThemeLight)); if __e != nil { return }
-//line nechat.gox:114
+//line nechat.gox:125
 		__e = (doors.Ctx(notify.Root(ctx))).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line nechat.gox:115
+//line nechat.gox:126
 				__e = __c.Set("class", func() any {
 			class := "nechat-widget nechat-widget_split"
 			if k.params.Off(params.Sidebar) {
@@ -136,7 +147,7 @@ func (k *widget) Main() gox.Elem {
 			}
 			return class
 		}()); if __e != nil { return }
-//line nechat.gox:127
+//line nechat.gox:138
 				__e = __c.Set("data-nechat-theme", func() any {
 			key := css.FaceKey(k.params.ThemeDark, k.params.ThemeLight)
 			if key == "" {
@@ -145,15 +156,15 @@ func (k *widget) Main() gox.Elem {
 			return key
 		}()); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line nechat.gox:134
+//line nechat.gox:145
 				if !k.params.Off(params.Sidebar) {
-//line nechat.gox:135
+//line nechat.gox:146
 					__e = __c.Any(k.synced.Bind(func(synced bool) gox.Elem {
 				return gox.Elem(func(__c gox.Cursor) (__e error) {
 					ctx := __c.Context(); _ = ctx
-//line nechat.gox:136
+//line nechat.gox:147
 					if synced {
-//line nechat.gox:137
+//line nechat.gox:148
 						__e = __c.Any(aside.Aside{
 						Params: k.params,
 						Instance: k.inst,
@@ -161,22 +172,22 @@ func (k *widget) Main() gox.Elem {
 					}); if __e != nil { return }
 					}
 				return })
-//line nechat.gox:143
+//line nechat.gox:154
 			})); if __e != nil { return }
 				}
-//line nechat.gox:145
+//line nechat.gox:156
 				__e = __c.Any(chat.Chat{
 			Params: k.params,
 			Inst: k.inst,
 			Pops: k.pops.Popup[string](),
 		}); if __e != nil { return }
-//line nechat.gox:150
+//line nechat.gox:161
 				__e = __c.Any(k.pops.Script()); if __e != nil { return }
-//line nechat.gox:151
+//line nechat.gox:162
 				__e = __c.Any(notify.Script()); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
-//line nechat.gox:153
+//line nechat.gox:164
 }

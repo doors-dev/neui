@@ -544,6 +544,73 @@ func TestAgentSeesFieldsInListItemsAndSeriesStepsWithoutExtraSpaces(t *testing.T
 	expect(t, "file item children", children(scan.Children))
 }
 
+const seriesEndSpec = `{fields: [
+	{type: "series", label: "Trip", name: "trip", required: true, fields: [
+		"(v) => ({type: 'text', label: 'From', name: 'from'})",
+		"(v) => v === 'home' ? null : ({type: 'text', label: 'To', name: 'to'})"
+	]}
+], submits: [{text: "Send", value: "send"}]}`
+
+func TestAgentSeesASeriesEndWhereALaterStepReturnsNull(t *testing.T) {
+	a := open(t, seriesEndSpec)
+	s := a.sync(formPath, formPath+".trip.from")
+	root, from := s[0], s[1]
+	expect(t, "form data before any answer", datas(root.Data), `submit blocked: "form is not completed or contains errors"`)
+
+	rep := a.write(formPath+".trip.from", id(t, from.Inputs, "From"), "home")
+	if changed(rep, formPath+".trip.to", "") {
+		t.Fatalf("answering home added the To step: %+v", rep.Changes)
+	}
+	expect(t, "series children once the second step returns null", children(a.sync(formPath + ".trip")[0].Children), "from (From)")
+	a.c.Page.Timeout(10 * time.Second).MustElement(".neisland-form-step[data-complete]")
+	expect(t, "form data once the series ends", datas(a.sync(formPath)[0].Data))
+
+	rep = a.write(formPath+".trip.from", id(t, from.Inputs, "From"), "away")
+	if !changed(rep, formPath+".trip.to", "") {
+		t.Fatalf("answering away added no To step: %+v", rep.Changes)
+	}
+	to := a.sync(formPath + ".trip.to")[0]
+	expect(t, "To step inputs", inputs(to.Inputs), "input text To RW")
+	expect(t, "To step data", datas(to.Data), `to validation error: "field is required"`)
+	expect(t, "form data with the To step empty", datas(a.sync(formPath)[0].Data), `submit blocked: "form is not completed or contains errors"`)
+
+	a.write(formPath+".trip.from", id(t, from.Inputs, "From"), "home")
+	expect(t, "series children once home ends it again", children(a.sync(formPath + ".trip")[0].Children), "from (From)")
+	expect(t, "form data once the series ends again", datas(a.sync(formPath)[0].Data))
+	if r := a.round([]testkit.Turn{testkit.Say("noted"), testkit.Say("ended")}, call{"page__click", map[string]any{"path": formPath, "id": id(t, root.Inputs, "Send")}})[0]; r.Error != api.ToolOk {
+		t.Fatalf("the Send click failed: %s", text(r))
+	}
+	if notice := a.notified(`"submit":"send"`); !strings.Contains(notice, `"trip":{"from":"home"}`) {
+		t.Fatalf("the submit notification %q lacks the series holding only from", notice)
+	}
+}
+
+func TestAgentSeesASeriesFailWhenItsFirstStepReturnsNull(t *testing.T) {
+	p := testkit.NewProvider(api.Model{})
+	a := &agent{t: t, c: stack.Browser(t, stack.Host{Provider: p, Page: board()}), p: p}
+	r := a.run(call{"page__island_spec", map[string]any{"path": "board"}})[0]
+	line, _, _ := strings.Cut(text(r), "\n")
+	revision, ok := strings.CutPrefix(line, "revision ")
+	if !ok {
+		t.Fatalf("island_spec answered %q, want a revision line first", text(r))
+	}
+	r = a.round([]testkit.Turn{testkit.Say("noted")}, call{"page__island_begin", map[string]any{
+		"path":     "board",
+		"revision": revision,
+		"code": `ui.root.set(ui.form({fields: [{type: "series", label: "Trip", name: "trip", fields: [
+			"(v) => null",
+			"(v) => ({type: 'text', label: 'To', name: 'to'})"
+		]}]})); ui.notify(ui.draw()); ui.draw(1)`,
+		"comment": "a form",
+	}})[0]
+	if r.Error != api.ToolOk {
+		t.Fatalf("island_begin failed: %s", text(r))
+	}
+	if notice := a.notified("the first step returned null"); !strings.Contains(notice, `kind="script_error"`) || !strings.Contains(notice, `ui.form: series \"trip\": the first step returned null, want a field`) {
+		t.Fatalf("the failure reads %q, want ui.form to fail as a script error naming the series", notice)
+	}
+}
+
 func TestListItemSpacesKeepScreenOrderAfterRemovals(t *testing.T) {
 	a := open(t, `{fields: [{type: "list", field: {type: "text", label: "Tags", name: "tags"}, value: ["a", "b"]}]}`)
 	first := a.sync(formPath + ".tags.item_0001")[0]

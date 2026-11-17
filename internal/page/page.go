@@ -61,6 +61,7 @@ type permit[T any] struct {
 	item   T
 	old    snapshot
 	before map[string][4]uint64
+	island island.Island
 }
 
 func (p *page) Module() Module {
@@ -84,6 +85,8 @@ func (p *page) Module() Module {
 		if err != nil {
 			return toolResult{}, err
 		}
+		a.enter()
+		defer a.leave()
 		out, err := a.item.call(ctx, in)
 		if err != nil {
 			var res toolResult
@@ -137,6 +140,8 @@ func (p *page) Module() Module {
 		if err != nil {
 			return actionReport{}, err
 		}
+		a.enter()
+		defer a.leave()
 		res, err := dispatch[actionReport](ctx, a.item, "input", arg.Value)
 		if err != nil {
 			return actionReport{}, a.fail(ctx, arg.Path, err, &res.report, &res.report)
@@ -154,6 +159,8 @@ func (p *page) Module() Module {
 		if err != nil {
 			return actionReport{}, err
 		}
+		a.enter()
+		defer a.leave()
 		res, err := dispatch[actionReport](ctx, a.item, "click", nil)
 		if err != nil {
 			return actionReport{}, a.fail(ctx, arg.Path, err, &res.report, &res.report)
@@ -395,7 +402,7 @@ func (m *module) act[T any](ctx context.Context, path string, find func(s *space
 		}
 		before := map[string][4]uint64{}
 		m.page.space.digests(before)
-		return permit[T]{module: m, item: item, old: old, before: before}, nil
+		return permit[T]{module: m, item: item, old: old, before: before, island: s.within}, nil
 	}
 	live := s.snapshot()
 	r := refusal{reason: refusedUnreadMessage, Space: &live.state}
@@ -424,6 +431,18 @@ func (m *module) store(s *space, snap snapshot) {
 		if _, found := s.search(name); !found {
 			delete(m.snaps, path)
 		}
+	}
+}
+
+func (a permit[T]) enter() {
+	if a.island != nil {
+		a.island.Enter()
+	}
+}
+
+func (a permit[T]) leave() {
+	if a.island != nil {
+		a.island.Leave()
 	}
 }
 

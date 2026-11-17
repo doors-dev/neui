@@ -20,6 +20,8 @@ type Params struct {
 	Framed            bool
 	ThemeDark         css.Theme
 	ThemeLight        css.Theme
+	GreetingTitle     any
+	GreetingBody      any
 	ID                string
 	off               uint32
 }
@@ -41,6 +43,7 @@ const (
 	Sidebar
 	ThreadEdit
 	MessageSearch
+	Greeting
 )
 
 // Disable hides features.
@@ -55,7 +58,7 @@ func (p Params) Off(f Feature) bool {
 	return p.off&(1<<f) != 0
 }
 
-// InitDefault fills zero attachment limits with their defaults and assigns a fresh ID.
+// InitDefault fills zero attachment limits and nil greeting parts with their defaults and assigns a fresh ID.
 func (p *Params) InitDefault() {
 	if p.MaxAttachmentSize == 0 {
 		p.MaxAttachmentSize = 12 << 20
@@ -65,6 +68,12 @@ func (p *Params) InitDefault() {
 	}
 	if p.AttachmentTimeout == 0 {
 		p.AttachmentTimeout = 10 * time.Minute
+	}
+	if p.GreetingTitle == nil {
+		p.GreetingTitle = "How can I help?"
+	}
+	if p.GreetingBody == nil {
+		p.GreetingBody = "Ask a question or describe what you need."
 	}
 	p.ID = doors.IDRand()
 }

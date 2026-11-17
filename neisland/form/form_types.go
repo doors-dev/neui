@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/doors-dev/doors"
+	"github.com/swaggest/jsonschema-go"
 	"neui.dev"
 )
 
@@ -104,7 +105,7 @@ type option struct {
 }
 
 type selectParams struct {
-	_       struct{} `additionalProperties:"false" description:"choice from a fixed list of options; its value is an array of the chosen options as {value, label} objects in option order, a single item when max is 1, left out of the result when none is chosen"`
+	_       struct{} `additionalProperties:"false" description:"choice from a fixed list of options; its value is an array of the chosen options as {value, label} objects in option order (with max 1, an array of one), left out of the result when none is chosen"`
 	Type    string   `json:"type" required:"true" const:"select"`
 	Label   string   `json:"label" required:"true" minLength:"1" maxLength:"80" description:"text shown with the field"`
 	Name    string   `json:"name" required:"true" minLength:"1" maxLength:"80" description:"key of the value in the result, unique among the fields beside it; in a list's template it is the key of the whole list"`
@@ -123,7 +124,7 @@ func (p selectParams) label() string {
 }
 
 type searchParams struct {
-	_           struct{}                          `additionalProperties:"false" description:"choice from options the agent's search function finds for what the user types, for when the options are too many to list; its value is an array of the chosen options as {value, label} objects in the order they were picked, a single item when max is 1, left out of the result when none is chosen"`
+	_           struct{}                          `additionalProperties:"false" description:"choice from options the agent's search function finds for what the user types, for when the options are too many to list; its value is an array of the chosen options as {value, label} objects in the order they were picked (with max 1, an array of one), left out of the result when none is chosen"`
 	Type        string                            `json:"type" required:"true" const:"search"`
 	Label       string                            `json:"label" required:"true" minLength:"1" maxLength:"80" description:"text shown with the field"`
 	Name        string                            `json:"name" required:"true" minLength:"1" maxLength:"80" description:"key of the value in the result, unique among the fields beside it; in a list's template it is the key of the whole list"`
@@ -217,7 +218,7 @@ type seriesParams struct {
 	Label    string                             `json:"label" required:"true" minLength:"1" maxLength:"80" description:"heading shown above the fields"`
 	Name     string                             `json:"name" required:"true" minLength:"1" maxLength:"80" description:"key of the object in the result, unique among the fields beside it; in a list's template it is the key of the whole list"`
 	Required bool                               `json:"required,omitempty" description:"true makes the user answer every step before submitting; false lets the user leave the first step empty to skip the series, but once it is answered every step must be"`
-	Fields   []neui.IslandCall[any, seriesStep] `json:"fields" required:"true" nullable:"false" minItems:"2" maxItems:"20" description:"one step function per field, in order: each gets the value of the field the previous step returned, null for the first step, and returns the field to show; a series always shows one field per step, so to let a path end early return a field whose only option is a skip value, preselected; a step returns a plain field only, not a checkbox, file, group, list or series; a step field's own required is ignored: the first step is required when the series is, every later step always is, as the series is started by then, and a required select or search step needs at least one option chosen"`
+	Fields   []neui.IslandCall[any, seriesStep] `json:"fields" required:"true" nullable:"false" minItems:"2" maxItems:"20" description:"one step function per field, in order: each gets the value of the field the previous step returned, null for the first step, and returns the field to show; a later step may return null to end the series there; a step returns a plain field only, not a checkbox, file, group, list or series; a step field's own required is ignored: the first step is required when the series is, every later step always is, as the series is started by then, and a required select or search step needs at least one option chosen"`
 }
 
 func (p seriesParams) name() string {
@@ -302,7 +303,16 @@ func (seriesStep) JSONSchemaAnyOf() []any {
 	return []any{textParams{}, numberParams{}, dateParams{}, textareaParams{}, selectParams{}, searchParams{}}
 }
 
+func (seriesStep) PrepareJSONSchema(s *jsonschema.Schema) error {
+	s.Type = nil
+	s.AnyOf = append(s.AnyOf, jsonschema.Null.ToSchemaOrBool())
+	return nil
+}
+
 func (f *seriesStep) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" {
+		return nil
+	}
 	var field fieldParams
 	if err := json.Unmarshal(data, &field); err != nil {
 		return err

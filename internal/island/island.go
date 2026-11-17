@@ -7,6 +7,7 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
@@ -57,6 +58,7 @@ type island struct {
 	status      *doors.Door
 	run         *run
 	seq         uint
+	entered     atomic.Int32
 }
 
 func (i *island) Spec(ctx context.Context, space string) (string, []int, []string) {
@@ -72,6 +74,14 @@ func (i *island) Spec(ctx context.Context, space string) (string, []int, []strin
 		all = append(all, start+end)
 	}
 	return b.String(), all, append([]string{"logs and files", "reading the reference"}, items...)
+}
+
+func (i *island) Enter() {
+	i.entered.Add(1)
+}
+
+func (i *island) Leave() {
+	i.entered.Add(-1)
 }
 
 func (i *island) Unmount() {

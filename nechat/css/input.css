@@ -209,7 +209,7 @@
 		text-(--danger-ink)
 	}
 
-	.nechat-closed-title {
+	.nechat-closed-title, .nechat-greet-title {
 		@apply
 		mt-1
 		mb-0
@@ -228,6 +228,35 @@
 		text-sm
 		leading-normal
 		text-(--app-ink-quiet)
+		text-balance
+	}
+
+	.nechat-greet {
+		@apply
+		box-border
+		flex
+		flex-col
+		items-center
+		justify-center
+		gap-1.5
+		min-h-full
+		p-4
+		text-center
+	}
+
+	.nechat-greet-body {
+		@apply
+		min-w-0
+		max-w-full
+		text-sm
+		leading-normal
+		text-(--app-ink-quiet)
+	}
+
+	.nechat-greet-body_text {
+		@apply
+		m-0
+		max-w-[30ch]
 		text-balance
 	}
 
@@ -1380,7 +1409,8 @@
 		text-base
 		leading-[1.6]
 		pt-0
-		px-3
+		ps-3
+		pe-4
 		pb-4
 		rounded-(--_nechat-radius-surface)
 		wrap-anywhere

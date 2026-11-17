@@ -17,6 +17,7 @@ import (
 	"neui.dev/api"
 	"neui.dev/internal/storage/local"
 	"neui.dev/internal/testkit"
+	"neui.dev/internal/tools"
 )
 
 func putFile(t *testing.T, store *local.FileStorage, origin api.Origin, name, content string) {
@@ -820,5 +821,27 @@ func TestFailedWriteBytesKeepsTheOriginal(t *testing.T) {
 	defer rc.Close()
 	if b, _ := io.ReadAll(rc); string(b) != "0123456789" {
 		t.Fatalf("got %q", b)
+	}
+}
+
+func TestReadFromScriptIsTheText(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	content := `{"cards":[1,2]}` + "\n" + strings.Repeat("y", 3000) + "\r\nlast"
+	write(t, c.FS(), "a.txt", content)
+	tool, err := tools.NewTool("read", readDesc, readTool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := tool.JS(c.Ctx())
+	out, err := call([]any{`{"path":"a.txt"}`})
+	if err != nil || out != content {
+		t.Fatalf("a script read %q, %v; want the file as it is", out, err)
+	}
+	out, err = call([]any{`{"path":"a.txt","offset":2,"limit":1}`})
+	if want := strings.Repeat("y", 3000) + "\r\n"; err != nil || out != want {
+		t.Fatalf("a script read of line 2 gave %q, %v; want the whole line with its ending", out, err)
+	}
+	if _, err := call([]any{`{"path":"a.txt","offset":9}`}); err == nil {
+		t.Fatal("a script read past the end succeeded")
 	}
 }

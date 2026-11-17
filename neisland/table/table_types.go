@@ -193,7 +193,7 @@ type result struct {
 type row struct {
 	_       struct{}     `additionalProperties:"false"`
 	ID      string       `json:"id" required:"true" minLength:"1" maxLength:"200" description:"identifies the row in what a click submits"`
-	Cells   []cellText   `json:"cells" required:"true" nullable:"false" description:"one text per column, in column order; inline markdown: **bold**, *italic*, ~~strike~~, code in backquotes, [links](https://…) and [name](file:///path) downloads of workspace files, path relative to the workspace root; search and sort use the text as shown"`
+	Cells   []cellText   `json:"cells" required:"true" nullable:"false" description:"one text per column, in column order; inline markdown: **bold**, *italic*, ~~strike~~, code in backquotes, [links](https://…) and [name](file:///path) downloads of workspace files, path relative to the workspace root; search and sort use the text as shown, numbers in it by value; for another order, such as priorities, use query"`
 	Actions []cellButton `json:"actions,omitempty" maxItems:"5" description:"action buttons of the row"`
 	plain   []string
 }

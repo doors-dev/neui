@@ -130,6 +130,15 @@ func (f *seriesWidget) setField(ctx context.Context, name string, value any, err
 		f.system.set(ctx, nil, errSystem)
 		return
 	}
+	if field.v == nil {
+		if nextIndex == 0 {
+			f.onSystemError(ctx, fmt.Errorf("series %q: the first step returned null, want a field", f.params.Name))
+			return
+		}
+		f.state.Update(ctx, seriesState{steps: nextIndex, complete: true})
+		f.system.set(ctx, nil, nil)
+		return
+	}
 	required := f.params.Required || nextIndex > 0
 	switch v := field.v.(type) {
 	case *textParams:

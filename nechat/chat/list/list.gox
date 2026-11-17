@@ -56,6 +56,7 @@ type list struct {
 		hidden bool
 	}
 	sectionAppender *doors.Door
+	greeting *doors.Door
 	historyPrepender *doors.Door
 	historyAppender *doors.Door
 	seq int
@@ -183,6 +184,10 @@ func (l List) seed(ctx context.Context, active *api.Round, anchor api.RoundID) (
 	if l.lastSection.live != nil || len(tail) != 0 {
 		l.activate(ctx, lastID, lastHead, tail, new(doors.Door), head == api.NoRoundID && l.lastSection.live != nil)
 	}
+	if active == nil && len(tail) == 0 && len(sections) == 0 && !l.params.Off(params.Greeting) {
+		l.greeting = new(doors.Door)
+		l.greeting.Inner(ctx, greeting(l.params.GreetingTitle, l.params.GreetingBody))
+	}
 	s := &seed{
 		prepender: l.historyPrepender,
 		historyAppender: l.historyAppender,
@@ -191,6 +196,9 @@ func (l List) seed(ctx context.Context, active *api.Round, anchor api.RoundID) (
 	}
 	if l.lastSection.entry.door != nil {
 		s.last = l.lastSection.entry
+	}
+	if l.greeting != nil {
+		s.greeting = l.greeting
 	}
 	return doors.Once(s), nil
 }
@@ -244,6 +252,10 @@ func (l List) RoundStart(ctx context.Context, r api.Round, truncate api.RoundID)
 	defer l.mu.Unlock()
 	if l.sectionAppender == nil {
 		return
+	}
+	if l.greeting != nil {
+		l.greeting.Unmount(ctx)
+		l.greeting = nil
 	}
 	l.lastRound.Update(ctx, r.ID)
 	l.lastSection.live = round.NewLiveRound(
@@ -628,6 +640,7 @@ type seed struct {
 	appender gox.Comp
 	history []entry
 	last gox.Comp
+	greeting gox.Comp
 }
 
 elem (s *seed) Main() {
@@ -637,5 +650,22 @@ elem (s *seed) Main() {
 	})
 	~(s.historyAppender)
 	~(s.last)
+	~(s.greeting)
 	~(s.appender)
+}
+
+elem greeting(title any, body any) {
+	~~
+	text, isText := body.(string)
+	~~
+	<div class="nechat-greet">
+		~(if title != nil && title != "" {
+			<div class="nechat-greet-title">~(title)</div>
+		})
+		~(if isText && text != "" {
+			<div class="nechat-greet-body nechat-greet-body_text">~(text)</div>
+		} else if !isText && body != nil {
+			<div class="nechat-greet-body">~(body)</div>
+		})
+	</div>
 }

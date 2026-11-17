@@ -1,6 +1,7 @@
 package page
 
 import (
+	"cmp"
 	"context"
 	"encoding/binary"
 	"encoding/json"
@@ -31,6 +32,7 @@ type space struct {
 	tools    []*tool
 	data     []*data
 	island   island.Island
+	within   island.Island
 	digest   [4]uint64
 	counts   [4]map[uint64]int
 	inputs
@@ -75,6 +77,7 @@ func (s Space) addSpace(ctx context.Context, name string, desc string, island is
 		}(),
 		desc:   desc,
 		island: island,
+		within: cmp.Or(island, s.within),
 	}
 	defer doors.OnClean(ctx, func() {
 		s.removeSpace(space)
