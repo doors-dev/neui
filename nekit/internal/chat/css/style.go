@@ -12,8 +12,10 @@ import (
 var style []byte
 
 // Style renders the nechat stylesheet link and, when dark or light set any
-// colour, a rule applying them to widgets whose data-nechat-theme is their FaceKey.
-func Style(dark Theme, light Theme) gox.Elem {
+// colour or layout differs from the defaults, rules applying them to widgets
+// whose data-nechat-theme is their FaceKey and whose data-nechat-layout is
+// their LayoutKey.
+func Style(dark Theme, light Theme, layout Layout) gox.Elem {
 	return func(cur gox.Cursor) error {
 		if err := cur.InitVoid("link"); err != nil {
 			return err
@@ -27,17 +29,23 @@ func Style(dark Theme, light Theme) gox.Elem {
 		if err := cur.Submit(); err != nil {
 			return err
 		}
-		key := FaceKey(dark, light)
-		if key == "" {
+		face := FaceKey(dark, light)
+		place := LayoutKey(layout)
+		if face == "" && place == "" {
 			return nil
 		}
 		var rule bytes.Buffer
-		rule.WriteString(`.nechat-widget[data-nechat-theme="`)
-		rule.WriteString(key)
-		rule.WriteString(`"]{`)
-		dark.write(&rule, "dark")
-		light.write(&rule, "light")
-		rule.WriteString("}")
+		if face != "" {
+			rule.WriteString(`.nechat-widget[data-nechat-theme="`)
+			rule.WriteString(face)
+			rule.WriteString(`"]{`)
+			dark.write(&rule, "dark")
+			light.write(&rule, "light")
+			rule.WriteString("}")
+		}
+		if place != "" {
+			layout.write(&rule, place)
+		}
 		if err := cur.Init("style"); err != nil {
 			return err
 		}

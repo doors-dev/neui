@@ -69,7 +69,7 @@ func openLog(t *testing.T, pinned bool) *log {
 		default:
 		}
 		return cur.Many(
-			css.Style(css.Theme{}, css.Theme{}),
+			css.Style(css.Theme{}, css.Theme{}, css.Layout{}),
 			div(map[string]any{"class": "nechat-log nechat-log_scroll", "style": "height: 400px"},
 				div(map[string]any{"class": "nechat-section"},
 					div(map[string]any{"class": "nechat-turn"}, tall(1200)),

@@ -23,6 +23,16 @@ type Chat struct {
 	Params params.Params
 	Inst api.Instance
 	Pops pops.Popup[string]
+	Badge doors.Source[Badge]
+}
+
+type Badge struct {
+	Collapsed bool
+	Running bool
+	Block string
+	Asking bool
+	Ended bool
+	Failed bool
 }
 
 const pasteAsFile = 64 * 1024
@@ -35,6 +45,22 @@ func (c Chat) Chat(thread api.ChatThread, s api.ChatState) api.Chat {
 	controller := controller.New(thread, s.Input, s.Round != nil, s.Usage, s.Tasks, s.Compaction, s.CanCompact, s.Ask)
 	at := anchor.Read(s.Meta)
 	dead := doors.NewSource(alive)
+	seed := Badge{Running: s.Round != nil, Block: "text", Asking: s.Ask != nil}
+	if s.Round != nil {
+		for content := range s.Round.Response.Iter() {
+			switch content.(type) {
+			case api.ContentText:
+				seed.Block = "text"
+			case api.ContentReasoning:
+				seed.Block = "thinking"
+				if c.Params.Off(params.Thinking) {
+					seed.Block = "text"
+				}
+			case api.ContentToolUse:
+				seed.Block = "tools"
+			}
+		}
+	}
 	return &chat{
 		params: c.Params,
 		thread: thread,
@@ -46,6 +72,8 @@ func (c Chat) Chat(thread api.ChatThread, s api.ChatState) api.Chat {
 		}),
 		name: doors.NewSource(s.Name),
 		dead: dead,
+		badge: c.Badge,
+		seed: seed,
 	}
 }
 
@@ -69,6 +97,11 @@ func closedKindOf(err error) closedKind {
 }
 
 elem (c Chat) Placeholder(enabled doors.Beam[bool]) {
+	~~
+	c.Badge.Mutate(ctx, func(b Badge) Badge {
+		return Badge{Collapsed: b.Collapsed, Block: "text"}
+	})
+	~~
 	~(enabled.Bind(elem(loading bool) {
 		<div
 			class="nechat-pane nechat-widget_off"
@@ -113,12 +146,24 @@ type chat struct {
 	list list.List
 	name doors.Source[string]
 	dead doors.Source[closedKind]
+	badge doors.Source[Badge]
+	seed Badge
 }
 
 func (c *chat) Update(ctx context.Context, e api.ChatEvent) {
 	doors.OnBatch(ctx, func(context.Context) {}, func(ctx context.Context) {
 		if api.Final(e) {
 			c.composer.UpdateActive(ctx, false)
+			end, ok := e.(api.ChatEventRoundEnd)
+			_, critical := e.(api.ChatEventCriticalError)
+			c.badge.Mutate(ctx, func(b Badge) Badge {
+				b.Running = false
+				if b.Collapsed {
+					b.Ended = true
+					b.Failed = critical || ok && end.State == api.RoundError
+				}
+				return b
+			})
 		}
 		switch e := e.(type) {
 		case api.ChatEventName:
@@ -128,6 +173,11 @@ func (c *chat) Update(ctx context.Context, e api.ChatEvent) {
 			c.list.RoundDone(ctx, e.State)
 		case api.ChatEventRoundStart:
 			c.composer.RoundStart(ctx, e.Usage, e.CanCompact)
+			c.badge.Mutate(ctx, func(b Badge) Badge {
+				b.Running = true
+				b.Block = "text"
+				return b
+			})
 			if e.Round.Input.Len() != 0 {
 				c.composer.FlushInput(ctx)
 			}
@@ -138,14 +188,46 @@ func (c *chat) Update(ctx context.Context, e api.ChatEvent) {
 			c.composer.UpdateTasks(ctx, e.Tasks)
 		case api.ChatEventCompacting:
 			c.composer.UpdateCompaction(ctx, e.Running, e.Usage, e.CanCompact)
+			if e.Running {
+				c.badge.Mutate(ctx, func(b Badge) Badge {
+					b.Block = "text"
+					return b
+				})
+			}
 		case api.ChatEventRoundUsage:
 			c.composer.UpdateUsage(ctx, e.Usage)
 		case api.ChatEventAsk:
 			c.composer.Ask(ctx, e.Ask)
+			c.badge.Mutate(ctx, func(b Badge) Badge {
+				b.Asking = true
+				return b
+			})
 		case api.ChatEventAskDone:
 			c.composer.AskDone(ctx)
+			c.badge.Mutate(ctx, func(b Badge) Badge {
+				b.Asking = false
+				return b
+			})
 		case api.ChatEventIndexed:
 			c.list.IndexedEvent(e.Event)
+			block := ""
+			switch e.Event.(type) {
+			case api.EventText:
+				block = "text"
+			case api.EventThinking, api.EventSummary:
+				block = "thinking"
+				if c.params.Off(params.Thinking) {
+					block = "text"
+				}
+			case api.EventTool:
+				block = "tools"
+			}
+			if block != "" {
+				c.badge.Mutate(ctx, func(b Badge) Badge {
+					b.Block = block
+					return b
+				})
+			}
 		case api.ChatEventToolResults:
 			c.list.ToolsDone()
 		case api.ChatEventCriticalError:
@@ -156,6 +238,16 @@ func (c *chat) Update(ctx context.Context, e api.ChatEvent) {
 }
 
 elem (c *chat) Main() {
+	~~
+	c.badge.Mutate(ctx, func(b Badge) Badge {
+		return Badge{
+			Collapsed: b.Collapsed,
+			Running: c.seed.Running,
+			Block: c.seed.Block,
+			Asking: c.seed.Asking,
+		}
+	})
+	~~
 	<div
 		class="nechat-pane"
 		data-attach=({
@@ -268,6 +360,9 @@ elem (c *chat) body(kind closedKind) {
 
 elem (c *chat) closed(kind closedKind) {
 	~~
+	c.badge.Mutate(ctx, func(b Badge) Badge {
+		return Badge{Collapsed: b.Collapsed, Block: "text", Ended: b.Ended, Failed: b.Failed}
+	})
 	icon, head, text := icons.WarningFill(), "Something went wrong", "This chat hit an error."
 	if kind == deleted {
 		icon, head, text = icons.Trash(), "This chat was deleted.", "It was deleted elsewhere."

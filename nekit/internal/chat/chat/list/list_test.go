@@ -46,7 +46,9 @@ func TestSyncLoadErrorClearsRangeForRetry(t *testing.T) {
 		l.scrollState.topReached = !older
 		l.scrollState.spawned = true
 		l.mu.Lock()
-		more := l.sync(context.Background())
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		more := l.sync(ctx)
 		l.mu.Unlock()
 		if more {
 			t.Fatalf("older=%v: sync asked for another pass after a load error", older)

@@ -43,6 +43,10 @@ type Theme struct {
 	DangerBgActive string
 	// DangerInkOnFill is the text colour on a danger fill.
 	DangerInkOnFill string
+	// LauncherBg is the fill of the round button that opens a collapsed chat; it defaults to AppInk.
+	LauncherBg string
+	// LauncherInk is the icon colour of the round button that opens a collapsed chat; it defaults to AppBg.
+	LauncherInk string
 }
 
 func (t Theme) empty() bool {
@@ -65,6 +69,8 @@ func (t Theme) write(b *bytes.Buffer, face string) {
 		{"danger-bg-hover", t.DangerBgHover},
 		{"danger-bg-active", t.DangerBgActive},
 		{"danger-ink-on-fill", t.DangerInkOnFill},
+		{"launcher-bg", t.LauncherBg},
+		{"launcher-ink", t.LauncherInk},
 	} {
 		if token[1] == "" || strings.ContainsAny(token[1], "{};<") {
 			continue

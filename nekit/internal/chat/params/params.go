@@ -20,6 +20,7 @@ type Params struct {
 	Framed            bool
 	ThemeDark         css.Theme
 	ThemeLight        css.Theme
+	Layout            css.Layout
 	GreetingTitle     any
 	GreetingBody      any
 	ID                string
@@ -44,6 +45,7 @@ const (
 	ThreadEdit
 	MessageSearch
 	Greeting
+	Dock
 )
 
 // Disable hides features.

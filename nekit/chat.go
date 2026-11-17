@@ -18,6 +18,22 @@ type Chat = chat.Chat
 // light; set it as Chat.ThemeDark or Chat.ThemeLight.
 type ChatTheme = css.Theme
 
+// ChatLayout sets where the chat sits and how big it is; set it as Chat.Layout.
+// Lengths are CSS lengths such as "30rem" (px, rem, em, vw, vh or %); an empty
+// or invalid one keeps the default. On screens under 40rem wide the open chat
+// fills the screen.
+type ChatLayout = css.Layout
+
+// ChatSide is the page edge the chat sits at.
+type ChatSide = css.Side
+
+const (
+	// ChatRight puts the chat at the right edge, the default.
+	ChatRight = ChatSide(css.Right)
+	// ChatLeft puts the chat at the left edge.
+	ChatLeft = ChatSide(css.Left)
+)
+
 // ChatFeature is a part of the chat UI that can be hidden from the user.
 type ChatFeature = params.Feature
 
@@ -36,8 +52,8 @@ const (
 	ChatRetry = ChatFeature(params.Retry)
 	// ChatAttachments hides the attach button and tray; large pastes stay in the draft as text.
 	ChatAttachments = ChatFeature(params.Attachments)
-	// ChatFiles hides the files popover in the top bar.
-	ChatFiles = ChatFeature(params.Files)
+	// // ChatFiles hides the files popover in the top bar.
+	// ChatFiles = ChatFeature(params.Files)
 	// ChatSidebar hides the chat list sidebar and its menu button.
 	ChatSidebar = ChatFeature(params.Sidebar)
 	// ChatThreadEdit hides rename, clone and delete in the chat list.
@@ -46,6 +62,8 @@ const (
 	ChatMessageSearch = ChatFeature(params.MessageSearch)
 	// ChatGreeting hides the greeting a new chat shows before its first message.
 	ChatGreeting = ChatFeature(params.Greeting)
+	// ChatDock hides the dock button, so the chat only floats.
+	ChatDock = ChatFeature(params.Dock)
 )
 
 // ChatSimple is the preset for non-technical users. It grows as technical features are added.

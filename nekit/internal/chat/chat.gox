@@ -39,6 +39,8 @@ type Chat struct {
 	// ThemeLight recolours the light face, shown under a light system scheme or
 	// inside data-theme="light". The zero value keeps the built-in palette.
 	ThemeLight css.Theme
+	// Layout sets the chat's side and sizes; the zero value keeps the defaults.
+	Layout css.Layout
 	// GreetingTitle is the heading a new chat shows before its first message:
 	// a string or a GoX element. nil shows "How can I help?"; "" leaves it out.
 	GreetingTitle any
@@ -69,6 +71,7 @@ func (k Chat) Main() gox.Elem {
 		Framed: k.Framed,
 		ThemeDark: k.ThemeDark,
 		ThemeLight: k.ThemeLight,
+		Layout: k.Layout,
 		GreetingTitle: k.GreetingTitle,
 		GreetingBody: k.GreetingBody,
 	}
@@ -94,6 +97,9 @@ func (k Chat) Main() gox.Elem {
 			return false
 		})
 		inst := instance.GetInstance(cur.Context())
+		enabled := doors.DeriveBeam(inst.State(), func(s api.InstanceState) bool {
+			return s.Status != api.InstanceDisabled
+		})
 		return cur.Comp(state.Route(
 			doors.RouteMatch(
 				func(ws *windowStateWrapper) bool {
@@ -108,14 +114,19 @@ func (k Chat) Main() gox.Elem {
 					}, func(_ *windowStateWrapper, w layout.State) *windowStateWrapper {
 						return &windowStateWrapper{State: &w}
 					})
-				}, doors.RouteSource(func(s doors.Source[layout.State]) gox.Elem {
-					return (&widget{
+				}, doors.RouteSource(elem(s doors.Source[layout.State]) {
+					~~
+					enabled, _ := enabled.Effect(ctx)
+					if !enabled {
+						return
+					}
+					~~
+					~(&widget{
 						params: params,
 						state: s,
 						inst: inst,
-						synced: inst.Synced(),
 						pops: pops.NewPopups(),
-					}).Main()
+					})
 				})),
 			),
 		))
@@ -126,15 +137,57 @@ type widget struct {
 	params params.Params
 	state doors.Source[layout.State]
 	inst api.Instance
-	synced doors.Beam[bool]
 	pops pops.Popups
 }
 
 elem (k *widget) Main() {
 	~~
 	shell := new(doors.Setter)
-	mode, _ := doors.DeriveBeam(k.state, layout.Mode).ReadAndSub(ctx, func(ctx context.Context, m string) bool {
+	state, _ := k.state.Read(ctx)
+	badge := doors.NewSource(chat.Badge{Collapsed: !state.Expanded, Block: "text"})
+	mode, _ := doors.DeriveBeam(k.state, func(s layout.State) string {
+		return layout.Mode(s, !k.params.Off(params.Dock))
+	}).ReadAndSub(ctx, func(ctx context.Context, m string) bool {
 		doors.Call(ctx, shell.Set("data-mode", m))
+		badge.Mutate(ctx, func(b chat.Badge) chat.Badge {
+			b.Collapsed = m == "collapsed"
+			if !b.Collapsed {
+				b.Ended = false
+				b.Failed = false
+			}
+			return b
+		})
+		return false
+	})
+	launcher := new(doors.Setter)
+	label := func(b string) string {
+		switch b {
+		case "ask":
+			return "Open chat, question for you"
+		case "run-text", "run-thinking", "run-tools":
+			return "Open chat, agent working"
+		case "failed":
+			return "Open chat, round failed"
+		case "ended":
+			return "Open chat, answer ready"
+		}
+		return "Open chat"
+	}
+	current, _ := doors.DeriveBeam(badge, func(b chat.Badge) string {
+		switch {
+		case b.Asking:
+			return "ask"
+		case b.Running:
+			return "run-" + b.Block
+		case b.Failed:
+			return "failed"
+		case b.Ended:
+			return "ended"
+		}
+		return ""
+	}).ReadAndSub(ctx, func(ctx context.Context, b string) bool {
+		doors.Call(ctx, launcher.Set("data-badge", b))
+		doors.Call(ctx, launcher.Set("aria-label", label(b)))
 		return false
 	})
 	scope := new(doors.ScopeBlocking)
@@ -152,6 +205,9 @@ elem (k *widget) Main() {
 	dock := doors.AClick{
 		Scope: scope,
 		On: func(ctx context.Context, _ doors.RequestPointer) bool {
+			if k.params.Off(params.Dock) {
+				return false
+			}
 			k.state.Mutate(ctx, func(s layout.State) layout.State {
 				s.Dock = !s.Dock
 				return s
@@ -160,8 +216,12 @@ elem (k *widget) Main() {
 		},
 		OnError: notify.OnError,
 	}
+	dockIcon, undockIcon := icons.DockRight, icons.Undock
+	if k.params.Layout.Side == css.Left {
+		dockIcon, undockIcon = icons.DockLeft, icons.UndockLeft
+	}
 	~~
-	~(css.Style(k.params.ThemeDark, k.params.ThemeLight))
+	~(css.Style(k.params.ThemeDark, k.params.ThemeLight, k.params.Layout))
 	<div
 		(shell)
 		data-mode=(mode)
@@ -183,39 +243,66 @@ elem (k *widget) Main() {
 				return nil
 			}
 			return key
+		})
+		data-nechat-layout=({
+			key := css.LayoutKey(k.params.Layout)
+			if key == "" {
+				return nil
+			}
+			return key
 		})>
 		<div class="nechat-wctl">
-			~>(dock) <button type="button" class="nechat-iconbtn nechat-wctl-dock" title="Dock to the side" aria-label="Dock to the side">
-				~>(doors.Class("nechat-ic")) ~(icons.DockRight())
-			</button>
-			~>(dock) <button type="button" class="nechat-iconbtn nechat-wctl-undock" title="Undock" aria-label="Undock">
-				~>(doors.Class("nechat-ic")) ~(icons.Undock())
-			</button>
+			~(if !k.params.Off(params.Dock) {
+				~>(dock) <button type="button" class="nechat-iconbtn nechat-wctl-dock" title="Dock to the side" aria-label="Dock to the side">
+					~>(doors.Class("nechat-ic")) ~(dockIcon())
+				</button>
+				~>(dock) <button type="button" class="nechat-iconbtn nechat-wctl-undock" title="Undock" aria-label="Undock">
+					~>(doors.Class("nechat-ic")) ~(undockIcon())
+				</button>
+			})
 			~>(toggle) <button type="button" class="nechat-iconbtn" title="Collapse" aria-label="Collapse">
 				~>(doors.Class("nechat-ic")) ~(icons.Close())
 			</button>
 		</div>
 		~(if !k.params.Off(params.Sidebar) {
-			~(k.synced.Bind(elem(synced bool) {
-				~(if synced {
-					~aside.Aside{
-						Params: k.params,
-						Instance: k.inst,
-						Pops: k.pops,
-						Layout: k.state,
-					}
-				})
-			}))
+			~aside.Aside{
+				Params: k.params,
+				Instance: k.inst,
+				Pops: k.pops,
+				Layout: k.state,
+			}
 		})
 		~chat.Chat{
 			Params: k.params,
 			Inst: k.inst,
 			Pops: k.pops.Popup[string](),
+			Badge: badge,
 		}
 		~(k.pops.Script())
 		~(notify.Script())
-		~>(toggle) <button type="button" class="nechat-launcher" title="Open chat" aria-label="Open chat">
+		~>(toggle) <button
+			type="button"
+			class="nechat-launcher"
+			title="Open chat"
+			(launcher)
+			data-badge=(current)
+			aria-label=(label(current))>
 			~>(doors.Class("nechat-ic")) ~(icons.ChatCircle())
+			<span class="nechat-badge nechat-badge_run" aria-hidden="true">
+				~>(doors.Class("nechat-ic nechat-ic_line nechat-build nechat-badge-text")) ~(icons.TextAlignLeftLines())
+				<span class="nechat-blink nechat-badge-thinking">
+					~>(doors.Class("nechat-ic")) ~(icons.Lightbulb())
+					~>(doors.Class("nechat-ic")) ~(icons.LightbulbFill())
+				</span>
+				~>(doors.Class("nechat-ic nechat-ic_spin nechat-badge-tools")) ~(icons.Gear())
+			</span>
+			<span class="nechat-badge nechat-badge_ask" aria-hidden="true">
+				~>(doors.Class("nechat-ic")) ~(icons.CheckSquareFill())
+			</span>
+			<span class="nechat-badge nechat-badge_ended" aria-hidden="true"></span>
+			<span class="nechat-badge nechat-badge_failed" aria-hidden="true">
+				~>(doors.Class("nechat-ic")) ~(icons.Exclamation())
+			</span>
 		</button>
 		<script>
 			const widget = document.currentScript.closest(".nechat-widget")

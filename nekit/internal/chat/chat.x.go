@@ -42,6 +42,8 @@ type Chat struct {
 	// ThemeLight recolours the light face, shown under a light system scheme or
 	// inside data-theme="light". The zero value keeps the built-in palette.
 	ThemeLight css.Theme
+	// Layout sets the chat's side and sizes; the zero value keeps the defaults.
+	Layout css.Layout
 	// GreetingTitle is the heading a new chat shows before its first message:
 	// a string or a GoX element. nil shows "How can I help?"; "" leaves it out.
 	GreetingTitle any
@@ -72,6 +74,7 @@ func (k Chat) Main() gox.Elem {
 		Framed: k.Framed,
 		ThemeDark: k.ThemeDark,
 		ThemeLight: k.ThemeLight,
+		Layout: k.Layout,
 		GreetingTitle: k.GreetingTitle,
 		GreetingBody: k.GreetingBody,
 	}
@@ -97,6 +100,9 @@ func (k Chat) Main() gox.Elem {
 			return false
 		})
 		inst := instance.GetInstance(cur.Context())
+		enabled := doors.DeriveBeam(inst.State(), func(s api.InstanceState) bool {
+			return s.Status != api.InstanceDisabled
+		})
 		return cur.Comp(state.Route(
 			doors.RouteMatch(
 				func(ws *windowStateWrapper) bool {
@@ -112,13 +118,23 @@ func (k Chat) Main() gox.Elem {
 						return &windowStateWrapper{State: &w}
 					})
 				}, doors.RouteSource(func(s doors.Source[layout.State]) gox.Elem {
-					return (&widget{
+					return gox.Elem(func(__c gox.Cursor) (__e error) {
+						ctx := __c.Context(); _ = ctx
+//line chat.gox:119
+						enabled, _ := enabled.Effect(ctx)
+					if !enabled {
+						return
+					}
+
+//line chat.gox:124
+						__e = __c.Any(&widget{
 						params: params,
 						state: s,
 						inst: inst,
-						synced: inst.Synced(),
 						pops: pops.NewPopups(),
-					}).Main()
+					}); if __e != nil { return }
+					return })
+//line chat.gox:130
 				})),
 			),
 		))
@@ -129,18 +145,60 @@ type widget struct {
 	params params.Params
 	state doors.Source[layout.State]
 	inst api.Instance
-	synced doors.Beam[bool]
 	pops pops.Popups
 }
 
-//line chat.gox:133
+//line chat.gox:143
 func (k *widget) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line chat.gox:135
+//line chat.gox:145
 		shell := new(doors.Setter)
-	mode, _ := doors.DeriveBeam(k.state, layout.Mode).ReadAndSub(ctx, func(ctx context.Context, m string) bool {
+	state, _ := k.state.Read(ctx)
+	badge := doors.NewSource(chat.Badge{Collapsed: !state.Expanded, Block: "text"})
+	mode, _ := doors.DeriveBeam(k.state, func(s layout.State) string {
+		return layout.Mode(s, !k.params.Off(params.Dock))
+	}).ReadAndSub(ctx, func(ctx context.Context, m string) bool {
 		doors.Call(ctx, shell.Set("data-mode", m))
+		badge.Mutate(ctx, func(b chat.Badge) chat.Badge {
+			b.Collapsed = m == "collapsed"
+			if !b.Collapsed {
+				b.Ended = false
+				b.Failed = false
+			}
+			return b
+		})
+		return false
+	})
+	launcher := new(doors.Setter)
+	label := func(b string) string {
+		switch b {
+		case "ask":
+			return "Open chat, question for you"
+		case "run-text", "run-thinking", "run-tools":
+			return "Open chat, agent working"
+		case "failed":
+			return "Open chat, round failed"
+		case "ended":
+			return "Open chat, answer ready"
+		}
+		return "Open chat"
+	}
+	current, _ := doors.DeriveBeam(badge, func(b chat.Badge) string {
+		switch {
+		case b.Asking:
+			return "ask"
+		case b.Running:
+			return "run-" + b.Block
+		case b.Failed:
+			return "failed"
+		case b.Ended:
+			return "ended"
+		}
+		return ""
+	}).ReadAndSub(ctx, func(ctx context.Context, b string) bool {
+		doors.Call(ctx, launcher.Set("data-badge", b))
+		doors.Call(ctx, launcher.Set("aria-label", label(b)))
 		return false
 	})
 	scope := new(doors.ScopeBlocking)
@@ -158,6 +216,9 @@ func (k *widget) Main() gox.Elem {
 	dock := doors.AClick{
 		Scope: scope,
 		On: func(ctx context.Context, _ doors.RequestPointer) bool {
+			if k.params.Off(params.Dock) {
+				return false
+			}
 			k.state.Mutate(ctx, func(s layout.State) layout.State {
 				s.Dock = !s.Dock
 				return s
@@ -166,16 +227,20 @@ func (k *widget) Main() gox.Elem {
 		},
 		OnError: notify.OnError,
 	}
+	dockIcon, undockIcon := icons.DockRight, icons.Undock
+	if k.params.Layout.Side == css.Left {
+		dockIcon, undockIcon = icons.DockLeft, icons.UndockLeft
+	}
 
-//line chat.gox:164
-		__e = __c.Any(css.Style(k.params.ThemeDark, k.params.ThemeLight)); if __e != nil { return }
+//line chat.gox:224
+		__e = __c.Any(css.Style(k.params.ThemeDark, k.params.ThemeLight, k.params.Layout)); if __e != nil { return }
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line chat.gox:166
+//line chat.gox:226
 			__e = __c.Modify(shell); if __e != nil { return }
-//line chat.gox:167
+//line chat.gox:227
 			__e = __c.Set("data-mode", mode); if __e != nil { return }
-//line chat.gox:168
+//line chat.gox:228
 			__e = __c.Set("class", func() any {
 			class := "nechat-widget nechat-widget_split"
 			if k.params.Off(params.Sidebar) {
@@ -188,9 +253,17 @@ func (k *widget) Main() gox.Elem {
 			}
 			return class
 		}()); if __e != nil { return }
-//line chat.gox:180
+//line chat.gox:240
 			__e = __c.Set("data-nechat-theme", func() any {
 			key := css.FaceKey(k.params.ThemeDark, k.params.ThemeLight)
+			if key == "" {
+				return nil
+			}
+			return key
+		}()); if __e != nil { return }
+//line chat.gox:247
+			__e = __c.Set("data-nechat-layout", func() any {
+			key := css.LayoutKey(k.params.Layout)
 			if key == "" {
 				return nil
 			}
@@ -199,73 +272,76 @@ func (k *widget) Main() gox.Elem {
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line chat.gox:187
+//line chat.gox:254
 				__e = __c.Set("class", "nechat-wctl"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line chat.gox:188
-				__e = (dock).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
-					ctx := __c.Context(); _ = ctx
-					__e = __c.Init("button"); if __e != nil { return }
-					{
-//line chat.gox:188
-						__e = __c.Set("type", "button"); if __e != nil { return }
-//line chat.gox:188
-						__e = __c.Set("class", "nechat-iconbtn nechat-wctl-dock"); if __e != nil { return }
-//line chat.gox:188
-						__e = __c.Set("title", "Dock to the side"); if __e != nil { return }
-//line chat.gox:188
-						__e = __c.Set("aria-label", "Dock to the side"); if __e != nil { return }
-						__e = __c.Submit(); if __e != nil { return }
-//line chat.gox:189
-						__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
-							ctx := __c.Context(); _ = ctx
-//line chat.gox:189
-							__e = __c.Any(icons.DockRight()); if __e != nil { return }
-						return })); if __e != nil { return }
-					}
-					__e = __c.Close(); if __e != nil { return }
-				return })); if __e != nil { return }
-//line chat.gox:191
-				__e = (dock).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
-					ctx := __c.Context(); _ = ctx
-					__e = __c.Init("button"); if __e != nil { return }
-					{
-//line chat.gox:191
-						__e = __c.Set("type", "button"); if __e != nil { return }
-//line chat.gox:191
-						__e = __c.Set("class", "nechat-iconbtn nechat-wctl-undock"); if __e != nil { return }
-//line chat.gox:191
-						__e = __c.Set("title", "Undock"); if __e != nil { return }
-//line chat.gox:191
-						__e = __c.Set("aria-label", "Undock"); if __e != nil { return }
-						__e = __c.Submit(); if __e != nil { return }
-//line chat.gox:192
-						__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
-							ctx := __c.Context(); _ = ctx
-//line chat.gox:192
-							__e = __c.Any(icons.Undock()); if __e != nil { return }
-						return })); if __e != nil { return }
-					}
-					__e = __c.Close(); if __e != nil { return }
-				return })); if __e != nil { return }
-//line chat.gox:194
+//line chat.gox:255
+				if !k.params.Off(params.Dock) {
+//line chat.gox:256
+					__e = (dock).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+						ctx := __c.Context(); _ = ctx
+						__e = __c.Init("button"); if __e != nil { return }
+						{
+//line chat.gox:256
+							__e = __c.Set("type", "button"); if __e != nil { return }
+//line chat.gox:256
+							__e = __c.Set("class", "nechat-iconbtn nechat-wctl-dock"); if __e != nil { return }
+//line chat.gox:256
+							__e = __c.Set("title", "Dock to the side"); if __e != nil { return }
+//line chat.gox:256
+							__e = __c.Set("aria-label", "Dock to the side"); if __e != nil { return }
+							__e = __c.Submit(); if __e != nil { return }
+//line chat.gox:257
+							__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+								ctx := __c.Context(); _ = ctx
+//line chat.gox:257
+								__e = __c.Any(dockIcon()); if __e != nil { return }
+							return })); if __e != nil { return }
+						}
+						__e = __c.Close(); if __e != nil { return }
+					return })); if __e != nil { return }
+//line chat.gox:259
+					__e = (dock).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+						ctx := __c.Context(); _ = ctx
+						__e = __c.Init("button"); if __e != nil { return }
+						{
+//line chat.gox:259
+							__e = __c.Set("type", "button"); if __e != nil { return }
+//line chat.gox:259
+							__e = __c.Set("class", "nechat-iconbtn nechat-wctl-undock"); if __e != nil { return }
+//line chat.gox:259
+							__e = __c.Set("title", "Undock"); if __e != nil { return }
+//line chat.gox:259
+							__e = __c.Set("aria-label", "Undock"); if __e != nil { return }
+							__e = __c.Submit(); if __e != nil { return }
+//line chat.gox:260
+							__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+								ctx := __c.Context(); _ = ctx
+//line chat.gox:260
+								__e = __c.Any(undockIcon()); if __e != nil { return }
+							return })); if __e != nil { return }
+						}
+						__e = __c.Close(); if __e != nil { return }
+					return })); if __e != nil { return }
+				}
+//line chat.gox:263
 				__e = (toggle).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 					ctx := __c.Context(); _ = ctx
 					__e = __c.Init("button"); if __e != nil { return }
 					{
-//line chat.gox:194
+//line chat.gox:263
 						__e = __c.Set("type", "button"); if __e != nil { return }
-//line chat.gox:194
+//line chat.gox:263
 						__e = __c.Set("class", "nechat-iconbtn"); if __e != nil { return }
-//line chat.gox:194
+//line chat.gox:263
 						__e = __c.Set("title", "Collapse"); if __e != nil { return }
-//line chat.gox:194
+//line chat.gox:263
 						__e = __c.Set("aria-label", "Collapse"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line chat.gox:195
+//line chat.gox:264
 						__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 							ctx := __c.Context(); _ = ctx
-//line chat.gox:195
+//line chat.gox:264
 							__e = __c.Any(icons.Close()); if __e != nil { return }
 						return })); if __e != nil { return }
 					}
@@ -273,56 +349,130 @@ func (k *widget) Main() gox.Elem {
 				return })); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line chat.gox:198
+//line chat.gox:267
 			if !k.params.Off(params.Sidebar) {
-//line chat.gox:199
-				__e = __c.Any(k.synced.Bind(func(synced bool) gox.Elem {
-				return gox.Elem(func(__c gox.Cursor) (__e error) {
-					ctx := __c.Context(); _ = ctx
-//line chat.gox:200
-					if synced {
-//line chat.gox:201
-						__e = __c.Any(aside.Aside{
-						Params: k.params,
-						Instance: k.inst,
-						Pops: k.pops,
-						Layout: k.state,
-					}); if __e != nil { return }
-					}
-				return })
-//line chat.gox:208
-			})); if __e != nil { return }
+//line chat.gox:268
+				__e = __c.Any(aside.Aside{
+				Params: k.params,
+				Instance: k.inst,
+				Pops: k.pops,
+				Layout: k.state,
+			}); if __e != nil { return }
 			}
-//line chat.gox:210
+//line chat.gox:275
 			__e = __c.Any(chat.Chat{
 			Params: k.params,
 			Inst: k.inst,
 			Pops: k.pops.Popup[string](),
+			Badge: badge,
 		}); if __e != nil { return }
-//line chat.gox:215
+//line chat.gox:281
 			__e = __c.Any(k.pops.Script()); if __e != nil { return }
-//line chat.gox:216
+//line chat.gox:282
 			__e = __c.Any(notify.Script()); if __e != nil { return }
-//line chat.gox:217
+//line chat.gox:283
 			__e = (toggle).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.Init("button"); if __e != nil { return }
 				{
-//line chat.gox:217
+//line chat.gox:284
 					__e = __c.Set("type", "button"); if __e != nil { return }
-//line chat.gox:217
+//line chat.gox:285
 					__e = __c.Set("class", "nechat-launcher"); if __e != nil { return }
-//line chat.gox:217
+//line chat.gox:286
 					__e = __c.Set("title", "Open chat"); if __e != nil { return }
-//line chat.gox:217
-					__e = __c.Set("aria-label", "Open chat"); if __e != nil { return }
+//line chat.gox:287
+					__e = __c.Modify(launcher); if __e != nil { return }
+//line chat.gox:288
+					__e = __c.Set("data-badge", current); if __e != nil { return }
+//line chat.gox:289
+					__e = __c.Set("aria-label", label(current)); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line chat.gox:218
+//line chat.gox:290
 					__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 						ctx := __c.Context(); _ = ctx
-//line chat.gox:218
+//line chat.gox:290
 						__e = __c.Any(icons.ChatCircle()); if __e != nil { return }
 					return })); if __e != nil { return }
+					__e = __c.Init("span"); if __e != nil { return }
+					{
+//line chat.gox:291
+						__e = __c.Set("class", "nechat-badge nechat-badge_run"); if __e != nil { return }
+//line chat.gox:291
+						__e = __c.Set("aria-hidden", "true"); if __e != nil { return }
+						__e = __c.Submit(); if __e != nil { return }
+//line chat.gox:292
+						__e = (doors.Class("nechat-ic nechat-ic_line nechat-build nechat-badge-text")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+							ctx := __c.Context(); _ = ctx
+//line chat.gox:292
+							__e = __c.Any(icons.TextAlignLeftLines()); if __e != nil { return }
+						return })); if __e != nil { return }
+						__e = __c.Init("span"); if __e != nil { return }
+						{
+//line chat.gox:293
+							__e = __c.Set("class", "nechat-blink nechat-badge-thinking"); if __e != nil { return }
+							__e = __c.Submit(); if __e != nil { return }
+//line chat.gox:294
+							__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+								ctx := __c.Context(); _ = ctx
+//line chat.gox:294
+								__e = __c.Any(icons.Lightbulb()); if __e != nil { return }
+							return })); if __e != nil { return }
+//line chat.gox:295
+							__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+								ctx := __c.Context(); _ = ctx
+//line chat.gox:295
+								__e = __c.Any(icons.LightbulbFill()); if __e != nil { return }
+							return })); if __e != nil { return }
+						}
+						__e = __c.Close(); if __e != nil { return }
+//line chat.gox:297
+						__e = (doors.Class("nechat-ic nechat-ic_spin nechat-badge-tools")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+							ctx := __c.Context(); _ = ctx
+//line chat.gox:297
+							__e = __c.Any(icons.Gear()); if __e != nil { return }
+						return })); if __e != nil { return }
+					}
+					__e = __c.Close(); if __e != nil { return }
+					__e = __c.Init("span"); if __e != nil { return }
+					{
+//line chat.gox:299
+						__e = __c.Set("class", "nechat-badge nechat-badge_ask"); if __e != nil { return }
+//line chat.gox:299
+						__e = __c.Set("aria-hidden", "true"); if __e != nil { return }
+						__e = __c.Submit(); if __e != nil { return }
+//line chat.gox:300
+						__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+							ctx := __c.Context(); _ = ctx
+//line chat.gox:300
+							__e = __c.Any(icons.CheckSquareFill()); if __e != nil { return }
+						return })); if __e != nil { return }
+					}
+					__e = __c.Close(); if __e != nil { return }
+					__e = __c.Init("span"); if __e != nil { return }
+					{
+//line chat.gox:302
+						__e = __c.Set("class", "nechat-badge nechat-badge_ended"); if __e != nil { return }
+//line chat.gox:302
+						__e = __c.Set("aria-hidden", "true"); if __e != nil { return }
+						__e = __c.Submit(); if __e != nil { return }
+					}
+					__e = __c.Close(); if __e != nil { return }
+					__e = __c.Init("span"); if __e != nil { return }
+					{
+//line chat.gox:303
+						__e = __c.Set("class", "nechat-badge nechat-badge_failed"); if __e != nil { return }
+//line chat.gox:303
+						__e = __c.Set("aria-hidden", "true"); if __e != nil { return }
+						__e = __c.Submit(); if __e != nil { return }
+//line chat.gox:304
+						__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+							ctx := __c.Context(); _ = ctx
+//line chat.gox:304
+							__e = __c.Any(icons.Exclamation()); if __e != nil { return }
+						return })); if __e != nil { return }
+					}
+					__e = __c.Close(); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
 			return })); if __e != nil { return }
@@ -335,5 +485,5 @@ func (k *widget) Main() gox.Elem {
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line chat.gox:233
+//line chat.gox:320
 }

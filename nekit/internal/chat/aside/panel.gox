@@ -137,12 +137,16 @@ elem (p *Aside) aside() {
 		} <script>
 			const side = document.currentScript.closest(".nechat-aside")
 			const widget = side.closest(".nechat-widget")
-			$on("opened", () => {
+			const collapse = () => {
 				if (getComputedStyle(side).position !== "absolute") return
 				return $hook("collapse", true).catch((err) => {
 					if (err instanceof HookErr)
 						widget.dispatchEvent(new CustomEvent("nechat_error", { detail: err.kind }))
 				})
+			}
+			$on("opened", collapse)
+			side.addEventListener("click", (e) => {
+				if (e.target.closest(".nechat-thread_active")) collapse()
 			})
 		</script>
 		~(if !p.Params.Off(params.ThreadEdit) {

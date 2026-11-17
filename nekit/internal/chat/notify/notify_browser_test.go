@@ -18,7 +18,7 @@ const lifetime = 4 * time.Second
 
 func TestToastShowsOncePerKindAndLeavesALifetimeAfterItsLastShow(t *testing.T) {
 	c := stack.Browser(t, stack.Host{Provider: testkit.NewProvider(api.Model{}), Page: func(cur gox.Cursor) error {
-		if err := cur.Any(css.Style(css.Theme{}, css.Theme{})); err != nil {
+		if err := cur.Any(css.Style(css.Theme{}, css.Theme{}, css.Layout{})); err != nil {
 			return err
 		}
 		if err := cur.Init("div"); err != nil {

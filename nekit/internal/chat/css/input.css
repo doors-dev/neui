@@ -22,6 +22,12 @@
 	100% { opacity: 0 }
 }
 
+@keyframes nechat-pop {
+	0%, 40%, 100% { transform: scale(1) }
+	10%, 28% { transform: scale(1.22) }
+	19% { transform: scale(1) }
+}
+
 @keyframes nechat-auto-fill {
 	0% { width: 0 }
 	100% { width: 100% }
@@ -55,6 +61,8 @@
 		--danger-bg-hover: var(--nechat-dark-danger-bg-hover, --theme(--color-red-600 inline));
 		--danger-bg-active: var(--nechat-dark-danger-bg-active, --theme(--color-red-700 inline));
 		--danger-ink-on-fill: var(--nechat-dark-danger-ink-on-fill, --theme(--color-white inline));
+		--launcher-bg: var(--nechat-dark-launcher-bg, var(--app-ink));
+		--launcher-ink: var(--nechat-dark-launcher-ink, var(--app-bg));
 		--figure-value: var(--app-ink);
 		--figure-track: color-mix(in srgb, transparent, currentColor 35%);
 		--field-border: var(--panel-border-focus);
@@ -91,6 +99,8 @@
 			--danger-bg-hover: var(--nechat-light-danger-bg-hover, var(--danger-ink));
 			--danger-bg-active: var(--nechat-light-danger-bg-active, --theme(--color-red-800 inline));
 			--danger-ink-on-fill: var(--nechat-light-danger-ink-on-fill, --theme(--color-white inline));
+			--launcher-bg: var(--nechat-light-launcher-bg, var(--app-ink));
+			--launcher-ink: var(--nechat-light-launcher-ink, var(--app-bg));
 			--figure-value: var(--app-ink);
 			--figure-track: color-mix(in srgb, transparent, currentColor 35%);
 			--field-border: var(--panel-border-focus);
@@ -128,6 +138,8 @@
 		--danger-bg-hover: var(--nechat-light-danger-bg-hover, var(--danger-ink));
 		--danger-bg-active: var(--nechat-light-danger-bg-active, --theme(--color-red-800 inline));
 		--danger-ink-on-fill: var(--nechat-light-danger-ink-on-fill, --theme(--color-white inline));
+		--launcher-bg: var(--nechat-light-launcher-bg, var(--app-ink));
+		--launcher-ink: var(--nechat-light-launcher-ink, var(--app-bg));
 		--figure-value: var(--app-ink);
 		--figure-track: color-mix(in srgb, transparent, currentColor 35%);
 		--field-border: var(--panel-border-focus);
@@ -1722,7 +1734,7 @@
 		shadow-xl
 	}
 
-	.nechat-widget[data-mode="collapsed"] { @apply invisible }
+	.nechat-widget[data-mode="collapsed"] { @apply invisible overflow-visible }
 	.nechat-widget[data-mode="collapsed"] .nechat-toasts { @apply invisible }
 
 	@media (width < 40rem) {
@@ -1773,7 +1785,7 @@
 			top-0
 			right-0
 			bottom-0
-			w-[var(--nechat-dock-w,28rem)]
+			w-112
 			h-auto
 			max-w-none
 			max-h-none
@@ -1781,27 +1793,36 @@
 			border-s
 			rounded-none
 			shadow-none
+			transition-[translate]
+			duration-200
+			ease-out;
+			@starting-style { translate: 100% 0 }
 		}
-		html:has(.nechat-widget[data-mode="dock"]) { padding-right: var(--nechat-dock-w, 28rem) }
+		html:has(.nechat-widget[data-mode]) { transition: padding-right 200ms ease-out, padding-left 200ms ease-out }
+		html:has(.nechat-widget[data-mode="dock"]) { padding-right: 28rem }
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.nechat-widget[data-mode="dock"], html:has(.nechat-widget[data-mode]) { transition: none }
 	}
 
 	@media (width < 40rem) {
 		.nechat-wctl-dock, .nechat-wctl-undock { @apply hidden }
 	}
 
-	.nechat-widget[data-mode] .nechat-pane > .nechat-top { @apply pe-20 }
-	.nechat-widget[data-mode].nechat-widget_aside-right .nechat-pane > .nechat-top { @apply ps-20 }
+	.nechat-widget[data-mode] .nechat-pane > .nechat-top { @apply pe-18 }
+	.nechat-widget[data-mode].nechat-widget_aside-right .nechat-pane > .nechat-top { @apply ps-18 }
 
 	@container (width < 36rem) {
-		.nechat-widget[data-mode] .nechat-aside > .nechat-top { @apply pe-20 }
-		.nechat-widget[data-mode].nechat-widget_aside-right .nechat-aside > .nechat-top { @apply ps-20 }
+		.nechat-widget[data-mode] .nechat-aside > .nechat-top { @apply pe-18 }
+		.nechat-widget[data-mode].nechat-widget_aside-right .nechat-aside > .nechat-top { @apply ps-18 }
 	}
 
 	@media (width < 40rem) {
-		.nechat-widget[data-mode] .nechat-pane > .nechat-top { @apply pe-10 }
-		.nechat-widget[data-mode].nechat-widget_aside-right .nechat-pane > .nechat-top { @apply ps-10 }
-		.nechat-widget[data-mode] .nechat-aside > .nechat-top { @apply pe-10 }
-		.nechat-widget[data-mode].nechat-widget_aside-right .nechat-aside > .nechat-top { @apply ps-10 }
+		.nechat-widget[data-mode] .nechat-pane > .nechat-top { @apply pe-11 }
+		.nechat-widget[data-mode].nechat-widget_aside-right .nechat-pane > .nechat-top { @apply ps-11 }
+		.nechat-widget[data-mode] .nechat-aside > .nechat-top { @apply pe-11 }
+		.nechat-widget[data-mode].nechat-widget_aside-right .nechat-aside > .nechat-top { @apply ps-11 }
 	}
 
 	.nechat-launcher {
@@ -1818,10 +1839,10 @@
 		justify-center
 		appearance-none
 		border
-		border-(--button-border)
+		border-(--launcher-bg)
 		rounded-full
-		bg-(--app-bg)
-		text-(--button-ink)
+		bg-(--launcher-bg)
+		text-(--launcher-ink)
 		shadow-lg
 		cursor-pointer
 		outline-none
@@ -1831,10 +1852,91 @@
 	.nechat-widget[data-mode="collapsed"] > .nechat-launcher { @apply inline-flex }
 	.nechat-launcher > .nechat-ic { @apply w-6 h-6 }
 
-	.nechat-launcher:hover, .nechat-launcher:active, .nechat-launcher:focus-visible {
+	.nechat-badge {
 		@apply
-		border-(--panel-border-focus)
-		text-(--button-ink-hover)
+		hidden
+		absolute
+		place-items-center
+		rounded-full
+		pointer-events-none
+	}
+
+	.nechat-badge .nechat-ic, .nechat-badge .nechat-blink { @apply w-3.5 h-3.5 }
+	.nechat-badge_run > * { @apply hidden }
+
+	.nechat-badge_run {
+		@apply
+		-top-1.5
+		-right-1.5
+		w-5.5
+		h-5.5
+		bg-(--app-bg)
+		text-(--app-ink)
+		shadow-[0_0_0_1px_var(--panel-border-focus)]
+	}
+
+	.nechat-badge_ask {
+		@apply
+		-top-2.5
+		-right-2.5
+		w-7.5
+		h-7.5
+		bg-(--app-bg)
+		text-(--app-ink)
+		shadow-[inset_0_0_0_2px_var(--app-ink),0_0_0_2px_var(--app-bg)]
+		animate-[nechat-pop_2s_ease-out_infinite]
+	}
+
+	.nechat-badge_ask .nechat-ic { @apply w-4 h-4 }
+
+	.nechat-badge_ended {
+		@apply
+		-top-px
+		-right-px
+		w-3.5
+		h-3.5
+		bg-(--app-ink)
+		shadow-[0_0_0_2.5px_var(--app-bg)]
+		animate-[nechat-pop_2s_ease-out_infinite]
+	}
+
+	.nechat-badge_failed {
+		@apply
+		-top-1.5
+		-right-1.5
+		w-5.5
+		h-5.5
+		bg-(--danger-bg-hover)
+		text-(--danger-ink-on-fill)
+		shadow-[0_0_0_2px_var(--app-bg)]
+	}
+
+	.nechat-launcher[data-badge^="run-"] > .nechat-badge_run,
+	.nechat-launcher[data-badge="ask"] > .nechat-badge_ask,
+	.nechat-launcher[data-badge="ended"] > .nechat-badge_ended,
+	.nechat-launcher[data-badge="failed"] > .nechat-badge_failed,
+	.nechat-launcher[data-badge="run-thinking"] .nechat-badge-thinking { @apply grid }
+	.nechat-launcher[data-badge="run-text"] .nechat-badge-text,
+	.nechat-launcher[data-badge="run-tools"] .nechat-badge-tools { @apply block }
+
+	@media (prefers-reduced-motion: reduce) {
+		.nechat-launcher .nechat-badge, .nechat-launcher .nechat-badge * { @apply animate-none }
+	}
+
+	.nechat-launcher:hover, .nechat-launcher:active {
+		@apply
+		ring-2
+		ring-(--launcher-bg)
+		ring-offset-2
+		ring-offset-(--app-bg)
+	}
+
+	.nechat-launcher:focus-visible {
+		@apply
+		outline-solid
+		outline-2
+		outline-offset-2
+		outline-(--focus-ring)
 	}
 
 	@media (width < 40rem) {
@@ -1856,5 +1958,7 @@
 		.nechat-thread_active, .nechat-gauge_open, .nechat-iconbtn_open, .nechat-pick:has(> input:checked) { border-color: Highlight }
 		.nechat-btn:disabled, .nechat-iconbtn:disabled { color: GrayText; border-color: GrayText }
 		.nechat-gauge_opens > .nechat-gauge-body::after { forced-color-adjust: none; border-inline-color: transparent; border-block-end-color: CanvasText }
+		.nechat-launcher:hover, .nechat-launcher:active { border-color: Highlight }
+		.nechat-badge_ended { forced-color-adjust: none; background-color: CanvasText; box-shadow: 0 0 0 2.5px Canvas }
 	}
 }

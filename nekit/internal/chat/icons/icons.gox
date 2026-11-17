@@ -199,6 +199,18 @@ elem DockRight() {
 	<svg (svgAttrs) viewBox="0 0 256 256"><rect x="28" y="44" width="200" height="168" rx="16" fill="none" stroke="currentColor" stroke-width="16"></rect><rect x="152" y="44" width="76" height="168" rx="16"></rect></svg>
 }
 
+elem DockLeft() {
+	<svg (svgAttrs) viewBox="0 0 256 256"><rect x="28" y="44" width="200" height="168" rx="16" fill="none" stroke="currentColor" stroke-width="16"></rect><rect x="28" y="44" width="76" height="168" rx="16"></rect></svg>
+}
+
 elem Undock() {
 	<svg (svgAttrs) viewBox="0 0 256 256"><rect x="28" y="44" width="200" height="168" rx="16" fill="none" stroke="currentColor" stroke-width="16"></rect><rect x="124" y="116" width="80" height="72" rx="8"></rect></svg>
+}
+
+elem UndockLeft() {
+	<svg (svgAttrs) viewBox="0 0 256 256"><rect x="28" y="44" width="200" height="168" rx="16" fill="none" stroke="currentColor" stroke-width="16"></rect><rect x="52" y="116" width="80" height="72" rx="8"></rect></svg>
+}
+
+elem Exclamation() {
+	<svg (svgAttrs) viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="32" stroke-linecap="round"><path d="M128 56v92"></path><circle cx="128" cy="200" r="6" fill="currentColor" stroke-width="16"></circle></svg>
 }

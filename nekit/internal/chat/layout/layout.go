@@ -6,11 +6,11 @@ type State struct {
 	Dock bool
 }
 
-func Mode(s State) string {
+func Mode(s State, dock bool) string {
 	switch {
 	case !s.Expanded:
 		return "collapsed"
-	case s.Dock:
+	case s.Dock && dock:
 		return "dock"
 	default:
 		return "float"
