@@ -40,6 +40,8 @@ func MessageStorage(t *testing.T, open func(t *testing.T) api.MessageStorage) {
 		{"RoundSearchCursor", storageRoundSearchCursor},
 		{"RoundReadsOmitResults", storageRoundReadsOmitResults},
 		{"RoundSearchSnippetAfterCaseChangingRunes", storageRoundSearchSnippetAfterCaseChangingRunes},
+		{"ThreadListNameFoldsNonASCII", storageThreadListNameFoldsNonASCII},
+		{"RoundSearchFoldsNonASCII", storageRoundSearchFoldsNonASCII},
 	} {
 		t.Run(c.name, func(t *testing.T) { c.run(t, open(t)) })
 	}
@@ -1278,6 +1280,57 @@ func storageRoundSearchSnippetAfterCaseChangingRunes(t *testing.T, s api.Message
 	for _, h := range hits {
 		if !strings.HasSuffix(h.Snippet, "abc") {
 			t.Fatalf("snippet in %s must end with the match: %q", h.Thread, h.Snippet)
+		}
+	}
+}
+
+func storageThreadListNameFoldsNonASCII(t *testing.T, s api.MessageStorage) {
+	ctx := context.Background()
+	a := createThread(t, s, "a")
+	createThread(t, s, "b")
+	if _, err := s.ThreadRename(ctx, "a", a.Seq, "Отчёт за квартал"); err != nil {
+		t.Fatalf("rename a: %v", err)
+	}
+	for _, name := range []string{"отчёт", "ОТЧЁТ", "За Квартал"} {
+		threads, err := s.ThreadList(ctx, time.Time{}, time.Time{}, false, 0, name)
+		if err != nil {
+			t.Fatalf("ThreadList name %q: %v", name, err)
+		}
+		if want := []api.ThreadID{"a"}; !reflect.DeepEqual(idsOfThreads(threads), want) {
+			t.Fatalf("ThreadList name %q folds case: got %v, want %v", name, idsOfThreads(threads), want)
+		}
+	}
+}
+
+func storageRoundSearchFoldsNonASCII(t *testing.T, s api.MessageStorage) {
+	ctx := context.Background()
+	createThread(t, s, "a")
+	createThread(t, s, "b")
+	addInput(t, s, "a", 0, "Привет мир")
+	round, seq := addInput(t, s, "b", 0, "unrelated input")
+	if _, err := s.RoundOk(ctx, "b", seq, round, api.EventUsage{}, api.Indexed[api.Content]{
+		0: api.ContentText{Text: "Die ÜBERSICHT ist fertig"},
+	}); err != nil {
+		t.Fatalf("RoundOk: %v", err)
+	}
+	for _, c := range []struct {
+		query   string
+		thread  api.ThreadID
+		snippet string
+	}{
+		{"привет", "a", "Привет"},
+		{"МИР", "a", "мир"},
+		{"übersicht", "b", "ÜBERSICHT"},
+	} {
+		hits, err := s.RoundSearch(ctx, "", false, c.query, nil, false, false, 0)
+		if err != nil {
+			t.Fatalf("RoundSearch(%q): %v", c.query, err)
+		}
+		if len(hits) != 1 || hits[0].Thread != c.thread {
+			t.Fatalf("RoundSearch(%q): want one hit in %s, got %+v", c.query, c.thread, hits)
+		}
+		if !strings.Contains(hits[0].Snippet, c.snippet) {
+			t.Fatalf("RoundSearch(%q): snippet %q must contain %q", c.query, hits[0].Snippet, c.snippet)
 		}
 	}
 }

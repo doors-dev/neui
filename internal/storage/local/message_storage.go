@@ -4,20 +4,13 @@ import (
 	"cmp"
 	"context"
 	"iter"
-	"maps"
 	"slices"
 	"strings"
 	"sync"
 	"time"
-	"unicode"
-	"unicode/utf8"
 
 	"neui.dev/api"
-)
-
-const (
-	snippetLead  = 40
-	snippetTrail = 120
+	"neui.dev/internal/storage/match"
 )
 
 func NewMessageStorage() api.MessageStorage {
@@ -41,7 +34,7 @@ type localThread struct {
 func (l *MessageStorage) ThreadList(ctx context.Context, from, to time.Time, asc bool, limit int, name string) ([]api.Thread, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	fold := strings.ToLower(name)
+	fold := match.Fold(name)
 	out := make([]api.Thread, 0, len(l.threads))
 	for _, t := range l.threads {
 		if !from.IsZero() && t.thread.Updated.Before(from) {
@@ -50,7 +43,7 @@ func (l *MessageStorage) ThreadList(ctx context.Context, from, to time.Time, asc
 		if !to.IsZero() && !t.thread.Updated.Before(to) {
 			continue
 		}
-		if fold != "" && !strings.Contains(strings.ToLower(t.thread.Name), fold) {
+		if fold != "" && !strings.Contains(match.Fold(t.thread.Name), fold) {
 			continue
 		}
 		out = append(out, t.thread)
@@ -270,7 +263,7 @@ func (l *MessageStorage) RoundAfter(ctx context.Context, thread api.ThreadID, st
 func (l *MessageStorage) RoundSearch(ctx context.Context, thread api.ThreadID, exclude bool, query string, from *api.Cursor, inclusive bool, asc bool, limit int) ([]api.Hit, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	fold := strings.ToLower(query)
+	fold := match.Fold(query)
 	if fold == "" {
 		return nil, nil
 	}
@@ -280,18 +273,7 @@ func (l *MessageStorage) RoundSearch(ctx context.Context, thread api.ThreadID, e
 			continue
 		}
 		for _, r := range t.rounds {
-			snippet, ok := matchSnippet(r.Input.Text, fold)
-			if !ok {
-				for _, i := range slices.Sorted(maps.Keys(r.Response)) {
-					text, is := r.Response[i].(api.ContentText)
-					if !is {
-						continue
-					}
-					if snippet, ok = matchSnippet(text.Text, fold); ok {
-						break
-					}
-				}
-			}
+			snippet, ok := match.Round(r.Input, r.Response, fold)
 			if !ok {
 				continue
 			}
@@ -327,34 +309,6 @@ func (l *MessageStorage) RoundSearch(ctx context.Context, thread api.ThreadID, e
 		out = out[:limit]
 	}
 	return out, nil
-}
-
-func matchSnippet(text string, fold string) (string, bool) {
-	i := strings.Index(strings.ToLower(text), fold)
-	if i == -1 {
-		return "", false
-	}
-	start, end := 0, len(text)
-	lowered := 0
-	for at, r := range text {
-		if lowered == i {
-			start = at
-		}
-		if lowered == i+len(fold) {
-			end = at
-			break
-		}
-		lowered += utf8.RuneLen(unicode.ToLower(r))
-	}
-	lo := max(start-snippetLead, 0)
-	for lo > 0 && !utf8.RuneStart(text[lo]) {
-		lo--
-	}
-	hi := min(end+snippetTrail, len(text))
-	for hi < len(text) && !utf8.RuneStart(text[hi]) {
-		hi++
-	}
-	return text[lo:hi], true
 }
 
 func (l *MessageStorage) RoundInput(ctx context.Context, thread api.ThreadID, seq api.Seq, input api.Input) (api.RoundID, api.Seq, error) {
