@@ -176,7 +176,7 @@ elem (c *chat) Main() {
 			Name: "escape",
 			Scope: new(doors.ScopeBlocking),
 			On: func(ctx context.Context, r doors.RequestHook[bool]) (any, bool) {
-				c.composer.Escape(ctx)
+				c.composer.Escape(ctx, r.Data())
 				return nil, false
 			},
 		} <script data:id=(c.params.ID) data:paste=(pasteAsFile)>
@@ -189,7 +189,7 @@ elem (c *chat) Main() {
 				const escape = new CustomEvent("nechat_escape", { cancelable: true })
 				if (!widget.dispatchEvent(escape)) return
 				if (!main.contains(e.target)) return
-				$hook("escape", true).catch((err) => {
+				$hook("escape", main.querySelector("#composer" + id)?.contains(e.target) === true).catch((err) => {
 					if (err instanceof HookErr)
 						widget.dispatchEvent(new CustomEvent("nechat_error", { detail: err.kind }))
 				})

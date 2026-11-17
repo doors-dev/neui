@@ -386,7 +386,7 @@ func (s Controller) Stop(ctx context.Context) {
 	s.thread.Stop(ctx)
 }
 
-func (s Controller) Escape(ctx context.Context) {
+func (s Controller) Escape(ctx context.Context, fromComposer bool) {
 	d := s.origin.Get()
 	if d.rewind.isValid() {
 		s.CancelRewind(ctx)
@@ -398,6 +398,9 @@ func (s Controller) Escape(ctx context.Context) {
 	}
 	if d.pending {
 		s.thread.Unsend(ctx)
+		return
+	}
+	if !fromComposer {
 		return
 	}
 	if d.active {

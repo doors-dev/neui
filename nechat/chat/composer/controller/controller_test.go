@@ -16,6 +16,7 @@ type fakeThread struct {
 	sent    []api.Input
 	rewound []api.Input
 	inputs  []api.Input
+	stops   int
 }
 
 const inputLimit = 1000
@@ -43,6 +44,11 @@ func (f *fakeThread) Rewind(ctx context.Context, round api.RoundID, input api.In
 
 func (f *fakeThread) Input(ctx context.Context, input api.Input) error {
 	f.inputs = append(f.inputs, input)
+	return nil
+}
+
+func (f *fakeThread) Stop(ctx context.Context) error {
+	f.stops++
 	return nil
 }
 
@@ -271,5 +277,30 @@ func TestCanCompactFollowsEvents(t *testing.T) {
 	got := c.Context().Get()
 	if !got.CanCompact || got.Usage != usage || !c.Active().Get() {
 		t.Fatalf("round start: want active, CanCompact and the event usage, got %+v active=%v", got, c.Active().Get())
+	}
+}
+
+func TestEscapeStopsAndCancelsTasksOnlyFromTheComposer(t *testing.T) {
+	ctx := context.Background()
+	thread := &fakeThread{}
+	active := New(thread, api.ChatInput{}, true, api.EventUsage{}, nil, false, false, nil)
+	active.Escape(ctx, false)
+	if thread.stops != 0 {
+		t.Fatalf("Escape outside the composer stopped the answer")
+	}
+	active.Escape(ctx, true)
+	if thread.stops != 1 {
+		t.Fatalf("Escape in the composer: want one stop, got %d", thread.stops)
+	}
+	canceled := 0
+	tasks := []api.Task{{ID: 1, Cancel: func(error) { canceled++ }}}
+	idle := New(thread, api.ChatInput{}, false, api.EventUsage{}, tasks, false, false, nil)
+	idle.Escape(ctx, false)
+	if canceled != 0 {
+		t.Fatalf("Escape outside the composer cancelled the tasks")
+	}
+	idle.Escape(ctx, true)
+	if canceled != 1 {
+		t.Fatalf("Escape in the composer: want the task cancelled once, got %d", canceled)
 	}
 }

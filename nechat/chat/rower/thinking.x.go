@@ -39,7 +39,7 @@ type thinking struct {
 	summarySlot *doors.Door
 }
 
-const summary = "Reasoning"
+const summary = "reasoning"
 
 //line thinking.gox:41
 func (t *thinking) Main() gox.Elem {
