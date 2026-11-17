@@ -44,7 +44,7 @@ type instance struct {
 	dead    map[*link]struct{}
 	page    page.Page
 	current doors.Source[*api.ThreadID]
-	synced  doors.Source[bool]
+	synced  atomic.Bool
 }
 
 func (inst *instance) enable(b *common.Backend) {
@@ -57,10 +57,6 @@ func (inst *instance) disable() {
 
 func (inst *instance) getSpace() page.Space {
 	return inst.page.Space()
-}
-
-func (inst *instance) Synced() doors.Beam[bool] {
-	return inst.synced
 }
 
 func (inst Instance) link() (Link, bool) {
@@ -125,7 +121,7 @@ func (inst *instance) run() {
 			inst.queue.PopFront()
 		case <-synced:
 			synced = nil
-			inst.synced.Update(context.Background(), true)
+			inst.synced.Store(true)
 			if inst.backend.Load() != nil {
 				inst.getUplink()
 			}
@@ -136,7 +132,7 @@ func (inst *instance) run() {
 func (inst *instance) onCommand(cmd command) {
 	switch cmd := cmd.(type) {
 	case commandSetUplink:
-		if !inst.synced.Get() || inst.backend.Load() != cmd.backend {
+		if !inst.synced.Load() || inst.backend.Load() != cmd.backend {
 			cmd.uplink.Close()
 			cmd.Err(api.ErrUnlinked)
 			return
@@ -145,7 +141,7 @@ func (inst *instance) onCommand(cmd command) {
 		inst.setUplink(cmd.ctx, cmd.uplink)
 		inst.reloadLinks(thread.NewMessageReload(cmd.Operation))
 	case commandDrop:
-		if !inst.synced.Get() {
+		if !inst.synced.Load() {
 			cmd.Err(api.ErrUnlinked)
 			return
 		}
@@ -158,7 +154,7 @@ func (inst *instance) onCommand(cmd command) {
 		inst.reloadLinks(thread.NewMessageReload(cmd.Operation))
 	case commandLink:
 		inst.links[cmd.link] = struct{}{}
-		if inst.synced.Get() && inst.backend.Load() != nil {
+		if inst.synced.Load() && inst.backend.Load() != nil {
 			cmd.link.backend = inst.backend.Load()
 			if inst.uplink.Valid() {
 				cmd.link.thread = inst.uplink.ID()
@@ -181,12 +177,12 @@ func (inst *instance) onCommand(cmd command) {
 		}
 		if cmd.backend == nil {
 			inst.state.Disable(context.Background())
-			if inst.synced.Get() {
+			if inst.synced.Load() {
 				inst.reloadLinks(thread.NewMessageReload(nil))
 			}
 			return
 		}
-		if inst.synced.Get() {
+		if inst.synced.Load() {
 			inst.getUplink()
 			return
 		}
@@ -202,7 +198,7 @@ func (inst *instance) onCommand(cmd command) {
 		}
 		inst.sendUplink(cmd.makeCommand(inst.uplink))
 	case commandRecord:
-		if !inst.synced.Get() || !inst.uplink.Valid() {
+		if !inst.synced.Load() || !inst.uplink.Valid() {
 			cmd.Err(api.ErrUnlinked)
 			return
 		}

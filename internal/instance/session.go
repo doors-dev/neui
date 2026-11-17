@@ -71,7 +71,6 @@ func (s Session) newInstance(id string, ctx context.Context) Instance {
 		dead:    make(map[*link]struct{}),
 		page:    page.NewPage(ctx),
 		current: doors.TabState[api.ThreadID](ctx, "neui_thread"),
-		synced:  doors.NewSource(false),
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -44,7 +44,7 @@ func (inst *instance) ThreadOpen(ctx context.Context, id api.ThreadID, meta any)
 	if ctx.Err() != nil {
 		return context.Canceled
 	}
-	if !inst.synced.Get() {
+	if !inst.synced.Load() {
 		return api.ErrUnlinked
 	}
 	if _, err := backend.Storage().ThreadGet(ctx, id); err != nil {
@@ -79,7 +79,7 @@ func (inst *instance) ThreadNew(ctx context.Context) error {
 	if ctx.Err() != nil {
 		return context.Canceled
 	}
-	if !inst.synced.Get() {
+	if !inst.synced.Load() {
 		return api.ErrUnlinked
 	}
 	op := thread.NewOperation(ctx)

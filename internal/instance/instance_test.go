@@ -47,8 +47,8 @@ func deadTestInstance(t *testing.T) *instance {
 		page:    page.NewPage(ctx),
 		state:   ui.NewChats().Add(ctx, "inst", api.InstanceState{}),
 		current: doors.NewSource[*api.ThreadID](nil),
-		synced:  doors.NewSource(true),
 	}
+	inst.synced.Store(true)
 	inst.backend.Store(common.NewBackend(ctx, local.NewMessageStorage(), store, store, []common.Option{common.OptionProvider(stubProvider{})}))
 	inst.uplink = thread.NewLink(inst.backend.Load(), inst.page)
 	t.Cleanup(func() { inst.uplink.Close() })
@@ -238,7 +238,7 @@ func TestCriticalErrorReloadsAPaneThatWasNeverInitialised(t *testing.T) {
 
 func TestUnsyncedInstanceRefusesUplinkCommands(t *testing.T) {
 	inst := deadTestInstance(t)
-	inst.synced.Update(context.Background(), false)
+	inst.synced.Store(false)
 	ctx := context.Background()
 	before := inst.uplink.ID()
 
