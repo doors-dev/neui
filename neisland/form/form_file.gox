@@ -818,6 +818,8 @@ elem (f *fileWidget) chip(e fileEntry) {
 		</span>
 		~(if e.status == fileDone {
 			~(neui.Data{Text: "uploaded file", Object: map[string]any{"name": e.name, "size": e.size, "path": e.path}})
+		} else if e.status == fileFailed {
+			~(neui.Data{Text: "file not uploaded", Object: map[string]any{"name": e.name, "error": e.reason}})
 		})
 		~(if e.retry {
 			<button type="button" class="neisland-form-file-retry" data-file-retry=(e.key) hidden>Retry</button>

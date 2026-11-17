@@ -301,10 +301,10 @@ func TestAgentSeesTheFormAsSpacesOfInputsAndErrors(t *testing.T) {
 		formPath,
 		formPath+".address",
 		formPath+".tags",
-		formPath+".tags.item_1",
+		formPath+".tags.item_0001",
 		formPath+".contacts",
-		formPath+".contacts.item_1",
-		formPath+".contacts.item_1.owner",
+		formPath+".contacts.item_0001",
+		formPath+".contacts.item_0001.owner",
 		formPath+".person",
 		formPath+".docs",
 		formPath+".trip",
@@ -335,9 +335,9 @@ func TestAgentSeesTheFormAsSpacesOfInputsAndErrors(t *testing.T) {
 		"address (Address)", "contacts (Contact)", "docs (Docs)", "person (Person)", "tags (Tags)", "trip (Trip)")
 	expect(t, "group inputs", inputs(address.Inputs), "input text City RW")
 	expect(t, "list inputs", inputs(tags.Inputs), "button button add an item RW")
-	expect(t, "list children", children(tags.Children), "item_1 (item 1 of tags)", "item_2 (item 2 of tags)")
+	expect(t, "list children", children(tags.Children), "item_0001 (an item of tags)", "item_0002 (an item of tags)")
 	expect(t, "list item inputs", inputs(tag.Inputs), "input text Tags RW", "button button remove this item RW")
-	expect(t, "group list children", children(contacts.Children), "item_1 (item 1 of contacts)")
+	expect(t, "group list children", children(contacts.Children), "item_0001 (an item of contacts)")
 	expect(t, "group item inputs", inputs(contact.Inputs), "input email Email RW", "button button remove this item RW")
 	expect(t, "group item children", children(contact.Children), "owner (Owner)")
 	expect(t, "nested search inputs", inputs(owner.Inputs), "input text search RW")
@@ -391,17 +391,17 @@ func TestAgentSeesTheFormAsSpacesOfInputsAndErrors(t *testing.T) {
 	if rep.Diff == nil || rep.Diff.Children == nil {
 		t.Fatalf("adding an item brought no child: %+v", rep.Diff)
 	}
-	expect(t, "list children added", children(rep.Diff.Children.Added), "item_3 (item 3 of tags)")
+	expect(t, "list children added", children(rep.Diff.Children.Added), "item_0003 (an item of tags)")
 	if !changed(rep, formPath, "data") {
 		t.Fatalf("adding an empty item did not block submit or add its space: %+v", rep.Changes)
 	}
-	added := a.sync(formPath + ".tags.item_3")[0]
+	added := a.sync(formPath + ".tags.item_0003")[0]
 	expect(t, "new item data", datas(added.Data), `tags validation error: "field is required"`)
-	rep = a.click(formPath+".tags.item_3", id(t, added.Inputs, "remove this item"))
+	rep = a.click(formPath+".tags.item_0003", id(t, added.Inputs, "remove this item"))
 	if rep.Diff == nil || !rep.Diff.Removed {
 		t.Fatalf("removing the item left its space: %+v", rep.Diff)
 	}
-	expect(t, "list children after the remove", children(a.sync(formPath + ".tags")[0].Children), "item_1 (item 1 of tags)", "item_2 (item 2 of tags)")
+	expect(t, "list children after the remove", children(a.sync(formPath + ".tags")[0].Children), "item_0001 (an item of tags)", "item_0002 (an item of tags)")
 
 	rep = a.write(formPath+".trip.from", id(t, from.Inputs, "From"), "x")
 	if !changed(rep, formPath+".trip.to", "") {
@@ -522,10 +522,10 @@ const nestedSpec = `{fields: [
 
 func TestAgentSeesFieldsInListItemsAndSeriesStepsWithoutExtraSpaces(t *testing.T) {
 	a := open(t, nestedSpec)
-	s := a.sync(formPath, formPath+".picks", formPath+".picks.item_1", formPath+".scans", formPath+".route", formPath+".route.city")
+	s := a.sync(formPath, formPath+".picks", formPath+".picks.item_0001", formPath+".scans", formPath+".route", formPath+".route.city")
 	root, picks, pick, scans, route, city := s[0], s[1], s[2], s[3], s[4], s[5]
 	expect(t, "form children", children(root.Children), "picks (Pick)", "route (Route)", "scans (Scan)")
-	expect(t, "search list children", children(picks.Children), "item_1 (item 1 of picks)")
+	expect(t, "search list children", children(picks.Children), "item_0001 (an item of picks)")
 	expect(t, "search item inputs", inputs(pick.Inputs), "input text search RW", "button button remove One RW", "button button remove this item RW")
 	expect(t, "search item children", children(pick.Children))
 	expect(t, "series children", children(route.Children), "city (City)")
@@ -537,9 +537,39 @@ func TestAgentSeesFieldsInListItemsAndSeriesStepsWithoutExtraSpaces(t *testing.T
 	if rep.Diff == nil || rep.Diff.Children == nil {
 		t.Fatalf("adding a file item brought no child: %+v", rep.Diff)
 	}
-	expect(t, "file list children added", children(rep.Diff.Children.Added), "item_1 (item 1 of scans)")
-	scan := a.sync(formPath + ".scans.item_1")[0]
+	expect(t, "file list children added", children(rep.Diff.Children.Added), "item_0001 (an item of scans)")
+	scan := a.sync(formPath + ".scans.item_0001")[0]
 	expect(t, "file item inputs", inputs(scan.Inputs), "input file file chooser RW", "button button remove this item RW")
 	expect(t, "file item data", datas(scan.Data), `scans validation error: "field is required"`)
 	expect(t, "file item children", children(scan.Children))
+}
+
+func TestListItemSpacesKeepScreenOrderAfterRemovals(t *testing.T) {
+	a := open(t, `{fields: [{type: "list", field: {type: "text", label: "Tags", name: "tags"}, value: ["a", "b"]}]}`)
+	first := a.sync(formPath + ".tags.item_0001")[0]
+	a.click(formPath+".tags.item_0001", id(t, first.Inputs, "remove this item"))
+	tags := a.sync(formPath + ".tags")[0]
+	a.click(formPath+".tags", id(t, tags.Inputs, "add an item"))
+	expect(t, "list children after removing the first and adding one", children(a.sync(formPath + ".tags")[0].Children), "item_0002 (an item of tags)", "item_0003 (an item of tags)")
+}
+
+func TestAgentSeesARejectedFileWithItsReason(t *testing.T) {
+	a := open(t, `{fields: [{type: "file", label: "Docs", name: "docs", accept: ".txt"}]}`)
+	file := filepath.Join(t.TempDir(), "image.png")
+	if err := os.WriteFile(file, []byte("png"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a.c.Page.MustElement(".neisland-form-file-input").MustSetFiles(file)
+	reason := a.c.Page.Timeout(10 * time.Second).MustElement(".neisland-form-file-reason").MustText()
+	docs := a.sync(formPath + ".docs")[0]
+	if len(docs.Data) != 1 || docs.Data[0].Text != "file not uploaded" {
+		t.Fatalf("the rejected file shows as %q, want one file not uploaded", datas(docs.Data))
+	}
+	var rejected struct {
+		Name  string
+		Error string
+	}
+	if err := json.Unmarshal(docs.Data[0].Object, &rejected); err != nil || rejected.Name != "image.png" || rejected.Error != reason {
+		t.Fatalf("the rejected file's data is %s (%v), want its name and the reason the user sees, %q", docs.Data[0].Object, err, reason)
+	}
 }

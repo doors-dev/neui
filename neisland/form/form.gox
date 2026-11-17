@@ -17,7 +17,7 @@ import (
 // {"data": values, "submit": button value} to the script waiting in
 // ui.draw(). Files upload into the island dir as they are picked; a file
 // field's value is their workspace paths.
-func New(ctx context.Context, p Params, submit func(ctx context.Context, s map[string]any) bool) (api.Widget[struct{}], error) {
+func New(ctx context.Context, p Params, submit func(ctx context.Context, s map[string]any) bool) (api.Widget[Patch], error) {
 	if len(p.Submits) == 0 {
 		p.Submits = []submitParams{{Text: "Submit"}}
 	}
@@ -118,7 +118,7 @@ type widget struct {
 	submit func(ctx context.Context, s map[string]any) bool
 }
 
-func (f *widget) Update(context.Context, struct{}) {
+func (f *widget) Update(context.Context, Patch) {
 }
 
 func (f *widget) onSubmit(ctx context.Context, r doors.RequestRawForm) {

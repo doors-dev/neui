@@ -1,6 +1,7 @@
 package table
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -24,8 +25,14 @@ type pageView struct {
 type rowView struct {
 	ID       string       `json:"id" required:"true" description:"the row's id"`
 	Cells    []cellText   `json:"cells" required:"true" nullable:"false" description:"one markdown text per column, in column order"`
-	Actions  []cellButton `json:"actions,omitempty" description:"the row's action buttons"`
+	Actions  []actionView `json:"actions,omitempty" description:"the row's action buttons"`
 	Selected bool         `json:"selected,omitempty" description:"true when the row is selected"`
+}
+
+type actionView struct {
+	Text  string `json:"text" required:"true" description:"label shown on the button"`
+	Value string `json:"value" required:"true" description:"the action's value"`
+	Style string `json:"style" required:"true" description:"visual weight, as the user sees it"`
 }
 
 type pageArg struct {
@@ -65,18 +72,18 @@ var errNoDraw = errors.New(noDrawMessage)
 func (t widget) tools() []gox.Comp {
 	tools := []gox.Comp{
 		neui.Tool[struct{}, pageView]{Name: getPageName, Desc: getPageDesc, Handler: t.getPage},
-		neui.Tool[pageArg, pageView]{Name: setPageName, Desc: setPageDesc, Handler: t.setPage},
+		neui.Tool[pageArg, struct{}]{Name: setPageName, Desc: setPageDesc, Handler: t.setPage},
 		neui.Tool[actionArg, struct{}]{Name: clickActionName, Desc: clickActionDesc, Handler: t.clickAction},
 	}
 	if t.params.Search {
-		tools = append(tools, neui.Tool[searchArg, pageView]{Name: setSearchName, Desc: setSearchDesc, Handler: t.setSearch})
+		tools = append(tools, neui.Tool[searchArg, struct{}]{Name: setSearchName, Desc: setSearchDesc, Handler: t.setSearch})
 	}
 	if slices.ContainsFunc(t.params.Columns, func(c column) bool { return c.Sort }) {
-		tools = append(tools, neui.Tool[sortSpec, pageView]{Name: setSortName, Desc: setSortDesc, Handler: t.setSort})
+		tools = append(tools, neui.Tool[sortSpec, struct{}]{Name: setSortName, Desc: setSortDesc, Handler: t.setSort})
 	}
 	if t.params.Select != nil {
 		tools = append(tools,
-			neui.Tool[selectArg, pageView]{Name: setSelectedName, Desc: setSelectedDesc, Handler: t.setSelected},
+			neui.Tool[selectArg, struct{}]{Name: setSelectedName, Desc: setSelectedDesc, Handler: t.setSelected},
 			neui.Tool[struct{}, selectedIDs]{Name: getSelectedName, Desc: getSelectedDesc, Handler: t.getSelected},
 			neui.Tool[struct{}, struct{}]{Name: submitSelectedName, Desc: submitSelectedDesc, Handler: t.submitSelected},
 			neui.Tool[struct{}, struct{}]{Name: clearSelectedName, Desc: clearSelectedDesc, Handler: t.clearSelected},
@@ -114,7 +121,10 @@ func (t widget) view(s state, content result) pageView {
 	for i, r := range content.Rows {
 		cells := make([]cellText, len(t.params.Columns))
 		copy(cells, r.Cells)
-		v.Rows[i] = rowView{ID: r.ID, Cells: cells, Actions: r.Actions}
+		v.Rows[i] = rowView{ID: r.ID, Cells: cells}
+		for _, a := range r.Actions {
+			v.Rows[i].Actions = append(v.Rows[i].Actions, actionView{Text: a.Text, Value: a.Value, Style: cmp.Or(a.Style, "secondary")})
+		}
 		if t.params.Select != nil {
 			_, v.Rows[i].Selected = s.selected[r.ID]
 		}
@@ -134,71 +144,64 @@ func (t widget) getPage(ctx context.Context, _ struct{}) (pageView, error) {
 	return t.view(current, content), nil
 }
 
-func (t widget) setPage(ctx context.Context, in pageArg) (pageView, error) {
+func (t widget) setPage(ctx context.Context, in pageArg) (struct{}, error) {
 	target, ok := t.state.Read(ctx)
 	if !ok {
-		return pageView{}, context.Canceled
+		return struct{}{}, context.Canceled
 	}
 	target.page = in.Page
 	content, err := load(ctx, target)
 	if err != nil {
-		return pageView{}, err
+		return struct{}{}, err
 	}
 	if in.Page > 1 && content.Total != nil {
 		if last := max(1, (*content.Total+target.size-1)/target.size); in.Page > last {
-			return pageView{}, fmt.Errorf(pastLastPageMessage, in.Page, last)
+			return struct{}{}, fmt.Errorf(pastLastPageMessage, in.Page, last)
 		}
 	}
 	if in.Page > 1 && content.Total == nil && len(content.Rows) == 0 {
-		return pageView{}, fmt.Errorf(emptyPageMessage, in.Page)
+		return struct{}{}, fmt.Errorf(emptyPageMessage, in.Page)
 	}
-	return t.view(t.showPage(ctx, in.Page), content), nil
+	t.showPage(ctx, in.Page)
+	return struct{}{}, nil
 }
 
-func (t widget) setSearch(ctx context.Context, in searchArg) (pageView, error) {
-	next := t.search(ctx, in.Text, true)
-	content, err := load(ctx, next)
-	if err != nil {
-		return pageView{}, err
-	}
-	return t.view(next, content), nil
+func (t widget) setSearch(ctx context.Context, in searchArg) (struct{}, error) {
+	t.search(ctx, in.Text, true)
+	return struct{}{}, nil
 }
 
-func (t widget) setSort(ctx context.Context, in sortSpec) (pageView, error) {
+func (t widget) setSort(ctx context.Context, in sortSpec) (struct{}, error) {
 	if in.Column < 0 || in.Column >= len(t.params.Columns) || !t.params.Columns[in.Column].Sort {
-		return pageView{}, fmt.Errorf(notSortableMessage, in.Column)
+		return struct{}{}, fmt.Errorf(notSortableMessage, in.Column)
 	}
-	next := t.sortBy(ctx, in.Column, in.Desc)
-	content, err := load(ctx, next)
-	if err != nil {
-		return pageView{}, err
-	}
-	return t.view(next, content), nil
+	t.sortBy(ctx, in.Column, in.Desc)
+	return struct{}{}, nil
 }
 
-func (t widget) setSelected(ctx context.Context, in selectArg) (pageView, error) {
+func (t widget) setSelected(ctx context.Context, in selectArg) (struct{}, error) {
 	current, ok := t.state.Read(ctx)
 	if !ok {
-		return pageView{}, context.Canceled
+		return struct{}{}, context.Canceled
 	}
 	content, err := load(ctx, current)
 	if err != nil {
-		return pageView{}, err
+		return struct{}{}, err
 	}
 	added := 0
 	for _, id := range in.IDs {
 		if !slices.ContainsFunc(content.Rows, func(r row) bool { return r.ID == id }) {
-			return pageView{}, fmt.Errorf(notOnPageMessage, id)
+			return struct{}{}, fmt.Errorf(notOnPageMessage, id)
 		}
 		if _, ok := current.selected[id]; in.Selected && !ok {
 			added++
 		}
 	}
 	if len(current.selected)+added > 1000 {
-		return pageView{}, fmt.Errorf(selectionFullMessage, len(current.selected))
+		return struct{}{}, fmt.Errorf(selectionFullMessage, len(current.selected))
 	}
-	current.selected = t.mark(ctx, in.IDs, in.Selected)
-	return t.view(current, content), nil
+	t.mark(ctx, in.IDs, in.Selected)
+	return struct{}{}, nil
 }
 
 func (t widget) getSelected(ctx context.Context, _ struct{}) (selectedIDs, error) {

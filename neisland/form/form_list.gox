@@ -247,6 +247,11 @@ func (f *listWidget) value(name string) any {
 
 var maxIntWidth = len(strconv.Itoa(math.MaxInt))
 
+func itemNumber(name string) string {
+	n, _ := strconv.Atoi(strings.TrimLeft(name, "0"))
+	return fmt.Sprintf("%04d", n)
+}
+
 func (f *listWidget) nextName() string {
 	f.index += 1
 	return fmt.Sprintf("%0*d", maxIntWidth, f.index)
@@ -394,8 +399,8 @@ elem (f *listWidget) item(field *listItemWidget) {
 	})
 	~~
 	~>(neui.Space{
-		Name: "item_" + strings.TrimLeft(field.name, "0"),
-		Desc: fmt.Sprintf("item %d of %s", field.state.Get().index, f.params.name()),
+		Name: "item_" + itemNumber(field.name),
+		Desc: "an item of " + f.params.name(),
 	}) <li class="neisland-form-item">
 		<div
 			(&field.body)

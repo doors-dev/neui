@@ -12,7 +12,6 @@ import (
 	"github.com/doors-dev/gox"
 	"neui.dev"
 	"neui.dev/api"
-	"neui.dev/internal/page"
 	"neui.dev/internal/testkit"
 	"neui.dev/internal/testkit/stack"
 )
@@ -441,7 +440,7 @@ func TestFailedInputCallsReport(t *testing.T) {
 		}
 		message, _ := r.Content[0].(api.ContentText)
 		value, _ := r.Content[1].(api.ContentText)
-		if !strings.Contains(message.Text, "not found; ") || value.Text != want {
+		if !strings.HasSuffix(message.Text, "not found") || value.Text != want {
 			t.Fatalf("the %s failed with %#v, want the message and then %s", r.ID, r.Content, want)
 		}
 	}
@@ -560,7 +559,7 @@ func answers(t *testing.T, p *testkit.Provider, n int) []string {
 }
 
 func failed(message string) string {
-	return "error: client execution failed: " + message + "; " + page.FailedAfterRunMessage
+	return "error: client execution failed: " + message
 }
 
 func expect(t *testing.T, got []string, want ...string) {

@@ -87,6 +87,12 @@ func (a *agent) call(tool string, arg any) json.RawMessage {
 	return out.Output
 }
 
+func (a *agent) then(tool string, arg any) view {
+	a.t.Helper()
+	stack.ExpectJSON(a.t, a.call(tool, arg), `{}`)
+	return decode(a.t, a.call("get_page", map[string]any{}))
+}
+
 func (a *agent) refused(tool string, arg any, want string) {
 	a.t.Helper()
 	r := a.result("page__tool", map[string]any{"path": a.space, "tool": tool, "arg": arg})
@@ -228,7 +234,7 @@ func TestTableGetPageReadsOnlyWhatTheUserSees(t *testing.T) {
 
 func TestTableSetPageTurnsTheUsersPage(t *testing.T) {
 	a := full(t)
-	v := decode(t, a.call("set_page", map[string]any{"page": 3}))
+	v := a.then("set_page", map[string]any{"page": 3})
 	if ids(v) != "r11 r12" || v.Page != 3 {
 		t.Fatalf("set_page 3 read %+v, want rows r11 r12 on page 3", v)
 	}
@@ -243,7 +249,7 @@ func TestTableSetPageWithoutTotalNeedsRows(t *testing.T) {
 		for (var i = p.offset; i < Math.min(p.offset + p.limit, 8); i++) rows.push({id: "e" + (i + 1), cells: ["entry " + (i + 1)]})
 		return {rows: rows}
 	})}))`+loop)
-	v := decode(t, a.call("set_page", map[string]any{"page": 2}))
+	v := a.then("set_page", map[string]any{"page": 2})
 	if ids(v) != "e6 e7 e8" || v.Page != 2 || v.Pages != nil {
 		t.Fatalf("set_page 2 read %+v, want e6 to e8 on page 2 with no page count", v)
 	}
@@ -254,13 +260,13 @@ func TestTableSetPageWithoutTotalNeedsRows(t *testing.T) {
 func TestTableSetSearchTypesForTheUser(t *testing.T) {
 	a := full(t)
 	a.call("set_page", map[string]any{"page": 2})
-	v := decode(t, a.call("set_search", map[string]any{"text": " row 1 "}))
+	v := a.then("set_search", map[string]any{"text": " row 1 "})
 	if ids(v) != "r1 r10 r11 r12" || v.Page != 1 || v.Search != "row 1" {
 		t.Fatalf("set_search read %+v, want r1 r10 r11 r12 on page 1 for row 1", v)
 	}
 	a.shows(".neisland-table-search", "row 1")
 	a.shows(".neisland-table-status-text", "Showing 1–4 of 4")
-	v = decode(t, a.call("set_search", map[string]any{"text": ""}))
+	v = a.then("set_search", map[string]any{"text": ""})
 	if v.Search != "" || *v.Pages != 3 {
 		t.Fatalf("an empty search read %+v, want every row back", v)
 	}
@@ -270,7 +276,7 @@ func TestTableSetSearchTypesForTheUser(t *testing.T) {
 func TestTableSetSortSortsForTheUser(t *testing.T) {
 	a := full(t)
 	a.call("set_page", map[string]any{"page": 2})
-	v := decode(t, a.call("set_sort", map[string]any{"column": 0, "desc": true}))
+	v := a.then("set_sort", map[string]any{"column": 0, "desc": true})
 	if ids(v) != "r12 r11 r10 r9 r8" || v.Page != 1 || v.Sort == nil || v.Sort.Column != 0 || !v.Sort.Desc {
 		t.Fatalf("set_sort read %+v, want r12 down to r8 on page 1, sorted by Name descending", v)
 	}
@@ -281,7 +287,7 @@ func TestTableSetSortSortsForTheUser(t *testing.T) {
 
 func TestTableSelectionTools(t *testing.T) {
 	a := full(t)
-	v := decode(t, a.call("set_selected", map[string]any{"ids": []string{"r2", "r4"}, "selected": true}))
+	v := a.then("set_selected", map[string]any{"ids": []string{"r2", "r4"}, "selected": true})
 	if v.Selected != 2 || !v.Rows[1].Selected || !v.Rows[3].Selected || v.Rows[0].Selected {
 		t.Fatalf("set_selected read %+v, want r2 and r4 selected", v)
 	}
@@ -289,7 +295,7 @@ func TestTableSelectionTools(t *testing.T) {
 	a.refused("set_selected", map[string]any{"ids": []string{"r9"}, "selected": true}, `row "r9" is not on the current page`)
 	a.call("set_page", map[string]any{"page": 2})
 	a.call("set_selected", map[string]any{"ids": []string{"r6"}, "selected": true})
-	v = decode(t, a.call("set_selected", map[string]any{"ids": []string{"r6"}, "selected": false}))
+	v = a.then("set_selected", map[string]any{"ids": []string{"r6"}, "selected": false})
 	if v.Selected != 2 || v.Rows[0].Selected {
 		t.Fatalf("unselecting r6 read %+v, want r6 unselected and 2 left", v)
 	}
@@ -332,7 +338,7 @@ func TestTableSetSelectedKeepsTheCap(t *testing.T) {
 for (var i = 0; i < 999; i++) held.push("x" + i)
 ui.root.set(ui.table({columns: [{title: "Name"}, {title: "Spec"}], rows: rows, pageSize: 5, select: {}, selected: held}))`+loop)
 	a.refused("set_selected", map[string]any{"ids": []string{"r1", "r2"}, "selected": true}, "the selection holds at most 1000 rows, and 999 are selected")
-	v := decode(t, a.call("set_selected", map[string]any{"ids": []string{"r1"}, "selected": true}))
+	v := a.then("set_selected", map[string]any{"ids": []string{"r1"}, "selected": true})
 	if v.Selected != 1000 || !v.Rows[0].Selected {
 		t.Fatalf("selecting r1 read %+v, want it selected as the 1000th", v)
 	}

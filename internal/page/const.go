@@ -3,7 +3,7 @@ package page
 import "errors"
 
 const moduleName = "page"
-const moduleDesc = `Your access to the live page the user has open: use it to help the user operate the application — navigate, fill inputs, press buttons, call the tools the page exposes, or focus an element to point the user at it. The page is a tree of spaces, UI regions carrying tools, inputs and child spaces. Only what the application chose to expose is there, so a missing element means unavailable to you, not absent from the page: say so instead of guessing. read, write, click, focus and tool need the space read first, with sync, by you or a script, and act only while it is as it was last read; otherwise they fail without acting. Every page call made as a tool call costs a round; for repetitive work — the same steps over several rows or items — write a script when the js module is available. In a script, a refused or failed page call throws, and its e.value holds what its error carries: diff, space, or the failed call's result. You are part of this page, and to the user you see what they see: reading it, and its spaces, paths, syncs, rerenders and refused calls, are your plumbing, invisible to them. Don't announce looking at the page or what you find on it, such as "I'll look at the page first" or "I see there are tools": read it and act. Report outcomes in page terms: what was filled, pressed or changed.`
+const moduleDesc = `Your access to the live page the user has open: use it to help the user operate the application — navigate, fill inputs, press buttons, call the tools the page exposes, or focus an element to point the user at it. The page is a tree of spaces, UI regions carrying tools, inputs and child spaces. Only what the application chose to expose is there, so a missing element means unavailable to you, not absent from the page: say so instead of guessing. read, write, click, focus and tool need the space read first, with sync, by you or a script, and act only while it is as it was last read; otherwise they fail without acting. The user works the same page alongside you: a change you did not make, shown in a refusal's diff or a call's changes, most often comes from them, so check what they did and build on it instead of redoing or undoing it. Every page call made as a tool call costs a round; for repetitive work — the same steps over several rows or items — write a script when the js module is available. In a script, a refused or failed page call throws, and its e.value holds what its error carries: diff, space, or the failed call's result. You are part of this page, and to the user you see what they see: reading it, and its spaces, paths, syncs, rerenders and refused calls, are your plumbing, invisible to them. Don't announce looking at the page or what you find on it, such as "I'll look at the page first" or "I see there are tools": read it and act. Report outcomes in page terms: what was filled, pressed or changed.`
 const toolName = "tool"
 const toolDesc = `Call a tool defined by the currently rendered page.`
 const readName = "read"
@@ -43,7 +43,7 @@ const islandEndName = "island_end"
 const islandEndDesc = `End an island's app now, whether a part is running or not: the island replaces the app's screen with its own, and the values a running part notified since its last ui.draw() are dropped. Not accessible from scripts.`
 const fileOrCodeMessage = "set exactly one of file and code"
 const islandFromJSMessage = "island tools are not accessible from a script"
-const failedAfterRunMessage = "the call ran and then failed, so the page may have changed: the result that comes with this error shows what changed"
+const ownIslandMessage = "a script can't make page calls into its own island: it works its widgets through ui"
 
 const islandName = "island"
 const islandsDesc = `Islands
@@ -180,3 +180,4 @@ var errIslandSpecPage = errors.New(islandSpecPageMessage)
 var errIslandSpecItem = errors.New(islandSpecItemMessage)
 var errFileOrCode = errors.New(fileOrCodeMessage)
 var errIslandFromJS = errors.New(islandFromJSMessage)
+var errOwnIsland = errors.New(ownIslandMessage)

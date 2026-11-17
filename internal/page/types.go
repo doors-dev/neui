@@ -207,7 +207,7 @@ type failure struct {
 }
 
 func (f failure) Error() string {
-	return f.err.Error() + "; " + failedAfterRunMessage
+	return f.err.Error()
 }
 
 func (f failure) Unwrap() error {

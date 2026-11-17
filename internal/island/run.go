@@ -49,7 +49,7 @@ func newRun(ctx context.Context, island *island, seq uint, space string, comment
 		vm.Close()
 		return nil, err
 	}
-	ctx, cancel := context.WithCancelCause(ctrl.Context())
+	ctx, cancel := context.WithCancelCause(context.WithValue(ctrl.Context(), common.KeyIslandScript, space))
 	r := &run{
 		island:           island,
 		seq:              seq,

@@ -1053,7 +1053,7 @@ return ["jam", "stick"].map(tool => { try { page__tool({path: "counter", tool, a
 	plain(t, testkit.Results(p.Request(t, 8))[0], "invalid input: argument do not match the schema")
 	var scripted struct{ Result json.RawMessage }
 	testkit.Decode(t, testkit.Results(p.Request(t, 9))[0], &scripted)
-	if want := fmt.Sprintf(`[["tool: jammed; %[1]s","changes,diff",null],["tool: jam: stuck; %[1]s","changes,diff,output",{"count":7}]]`, page.FailedAfterRunMessage); string(scripted.Result) != want {
+	if want := `[["tool: jammed","changes,diff",null],["tool: jam: stuck","changes,diff,output",{"count":7}]]`; string(scripted.Result) != want {
 		t.Fatalf("the script caught %s, want the message in e.message and the call's result in e.value", scripted.Result)
 	}
 }

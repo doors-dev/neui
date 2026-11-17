@@ -23,7 +23,7 @@ func NewMarkdown(ctx context.Context, p markdown.Params) (api.Widget[markdown.Pa
 }
 
 // NewForm builds a form control, for Library.Control.
-func NewForm(ctx context.Context, p form.Params, submit func(ctx context.Context, s map[string]any) bool) (api.Widget[struct{}], error) {
+func NewForm(ctx context.Context, p form.Params, submit func(ctx context.Context, s map[string]any) bool) (api.Widget[form.Patch], error) {
 	return form.New(ctx, p, submit)
 }
 

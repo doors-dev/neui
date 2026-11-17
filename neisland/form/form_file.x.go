@@ -890,16 +890,20 @@ func (f *fileWidget) chip(e fileEntry) gox.Elem {
 			if e.status == fileDone {
 //line form_file.gox:820
 				__e = __c.Any(neui.Data{Text: "uploaded file", Object: map[string]any{"name": e.name, "size": e.size, "path": e.path}}); if __e != nil { return }
-			}
+//line form_file.gox:821
+			} else if e.status == fileFailed {
 //line form_file.gox:822
+				__e = __c.Any(neui.Data{Text: "file not uploaded", Object: map[string]any{"name": e.name, "error": e.reason}}); if __e != nil { return }
+			}
+//line form_file.gox:824
 			if e.retry {
 				__e = __c.Init("button"); if __e != nil { return }
 				{
-//line form_file.gox:823
+//line form_file.gox:825
 					__e = __c.Set("type", "button"); if __e != nil { return }
-//line form_file.gox:823
+//line form_file.gox:825
 					__e = __c.Set("class", "neisland-form-file-retry"); if __e != nil { return }
-//line form_file.gox:823
+//line form_file.gox:825
 					__e = __c.Set("data-file-retry", e.key); if __e != nil { return }
 					__e = __c.Set("hidden", true); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
@@ -907,12 +911,12 @@ func (f *fileWidget) chip(e fileEntry) gox.Elem {
 				}
 				__e = __c.Close(); if __e != nil { return }
 			}
-//line form_file.gox:825
+//line form_file.gox:827
 			__e = (neui.Input{Desc: "remove " + e.name}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.Init("button"); if __e != nil { return }
 				{
-//line form_file.gox:826
+//line form_file.gox:828
 					__e = __c.Modify(doors.AClick{
 				Scope: f.field.scope(),
 				Batch: true,
@@ -921,15 +925,15 @@ func (f *fileWidget) chip(e fileEntry) gox.Elem {
 					return false
 				},
 			}); if __e != nil { return }
-//line form_file.gox:834
-					__e = __c.Set("type", "button"); if __e != nil { return }
-//line form_file.gox:835
-					__e = __c.Set("class", "neisland-form-remove"); if __e != nil { return }
 //line form_file.gox:836
-					__e = __c.Set("id", f.id + "-x" + e.key); if __e != nil { return }
+					__e = __c.Set("type", "button"); if __e != nil { return }
 //line form_file.gox:837
-					__e = __c.Set("value", e.key); if __e != nil { return }
+					__e = __c.Set("class", "neisland-form-remove"); if __e != nil { return }
 //line form_file.gox:838
+					__e = __c.Set("id", f.id + "-x" + e.key); if __e != nil { return }
+//line form_file.gox:839
+					__e = __c.Set("value", e.key); if __e != nil { return }
+//line form_file.gox:840
 					__e = __c.Set("aria-label", func() any {
 				switch e.status {
 				case fileUploading:
@@ -948,5 +952,5 @@ func (f *fileWidget) chip(e fileEntry) gox.Elem {
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line form_file.gox:851
+//line form_file.gox:853
 }

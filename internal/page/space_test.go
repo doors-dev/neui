@@ -191,8 +191,8 @@ func TestDiffAndChangesShowToolsAndInputs(t *testing.T) {
 func TestFailureUnwrapsItsError(t *testing.T) {
 	err := fmt.Errorf("jam: %w", errToolNotFound)
 	f := failure{result: &report{Diff: &diff{}}, err: err}
-	if !errors.Is(f, errToolNotFound) || f.Error() != err.Error()+"; "+failedAfterRunMessage {
-		t.Fatalf("the failure reads %q and unwraps to %v, want the error it carries and the note that the call ran", f.Error(), errors.Unwrap(f))
+	if !errors.Is(f, errToolNotFound) || f.Error() != err.Error() {
+		t.Fatalf("the failure reads %q and unwraps to %v, want the error it carries", f.Error(), errors.Unwrap(f))
 	}
 }
 

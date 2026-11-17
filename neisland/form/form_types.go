@@ -311,6 +311,11 @@ func (f *seriesStep) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// Patch is the form's update: it takes none.
+type Patch struct {
+	_ struct{} `additionalProperties:"false" description:"a form takes no patches: to change one, create a new form"`
+}
+
 // Params is what a script passes to ui.form.
 type Params struct {
 	_       struct{}       `additionalProperties:"false"`
