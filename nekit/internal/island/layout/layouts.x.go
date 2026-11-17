@@ -1,4 +1,4 @@
-// Managed by GoX v0.3.6-0.20261113082228-02db5fed593a
+// Managed by GoX v0.4.0
 
 //line layouts.gox:1
 package layout

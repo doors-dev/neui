@@ -316,7 +316,7 @@ elem (t widget) render() {
 													Scope: neui.IslandScope(ctx),
 													Indicator: pending.Indicator(ctx),
 													On: func(ctx context.Context, _ doors.RequestPointer) bool {
-														t.submit(ctx, Submit{ID: r.ID})
+														t.submit(ctx, Submit{Row: r.ID})
 														return false
 													},
 												})>
@@ -338,7 +338,7 @@ elem (t widget) render() {
 													Scope: neui.IslandScope(ctx),
 													Indicator: pending.Indicator(ctx),
 													On: func(ctx context.Context, _ doors.RequestPointer) bool {
-														t.submit(ctx, Submit{ID: r.ID, Value: a.Value})
+														t.submit(ctx, Submit{Row: r.ID, Value: a.Value})
 														return false
 													},
 												})>
@@ -489,33 +489,44 @@ elem (t widget) checkbox(label string, id string) {
 }
 
 elem (t widget) status(sel map[string]struct{}, content result, page int, size int) {
-	~(if len(sel) > 0 && t.params.Select != nil {
+	~(if t.params.Select != nil && (len(sel) > 0 || len(content.Rows) != 0) {
 		<span class="neisland-table-status-text" role="status"><span class="neisland-table-count">~(len(sel))</span> selected</span>
 		<button
 			type="button"
 			class=("neisland-button neisland-button-sm neisland-button-" + t.params.Select.Style)
 			data-neui="submit"
+			aria-disabled=({
+				if len(sel) == 0 {
+					return "true"
+				}
+				return nil
+			})
 			(doors.AClick{
 				Scope: neui.IslandScope(ctx),
 				Indicator: pending.Indicator(ctx),
 				On: func(ctx context.Context, _ doors.RequestPointer) bool {
-					t.submit(ctx, Submit{IDs: slices.Sorted(maps.Keys(sel))})
+					if len(sel) == 0 {
+						return false
+					}
+					t.submit(ctx, Submit{Rows: slices.Sorted(maps.Keys(sel))})
 					return false
 				},
 			})>
 			~(t.params.Select.Text)
 		</button>
-		<button
-			type="button"
-			class="neisland-table-clear"
-			(doors.AClick{
-				On: func(ctx context.Context, _ doors.RequestPointer) bool {
-					t.selected.Update(ctx, nil)
-					return false
-				},
-			})>
-			Clear
-		</button>
+		~(if len(sel) > 0 {
+			<button
+				type="button"
+				class="neisland-table-clear"
+				(doors.AClick{
+					On: func(ctx context.Context, _ doors.RequestPointer) bool {
+						t.selected.Update(ctx, nil)
+						return false
+					},
+				})>
+				Clear
+			</button>
+		})
 	} else if len(content.Rows) == 0 {
 		<span class="neisland-table-status-text" role="status">Nothing to show</span>
 	} else {

@@ -224,9 +224,9 @@ type cellButton struct {
 
 // Submit is what a table hands the script waiting in ui.draw().
 type Submit struct {
-	ID    string   `json:"id,omitempty" description:"id of the row the user acted on: alone for a click on the row's first cell, with value for a row action; empty for a selection submit"`
+	Row   string   `json:"row,omitempty" description:"id of the row the user acted on: alone for a click on the row's first cell, with value for a row action; empty for a selection submit"`
 	Value string   `json:"value,omitempty" description:"value of the row action button clicked; empty for a first-cell click and a selection submit"`
-	IDs   []string `json:"ids,omitempty" maxItems:"1000" description:"ids of the selected rows, sorted; set only for a selection submit"`
+	Rows  []string `json:"rows,omitempty" maxItems:"1000" description:"ids of the selected rows, sorted; set only for a selection submit"`
 }
 
 // Patch is what a script passes to update a table.

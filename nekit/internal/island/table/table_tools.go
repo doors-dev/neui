@@ -224,7 +224,7 @@ func (t widget) submitSelected(ctx context.Context, _ struct{}) (struct{}, error
 	if len(selected) == 0 {
 		return struct{}{}, errNothingSelected
 	}
-	if !t.submit(ctx, Submit{IDs: slices.Sorted(maps.Keys(selected))}) {
+	if !t.submit(ctx, Submit{Rows: slices.Sorted(maps.Keys(selected))}) {
 		return struct{}{}, errNoDraw
 	}
 	return struct{}{}, nil
@@ -247,7 +247,7 @@ func (t widget) clickRow(ctx context.Context, in rowArg) (struct{}, error) {
 	if !slices.ContainsFunc(content.Rows, func(r row) bool { return r.ID == in.ID }) {
 		return struct{}{}, fmt.Errorf(notOnPageMessage, in.ID)
 	}
-	if !t.submit(ctx, Submit{ID: in.ID}) {
+	if !t.submit(ctx, Submit{Row: in.ID}) {
 		return struct{}{}, errNoDraw
 	}
 	return struct{}{}, nil
@@ -275,7 +275,7 @@ func (t widget) clickAction(ctx context.Context, in actionArg) (struct{}, error)
 	if !found {
 		return struct{}{}, fmt.Errorf(noActionMessage, in.ID, in.Value)
 	}
-	if !t.submit(ctx, Submit{ID: in.ID, Value: in.Value}) {
+	if !t.submit(ctx, Submit{Row: in.ID, Value: in.Value}) {
 		return struct{}{}, errNoDraw
 	}
 	return struct{}{}, nil

@@ -36,7 +36,7 @@ func TestTableRowsPatchKeepsSelectedRows(t *testing.T) {
 	a.Find(`input[aria-label="Select Ann"]`).Click()
 	status.WaitText("2 selected")
 	a.Find(".neisland-table-status .neisland-button-primary").Click()
-	stack.ExpectJSON(t, a.Submitted(), `{"ids": ["a", "c"]}`)
+	stack.ExpectJSON(t, a.Submitted(), `{"rows": ["a", "c"]}`)
 }
 
 func TestTableQueryWithoutTotalStaysOnLastFullPage(t *testing.T) {

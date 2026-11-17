@@ -478,7 +478,7 @@ func (t widget) render() gox.Elem {
 													Scope: neui.IslandScope(ctx),
 													Indicator: pending.Indicator(ctx),
 													On: func(ctx context.Context, _ doors.RequestPointer) bool {
-														t.submit(ctx, Submit{ID: r.ID})
+														t.submit(ctx, Submit{Row: r.ID})
 														return false
 													},
 												}); if __e != nil { return }
@@ -524,7 +524,7 @@ func (t widget) render() gox.Elem {
 													Scope: neui.IslandScope(ctx),
 													Indicator: pending.Indicator(ctx),
 													On: func(ctx context.Context, _ doors.RequestPointer) bool {
-														t.submit(ctx, Submit{ID: r.ID, Value: a.Value})
+														t.submit(ctx, Submit{Row: r.ID, Value: a.Value})
 														return false
 													},
 												}); if __e != nil { return }
@@ -807,7 +807,7 @@ func (t widget) status(sel map[string]struct{}, content result, page int, size i
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 //line table.gox:492
-		if len(sel) > 0 && t.params.Select != nil {
+		if t.params.Select != nil && (len(sel) > 0 || len(content.Rows) != 0) {
 			__e = __c.Init("span"); if __e != nil { return }
 			{
 //line table.gox:493
@@ -836,43 +836,56 @@ func (t widget) status(sel map[string]struct{}, content result, page int, size i
 //line table.gox:497
 				__e = __c.Set("data-neui", "submit"); if __e != nil { return }
 //line table.gox:498
+				__e = __c.Set("aria-disabled", func() any {
+				if len(sel) == 0 {
+					return "true"
+				}
+				return nil
+			}()); if __e != nil { return }
+//line table.gox:504
 				__e = __c.Modify(doors.AClick{
 				Scope: neui.IslandScope(ctx),
 				Indicator: pending.Indicator(ctx),
 				On: func(ctx context.Context, _ doors.RequestPointer) bool {
-					t.submit(ctx, Submit{IDs: slices.Sorted(maps.Keys(sel))})
+					if len(sel) == 0 {
+						return false
+					}
+					t.submit(ctx, Submit{Rows: slices.Sorted(maps.Keys(sel))})
 					return false
 				},
 			}); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line table.gox:506
+//line table.gox:515
 				__e = __c.Any(t.params.Select.Text); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-			__e = __c.Init("button"); if __e != nil { return }
-			{
-//line table.gox:509
-				__e = __c.Set("type", "button"); if __e != nil { return }
-//line table.gox:510
-				__e = __c.Set("class", "neisland-table-clear"); if __e != nil { return }
-//line table.gox:511
-				__e = __c.Modify(doors.AClick{
-				On: func(ctx context.Context, _ doors.RequestPointer) bool {
-					t.selected.Update(ctx, nil)
-					return false
-				},
-			}); if __e != nil { return }
-				__e = __c.Submit(); if __e != nil { return }
-				__e = __c.Text("Clear"); if __e != nil { return }
-			}
-			__e = __c.Close(); if __e != nil { return }
+//line table.gox:517
+			if len(sel) > 0 {
+				__e = __c.Init("button"); if __e != nil { return }
+				{
 //line table.gox:519
+					__e = __c.Set("type", "button"); if __e != nil { return }
+//line table.gox:520
+					__e = __c.Set("class", "neisland-table-clear"); if __e != nil { return }
+//line table.gox:521
+					__e = __c.Modify(doors.AClick{
+					On: func(ctx context.Context, _ doors.RequestPointer) bool {
+						t.selected.Update(ctx, nil)
+						return false
+					},
+				}); if __e != nil { return }
+					__e = __c.Submit(); if __e != nil { return }
+					__e = __c.Text("Clear"); if __e != nil { return }
+				}
+				__e = __c.Close(); if __e != nil { return }
+			}
+//line table.gox:530
 		} else if len(content.Rows) == 0 {
 			__e = __c.Init("span"); if __e != nil { return }
 			{
-//line table.gox:520
+//line table.gox:531
 				__e = __c.Set("class", "neisland-table-status-text"); if __e != nil { return }
-//line table.gox:520
+//line table.gox:531
 				__e = __c.Set("role", "status"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Text("Nothing to show"); if __e != nil { return }
@@ -881,42 +894,42 @@ func (t widget) status(sel map[string]struct{}, content result, page int, size i
 		} else  {
 			__e = __c.Init("span"); if __e != nil { return }
 			{
-//line table.gox:522
+//line table.gox:533
 				__e = __c.Set("class", "neisland-table-status-text"); if __e != nil { return }
-//line table.gox:522
+//line table.gox:533
 				__e = __c.Set("role", "status"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Text("Showing "); if __e != nil { return }
 				__e = __c.Init("span"); if __e != nil { return }
 				{
-//line table.gox:522
+//line table.gox:533
 					__e = __c.Set("class", "neisland-table-count"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line table.gox:522
+//line table.gox:533
 					__e = __c.Any((page - 1) * size + 1); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
 				__e = __c.Text("–"); if __e != nil { return }
 				__e = __c.Init("span"); if __e != nil { return }
 				{
-//line table.gox:522
+//line table.gox:533
 					__e = __c.Set("class", "neisland-table-count"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line table.gox:522
+//line table.gox:533
 					__e = __c.Any((page - 1) * size + len(content.Rows)); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
-//line table.gox:522
+//line table.gox:533
 				if content.Total != nil {
 					__e = __c.InitContainer(); if __e != nil { return }
 					{
 						__e = __c.Text(" of "); if __e != nil { return }
 						__e = __c.Init("span"); if __e != nil { return }
 						{
-//line table.gox:523
+//line table.gox:534
 							__e = __c.Set("class", "neisland-table-count"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
-//line table.gox:523
+//line table.gox:534
 							__e = __c.Any(*content.Total); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
@@ -927,14 +940,14 @@ func (t widget) status(sel map[string]struct{}, content result, page int, size i
 			__e = __c.Close(); if __e != nil { return }
 		}
 	return })
-//line table.gox:526
+//line table.gox:537
 }
 
-//line table.gox:528
+//line table.gox:539
 func (t widget) pager(content result, page int, size int) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line table.gox:530
+//line table.gox:541
 		pages := 0
 	if content.Total != nil {
 		pages = (*content.Total + size - 1) / size
@@ -942,91 +955,91 @@ func (t widget) pager(content result, page int, size int) gox.Elem {
 	first := max(1, min(page - 2, pages - 4))
 	last := min(pages, first + 4)
 
-//line table.gox:537
+//line table.gox:548
 		if content.Total != nil && pages > 1 {
 			__e = __c.Init("nav"); if __e != nil { return }
 			{
-//line table.gox:538
+//line table.gox:549
 				__e = __c.Set("class", "neisland-table-pager"); if __e != nil { return }
-//line table.gox:538
+//line table.gox:549
 				__e = __c.Set("aria-label", "Pagination"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line table.gox:539
+//line table.gox:550
 				__e = __c.Any(t.pageButton("First", 1, page > 1)); if __e != nil { return }
-//line table.gox:540
+//line table.gox:551
 				__e = __c.Any(t.pageButton("Prev", page - 1, page > 1)); if __e != nil { return }
-//line table.gox:541
+//line table.gox:552
 				for n := first; n <= last; n++ {
-//line table.gox:542
+//line table.gox:553
 					if n == page {
 						__e = __c.Init("span"); if __e != nil { return }
 						{
-//line table.gox:543
+//line table.gox:554
 							__e = __c.Set("class", "neisland-table-current"); if __e != nil { return }
-//line table.gox:543
+//line table.gox:554
 							__e = __c.Set("aria-current", "page"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
-//line table.gox:543
+//line table.gox:554
 							__e = __c.Any(n); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
 					} else  {
-//line table.gox:545
+//line table.gox:556
 						__e = __c.Any(t.pageButton(strconv.Itoa(n), n, true)); if __e != nil { return }
 					}
 				}
-//line table.gox:548
+//line table.gox:559
 				__e = __c.Any(t.pageButton("Next", page + 1, page < pages)); if __e != nil { return }
-//line table.gox:549
+//line table.gox:560
 				__e = __c.Any(t.pageButton("Last", pages, page < pages)); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line table.gox:551
+//line table.gox:562
 		} else if content.Total == nil && (page > 1 || len(content.Rows) == size) {
 			__e = __c.Init("nav"); if __e != nil { return }
 			{
-//line table.gox:552
+//line table.gox:563
 				__e = __c.Set("class", "neisland-table-pager"); if __e != nil { return }
-//line table.gox:552
+//line table.gox:563
 				__e = __c.Set("aria-label", "Pagination"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line table.gox:553
+//line table.gox:564
 				__e = __c.Any(t.pageButton("Prev", page - 1, page > 1)); if __e != nil { return }
-//line table.gox:554
+//line table.gox:565
 				__e = __c.Any(t.pageButton("Next", page + 1, len(content.Rows) == size)); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		}
 	return })
-//line table.gox:557
+//line table.gox:568
 }
 
-//line table.gox:559
+//line table.gox:570
 func (t widget) pageButton(label string, page int, enabled bool) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line table.gox:560
+//line table.gox:571
 		if !enabled {
 			__e = __c.Init("button"); if __e != nil { return }
 			{
-//line table.gox:561
+//line table.gox:572
 				__e = __c.Set("type", "button"); if __e != nil { return }
-//line table.gox:561
+//line table.gox:572
 				__e = __c.Set("class", "neisland-button neisland-table-page neisland-button-secondary"); if __e != nil { return }
 				__e = __c.Set("disabled", true); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line table.gox:562
+//line table.gox:573
 				__e = __c.Any(label); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		} else  {
 			__e = __c.Init("button"); if __e != nil { return }
 			{
-//line table.gox:566
+//line table.gox:577
 				__e = __c.Set("type", "button"); if __e != nil { return }
-//line table.gox:567
+//line table.gox:578
 				__e = __c.Set("class", "neisland-button neisland-table-page neisland-button-secondary"); if __e != nil { return }
-//line table.gox:568
+//line table.gox:579
 				__e = __c.Modify(doors.AClick{
 				On: func(ctx context.Context, _ doors.RequestPointer) bool {
 					t.showPage(ctx, page)
@@ -1034,11 +1047,11 @@ func (t widget) pageButton(label string, page int, enabled bool) gox.Elem {
 				},
 			}); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line table.gox:574
+//line table.gox:585
 				__e = __c.Any(label); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		}
 	return })
-//line table.gox:577
+//line table.gox:588
 }

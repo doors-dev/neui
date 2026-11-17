@@ -108,7 +108,7 @@ func (a *agent) submitted(want table.Submit) {
 	a.t.Helper()
 	select {
 	case got := <-a.got:
-		if got.ID != want.ID || got.Value != want.Value || !slices.Equal(got.IDs, want.IDs) {
+		if got.Row != want.Row || got.Value != want.Value || !slices.Equal(got.Rows, want.Rows) {
 			a.t.Fatalf("the script got %+v, want %+v", got, want)
 		}
 	case <-time.After(10 * time.Second):
@@ -302,7 +302,7 @@ func TestTableSelectionTools(t *testing.T) {
 	a.call("set_selected", map[string]any{"ids": []string{"r7"}, "selected": true})
 	stack.ExpectJSON(t, a.call("get_selected", map[string]any{}), `{"ids": ["r2", "r4", "r7"]}`)
 	a.call("submit_selected", map[string]any{})
-	a.submitted(table.Submit{IDs: []string{"r2", "r4", "r7"}})
+	a.submitted(table.Submit{Rows: []string{"r2", "r4", "r7"}})
 	a.call("clear_selected", map[string]any{})
 	a.shows(".neisland-table-status-text", "Showing 6–10 of 12")
 	stack.ExpectJSON(t, a.call("get_selected", map[string]any{}), `{"ids": []}`)
@@ -312,14 +312,14 @@ func TestTableSelectionTools(t *testing.T) {
 func TestTableClickRowSubmitsTheRow(t *testing.T) {
 	a := full(t)
 	a.call("click_row", map[string]any{"id": "r3"})
-	a.submitted(table.Submit{ID: "r3"})
+	a.submitted(table.Submit{Row: "r3"})
 	a.refused("click_row", map[string]any{"id": "r12"}, `row "r12" is not on the current page`)
 }
 
 func TestTableClickActionReachesTheScript(t *testing.T) {
 	a := full(t)
 	a.call("click_action", map[string]any{"id": "r4", "value": "drop"})
-	a.submitted(table.Submit{ID: "r4", Value: "drop"})
+	a.submitted(table.Submit{Row: "r4", Value: "drop"})
 	a.refused("click_action", map[string]any{"id": "r3", "value": "drop"}, `row "r3" has no action "drop"`)
 	a.refused("click_action", map[string]any{"id": "r8", "value": "open"}, `row "r8" is not on the current page`)
 }
@@ -329,7 +329,7 @@ func TestTableSubmitFailsWithNoDrawWaiting(t *testing.T) {
 var ev = ui.draw()
 app.got(ev.output)`)
 	a.call("click_action", map[string]any{"id": "r1", "value": "open"})
-	a.submitted(table.Submit{ID: "r1", Value: "open"})
+	a.submitted(table.Submit{Row: "r1", Value: "open"})
 	a.refused("click_row", map[string]any{"id": "r2"}, "not submitted: the script is not waiting in ui.draw()")
 }
 
@@ -351,5 +351,5 @@ func TestTableSubmitReturnsWhenThePartEndsWithoutADraw(t *testing.T) {
 	if d := time.Since(began); d > 2*time.Second {
 		t.Fatalf("click_row returned after %v, want it back once the part ends", d)
 	}
-	a.submitted(table.Submit{ID: "r3"})
+	a.submitted(table.Submit{Row: "r3"})
 }
