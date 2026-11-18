@@ -29,7 +29,6 @@ import (
 	"github.com/zeebo/xxh3"
 	"neui.dev/internal/common"
 	"neui.dev/internal/island"
-	"neui.dev/internal/schema"
 	"neui.dev/internal/tools"
 	"neui.dev/internal/utils"
 )
@@ -349,25 +348,15 @@ func (s Space) AddData(ctx context.Context, text string, object any) error {
 	return nil
 }
 
-func (s Space) AddTool[I any, O any](ctx context.Context, name string, desc string, f func(ctx context.Context, input I) (O, error)) error {
-	inputSchema, err := schema.NewSchema[I]()
-	if err != nil {
-		return err
-	}
-	outputSchema, err := schema.NewSchema[O]()
-	if err != nil {
-		return err
-	}
+func (s Space) AddTool(ctx context.Context, from common.Tool) error {
 	base := doors.DetachedContext(ctx)
 	t := &tool{
-		Name:  utils.SanitizeName(name),
-		Desc:  desc + "\nOutput schema: " + string(outputSchema.Raw()),
-		Input: inputSchema.Raw(),
-		decode: func(arg json.RawMessage) (any, error) {
-			return inputSchema.Decode(arg)
-		},
+		Name:   from.Name(),
+		Desc:   from.Desc() + "\nOutput schema: " + string(from.Output()),
+		Input:  from.Params(),
+		decode: from.Decode,
 		call: func(ctx context.Context, input any) (any, error) {
-			var out O
+			var out any
 			var err error
 			settled := make(chan struct{})
 			doors.OnSettle(base, func(context.Context) {
@@ -381,7 +370,7 @@ func (s Space) AddTool[I any, O any](ctx context.Context, name string, desc stri
 				defer stop()
 				opCtx = tools.Attach(opCtx, ctx)
 				opCtx = common.AttachThread(opCtx, ctx)
-				out, err = f(opCtx, input.(I))
+				out, err = from.Call(opCtx, input)
 			})
 			select {
 			case <-settled:

@@ -30,6 +30,7 @@ import (
 	"neui.dev/api"
 	"neui.dev/internal/common"
 	"neui.dev/internal/island/core"
+	"neui.dev/internal/precheck"
 )
 
 type Library = core.Library
@@ -124,6 +125,13 @@ func (i *island) StartCode(ctx context.Context, space string, comment string, co
 	if err := check(code); err != nil {
 		return 0, 0, err
 	}
+	env, err := scriptEnv(ctx, i.lib)
+	if err != nil {
+		return 0, 0, err
+	}
+	if _, err := precheckPart(code, env, precheck.Globals{}); err != nil {
+		return 0, 0, err
+	}
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	if i.unmounted {
@@ -165,7 +173,7 @@ func (i *island) StartCode(ctx context.Context, space string, comment string, co
 		}
 		i.run = nil
 	}
-	run, err := newRun(ctx, i, i.seq, space, comment)
+	run, err := newRun(ctx, i, i.seq, space, comment, env)
 	if err != nil {
 		i.updateStatusScreen(ctx, noAppStatus, i.placeholder)
 		return 0, 0, err
@@ -313,7 +321,13 @@ func (s screen) Main() gox.Elem {
 
 func (i *island) Main() gox.Elem {
 	return func(cur gox.Cursor) error {
-		ctx, err := getSpace(cur.Context()).AddSpace(cur.Context(), screenSpaceName, screenSpaceDesc)
+		space := getSpace(cur.Context())
+		for _, t := range core.Tools(i.lib) {
+			if err := space.AddTool(cur.Context(), t); err != nil {
+				return err
+			}
+		}
+		ctx, err := space.AddSpace(cur.Context(), screenSpaceName, screenSpaceDesc)
 		if err != nil {
 			return err
 		}
@@ -336,6 +350,18 @@ func check(code string) error {
 		return fmt.Errorf("%w: %w", err, errScriptRejected)
 	}
 	return nil
+}
+
+func precheckPart(code string, env precheck.Env, globals precheck.Globals) (precheck.Globals, error) {
+	findings, globals := precheck.Check(code, env, globals)
+	if len(findings) == 0 {
+		return globals, nil
+	}
+	errs := make([]error, len(findings))
+	for i, f := range findings {
+		errs[i] = f
+	}
+	return globals, fmt.Errorf("%w: %w", errors.Join(errs...), errScriptRejected)
 }
 
 func checkSyntax(code string) error {

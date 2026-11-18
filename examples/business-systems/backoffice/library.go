@@ -46,6 +46,11 @@ func workbenchLibrary(l neui.Library) error {
 	if err := nekit.IslandRegisterAll(l); err != nil {
 		return err
 	}
+	for _, t := range operations {
+		if err := l.Add(t); err != nil {
+			return err
+		}
+	}
 	return addShopData(l)
 }
 

@@ -23,7 +23,6 @@ const (
 	KeyController
 	KeyIslandStore
 	KeyIslandWidget
-	KeyIslandScript
 )
 
 type IslandWidget struct {

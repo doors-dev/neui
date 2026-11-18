@@ -117,7 +117,7 @@ func TestTextStyleUpdate(t *testing.T) {
 }
 
 func TestTextSizeRejected(t *testing.T) {
-	a := stack.Island(t, devkit.App{Island: widgets(), Script: `ui.root.set(ui.markdown({text: "Title", size: "lg"})); ui.notify(ui.draw())`})
+	a := stack.Island(t, devkit.App{Island: widgets(), Script: `ui.root.set(ui.markdown(Object({text: "Title", size: "lg"}))); ui.notify(ui.draw())`})
 	if got := a.ContainerScriptError(); !strings.Contains(got, "size") {
 		t.Fatalf("got %q, want an error naming size", got)
 	}

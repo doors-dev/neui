@@ -651,90 +651,8 @@ func TestIslandBeginRefusedAfterSpecChange(t *testing.T) {
 	}
 }
 
-func TestIslandScriptActsOnTheAgentsRead(t *testing.T) {
-	page := func(cur gox.Cursor) error {
-		if err := (neui.Space{Name: "cart", Desc: "the cart"}).Proxy(cur, func(cur gox.Cursor) error {
-			return cur.Comp(neui.Tool[struct{}, string]{Name: "add", Desc: "adds an item", Handler: func(context.Context, struct{}) (string, error) {
-				return "added", nil
-			}})
-		}); err != nil {
-			return err
-		}
-		return cur.Any(board(make(chan int, 1), nil))
-	}
-	p := testkit.NewProvider(api.Model{},
-		testkit.Call("page__sync", map[string]any{"path": "cart"}),
-		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
-		revised(t, func(revision string) testkit.Turn {
-			return start(revision, `var seen = []
-try { seen.push(page__tool({path: "cart", tool: "add", arg: {}}).output) } catch (e) { seen.push(Object.keys(e.value).join(",")) }
-ui.notify(seen)`)
-		}),
-		testkit.Say("started"),
-		testkit.Say("noted"),
-	)
-	c := stack.Page(t, stack.Host{Provider: p, Page: page})
-	c.Send("add from the board")
-	c.Wait()
-	if notify := recorded(t, c, p, `kind="notifications_list"`); !strings.Contains(notify, `[["added"]]`) {
-		t.Fatalf("the island script's add notified %q, want it run on the agent's read", notify)
-	}
-}
-
-func TestIslandScriptCannotReachItsOwnIsland(t *testing.T) {
-	page := func(cur gox.Cursor) error {
-		if err := (neui.Space{Name: "cart", Desc: "the cart"}).Proxy(cur, func(cur gox.Cursor) error {
-			return cur.Comp(neui.Tool[struct{}, string]{Name: "add", Desc: "adds an item", Handler: func(context.Context, struct{}) (string, error) {
-				return "added", nil
-			}})
-		}); err != nil {
-			return err
-		}
-		if err := cur.Comp(neui.Island{
-			Name:        "other",
-			Desc:        "another island",
-			Placeholder: func(cur gox.Cursor) error { return cur.Text("idle") },
-			Template: func(slot gox.Comp) gox.Elem {
-				return func(cur gox.Cursor) error { return cur.Comp(slot) }
-			},
-			Library: func(l neui.Library) error { return nil },
-		}); err != nil {
-			return err
-		}
-		return cur.Any(board(make(chan int, 1), nil))
-	}
-	code := `var seen = {}
-function t(k, f) { try { f(); seen[k] = "ran" } catch (e) { seen[k] = e.message.includes("into its own island") ? "refused" : e.message } }
-t("sync board", () => page__sync({path: "board"}))
-t("sync screen", () => page__sync({path: "board.screen"}))
-t("tool", () => page__tool({path: "board.screen", tool: "x", arg: {}}))
-t("sync root", () => page__sync({path: ""}))
-t("sync other", () => page__sync({path: "other.screen"}))
-t("add", () => { page__sync({path: "cart"}); page__tool({path: "cart", tool: "add", arg: {}}) })
-ui.notify(seen)`
-	p := testkit.NewProvider(api.Model{},
-		testkit.Call("js__run", map[string]any{"code": `return page__sync({path: "board.screen"}) !== undefined`, "comment": "agent script"}),
-		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
-		revised(t, func(revision string) testkit.Turn {
-			return start(revision, code)
-		}),
-		testkit.Say("started"),
-		testkit.Say("noted"),
-	)
-	c := stack.Page(t, stack.Host{Provider: p, Page: page, Options: []common.Option{common.OptionModule(js.Module)}})
-	c.Send("probe the board")
-	c.Wait()
-	if r := testkit.Results(p.Request(t, 1))[0]; r.Error != api.ToolOk {
-		t.Fatalf("the agent's script failed to sync the island's screen: %#v", r.Content)
-	}
-	want := `{"sync board":"refused","sync screen":"refused","tool":"refused","sync root":"ran","sync other":"ran","add":"ran"}`
-	if notify := recorded(t, c, p, `kind="notifications_list"`); !strings.Contains(notify, want) {
-		t.Fatalf("the island script notified %q, want its own island refused and the rest of the page reached: %s", notify, want)
-	}
-}
-
-func TestIslandScriptGetsOnlyPageToolCalls(t *testing.T) {
-	code := `ui.notify([typeof page__sync, typeof page__tool, typeof page__click, typeof page__write, typeof page__read, typeof page__focus, typeof page__tree, typeof js__run])`
+func TestIslandScriptHasNoPageOrJSTools(t *testing.T) {
+	code := `ui.notify([typeof page__sync, typeof page__tool, typeof page__click, typeof js__run])`
 	p := testkit.NewProvider(api.Model{},
 		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
 		revised(t, func(revision string) testkit.Turn {
@@ -747,8 +665,26 @@ func TestIslandScriptGetsOnlyPageToolCalls(t *testing.T) {
 	c := stack.Page(t, stack.Host{Provider: p, Page: page, Options: []common.Option{common.OptionModule(js.Module)}})
 	c.Send("probe the board")
 	c.Wait()
-	if notify := recorded(t, c, p, `kind="notifications_list"`); !strings.Contains(notify, `[["function","function","undefined","undefined","undefined","undefined","undefined","undefined"]]`) {
-		t.Fatalf("the island script saw %q, want only page__sync and page__tool from page and no js tools", notify)
+	if notify := recorded(t, c, p, `kind="notifications_list"`); !strings.Contains(notify, `[["undefined","undefined","undefined","undefined"]]`) {
+		t.Fatalf("the island script saw %q, want no page or js tools", notify)
+	}
+}
+
+func TestIslandAppFunctionIsATool(t *testing.T) {
+	marks := make(chan int, 1)
+	p := testkit.NewProvider(api.Model{},
+		testkit.Call("page__sync", map[string]any{"path": "board"}),
+		testkit.Call("page__tool", map[string]any{"path": "board", "tool": "mark", "arg": map[string]any{"N": 7}}),
+		testkit.Say("marked"),
+	)
+	page := func(cur gox.Cursor) error { return cur.Any(board(marks, nil)) }
+	c := stack.Page(t, stack.Host{Provider: p, Page: page})
+	c.Send("mark 7")
+	c.Wait()
+	var out struct{ Output int }
+	testkit.Decode(t, testkit.Results(p.Request(t, 2))[0], &out)
+	if out.Output != 7 || <-marks != 7 {
+		t.Fatalf("the agent's mark returned %d, want the island's app function to run as a tool of its space", out.Output)
 	}
 }
 

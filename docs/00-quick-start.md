@@ -349,7 +349,7 @@ Render a tool only where the user may use it, with the same checks as the rest o
 })
 ```
 
-Put operations the agent may need from anywhere, such as changing any order by id, in a space in your app shell: they're on every page, and island scripts can call them too.
+Put operations the agent may need from anywhere, such as changing any order by id, in a space in your app shell: they're on every page.
 
 Page tools are the main way to let the agent operate your app. Prefer them over modules because:
 
@@ -398,10 +398,15 @@ func library(l neui.Library) error {
 
 Each one is a Go function that renders your component from the params the script passes.
 
-Island scripts can call your page tools and your agent's modules except JS. Often it makes sense to give an island its own API as well:
+Island scripts can call your agent's modules except page and JS. Give an island the tools its apps need in its library; `l.Add` takes the same `neui.Tool` struct you render on the page. The island also exposes them to the agent as tools of its space.
 
 ```gox
 // app.gox
+l.Add(neui.Tool[StockInput, Product]{
+	Name: "set_stock",
+	Desc: "Set the stock of a product.",
+	Handler: setStock,
+})
 l.Tool("top_customers", "customers ranked by what they paid", topCustomers)
 ```
 

@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
+
+	"neui.dev"
 )
 
 type created struct {
@@ -317,4 +319,82 @@ func adjustStock(ctx context.Context, in adjustStockInput) (stockOutput, error) 
 	}
 	notify(ctx, fmt.Sprintf("%s: %d in stock", p.Name, p.Stock))
 	return stockOutput{Stock: p.Stock}, nil
+}
+
+var operations = []neui.Tooler{
+	neui.Tool[createOrderInput, created]{
+		Name:    "create_order",
+		Desc:    "Create an order, checked like the New order form; stock is taken when it is created. Returns its id; open_order shows it to the user",
+		Handler: createOrder,
+	},
+	neui.Tool[orderItemInput, struct{}]{
+		Name:    "set_item_quantity",
+		Desc:    "Set the quantity of a product already on an order; 0 takes it off, and an order keeps at least one item. Checked against stock like the edit form",
+		Handler: setItemQuantity,
+	},
+	neui.Tool[orderItemInput, struct{}]{
+		Name:    "add_item",
+		Desc:    "Add a product to an order; when it is already on the order, its quantity grows by qty. Checked against stock like the edit form",
+		Handler: addItem,
+	},
+	neui.Tool[removeItemInput, struct{}]{
+		Name:    "remove_item",
+		Desc:    "Take a product off an order and put its units back in stock; an order keeps at least one item",
+		Handler: removeItem,
+	},
+	neui.Tool[addressInput, struct{}]{
+		Name:    "update_shipping_address",
+		Desc:    "Change where an order ships",
+		Handler: updateShippingAddress,
+	},
+	neui.Tool[statusInput, struct{}]{
+		Name:    "set_status",
+		Desc:    "Mark an order paid or unpaid; refund_order and cancel_order close it",
+		Handler: setStatus,
+	},
+	neui.Tool[orderInput, struct{}]{
+		Name:    "refund_order",
+		Desc:    "Refund a paid order: the money goes back to the customer and the order closes. Can't be undone",
+		Handler: refundOrder,
+	},
+	neui.Tool[orderInput, struct{}]{
+		Name:    "cancel_order",
+		Desc:    "Cancel an unpaid order: its items go back into stock and the order closes. Can't be undone",
+		Handler: cancelOrder,
+	},
+	neui.Tool[orderInput, struct{}]{
+		Name:    "remind_customer",
+		Desc:    "Send the customer of an unpaid order a payment reminder; the order page shows when it was sent",
+		Handler: remindCustomer,
+	},
+	neui.Tool[extendDueInput, dueOutput]{
+		Name:    "extend_due",
+		Desc:    "Move the due date of an unpaid order later by 1 to 60 days",
+		Handler: extendDue,
+	},
+	neui.Tool[customerInput, created]{
+		Name:    "create_customer",
+		Desc:    "Add a customer, checked like the New customer form. Returns their id; open_customer shows them to the user",
+		Handler: createCustomer,
+	},
+	neui.Tool[customerPatch, struct{}]{
+		Name:    "update_customer",
+		Desc:    "Change a customer's contact details, checked like the edit form; omitted fields stay as they are",
+		Handler: updateCustomer,
+	},
+	neui.Tool[productInput, created]{
+		Name:    "create_product",
+		Desc:    "Add a product, checked like the New product form. Returns its id",
+		Handler: createProduct,
+	},
+	neui.Tool[productPatch, struct{}]{
+		Name:    "update_product",
+		Desc:    "Change a product's SKU, name, price or stock, checked like the product form; omitted fields stay as they are",
+		Handler: updateProduct,
+	},
+	neui.Tool[adjustStockInput, stockOutput]{
+		Name:    "adjust_stock",
+		Desc:    "Add units to a product's stock, or take them away with a negative change; checked like the product form",
+		Handler: adjustStock,
+	},
 }

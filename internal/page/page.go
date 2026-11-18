@@ -231,9 +231,6 @@ func (p *page) Module() Module {
 		if err != nil {
 			return state{}, err
 		}
-		if ownIsland(ctx, s.path) {
-			return state{}, fmt.Errorf("space %q: %w", s.path, errOwnIsland)
-		}
 		live := s.snapshot()
 		if !fits(ctx, "", live.state) {
 			return state{}, fmt.Errorf("space %q: %w", s.path, errSpaceTooLarge)
@@ -402,9 +399,6 @@ func (m *module) act[T any](ctx context.Context, path string, find func(s *space
 	if err != nil {
 		return permit[T]{}, err
 	}
-	if ownIsland(ctx, s.path) {
-		return permit[T]{}, fmt.Errorf("space %q: %w", s.path, errOwnIsland)
-	}
 	old, ok := m.snaps[s.path]
 	if ok && old.digest == s.digest {
 		item, err := find(s)
@@ -487,11 +481,6 @@ func (a permit[T]) fail(ctx context.Context, path string, err error, res any, re
 		return err
 	}
 	return f
-}
-
-func ownIsland(ctx context.Context, path string) bool {
-	own, ok := ctx.Value(common.KeyIslandScript).(string)
-	return ok && (path == own || strings.HasPrefix(path, own+"."))
 }
 
 func fits(ctx context.Context, message string, v any) bool {

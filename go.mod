@@ -8,6 +8,7 @@ require (
 	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.2
 	github.com/doors-dev/doors v0.19.0
 	github.com/doors-dev/gox v0.4.0
+	github.com/dop251/goja v0.0.0-20261013122152-245c54f48cfc
 	github.com/gammazero/deque v1.2.1
 	github.com/go-rod/rod v0.116.2
 	github.com/johannesboyne/gofakes3 v1.2.0
@@ -20,6 +21,7 @@ require (
 	github.com/zeebo/xxh3 v1.1.0
 	golang.org/x/image v0.45.0
 	golang.org/x/net v0.60.0
+	golang.org/x/text v0.43.0
 	modernc.org/libquickjs v0.13.1
 	modernc.org/quickjs v0.25.0
 	modernc.org/sqlite v1.57.0
@@ -34,6 +36,7 @@ require (
 	github.com/evanw/esbuild v0.28.0 // indirect
 	github.com/go-playground/form/v4 v4.3.0 // indirect
 	github.com/go-shiori/dom v0.0.0-20230515143342-73569d674e1c // indirect
+	github.com/go-sourcemap/sourcemap v2.1.3+incompatible // indirect
 	github.com/gogs/chardet v0.0.0-20211120154057-b7413eaefb8f // indirect
 	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/google/uuid v1.6.0 // indirect
@@ -71,11 +74,10 @@ require (
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/oauth2 v0.35.0 // indirect
-	golang.org/x/sync v0.23.0 // indirect
+	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
-	golang.org/x/text v0.42.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
-	golang.org/x/tools v0.50.0 // indirect
+	golang.org/x/tools v0.51.0 // indirect
 	gopkg.in/ini.v1 v1.67.3 // indirect
 	modernc.org/libc v1.77.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect

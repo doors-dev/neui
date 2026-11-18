@@ -20,13 +20,15 @@ import (
 	"neui.dev/internal/common"
 )
 
-type space interface {
+// Space is what an island needs from the page space it is rendered in.
+type Space interface {
 	AddData(ctx context.Context, text string, object any) error
 	AddSpace(ctx context.Context, name string, desc string) (context.Context, error)
+	AddTool(ctx context.Context, t common.Tool) error
 }
 
-func getSpace(ctx context.Context) space {
-	s, ok := ctx.Value(common.KeySpace).(space)
+func getSpace(ctx context.Context) Space {
+	s, ok := ctx.Value(common.KeySpace).(Space)
 	if !ok {
 		panic("island: no space in context")
 	}

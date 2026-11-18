@@ -23,10 +23,12 @@ import (
 	"slices"
 
 	"github.com/doors-dev/gox"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 	"modernc.org/quickjs"
 	"neui.dev/api"
 	"neui.dev/internal/common"
 	"neui.dev/internal/modules/js"
+	"neui.dev/internal/precheck"
 	"neui.dev/internal/schema"
 	"neui.dev/internal/tools"
 )
@@ -43,18 +45,23 @@ func NewLibrary() Library {
 	return &library{
 		widgets: map[string]anyWidgetFactory{},
 		layouts: map[string]anyLayoutFactory{},
-		fetch:   tools.NewModule("", ""),
+		tools:   tools.NewModule("", ""),
 	}
 }
 
 type library struct {
 	widgets map[string]anyWidgetFactory
 	layouts map[string]anyLayoutFactory
-	fetch   tools.Module
+	tools   tools.Module
 	head    []gox.Elem
 	spec    string
 	ends    []int
 	items   []string
+}
+
+// Tools returns the app functions of l as tools.
+func Tools(l Library) []common.Tool {
+	return l.tools.List()
 }
 
 func (l Library) Head(e ...gox.Elem) {
@@ -62,7 +69,7 @@ func (l Library) Head(e ...gox.Elem) {
 }
 
 func (l *library) RegisterApp(ctx func() context.Context, vm *quickjs.VM) error {
-	if err := js.RegisterTools(vm, ctx, "__fetch__", l.fetch.List()); err != nil {
+	if err := js.RegisterTools(vm, ctx, "__fetch__", l.tools.List()); err != nil {
 		return err
 	}
 	m := tools.NewModule("", "")
@@ -88,12 +95,32 @@ func (l Library) layoutNames() []string {
 }
 
 func (l Library) fetchNames() []string {
-	list := l.fetch.List()
+	list := l.tools.List()
 	names := make([]string, len(list))
 	for i, t := range list {
 		names[i] = t.Name()
 	}
 	return names
+}
+
+// PrecheckEnv returns the library's views, controls, layouts and app
+// functions as precheck sees them; Globals is left to the caller.
+func (l Library) PrecheckEnv() precheck.Env {
+	env := precheck.Env{
+		Widgets: make(map[string]precheck.Widget, len(l.widgets)),
+		Layouts: make(map[string]*jsonschema.Schema, len(l.layouts)),
+		Apps:    map[string]bool{},
+	}
+	for name, f := range l.widgets {
+		env.Widgets[name] = f.precheck()
+	}
+	for name, f := range l.layouts {
+		env.Layouts[name] = f.precheck()
+	}
+	for _, t := range l.tools.List() {
+		env.Apps[t.Name()] = true
+	}
+	return env
 }
 
 func (l Library) newLayout(name string, params json.RawMessage, content []gox.Comp) (gox.Comp, error) {
@@ -136,10 +163,10 @@ func (l Library) Fetch(tool common.Tool) error {
 	if !identifier.MatchString(name) {
 		return fmt.Errorf("%q: %w", name, errName)
 	}
-	if _, ok := l.fetch.Get(name); ok {
+	if _, ok := l.tools.Get(name); ok {
 		return fmt.Errorf("%q: %w", name, errNameTaken)
 	}
-	l.fetch.AddTool(tool)
+	l.tools.AddTool(tool)
 	return nil
 }
 
@@ -215,6 +242,7 @@ type anyWidgetFactory interface {
 	new(ctx context.Context, params json.RawMessage, submit func(context.Context, any) bool) (anyWidget, error)
 	control() bool
 	spec() (string, []specSchema)
+	precheck() precheck.Widget
 }
 
 type widgetFactory[I, U, O any] struct {
@@ -251,10 +279,15 @@ func (w widgetFactory[I, U, O]) spec() (string, []specSchema) {
 	return w.desc, w.specs
 }
 
+func (w widgetFactory[I, U, O]) precheck() precheck.Widget {
+	return precheck.Widget{Params: w.inputSchema.Schema, Patch: w.updateSchema.Schema}
+}
+
 type anyLayoutFactory interface {
 	new(params json.RawMessage, children []gox.Comp) (gox.Comp, error)
 	validate(params json.RawMessage) error
 	spec() (string, []specSchema)
+	precheck() *jsonschema.Schema
 }
 
 type layoutFactory[I any] struct {
@@ -279,6 +312,10 @@ func (l layoutFactory[I]) validate(params json.RawMessage) error {
 
 func (l layoutFactory[I]) spec() (string, []specSchema) {
 	return l.desc, l.specs
+}
+
+func (l layoutFactory[I]) precheck() *jsonschema.Schema {
+	return l.inputSchema.Schema
 }
 
 type widget[I, U, O any] struct {

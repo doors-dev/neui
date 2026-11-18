@@ -89,8 +89,14 @@ func NewTool[I any, O any](name string, desc string, f func(ctx context.Context,
 		inputDefs:   inputSchema.Defs(),
 		outputSpec:  outputSpec,
 		outputDefs:  outputDefs,
-		rawCall:     rawCall,
-		stringCall:  stringCall,
+		decode: func(input json.RawMessage) (any, error) {
+			return inputSchema.Decode(input)
+		},
+		call: func(ctx context.Context, input any) (any, error) {
+			return f(ctx, input.(I))
+		},
+		rawCall:    rawCall,
+		stringCall: stringCall,
 	}, nil
 }
 
@@ -129,8 +135,17 @@ func NewRawTool(
 		output:      outputSchema.Raw(),
 		inputSpec:   inputSchema.Raw(),
 		outputSpec:  outputSchema.Raw(),
-		rawCall:     rawCall,
-		stringCall:  stringCall,
+		decode: func(input json.RawMessage) (any, error) {
+			if err := inputSchema.ValidateRaw(input); err != nil {
+				return nil, err
+			}
+			return input, nil
+		},
+		call: func(ctx context.Context, input any) (any, error) {
+			return f(ctx, input.(json.RawMessage))
+		},
+		rawCall:    rawCall,
+		stringCall: stringCall,
 	}, nil
 }
 
@@ -144,6 +159,8 @@ type tool struct {
 	inputDefs   map[string]json.RawMessage
 	outputSpec  []byte
 	outputDefs  map[string]json.RawMessage
+	decode      func(input json.RawMessage) (any, error)
+	call        func(ctx context.Context, input any) (any, error)
 	rawCall     func(ctx context.Context, input json.RawMessage) (any, error)
 	stringCall  func(ctx context.Context, input string) (any, error)
 }
@@ -174,6 +191,14 @@ func (c tool) Name() string {
 
 func (c tool) Desc() string {
 	return c.desc
+}
+
+func (c tool) Decode(input json.RawMessage) (any, error) {
+	return c.decode(input)
+}
+
+func (c tool) Call(ctx context.Context, input any) (any, error) {
+	return c.call(ctx, input)
 }
 
 func (c tool) Agent(ctx context.Context, input json.RawMessage) (api.UserContents, error) {

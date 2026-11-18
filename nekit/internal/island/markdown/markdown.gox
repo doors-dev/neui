@@ -28,14 +28,14 @@ import (
 // Patch is what a script passes to update a markdown view.
 type Patch struct {
 	_ struct{} `additionalProperties:"false"`
-	Text *string `json:"text,omitempty" minLength:"0" maxLength:"4000" description:"new text, markdown as the text param; omit to keep the current one"`
+	Text *string `json:"text,omitempty" minLength:"0" maxLength:"16000" description:"new text, markdown as the text param; omit to keep the current one"`
 	Style string `json:"style,omitempty" enum:"plain,card,info,success,warning,danger" description:"new style, as the style param; omit to keep the current one"`
 }
 
 // Params is what a script passes to ui.markdown.
 type Params struct {
 	_ struct{} `additionalProperties:"false"`
-	Text string `json:"text" maxLength:"4000" required:"true" minLength:"0" description:"markdown: # ## ### headings, the only way to make text larger, **bold**, *italic*, ~~strike~~, code in backquotes, - and 1. lists, - [ ] task lists, > quotes, fenced code blocks, | tables |, [links](https://…); a line break is kept; [name](file:///path) to a file in the workspace, path relative to its root, shows a download of it, ![alt](file:///path) shows the image; raw HTML is dropped; \"\" shows nothing, whatever the style"`
+	Text string `json:"text" maxLength:"16000" required:"true" minLength:"0" description:"markdown: # ## ### headings, the only way to make text larger, **bold**, *italic*, ~~strike~~, code in backquotes, - and 1. lists, - [ ] task lists, > quotes, fenced code blocks, | tables |, [links](https://…); a line break is kept; [name](file:///path) to a file in the workspace, path relative to its root, shows a download of it, ![alt](file:///path) shows the image; raw HTML is dropped; \"\" shows nothing, whatever the style"`
 	Style string `json:"style,omitempty" enum:"plain,card,info,success,warning,danger" default:"plain" description:"plain for titles and short lines; card frames content such as a report or a file list; info, success, warning and danger are a card marked in that tone, for outcomes that must stand out; the tone is only a mark, so the text must still say the outcome in words"`
 }
 

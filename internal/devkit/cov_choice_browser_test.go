@@ -26,7 +26,7 @@ import (
 
 func choiceCreate(t *testing.T, field string) string {
 	t.Helper()
-	return stack.ChoiceCreateError(t, widgets(), `ui.form({fields: [`+field+`]})`)
+	return stack.ChoiceCreateError(t, widgets(), `ui.form(Object({fields: [`+field+`]}))`)
 }
 
 func expectCreateFails(t *testing.T, field string, want string) {

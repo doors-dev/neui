@@ -145,7 +145,7 @@ func (l Library) Build() error {
 			}
 		}
 	}
-	fetches := l.fetch.List()
+	fetches := l.tools.List()
 	if len(fetches) > 0 {
 		b.WriteString("\nApp functions: app.<name>(input) -> result\n")
 		for _, t := range fetches {

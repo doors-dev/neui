@@ -109,6 +109,9 @@ func notices(ctx context.Context) doors.Source[notice] {
 }
 
 func notify(ctx context.Context, text string) {
+	if !doors.HasInstance(ctx) {
+		return
+	}
 	notices(ctx).Mutate(ctx, func(n notice) notice {
 		return notice{ID: n.ID + 1, Text: text}
 	})

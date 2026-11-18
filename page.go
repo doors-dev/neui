@@ -96,8 +96,12 @@ func (a Tool[I, O]) tool() (AnyTool, error) {
 // the render fails when I or O has no JSON schema.
 func (a Tool[I, O]) Main() gox.Elem {
 	return gox.Elem(func(cur gox.Cursor) error {
+		t, err := a.tool()
+		if err != nil {
+			return err
+		}
 		ctx := cur.Context()
-		return instance.GetSpace(ctx).AddTool(ctx, a.Name, a.Desc, a.Handler)
+		return instance.GetSpace(ctx).AddTool(ctx, t)
 	})
 }
 
@@ -464,7 +468,9 @@ type Library struct {
 }
 
 // Add adds the tool t defines as an app function, which scripts call as
-// app.<name>, with the name sanitized as NewModule does. It fails when that
+// app.<name>, with the name sanitized as NewModule does. The island also adds
+// it to its space as a tool, so the agent and scripts outside the island call
+// it with the page tools. It fails when that
 // name is empty, starts with a digit or is used by another app function,
 // when the input or output type has no JSON schema, and with
 // api.ErrAskInIsland for an Ask.

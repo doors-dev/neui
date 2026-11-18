@@ -31,7 +31,7 @@ func contForm(t *testing.T, spec string) (*stack.IslandApp, stack.Form) {
 
 func contFails(t *testing.T, spec string, want string) {
 	t.Helper()
-	a := stack.Island(t, devkit.App{Island: widgets(), Script: `ui.root.set(ui.form(` + spec + `)); ui.notify(ui.draw())`})
+	a := stack.Island(t, devkit.App{Island: widgets(), Script: `ui.root.set(ui.form(Object(` + spec + `))); ui.notify(ui.draw())`})
 	if got := a.ContainerScriptError(); !strings.Contains(got, want) {
 		t.Fatalf("ui.form failed with %q, want it to mention %q", got, want)
 	}

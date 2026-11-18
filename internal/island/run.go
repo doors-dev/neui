@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"iter"
 	"log/slog"
 	"strings"
 	"sync"
@@ -34,10 +35,58 @@ import (
 	"neui.dev/internal/common"
 	"neui.dev/internal/island/core"
 	"neui.dev/internal/modules/js"
+	"neui.dev/internal/precheck"
 	"neui.dev/internal/replay"
 )
 
-func newRun(ctx context.Context, island *island, seq uint, space string, comment string) (*run, error) {
+var builtins = sync.OnceValues(func() ([]string, error) {
+	vm, err := quickjs.NewVM()
+	if err != nil {
+		return nil, err
+	}
+	defer vm.Close()
+	names, err := vm.Eval(`Object.getOwnPropertyNames(globalThis).join(" ")`, quickjs.EvalGlobal)
+	if err != nil {
+		return nil, err
+	}
+	list, _ := names.(string)
+	return append(strings.Fields(list), "console", "print"), nil
+})
+
+func scriptModules(ctrl common.Controller) iter.Seq2[string, []common.Tool] {
+	return func(yield func(string, []common.Tool) bool) {
+		for m := range ctrl.Modules() {
+			if m.Name() == "page" || m.Name() == "js" {
+				continue
+			}
+			if !yield(m.Name(), m.List()) {
+				return
+			}
+		}
+	}
+}
+
+func scriptEnv(ctx context.Context, lib core.Library) (precheck.Env, error) {
+	names, err := builtins()
+	if err != nil {
+		return precheck.Env{}, err
+	}
+	env := lib.PrecheckEnv()
+	env.Globals = map[string]bool{}
+	for _, name := range names {
+		env.Globals[name] = true
+	}
+	if ctrl, ok := ctx.Value(common.KeyController).(common.Controller); ok {
+		for module, list := range scriptModules(ctrl) {
+			for _, t := range list {
+				env.Globals[module+"__"+t.Name()] = true
+			}
+		}
+	}
+	return env, nil
+}
+
+func newRun(ctx context.Context, island *island, seq uint, space string, comment string, env precheck.Env) (*run, error) {
 	ctrl := common.GetController(ctx)
 	log := logFile(space)
 	config := common.AppIslandConfig(ctrl.Context())
@@ -63,7 +112,7 @@ func newRun(ctx context.Context, island *island, seq uint, space string, comment
 		vm.Close()
 		return nil, err
 	}
-	ctx, cancel := context.WithCancelCause(context.WithValue(ctrl.Context(), common.KeyIslandScript, space))
+	ctx, cancel := context.WithCancelCause(ctrl.Context())
 	r := &run{
 		island:           island,
 		seq:              seq,
@@ -78,6 +127,7 @@ func newRun(ctx context.Context, island *island, seq uint, space string, comment
 		cancel:           cancel,
 		end:              make(chan struct{}),
 		store:            doors.NewStore(),
+		env:              env,
 	}
 	r.store.Save(common.IslandFSKey{}, ctrl.FS())
 	r.store.Save(common.IslandDirKey{}, islandDir(space))
@@ -87,20 +137,8 @@ func newRun(ctx context.Context, island *island, seq uint, space string, comment
 	r.runner = newRunner(r)
 	r.store.Save(runnerKey{}, r.runner)
 	r.state = core.NewState(r)
-	for m := range ctrl.Modules() {
-		list := m.List()
-		switch m.Name() {
-		case "js":
-			continue
-		case "page":
-			list = nil
-			for _, t := range m.List() {
-				if t.Name() == "sync" || t.Name() == "tool" {
-					list = append(list, t)
-				}
-			}
-		}
-		if err := js.RegisterTools(vm, r.TurnContext, m.Name()+"__", list); err != nil {
+	for module, list := range scriptModules(ctrl) {
+		if err := js.RegisterTools(vm, r.TurnContext, module+"__", list); err != nil {
 			r.clean()
 			return nil, err
 		}
@@ -162,6 +200,8 @@ type run struct {
 	queue            deque.Deque[eval]
 	trigger          *chan struct{}
 	handover         bool
+	env              precheck.Env
+	globals          precheck.Globals
 }
 
 func (r *run) Store() doors.Store {
@@ -198,11 +238,16 @@ func (r *run) eval(code string, interrupt bool) (uint, error) {
 	if r.ctx.Err() != nil {
 		return 0, context.Cause(r.ctx)
 	}
+	globals, err := precheckPart(code, r.env, r.globals)
+	if err != nil {
+		return 0, err
+	}
 	if interrupt {
 		r.queue.Clear()
 	} else if r.queue.Len() >= r.config.MaxQueue {
 		return 0, errQueueFull
 	}
+	r.globals = globals
 	r.scripts++
 	script := r.scripts
 	r.queue.PushBack(eval{

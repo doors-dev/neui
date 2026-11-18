@@ -32,7 +32,7 @@ func workbenchPanel() gox.Elem {
 //line workbench.gox:26
 		__e = __c.Any(neui.Island{
 		Name: "workbench",
-		Desc: "General-purpose island, on every page: build here any app the user asks for that the pages don't offer, such as side-by-side comparisons, bulk edits or small calculators. It shows as a panel over the page only while an app runs; the user can hide it and bring it back. Scripts read shop data with app.orders(filter), app.customers() and app.products(), and make changes with the tools of the operations space: page__sync({path: \"operations\"}) once, then page__tool({path: \"operations\", tool, arg})",
+		Desc: "General-purpose island, on every page: build here any app the user asks for that the pages don't offer, such as side-by-side comparisons, bulk edits or small calculators. It shows as a panel over the page only while an app runs; the user can hide it and bring it back. Its tools are every change you can make in the store, by id, from any page; its scripts call them, and read shop data, as app functions.",
 		Placeholder: gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
 			__e = __c.InitContainer(); if __e != nil { return }
