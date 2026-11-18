@@ -31,6 +31,53 @@ elem element(id string) {
 			}
 			return { handled: ok > 0 }
 		}
+		const act = async (el, kind) => {
+			const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches
+			let rect = el.getBoundingClientRect()
+			if (rect.width === 0 && rect.height === 0) {
+				return
+			}
+			if (rect.top < 0 || rect.left < 0 || rect.bottom > innerHeight || rect.right > innerWidth) {
+				el.scrollIntoView({ behavior: reduce ? "instant" : "smooth", block: "nearest", inline: "nearest" })
+				for (let i = 0; i < 20 && !reduce && !document.hidden; i++) {
+					await new Promise((resolve) => setTimeout(resolve, 50))
+					const next = el.getBoundingClientRect()
+					if (i > 0 && next.top === rect.top && next.left === rect.left) {
+						break
+					}
+					rect = next
+				}
+				rect = el.getBoundingClientRect()
+			}
+			if (!el.isConnected) {
+				return
+			}
+			if (!document.querySelector("style[data-neui-act]")) {
+				const style = document.createElement("style")
+				style.setAttribute("data-neui-act", "")
+				style.textContent =
+					'.neui-act{color:rgb(115 115 115);border-radius:4px;container-type:size}' +
+					'.neui-act-click::after{content:"";position:absolute;left:50%;top:50%;width:calc(100cqmin + 32px);height:calc(100cqmin + 32px);border-radius:50%;background:currentColor;opacity:0;transform:translate(-50%,-50%);animation:neui-act-ripple 400ms ease-out}' +
+					'@keyframes neui-act-ripple{from{opacity:.4;transform:translate(-50%,-50%) scale(.1)}to{opacity:0;transform:translate(-50%,-50%) scale(1)}}' +
+					'.neui-act-write{outline:2px solid currentColor;outline-offset:2px;box-shadow:0 0 12px 2px currentColor;opacity:0;animation:neui-act-glow 600ms ease-out}' +
+					'@keyframes neui-act-glow{20%{opacity:1}to{opacity:0}}' +
+					'@media (prefers-reduced-motion:reduce){.neui-act{opacity:1;animation:none;outline:2px solid currentColor;outline-offset:2px;box-shadow:none}.neui-act::after{content:none}}'
+				;(document.head || document.documentElement).prepend(style)
+			}
+			const overlay = document.createElement("div")
+			overlay.className = "neui-act neui-act-" + kind
+			overlay.setAttribute("aria-hidden", "true")
+			overlay.style.cssText =
+				"position:fixed;margin:0;box-sizing:border-box;pointer-events:none;z-index:2147483647" +
+				";top:" + rect.top + "px;left:" + rect.left + "px;width:" + rect.width + "px;height:" + rect.height + "px"
+			document.body.append(overlay)
+			const animations = overlay.getAnimations({ subtree: true })
+			if (animations.length === 0) {
+				setTimeout(() => overlay.remove(), 600)
+				return
+			}
+			Promise.allSettled(animations.map((a) => a.finished)).then(() => overlay.remove())
+		}
 		$on(id, async ({ action, value }) => {
 			const el = document.querySelector('[data-neid="' + id + '"]')
 			if (!el) {
@@ -46,6 +93,7 @@ elem element(id string) {
 			}
 			switch (action) {
 				case "click": {
+					await act(el, "click")
 					const report = await $sys.emit(
 						el,
 						new PointerEvent("click", { bubbles: true, cancelable: true }),
@@ -118,6 +166,7 @@ elem element(id string) {
 						if (el.checked === value) {
 							return { handled: false }
 						}
+						await act(el, "write")
 						const report = await $sys.emit(
 							el,
 							new PointerEvent("click", { bubbles: true, cancelable: true }),
@@ -142,6 +191,7 @@ elem element(id string) {
 						} else {
 							el.value = value
 						}
+						await act(el, "write")
 						const report = await $sys.emit(el, new Event("change", { bubbles: true }))
 						return outcome(report)
 					}
@@ -169,6 +219,7 @@ elem element(id string) {
 						el.value = old
 						throw new Error("the field did not accept this value")
 					}
+					await act(el, "write")
 					const input = await $sys.emit(el, new Event("input", { bubbles: true }))
 					const change = await $sys.emit(el, new Event("change", { bubbles: true }))
 					return outcome(input, change)
@@ -208,6 +259,53 @@ elem radioGroup(id string) {
 			}
 			return { handled: ok > 0 }
 		}
+		const act = async (el, kind) => {
+			const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches
+			let rect = el.getBoundingClientRect()
+			if (rect.width === 0 && rect.height === 0) {
+				return
+			}
+			if (rect.top < 0 || rect.left < 0 || rect.bottom > innerHeight || rect.right > innerWidth) {
+				el.scrollIntoView({ behavior: reduce ? "instant" : "smooth", block: "nearest", inline: "nearest" })
+				for (let i = 0; i < 20 && !reduce && !document.hidden; i++) {
+					await new Promise((resolve) => setTimeout(resolve, 50))
+					const next = el.getBoundingClientRect()
+					if (i > 0 && next.top === rect.top && next.left === rect.left) {
+						break
+					}
+					rect = next
+				}
+				rect = el.getBoundingClientRect()
+			}
+			if (!el.isConnected) {
+				return
+			}
+			if (!document.querySelector("style[data-neui-act]")) {
+				const style = document.createElement("style")
+				style.setAttribute("data-neui-act", "")
+				style.textContent =
+					'.neui-act{color:rgb(115 115 115);border-radius:4px;container-type:size}' +
+					'.neui-act-click::after{content:"";position:absolute;left:50%;top:50%;width:calc(100cqmin + 32px);height:calc(100cqmin + 32px);border-radius:50%;background:currentColor;opacity:0;transform:translate(-50%,-50%);animation:neui-act-ripple 400ms ease-out}' +
+					'@keyframes neui-act-ripple{from{opacity:.4;transform:translate(-50%,-50%) scale(.1)}to{opacity:0;transform:translate(-50%,-50%) scale(1)}}' +
+					'.neui-act-write{outline:2px solid currentColor;outline-offset:2px;box-shadow:0 0 12px 2px currentColor;opacity:0;animation:neui-act-glow 600ms ease-out}' +
+					'@keyframes neui-act-glow{20%{opacity:1}to{opacity:0}}' +
+					'@media (prefers-reduced-motion:reduce){.neui-act{opacity:1;animation:none;outline:2px solid currentColor;outline-offset:2px;box-shadow:none}.neui-act::after{content:none}}'
+				;(document.head || document.documentElement).prepend(style)
+			}
+			const overlay = document.createElement("div")
+			overlay.className = "neui-act neui-act-" + kind
+			overlay.setAttribute("aria-hidden", "true")
+			overlay.style.cssText =
+				"position:fixed;margin:0;box-sizing:border-box;pointer-events:none;z-index:2147483647" +
+				";top:" + rect.top + "px;left:" + rect.left + "px;width:" + rect.width + "px;height:" + rect.height + "px"
+			document.body.append(overlay)
+			const animations = overlay.getAnimations({ subtree: true })
+			if (animations.length === 0) {
+				setTimeout(() => overlay.remove(), 600)
+				return
+			}
+			Promise.allSettled(animations.map((a) => a.finished)).then(() => overlay.remove())
+		}
 		$on(id, async ({ action, value }) => {
 			const els = Array.from(document.querySelectorAll('[data-neid="' + id + '"]'))
 			if (els.length === 0) {
@@ -244,6 +342,7 @@ elem radioGroup(id string) {
 					if (el.checked) {
 						return { handled: false }
 					}
+					await act(el, "write")
 					const report = await $sys.emit(
 						el,
 						new PointerEvent("click", { bubbles: true, cancelable: true }),
