@@ -1,5 +1,7 @@
 # Neui: the runtime for agent-driven web apps
 
+[![Go Reference](https://pkg.go.dev/badge/neui.dev.svg)](https://pkg.go.dev/neui.dev)
+
 Adding an agent to a web app today means building a second product beside the first one. Neui is an AI agent and a web framework built as one stack. The framework, [Doors](https://github.com/doors-dev/doors) (Apache-2.0), lets Go teams build modern interactive apps with no separate frontend and no API layer. Neui adds the agent: it runs inside the user's session, sees the parts of the page you let it see, operates the UI like a user, and brings its own work environment for the jobs a chat alone cannot do.
 
 Every feature you build for users is instantly usable by the agent, with a work environment powerful enough to automate the work your users do by hand.
