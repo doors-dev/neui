@@ -25,7 +25,7 @@ import (
 	"neui.dev/internal/common"
 )
 
-const highlightDesc = `Add conditional formatting over a range: a threshold rule (gt, lt), top or bottom N, a contains match, a color scale or data bars.`
+const highlightDesc = `Add a conditional formatting rule to a range.`
 
 type highlightRule struct {
 	Type  string `json:"type" required:"true" description:"gt, lt, top, bottom, contains, colorScale or dataBar"`

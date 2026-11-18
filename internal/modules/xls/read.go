@@ -27,13 +27,13 @@ import (
 
 const profileSampleRows = 5
 
-const sheetsDesc = `List a workbook's sheets with row and column counts, tables, merged ranges and the autofilter. Start here before reading.`
-const profileDesc = `Profile one sheet or range of an .xlsx workbook: the header row, per-column types (number, text, date, bool, formula or mixed), the data row count and a 5-row sample. Types are guessed from the first data rows, up to the read cap. Use it to plan reads.`
-const readDesc = `Read cell values from a sheet, paged: offset is the 0-based row within the range to start at (offset 0 is the range's first row, header included), up to limit rows come back with nextOffset and truncated for the next page. Formatted values by default; raw returns underlying serial numbers and formulas. A merged cell reports its value at the anchor cell only.`
-const findDesc = `Find cells whose value contains a substring, across all sheets or one, returning sheet, cell and value. Results are capped — truncated means more matches exist; narrow the query or restrict to one sheet.`
+const sheetsDesc = `List a workbook's sheets with row and column counts, tables, merged ranges and the autofilter.`
+const profileDesc = `Profile a sheet or range: its header row, per-column types, data row count and a sample.`
+const readDesc = `Read cell values from a sheet, page by page. A merged cell reports its value at its top-left cell only.`
+const findDesc = `Find cells whose value contains a substring.`
 
 type sheetsArg struct {
-	Path string `json:"path" required:"true" description:"workspace path of the .xlsx workbook"`
+	Path string `json:"path" required:"true"`
 }
 
 type sheetInfo struct {
@@ -58,9 +58,9 @@ type profileArg struct {
 
 type profileResult struct {
 	Headers  []string   `json:"headers"`
-	Types    []string   `json:"types" description:"per column: number, text, date, bool, formula, or mixed when the non-empty cells disagree"`
+	Types    []string   `json:"types" description:"per column: number, text, date, bool, formula, or mixed when the non-empty cells disagree; guessed from the first data rows, up to the read cap"`
 	RowCount int        `json:"rowCount" description:"non-empty data rows below the header"`
-	Sample   [][]string `json:"sample" description:"first data rows, formatted"`
+	Sample   [][]string `json:"sample" description:"first 5 data rows, formatted"`
 }
 
 type readArg struct {
@@ -69,7 +69,7 @@ type readArg struct {
 	Range  string `json:"range" description:"like A1:D20, header row included; default the whole sheet"`
 	Offset uint   `json:"offset" description:"0-based row within the range to start at; 0 is the range's first row, header included"`
 	Limit  uint   `json:"limit" description:"max rows to return; the server caps large values — rely on truncated and nextOffset to page"`
-	Raw    bool   `json:"raw" description:"underlying values: date serials, unformatted numbers, formulas"`
+	Raw    bool   `json:"raw" description:"underlying values instead of formatted ones: date serials, unformatted numbers, formulas"`
 }
 
 type readResult struct {
@@ -92,7 +92,7 @@ type findHit struct {
 
 type findResult struct {
 	Hits      []findHit `json:"hits"`
-	Truncated bool      `json:"truncated,omitempty" description:"hit cap reached, more matches may exist"`
+	Truncated bool      `json:"truncated,omitempty" description:"hit cap reached, more matches may exist; narrow the query or restrict to one sheet"`
 }
 
 type bounds struct {

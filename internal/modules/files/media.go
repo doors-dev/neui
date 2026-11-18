@@ -28,8 +28,8 @@ import (
 	"neui.dev/internal/media"
 )
 
-const readImageDesc = `Read an image file as an image the model sees. PNG, JPEG, WebP or non-animated GIF; oversized images are downscaled.`
-const readDocumentDesc = `Read a file as a document attachment, such as a PDF. Plain text formats are better read with the read tool.`
+const readImageDesc = `Look at an image file: PNG, JPEG, WebP or non-animated GIF; oversized images are downscaled.`
+const readDocumentDesc = `Read a file, such as a PDF, as a document attachment; prefer read for plain text formats.`
 
 var documentExts = map[string]api.DocumentMime{
 	".pdf":      api.DocumentPDF,

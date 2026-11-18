@@ -37,12 +37,12 @@ const (
 	globCap          = 100
 )
 
-const grepDesc = `Search file contents line by line with a regular expression. The walk skips the uploads dirs; point path at one of them or a file inside to search there — every file scanned in an uploads dir is downloaded whole.`
+const grepDesc = `Search file contents with a regular expression.`
 const globDesc = `Find files by path pattern.`
 
 type grepArg struct {
 	Pattern string `json:"pattern" required:"true" description:"RE2 regular expression matched against single lines"`
-	Path    string `json:"path" description:"file or directory to search, empty string is everything"`
+	Path    string `json:"path" description:"file or directory to search; empty string searches the workspace but skips the uploads dirs. To search an uploads dir, name it or a file inside it; every file scanned there is downloaded whole"`
 	Glob    string `json:"glob" description:"only search files whose path relative to path matches, e.g. **/*.go"`
 	Limit   uint   `json:"limit" description:"max matches, default 100"`
 }
@@ -59,7 +59,7 @@ type grepResult struct {
 }
 
 type globArg struct {
-	Pattern string `json:"pattern" required:"true" description:"path pattern matched against paths relative to path, * stays within a path segment, ** crosses directories, e.g. **/*.csv"`
+	Pattern string `json:"pattern" required:"true" description:"matched against paths relative to path, * stays within a path segment, ** crosses directories, e.g. **/*.csv"`
 	Path    string `json:"path" description:"directory to search under, empty string is everything"`
 }
 

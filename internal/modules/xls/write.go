@@ -26,7 +26,7 @@ import (
 	"neui.dev/internal/common"
 )
 
-const writeDesc = `Write values or formulas into empty cells, row by row from a top-left cell. A string starting with = is a formula; functions newer than Excel 2007, such as IFS, SWITCH, MAXIFS, TEXTJOIN or CONCAT, get Excel's _xlfn. prefix automatically, and links outside the workbook (WEBSERVICE, FILTERXML, IMAGE, RTD, DDE) are refused. {row} in a formula becomes the row number of the cell it lands in, so one row repeated fills a column: cell E2, rows [["=B{row}*C{row}"]], repeat 19 fills E2:E20. Every target cell must be empty, and the block must sit wholly inside or wholly outside each table and the sheet's autofilter; merged cells and array formulas are refused. Cells written next to a table stay outside it — tables are never resized.`
+const writeDesc = `Write values or formulas row by row from a top-left cell. {row} in a formula becomes the row number of the cell it lands in, so one row repeated fills a column: cell E2, rows [["=B{row}*C{row}"]], repeat 19 fills E2:E20. The block must sit wholly inside or wholly outside each table and the sheet's autofilter; merged cells and array formulas are refused. Cells written next to a table stay outside it.`
 
 var futureFn = map[string]bool{
 	"ACOT": true, "ACOTH": true, "AGGREGATE": true, "ARABIC": true, "ARRAYTOTEXT": true, "BASE": true, "BETA.DIST": true, "BETA.INV": true,

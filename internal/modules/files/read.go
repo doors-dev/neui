@@ -36,7 +36,7 @@ const (
 	bytesCap     = 8 << 20
 )
 
-const readDesc = `Read a text file as numbered lines; everything after "N: " is file content. Output stops at the line limit or at the configured byte limit, whichever comes first, and the last line of the result says where to continue from. Line breaks show as \n whatever the file uses; edit, replace, insert, write and append keep the file's own CRLF or LF endings. Binary files are refused, use readBytes. From a script, it returns the file's text as it is, up to 8MB: no line numbers, no closing line, no truncated lines, and without limit the whole file.`
+const readDesc = `Read a text file as numbered lines; everything after "N: " is file content. Binary files are refused; use readBytes. Output stops at the line limit or the configured byte limit, whichever comes first, and its last line says where to continue. From a script it returns the file's text as it is, up to 8MB: no line numbers, no closing line, no truncated lines, and the whole file when limit is unset.`
 const readBytesDesc = `Read raw bytes of a file, base64 in the result. Reads over 8MB must be ranged.`
 const writeBytesDesc = `Write raw bytes to a file, replacing existing content, creating parent directories. Plain text goes through write.`
 

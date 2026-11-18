@@ -31,11 +31,11 @@ import (
 	"neui.dev/internal/tools"
 )
 
-const writeDesc = `Write a whole text file, replacing existing content, creating parent directories. An existing file keeps its line endings and BOM; content with \r keeps its line breaks as given. Binary goes through writeBytes.`
-const appendDesc = `Append to the end of a text file, creating it if missing. Line breaks take the file's existing ending.`
-const editDesc = `Replace text in a file; check content with read first. old must match the current content exactly, including whitespace and indentation; write line breaks as \n; the "N: " line prefixes shown by the read tool are not part of the content.`
-const replaceDesc = `Replace text matching an RE2 regular expression. Without all the pattern must match exactly once; capture groups work in the replacement, e.g. $1.`
-const insertDesc = `Insert text at a line position; 0 is the top of the file, N goes after line N from the read tool.`
+const writeDesc = `Write a whole text file, replacing existing content, creating parent directories. Content with \r keeps its line breaks as given.`
+const appendDesc = `Append to the end of a text file, creating it if missing.`
+const editDesc = `Replace text in a file; read the file first.`
+const replaceDesc = `Replace text matching a regular expression.`
+const insertDesc = `Insert lines into a text file.`
 
 const bom = "\ufeff"
 
@@ -75,7 +75,7 @@ type writeResult struct {
 
 type editArg struct {
 	Path       string `json:"path" required:"true"`
-	Old        string `json:"old" required:"true" description:"exact text to replace"`
+	Old        string `json:"old" required:"true" description:"text to replace, matching the current content exactly, including whitespace and indentation"`
 	New        string `json:"new" required:"true"`
 	ReplaceAll bool   `json:"replaceAll" description:"replace every occurrence; without it old must match exactly once"`
 }
@@ -86,7 +86,7 @@ type editResult struct {
 
 type replaceArg struct {
 	Path        string `json:"path" required:"true"`
-	Pattern     string `json:"pattern" required:"true" description:"RE2 regular expression matched against the file content; it sees lines ending in \n, as read shows them; (?s) lets . cross lines, (?m) makes ^ and $ match line boundaries"`
+	Pattern     string `json:"pattern" required:"true" description:"RE2 regular expression matched against the whole file, which it sees with lines ending in \n; (?s) lets . cross lines, (?m) makes ^ and $ match line boundaries"`
 	Replacement string `json:"replacement" description:"may reference capture groups as $1, $2; write ${1} when a letter, digit or _ follows, e.g. ${1}_old; $$ is a literal dollar"`
 	All         bool   `json:"all" description:"replace every match; without it the pattern must match exactly once"`
 }

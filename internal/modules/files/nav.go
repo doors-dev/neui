@@ -16,17 +16,20 @@ package files
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
+	"neui.dev/api"
 	"neui.dev/internal/common"
 )
 
 const listCap = 1000
 
-const listDesc = `List a directory of the thread filesystem: the workspace plus the virtual user_uploads/ and agent_uploads/ dirs at its root.`
+const listDesc = `List a directory.`
 const statDesc = `Read one entry's metadata.`
-const copyDesc = `Copy a file. Copying to agent_uploads/<name> stores the file for the user; a taken name is an error, delete it first or pick another.`
+const copyDesc = `Copy a file. Copying to a name already taken in agent_uploads/ is an error.`
 const moveDesc = `Move or rename a file or directory. The uploads dirs are read-only.`
-const deleteDesc = `Delete a file or directory recursively; missing is not an error. Deleting agent_uploads/<name> frees the name for a new copy; user_uploads/ is read-only.`
+const deleteDesc = `Delete a file or directory recursively; a missing path is not an error.`
 
 type listArg struct {
 	Path string `json:"path" description:"directory to list, empty string is the workspace root"`
@@ -80,6 +83,9 @@ func statTool(ctx context.Context, arg PathArg) (Entry, error) {
 func copyTool(ctx context.Context, arg copyArg) (Entry, error) {
 	fs := common.GetController(ctx).FS()
 	if err := fs.Copy(ctx, arg.Src, arg.Dst); err != nil {
+		if errors.Is(err, api.ErrExists) {
+			return Entry{}, fmt.Errorf("%q is taken: delete it first or pick another name: %w", arg.Dst, err)
+		}
 		return Entry{}, err
 	}
 	e, err := fs.Stat(ctx, arg.Dst)

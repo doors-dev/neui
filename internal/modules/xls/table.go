@@ -31,8 +31,8 @@ import (
 
 const maxFormatCells = 100000
 
-const tableDesc = `Create a new styled table: header row, per-column number formats, banded rows. A string starting with = is a formula, checked and prefixed like write's, with {row} becoming the row number of its cell. Creates the workbook and sheet when missing; on a new sheet it also freezes the rows through the header. Every target cell must be empty and clear of other tables, the autofilter and merged cells; column widths are set only on columns that are empty and keep the sheet default. Existing tables are never changed — no resizing, no added rows or columns. The table is the unit of report building — prefer it over ad-hoc cell writes.`
-const formatDesc = `Restyle a range: bold, a named fill, a number format, alignment. Only the flags you pass change.`
+const tableDesc = `Create a new styled table with a header row, per-column number formats and banded rows; on a new sheet it also freezes the rows through the header. The table must be clear of other tables, the autofilter and merged cells. Column widths are set only on columns that are empty and keep the sheet default.`
+const formatDesc = `Restyle a range; only the options you pass change.`
 
 var numText = regexp.MustCompile(`^[+-]?((\d{1,3}(,\d{3})+|\d+)(\.\d+)?|\.\d+)$`)
 
@@ -42,11 +42,11 @@ type columnSpec struct {
 }
 
 type tableArg struct {
-	Path    string       `json:"path" required:"true" description:"workspace path of the .xlsx workbook, created when missing"`
+	Path    string       `json:"path" required:"true" description:"created when missing"`
 	Sheet   string       `json:"sheet" required:"true" description:"created when missing"`
 	Cell    string       `json:"cell" description:"top-left cell, where the header row starts; default A1"`
 	Columns []columnSpec `json:"columns" required:"true"`
-	Rows    [][]any      `json:"rows" required:"true" description:"one array per data row, in column order; a string starting with = is a formula, {row} in it becomes the row number"`
+	Rows    [][]any      `json:"rows" required:"true" description:"one array per data row, in column order; a string starting with = is a formula, {row} in it becomes the row number of its cell"`
 	Preset  string       `json:"preset" description:"plain, report or financial; default plain"`
 	Name    string       `json:"name" description:"table name, for sheets output and structured references"`
 }

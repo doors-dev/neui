@@ -30,11 +30,11 @@ import (
 
 const unzipListCap = 100
 
-const zipDesc = `Zip files and directories into one archive. Paths inside the archive stay as given. Directory walks skip the uploads dirs; list them explicitly to include their files.`
+const zipDesc = `Zip files and directories into one archive, keeping their paths as given.`
 const unzipDesc = `Extract a zip archive into a directory. Copy an uploaded archive into the workspace first.`
 
 type zipArg struct {
-	Paths []string `json:"paths" required:"true" description:"files or directories to include"`
+	Paths []string `json:"paths" required:"true" description:"files or directories to include; walking a directory skips the uploads dirs, so list them here to include their files"`
 	Dst   string   `json:"dst" required:"true" description:"path of the archive to create"`
 }
 

@@ -23,15 +23,15 @@ import (
 	"neui.dev/internal/common"
 )
 
-const chartDesc = `Add a chart over a data range, header row included: one series per column, named by its header. Anchor is the top-left cell the chart is placed at — pick one clear of the data.`
+const chartDesc = `Add a chart with one series per column of dataRange.`
 
 type chartArg struct {
 	Path       string `json:"path" required:"true"`
 	Sheet      string `json:"sheet" required:"true"`
 	Type       string `json:"type" required:"true" description:"column, bar, line, pie or scatter"`
 	DataRange  string `json:"dataRange" required:"true" description:"columns to plot, header row included, like B1:C13; each header names its series"`
-	Categories string `json:"categoriesRange" description:"axis labels, header row included like dataRange, like A1:A13"`
-	Anchor     string `json:"anchor" required:"true" description:"top-left cell of the chart"`
+	Categories string `json:"categoriesRange" description:"axis labels, header row included, like A1:A13"`
+	Anchor     string `json:"anchor" required:"true" description:"top-left cell of the chart; pick one clear of the data"`
 	Title      string `json:"title"`
 }
 

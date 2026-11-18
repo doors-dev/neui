@@ -23,7 +23,7 @@ import (
 	"neui.dev/internal/common"
 )
 
-const totalDesc = `Add a summary row in the empty row right under a range: a SUBTOTAL per chosen column, bold with a top border, each cell keeping its column's number format (counts excepted). Plain ranges only: a range that is or overlaps a table is refused, since total rows inside tables are not supported — total a table with write instead, e.g. =SUBTOTAL(109,Sales[Amount]) in a cell clear of it. The summary row must also be clear of tables, the autofilter and merged cells.`
+const totalDesc = `Add a summary row, bold with a top border, in the empty row right under a plain range: a SUBTOTAL per chosen column, each cell keeping its column's number format (counts excepted). A range that is or overlaps a table is refused, since total rows inside tables are not supported; total a table with write instead, like =SUBTOTAL(109,Sales[Amount]) in a cell clear of it. The summary row must be clear of tables, the autofilter and merged cells.`
 
 type aggSpec struct {
 	Column string `json:"column" required:"true" description:"header of a column in the range, like Amount; a column letter inside the range, like B, also works"`
@@ -33,7 +33,7 @@ type aggSpec struct {
 type totalArg struct {
 	Path  string    `json:"path" required:"true"`
 	Sheet string    `json:"sheet" required:"true"`
-	Range string    `json:"range" required:"true" description:"data range to summarize, header row included, like A1:C20; the summary goes in the row below"`
+	Range string    `json:"range" required:"true" description:"data range to summarize, header row included, like A1:C20"`
 	Aggs  []aggSpec `json:"aggs" required:"true"`
 }
 
