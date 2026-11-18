@@ -915,12 +915,12 @@ func (a *analyzer) access(n ast.Node, left string, v value, name string) {
 		_, widget := a.env.Widgets[name]
 		_, layout := a.env.Layouts[name]
 		if !uiMembers[name] && !widget && !layout && !objectMembers[name] && !a.probed[name] {
-			a.report(n, uiMemberMessage, label)
+			a.report(n, uiMemberMessage, label, name)
 		}
 		return
 	case appKind:
 		if !a.env.Apps[name] && !objectMembers[name] && !a.probed[name] {
-			a.report(n, appMemberMessage, label)
+			a.report(n, appMemberMessage, label, name)
 		}
 		return
 	}
@@ -935,7 +935,7 @@ func (a *analyzer) access(n ast.Node, left string, v value, name string) {
 		case "update":
 			a.report(n, slotUpdateMessage, label)
 		default:
-			a.report(n, slotMemberMessage, label)
+			a.report(n, slotMemberMessage, label, name)
 		}
 	case widgetKind:
 		switch name {
@@ -943,11 +943,11 @@ func (a *analyzer) access(n ast.Node, left string, v value, name string) {
 		case "set":
 			a.report(n, widgetSetMessage, label, names)
 		default:
-			a.report(n, widgetMemberMessage, label, names)
+			a.report(n, widgetMemberMessage, label, names, name)
 		}
 	case layoutKind:
 		if name != "name" && name != "params" && name != "children" {
-			a.report(n, layoutMemberMessage, label, names)
+			a.report(n, layoutMemberMessage, label, names, name)
 		}
 	case drawKind:
 		if name == "id" || name == "output" {

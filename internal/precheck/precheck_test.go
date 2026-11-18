@@ -101,19 +101,19 @@ func TestHandleMethods(t *testing.T) {
 		want []string
 	}{
 		{"set on a view", "var note = ui.markdown({ text: \"hi\" })\nnote.set(ui.button({}))",
-			[]string{"line 2, column 1: TypeError: note.set: a view or control (ui.markdown) has no set, slots do: to change what it shows, call update(patch)"}},
+			[]string{"line 2, column 1: TypeError: note.set: ui.markdown has no set; set is for slots: to change what it shows, call update(patch)"}},
 		{"update on a slot", "var body = ui.slot()\nbody.update({})",
-			[]string{"line 2, column 1: TypeError: body.update: a slot has no update, views and controls do: to change what it shows, set it again"}},
+			[]string{"line 2, column 1: TypeError: body.update: a slot has no update; update is for views and controls: to change what a slot shows, set it again"}},
 		{"root is a slot", "ui.root.update({})",
-			[]string{"line 1, column 1: TypeError: ui.root.update: a slot has no update, views and controls do: to change what it shows, set it again"}},
+			[]string{"line 1, column 1: TypeError: ui.root.update: a slot has no update; update is for views and controls: to change what a slot shows, set it again"}},
 		{"unknown method", "var b = ui.button({})\nb.clear()",
-			[]string{"line 2, column 1: TypeError: b.clear: a view or control (ui.button) has only update(patch) and id"}},
+			[]string{"line 2, column 1: TypeError: b.clear: ui.button has no clear; views and controls have only update(patch) and id"}},
 		{"layout update", "var col = ui.column({})\ncol.update({})",
-			[]string{"line 2, column 1: TypeError: col.update: a layout (ui.column) has only name, params and children, and no update: to change it, set its slot again"}},
+			[]string{"line 2, column 1: TypeError: col.update: ui.column is a layout and has no update; to change it, set its slot again"}},
 		{"unknown ui member", "var t = ui.text({})",
-			[]string{"line 1, column 9: TypeError: ui.text: ui has only the views, controls and layouts the island's spec lists, plus root, slot, draw, notify and end"}},
+			[]string{"line 1, column 9: TypeError: ui.text: no view, control or layout named text in the island's spec"}},
 		{"returned from a function", "function make() { return ui.slot() }\nmake().update({})",
-			[]string{"line 2, column 1: TypeError: make().update: a slot has no update, views and controls do: to change what it shows, set it again"}},
+			[]string{"line 2, column 1: TypeError: make().update: a slot has no update; update is for views and controls: to change what a slot shows, set it again"}},
 		{"fine", "var b = ui.button({}), s = ui.slot()\nui.root.set(ui.column({}, s))\ns.set(b)\nb.update({ busy: true })\nvar id = b.id\nb.toString()", nil},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -188,15 +188,15 @@ func TestAppAndDraw(t *testing.T) {
 		want []string
 	}{
 		{"unknown app function", "var o = app.orders({})\nvar c = app.customers({})",
-			[]string{"line 2, column 9: TypeError: app.customers: app has only the functions the island's spec lists"}},
+			[]string{"line 2, column 9: TypeError: app.customers: no app function named customers in the island's spec"}},
 		{"draw fields", "var action = ui.draw()\nvar ids = action.ids\nvar v = action.output.value, id = action.id",
-			[]string{"line 2, column 11: TypeError: action.ids: what ui.draw() returns has only id and output: read the control's field as action.output.ids"}},
+			[]string{"line 2, column 11: TypeError: action.ids: ui.draw() returns only id and output; read the control's field as action.output.ids"}},
 		{"draw in a loop", "function work() {\n  while (true) {\n    var ev = ui.draw(1000)\n    if (ev === null) continue\n    if (ev.value) return\n  }\n}",
-			[]string{"line 5, column 9: TypeError: ev.value: what ui.draw() returns has only id and output: read the control's field as ev.output.value"}},
+			[]string{"line 5, column 9: TypeError: ev.value: ui.draw() returns only id and output; read the control's field as ev.output.value"}},
 		{"bracket", "var ev = ui.draw()\nev[\"first name\"]",
-			[]string{"line 2, column 1: TypeError: ev[\"first name\"]: what ui.draw() returns has only id and output: read the control's field as ev.output[\"first name\"]"}},
+			[]string{"line 2, column 1: TypeError: ev[\"first name\"]: ui.draw() returns only id and output; read the control's field as ev.output[\"first name\"]"}},
 		{"destructured draw", "var { id, output, ids } = ui.draw()",
-			[]string{"line 1, column 19: TypeError: ids: what ui.draw() returns has only id and output: read the control's field as output.ids"}},
+			[]string{"line 1, column 19: TypeError: ids: ui.draw() returns only id and output; read the control's field as output.ids"}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			got, _ := check(t, env, precheck.Globals{}, c.code)
@@ -238,7 +238,7 @@ func TestSwitchOff(t *testing.T) {
 	got, _ = check(t, env, globals, "y")
 	expect(t, got)
 	got, globals = check(t, env, precheck.Globals{}, "var n = ui.markdown({ text: \"a\" })\nwith ({ x: 1 }) { x\n  n.set() }\nn.set()")
-	expect(t, got, "line 4, column 1: TypeError: n.set: a view or control (ui.markdown) has no set, slots do: to change what it shows, call update(patch)")
+	expect(t, got, "line 4, column 1: TypeError: n.set: ui.markdown has no set; set is for slots: to change what it shows, call update(patch)")
 	got, _ = check(t, env, globals, "y")
 	expect(t, got, "line 1, column 1: TypeError: y is not defined: no part declared it, and the script has no such tool or built-in")
 	got, globals = check(t, env, precheck.Globals{}, "var store = { add(x) { this.items = x } }\nfunction Box() { this.size = 1 }")
@@ -246,7 +246,7 @@ func TestSwitchOff(t *testing.T) {
 	got, _ = check(t, env, globals, "items + size\ny")
 	expect(t, got, "line 2, column 1: TypeError: y is not defined: no part declared it, and the script has no such tool or built-in")
 	got, globals = check(t, env, precheck.Globals{}, "globalThis.x = 1\nx\nui.slot().update({})")
-	expect(t, got, "line 3, column 1: TypeError: ui.slot().update: a slot has no update, views and controls do: to change what it shows, set it again")
+	expect(t, got, "line 3, column 1: TypeError: ui.slot().update: a slot has no update; update is for views and controls: to change what a slot shows, set it again")
 	got, _ = check(t, env, globals, "x + y")
 	expect(t, got)
 }
@@ -256,7 +256,7 @@ func TestGlobalsAcrossParts(t *testing.T) {
 	got, first := check(t, env, precheck.Globals{}, "var note = ui.markdown({ text: \"a\" })\nvar body = ui.slot()\nlet seen = 0\nfunction show() {}")
 	expect(t, got)
 	got, _ = check(t, env, first, "note.set()\nbody.set(note)\nseen++\nshow()")
-	expect(t, got, "line 1, column 1: TypeError: note.set: a view or control (ui.markdown) has no set, slots do: to change what it shows, call update(patch)")
+	expect(t, got, "line 1, column 1: TypeError: note.set: ui.markdown has no set; set is for slots: to change what it shows, call update(patch)")
 	got, _ = check(t, env, first, "note = ui.slot()\nnote.set()")
 	expect(t, got)
 	got, second := check(t, env, first, "var extra = 1")
@@ -264,7 +264,7 @@ func TestGlobalsAcrossParts(t *testing.T) {
 	got, _ = check(t, env, second, "extra + seen\nmissing")
 	expect(t, got, "line 2, column 1: TypeError: missing is not defined: no part declared it, and the script has no such tool or built-in")
 	got, _ = check(t, env, first, "function show() { return ui.slot() }\nshow().set()\nshow().update({})")
-	expect(t, got, "line 3, column 1: TypeError: show().update: a slot has no update, views and controls do: to change what it shows, set it again")
+	expect(t, got, "line 3, column 1: TypeError: show().update: a slot has no update; update is for views and controls: to change what a slot shows, set it again")
 }
 
 func TestNeverGuess(t *testing.T) {
@@ -290,7 +290,7 @@ func TestNeverGuess(t *testing.T) {
 	}
 	_, lost := check(t, env, precheck.Globals{}, "var x = 1\n)")
 	got, _ := check(t, env, lost, "anything\nui.slot().update({})\nui.text({})")
-	expect(t, got, "line 3, column 1: TypeError: ui.text: ui has only the views, controls and layouts the island's spec lists, plus root, slot, draw, notify and end")
+	expect(t, got, "line 3, column 1: TypeError: ui.text: no view, control or layout named text in the island's spec")
 }
 
 func TestAfterEndlessCall(t *testing.T) {
@@ -311,11 +311,11 @@ function after() {}`)
 	got, _ = check(t, env, globals, "x.set()\nafter()\nlater")
 	expect(t, got)
 	got, _ = check(t, env, globals, "x.update({})")
-	expect(t, got, "line 1, column 1: TypeError: x.update: a slot has no update, views and controls do: to change what it shows, set it again")
+	expect(t, got, "line 1, column 1: TypeError: x.update: a slot has no update; update is for views and controls: to change what a slot shows, set it again")
 	got, _ = check(t, env, globals, "loop()\nx.update({})")
 	expect(t, got)
 	got, _ = check(t, env, globals, "loop = function () {}\nloop()\nx.update({})")
-	expect(t, got, "line 3, column 1: TypeError: x.update: a slot has no update, views and controls do: to change what it shows, set it again")
+	expect(t, got, "line 3, column 1: TypeError: x.update: a slot has no update; update is for views and controls: to change what a slot shows, set it again")
 	got, globals = check(t, env, precheck.Globals{}, `var y = ui.slot()
 function work() {
   while (true) {

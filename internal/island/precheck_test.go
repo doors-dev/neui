@@ -45,7 +45,7 @@ func TestPrecheckRefusesPart(t *testing.T) {
 		}
 	}
 	_, _, err := i.StartCode(ctx, "app", "", "var n = ui.note({ text: \"a\" })\nn.set()")
-	refused(err, "line 2, column 1: TypeError: n.set: a view or control (ui.note) has no set, slots do: to change what it shows, call update(patch)")
+	refused(err, "line 2, column 1: TypeError: n.set: ui.note has no set; set is for slots: to change what it shows, call update(patch)")
 	if i.run != old || i.seq != old.seq || old.ctx.Err() != nil {
 		t.Fatal("a refused island_begin replaced the running app")
 	}

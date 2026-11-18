@@ -57,13 +57,16 @@ func NewTool[I any, O any](name string, desc string, f func(ctx context.Context,
 			hint = "a text block"
 		}
 	}
-	b := strings.Builder{}
-	b.WriteString(desc)
-	b.WriteString("\nOutput schema: ")
-	b.Write(output)
-	if hint != "" {
-		b.WriteString("\nOn a direct tool call the result arrives as ")
-		b.WriteString(hint)
+	summary := func(output []byte) string {
+		b := strings.Builder{}
+		b.WriteString(desc)
+		b.WriteString("\nOutput schema: ")
+		b.Write(output)
+		if hint != "" {
+			b.WriteString("\nOn a direct tool call the result arrives as ")
+			b.WriteString(hint)
+		}
+		return b.String()
 	}
 	rawCall := func(ctx context.Context, input json.RawMessage) (any, error) {
 		arg, err := inputSchema.Decode(input)
@@ -82,7 +85,8 @@ func NewTool[I any, O any](name string, desc string, f func(ctx context.Context,
 	return tool{
 		name:        name,
 		desc:        desc,
-		summary:     b.String(),
+		summary:     summary(output),
+		brief:       summary(outputSpec),
 		inputSchema: inputSchema.Raw(),
 		output:      output,
 		inputSpec:   inputSchema.Root(),
@@ -131,6 +135,7 @@ func NewRawTool(
 		name:        name,
 		desc:        desc,
 		summary:     b.String(),
+		brief:       b.String(),
 		inputSchema: inputSchema.Raw(),
 		output:      outputSchema.Raw(),
 		inputSpec:   inputSchema.Raw(),
@@ -153,6 +158,7 @@ type tool struct {
 	name        string
 	desc        string
 	summary     string
+	brief       string
 	inputSchema []byte
 	output      []byte
 	inputSpec   []byte
@@ -171,6 +177,10 @@ func (c tool) Params() []byte {
 
 func (c tool) Summary() string {
 	return c.summary
+}
+
+func (c tool) Brief() string {
+	return c.brief
 }
 
 func (c tool) Output() []byte {

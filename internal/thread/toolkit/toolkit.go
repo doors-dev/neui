@@ -15,6 +15,7 @@
 package toolkit
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -112,6 +113,15 @@ func (t Toolkit) System() iter.Seq[string] {
 			if desc == "" {
 				continue
 			}
+			if defs, _ := outputDefs(m); len(defs) > 0 {
+				b := strings.Builder{}
+				b.WriteString(desc)
+				b.WriteString(outputDefsHead)
+				for _, name := range slices.Sorted(maps.Keys(defs)) {
+					fmt.Fprintf(&b, "\n%s %s", name, defs[name])
+				}
+				desc = b.String()
+			}
 			if !yield(fmt.Sprintf("<module name=%q>\n%s\n</module>", m.Name(), desc)) {
 				return
 			}
@@ -123,10 +133,15 @@ func (t Toolkit) Tools() iter.Seq[api.Tool] {
 	return func(yield func(api.Tool) bool) {
 		for m := range t.all() {
 			name := m.Name()
+			_, brief := outputDefs(m)
 			for _, tool := range m.List() {
+				desc := tool.Summary()
+				if brief[tool.Name()] {
+					desc = tool.Brief()
+				}
 				if !yield(api.Tool{
 					Name:   fmt.Sprintf("%s__%s", name, tool.Name()),
-					Desc:   tool.Summary(),
+					Desc:   desc,
 					Schema: json.RawMessage(tool.Params()),
 				}) {
 					return
@@ -134,6 +149,34 @@ func (t Toolkit) Tools() iter.Seq[api.Tool] {
 			}
 		}
 	}
+}
+
+const outputDefsHead = "\n\nOutput definitions, referred to as {\"$ref\":\"#/definitions/X\"} in this module's output schemas:"
+
+func outputDefs(m common.Module) (map[string]json.RawMessage, map[string]bool) {
+	defs := map[string]json.RawMessage{}
+	brief := map[string]bool{}
+	if m.Desc() == "" {
+		return defs, brief
+	}
+	for _, t := range m.List() {
+		_, own := t.OutputSpec()
+		if len(own) == 0 {
+			continue
+		}
+		fits := true
+		for name, raw := range own {
+			if seen, ok := defs[name]; ok && !bytes.Equal(seen, raw) {
+				fits = false
+			}
+		}
+		if !fits {
+			continue
+		}
+		maps.Copy(defs, own)
+		brief[t.Name()] = true
+	}
+	return defs, brief
 }
 
 func (t Toolkit) Modules() iter.Seq[common.Module] {

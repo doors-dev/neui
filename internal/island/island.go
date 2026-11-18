@@ -85,15 +85,21 @@ func (i *island) Spec(ctx context.Context, space string) (string, []int, []strin
 	b := strings.Builder{}
 	fmt.Fprintf(&b, "Logs and files\nconsole.log, info, warn and error append to the workspace file %s, which is emptied when an app starts. Views and controls keep their files, such as uploads, under the workspace dir %s, also emptied when an app starts: copy the files you want to keep elsewhere in the workspace.\n", logFile(space), islandDir(space))
 	logs := b.Len()
+	var modules []string
+	for module := range scriptModules(common.GetController(ctx)) {
+		modules = append(modules, module+"__*")
+	}
+	fmt.Fprintf(&b, specTools, strings.Join(modules, ", "))
+	tools := b.Len()
 	b.WriteString(specReference)
 	spec, ends, items := i.lib.Spec()
 	start := b.Len()
 	b.WriteString(spec)
-	all := []int{logs, start}
+	all := []int{logs, tools, start}
 	for _, end := range ends {
 		all = append(all, start+end)
 	}
-	return b.String(), all, append([]string{"logs and files", "reading the reference"}, items...)
+	return b.String(), all, append([]string{"logs and files", "your tools", "reading the reference"}, items...)
 }
 
 func (i *island) Enter() {

@@ -41,8 +41,14 @@ type Tool interface {
 	// Summary is the description the agent sees: Desc with the output
 	// schema appended.
 	Summary() string
+	// Brief is Summary with the output schema's definitions left out, for
+	// when they are listed with the module.
+	Brief() string
 	// Output is the JSON schema of the tool's result.
 	Output() []byte
+	// OutputSpec is the output schema's root and its definitions, the root
+	// referring to them as {"$ref":"#/definitions/X"}.
+	OutputSpec() ([]byte, map[string]json.RawMessage)
 	// Agent calls the tool as a direct tool call and returns its result as
 	// content for the model.
 	Agent(ctx context.Context, input json.RawMessage) (api.UserContents, error)

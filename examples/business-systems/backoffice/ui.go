@@ -151,7 +151,7 @@ func initials(name string) string {
 
 var chatTheme = nekit.ChatTheme{
 	AppBg:            "#ffffff",
-	AppBorder:        "#e7e5e4",
+	AppBorder:        "#d6d3d1",
 	AppInk:           "#1c1917",
 	AppInkQuiet:      "#78716c",
 	PanelBg:          "#fafaf9",
@@ -159,7 +159,7 @@ var chatTheme = nekit.ChatTheme{
 	ButtonBorder:     "#e7e5e4",
 	ButtonInk:        "#44403c",
 	ButtonInkOff:     "#a8a29e",
-	SecondaryBg:      "#f5f5f4",
+	SecondaryBg:      "#e7e5e4",
 	DangerInk:        "#dc2626",
 	DangerBgHover:    "#dc2626",
 	DangerBgActive:   "#b91c1c",

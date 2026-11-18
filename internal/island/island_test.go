@@ -30,6 +30,7 @@ import (
 	"neui.dev/api"
 	"neui.dev/internal/common"
 	"neui.dev/internal/modules/js"
+	timemod "neui.dev/internal/modules/time"
 	"neui.dev/internal/replay"
 	"neui.dev/internal/testkit"
 	"neui.dev/internal/testkit/stack"
@@ -667,6 +668,21 @@ func TestIslandScriptHasNoPageOrJSTools(t *testing.T) {
 	c.Wait()
 	if notify := recorded(t, c, p, `kind="notifications_list"`); !strings.Contains(notify, `[["undefined","undefined","undefined","undefined"]]`) {
 		t.Fatalf("the island script saw %q, want no page or js tools", notify)
+	}
+}
+
+func TestIslandSpecListsScriptTools(t *testing.T) {
+	p := testkit.NewProvider(api.Model{},
+		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
+		testkit.Say("read"),
+	)
+	page := func(cur gox.Cursor) error { return cur.Any(board(make(chan int, 1), nil)) }
+	c := stack.Page(t, stack.Host{Provider: p, Page: page, Options: []common.Option{common.OptionModule(js.Module), common.OptionModule(timemod.Module)}})
+	c.Send("read the board")
+	c.Wait()
+	_, _, spec := specText(t, testkit.Results(p.Request(t, 1))[0])
+	if !strings.Contains(spec, "time__*") || strings.Contains(spec, "page__*") || strings.Contains(spec, "js__*") {
+		t.Fatalf("the spec lists the script's tools as:\n%s", spec)
 	}
 }
 
