@@ -29,6 +29,7 @@ import (
 )
 
 type state struct {
+	columns   []column
 	query     neui.IslandCall[page, result]
 	rows      []row
 	size      int
@@ -38,6 +39,10 @@ type state struct {
 	searchSeq int
 	seq       int
 	selected  map[string]struct{}
+}
+
+func (t *state) sortable(column int) bool {
+	return column >= 0 && column < len(t.columns) && t.columns[column].Sort
 }
 
 func (t *state) isDataSource() bool {
@@ -169,6 +174,7 @@ func (p *Params) state() state {
 		selected[id] = struct{}{}
 	}
 	return state{
+		columns:  p.Columns,
 		query:    p.Query,
 		rows:     rowsPlain(p.Rows),
 		size:     p.PageSize,
@@ -246,6 +252,7 @@ type Submit struct {
 // Patch is what a script passes to update a table.
 type Patch struct {
 	_        struct{}                      `additionalProperties:"false" description:"{} reloads the rows: the current page of query, or the rows as they are"`
+	Columns  []column                      `json:"columns,omitempty" minItems:"1" maxItems:"12" description:"new column headers, in order; the sort stays when its column is still sortable"`
 	Query    neui.IslandCall[page, result] `json:"query,omitempty" description:"new function that returns the rows; replaces rows, and the table reloads from the first page with the sort and search kept"`
 	Rows     []row                         `json:"rows,omitempty" maxItems:"100" description:"new fixed rows; replaces query, and the table goes back to the first page"`
 	Sort     *sortSpec                     `json:"sort,omitempty" description:"new sort; ignored when the column is out of range or not sortable; the table goes back to the first page and keeps the selection"`

@@ -22,6 +22,7 @@ import (
 	"maps"
 	"slices"
 
+	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
 	"neui.dev"
 )
@@ -92,9 +93,14 @@ func (t widget) tools() []gox.Comp {
 	if t.params.Search {
 		tools = append(tools, neui.Tool[searchArg, struct{}]{Name: setSearchName, Desc: setSearchDesc, Handler: t.setSearch})
 	}
-	if slices.ContainsFunc(t.params.Columns, func(c column) bool { return c.Sort }) {
-		tools = append(tools, neui.Tool[sortSpec, struct{}]{Name: setSortName, Desc: setSortDesc, Handler: t.setSort})
-	}
+	tools = append(tools, doors.DeriveBeam(t.state, func(s state) bool {
+		return slices.ContainsFunc(s.columns, func(c column) bool { return c.Sort })
+	}).Bind(func(sortable bool) gox.Elem {
+		if !sortable {
+			return nil
+		}
+		return neui.Tool[sortSpec, struct{}]{Name: setSortName, Desc: setSortDesc, Handler: t.setSort}.Main()
+	}))
 	if t.params.Select != nil {
 		tools = append(tools,
 			neui.Tool[selectArg, struct{}]{Name: setSelectedName, Desc: setSelectedDesc, Handler: t.setSelected},
@@ -119,7 +125,7 @@ func load(ctx context.Context, s state) (result, error) {
 
 func (t widget) view(s state, content result) pageView {
 	v := pageView{
-		Columns: t.params.Columns,
+		Columns: s.columns,
 		Rows:    make([]rowView, len(content.Rows)),
 		Page:    s.page,
 		Sort:    s.sort,
@@ -133,7 +139,7 @@ func (t widget) view(s state, content result) pageView {
 		v.Selected = len(s.selected)
 	}
 	for i, r := range content.Rows {
-		cells := make([]cellText, len(t.params.Columns))
+		cells := make([]cellText, len(s.columns))
 		copy(cells, r.Cells)
 		v.Rows[i] = rowView{ID: r.ID, Cells: cells}
 		for _, a := range r.Actions {
@@ -186,7 +192,11 @@ func (t widget) setSearch(ctx context.Context, in searchArg) (struct{}, error) {
 }
 
 func (t widget) setSort(ctx context.Context, in sortSpec) (struct{}, error) {
-	if in.Column < 0 || in.Column >= len(t.params.Columns) || !t.params.Columns[in.Column].Sort {
+	current, ok := t.state.Read(ctx)
+	if !ok {
+		return struct{}{}, context.Canceled
+	}
+	if !current.sortable(in.Column) {
 		return struct{}{}, fmt.Errorf(notSortableMessage, in.Column)
 	}
 	t.sortBy(ctx, in.Column, in.Desc)

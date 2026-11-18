@@ -398,7 +398,7 @@ func library(l neui.Library) error {
 
 Each one is a Go function that renders your component from the params the script passes.
 
-Island scripts have access to the same toolkit as your agent: page tools, modules and so on. Often it makes sense to give an island its own API as well:
+Island scripts can call your page tools and your agent's modules except JS. Often it makes sense to give an island its own API as well:
 
 ```gox
 // app.gox

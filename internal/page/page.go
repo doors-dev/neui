@@ -212,9 +212,6 @@ func (p *page) Module() Module {
 		if err != nil {
 			return node{}, err
 		}
-		if ownIsland(ctx, s.path) {
-			return node{}, fmt.Errorf("space %q: %w", s.path, errOwnIsland)
-		}
 		depth := uint(3)
 		if arg.Depth != nil {
 			depth = *arg.Depth

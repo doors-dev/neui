@@ -88,7 +88,19 @@ func newRun(ctx context.Context, island *island, seq uint, space string, comment
 	r.store.Save(runnerKey{}, r.runner)
 	r.state = core.NewState(r)
 	for m := range ctrl.Modules() {
-		if err := js.RegisterTools(vm, r.TurnContext, m.Name()+"__", m.List()); err != nil {
+		list := m.List()
+		switch m.Name() {
+		case "js":
+			continue
+		case "page":
+			list = nil
+			for _, t := range m.List() {
+				if t.Name() == "sync" || t.Name() == "tool" {
+					list = append(list, t)
+				}
+			}
+		}
+		if err := js.RegisterTools(vm, r.TurnContext, m.Name()+"__", list); err != nil {
 			r.clean()
 			return nil, err
 		}

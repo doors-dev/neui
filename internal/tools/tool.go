@@ -191,7 +191,7 @@ func (c tool) JS(ctx context.Context) quickjs.HostFunc {
 		defer func() {
 			if r := recover(); r != nil {
 				output = nil
-				err = fmt.Errorf("%s: tool panicked: %v", c.name, r)
+				err = fmt.Errorf("tool panicked: %v", r)
 			}
 		}()
 		if len(args) != 1 {
@@ -206,7 +206,7 @@ func (c tool) JS(ctx context.Context) quickjs.HostFunc {
 			return nil, fmt.Errorf("arg must be a JSON string")
 		}
 		if err != nil {
-			return nil, fmt.Errorf("%s: %w", c.name, err)
+			return nil, err
 		}
 		return output, nil
 	}

@@ -131,7 +131,7 @@ type IslandConfig struct {
 	MaxOps int
 	// TurnTime is how long a script may run between ui.draw calls, fetch, app
 	// function and tool calls included, before it is stopped. The app stays
-	// up; the scripts still queued behind it are dropped. Default 30s.
+	// up; the scripts still queued behind it are dropped. Default 40s.
 	TurnTime time.Duration
 	// Memory is the JS runtime's memory limit in bytes, at least 4 MiB.
 	// Default 16 MiB.

@@ -130,7 +130,7 @@ func IslandConfigDefaults(c api.IslandConfig) api.IslandConfig {
 		c.MaxOps = 512
 	}
 	if c.TurnTime <= 0 {
-		c.TurnTime = 30 * time.Second
+		c.TurnTime = 40 * time.Second
 	}
 	if c.Memory <= 0 {
 		c.Memory = 16 << 20

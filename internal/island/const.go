@@ -32,7 +32,7 @@ const screenSpaceDesc = "what the island shows now: the app while one runs, othe
 const noAppStatus = "no app is running in this island: begin one with island_begin"
 const idleNote = "the screen has no control, so the part waits in this ui.draw() until you send the next part with island_interrupt or end the app with island_end"
 const scriptErrorNote = "the part stopped at this error and any parts queued behind it were dropped, listed in dropped; the app runs on: send what should still run with island_append"
-const scriptErrorActionNote = "the part stopped at this error while handling the user's action in last_action, which was not carried out; any parts queued behind it were dropped, listed in dropped; the app runs on: send the fix with island_append, and in it carry out that action or ask the user to redo it"
+const scriptErrorActionNote = "the part threw this error while handling last_action, the action its last ui.draw() returned; what it did before the error, app calls included, stays done; any parts queued behind it were dropped, listed in dropped; the app runs on: send the fix with island_append, and in it finish that action without repeating what is done, or ask the user to redo it"
 const callErrorNote = "fix the source and pass it again, by an update or in a new view or control"
 const widgetErrorNote = "the view or control keeps running: update or replace it"
 const turnTimeMessage = "the part went that long without ui.draw, app function and tool calls included, and was stopped: keep the work between two draws short and avoid unbounded loops"
@@ -44,7 +44,7 @@ const scriptRejectedMessage = "the part was refused: nothing ran, and nothing wa
 
 const specReference = `
 Reading the reference
-Schemas are JSON Schema; a {"$ref":"#/definitions/X"} refers to X under Definitions at the end. A field with "function" takes the source of a one-argument JavaScript function as a string, such as "(q) => app.find({ q })" or String(fn): arg is what it receives and returns what it must return. The view or control calls it on its own, at any time, apart from the script: it sees only its argument, app.* and console, so write script data into the source, such as "(v) => " + JSON.stringify(taken) + ".includes(v) ? 'taken' : ''". It must be synchronous, and built-ins are frozen: assigning over an inherited property such as err.name throws.
+Schemas are JSON Schema; a {"$ref":"#/definitions/X"} refers to X under Definitions at the end. A field with "function" takes the source of a one-argument JavaScript function as a string, such as "(q) => app.find({ q })" or String(fn): arg is what it receives and returns what it must return. The view or control calls it on its own, at any time, apart from the script. It is evaluated in its own scope and has only its argument, app.* and console, so write script data and helpers into the source, such as "(v) => " + JSON.stringify(taken) + ".includes(v) ? 'taken' : ''". It must be synchronous, and built-ins are frozen: assigning over an inherited property such as err.name throws.
 `
 
 var errUnmounted = errors.New(unmountedMessage)
