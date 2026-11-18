@@ -1957,6 +1957,12 @@ a.nechat-file_done:hover {
 .nechat-records, .nechat-summary {
   color: var(--app-ink-quiet);
 }
+.nechat-summary p:has(~ p, ~ * p) {
+  display: none;
+}
+.nechat-summary p:not(:has(~ p, ~ * p)) {
+  margin-top: 0px;
+}
 .nechat-seam {
   margin-top: calc(var(--spacing, 0.25rem) * 5);
   margin-bottom: var(--spacing, 0.25rem);

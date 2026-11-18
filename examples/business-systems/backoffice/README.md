@@ -2,13 +2,15 @@
 
 Kettle & Burr, a small coffee gear shop: dashboard, orders, customers and products, with the neui chat next to the pages. Data lives in memory and resets on restart.
 
-Run it from the repo root:
+Run it from the repo root with the API key of the provider you want; the key you set picks the model:
 
 ```sh
-DEEPSEEK_API_KEY=sk-... go run ./examples/business-systems/backoffice
+DEEPSEEK_API_KEY=sk-... go run ./examples/business-systems/backoffice      # DeepSeek Flash
+OPENAI_API_KEY=sk-... go run ./examples/business-systems/backoffice        # OpenAI gpt-6.1-terra
+ANTHROPIC_API_KEY=sk-ant-... go run ./examples/business-systems/backoffice # Claude Haiku 5.5
 ```
 
-With `OPENAI_API_KEY` instead, it runs on OpenAI, and with `ANTHROPIC_API_KEY` on Claude; when several are set, the first of DeepSeek, OpenAI and Claude is used.
+When several keys are set, DeepSeek is used first, then OpenAI, then Claude.
 
 Open http://localhost:8095 (set `PORT` to change it). Threads are stored in `neui.db` in the working directory.
 

@@ -1641,6 +1641,8 @@ a.nechat-file_done:hover { @apply bg-(--secondary-bg-hover) }
 .nechat-bubble-files { @apply flex flex-wrap justify-end gap-1.5 min-w-0 }
 .nechat-agent { @apply inline min-w-0 }
 .nechat-records, .nechat-summary { @apply text-(--app-ink-quiet) }
+.nechat-summary p:has(~ p, ~ * p) { @apply hidden }
+.nechat-summary p:not(:has(~ p, ~ * p)) { @apply mt-0 }
 
 .nechat-seam {
 	@apply
