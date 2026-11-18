@@ -57,5 +57,6 @@ func main() {
 	if port == "" {
 		port = "8095"
 	}
+	log.Printf("serving on http://localhost:%s", port)
 	log.Fatal(http.ListenAndServe(":"+port, app))
 }
