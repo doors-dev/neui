@@ -1032,7 +1032,7 @@
   text-align: left;
   font-size: var(--text-sm, 0.875rem);
   line-height: var(--nechat-tw-leading, var(--text-sm--line-height, calc(1.25 / 0.875)));
-  color: var(--app-ink-quiet);
+  color: var(--button-ink);
   --nechat-tw-outline-style: none;
   outline-style: none;
 }

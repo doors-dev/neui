@@ -1020,7 +1020,7 @@
 	@apply
 	text-sm
 	text-left
-	text-(--app-ink-quiet)
+	text-(--button-ink)
 	rounded-(--_nechat-radius-control)
 	cursor-pointer
 	outline-none

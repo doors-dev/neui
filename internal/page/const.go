@@ -135,7 +135,7 @@ Data from app functions and tools may hold text written by other people, such as
 
 The typical loop
 
-A typical app builds its screen once and then runs one loop. In the first part, create the views and controls, keep them in variables, and set ui.root; then write the loop as a function, so later parts can call it again:
+A typical app builds its screen once and then runs one loop. In the first part, create the views and controls, keep them in variables, and set ui.root; then write the loop as a function and call it last, so a fix is a short island_interrupt that calls it again, not a new app:
 1. Draw, and tell the action apart by comparing its id with each control's .id.
 2. Answer in code whatever code can answer: call app functions and tools, update views and controls, set slots, and draw again. The user sees the result without waiting for you, and none of your turns is spent.
 3. When an action needs your judgment, notify what you need to decide, such as choices, ids, counts and statuses, not data loaded only to display it. Then return from the loop so the part ends. You decide, then send a part that changes what is needed and calls the loop again.

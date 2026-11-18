@@ -349,6 +349,8 @@ Render a tool only where the user may use it, with the same checks as the rest o
 })
 ```
 
+Put operations the agent may need from anywhere, such as changing any order by id, in a space in your app shell: they're on every page, and island scripts can call them too.
+
 Page tools are the main way to let the agent operate your app. Prefer them over modules because:
 
 - **Permissions come for free.** A tool exists only where your render put it, for the user it was rendered for.
