@@ -1,0 +1,150 @@
+package main
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/doors-dev/doors"
+	"github.com/doors-dev/gox"
+	"neui.dev"
+)
+
+elem customerFormPage(id int) {
+	~~
+	c, found := shop.Customer(id)
+	~~
+	~(if id != 0 && !found {
+		~(notFound(fmt.Sprintf("Customer %d", id), crumb{Label: "Back to customers", Model: CustomersPath{}}))
+	} else {
+		~customerEditor{ID: id, Initial: c.customer.form()}
+	})
+}
+
+type customerEditor struct {
+	ID int
+	Initial customerForm
+}
+
+elem (e customerEditor) Main() {
+	~~
+	state := doors.NewSourceEqual(formState[customerForm]{Values: e.Initial}, always)
+	title := "New customer"
+	crumbs := []crumb{{Label: "Customers", Model: CustomersPath{}}, {Label: "New", Model: CustomersPath{View: ListNew}}}
+	desc := "Form adding a customer: name, email, phone, company, shipping address and notes; press Create customer to save"
+	if e.ID != 0 {
+		title = "Edit " + e.Initial.Name
+		crumbs = []crumb{{Label: "Customers", Model: CustomersPath{}}, {Label: e.Initial.Name, Model: CustomerPath{ID: e.ID}}, {Label: "Edit", Model: CustomerPath{View: ItemEdit, ID: e.ID}}}
+		desc = fmt.Sprintf("Form editing customer %s; press Save changes to keep them", e.Initial.Name)
+	}
+	~~
+	<div class="mx-auto max-w-3xl">
+		~>neui.Space{Name: "customer_form", Desc: desc} <div>
+			~pageHeader{Crumbs: crumbs, Title: title}
+			<form
+				(doors.ASubmit[customerForm]{
+					Scope: &doors.ScopeBlocking{},
+					Indicator: doors.IndicateAttrSubmitter("aria-busy", "true"),
+					Batch: true,
+					On: func(ctx context.Context, r doors.RequestForm[customerForm]) bool {
+						id, errs := shop.SaveCustomer(ctx, e.ID, r.Data())
+						if len(errs) > 0 {
+							state.Update(ctx, formState[customerForm]{Values: r.Data(), Errs: errs})
+							return false
+						}
+						if e.ID == 0 {
+							notify(ctx, "Customer added")
+						} else {
+							notify(ctx, "Customer saved")
+						}
+						navigate(ctx, CustomerPath{ID: id})
+						r.After(scrollTop)
+						return false
+					},
+				})
+				novalidate>
+				~(state.Bind(func(s formState[customerForm]) gox.Elem {
+					return e.fields(s)
+				}))
+			</form>
+		</div>
+		~(if e.ID != 0 {
+			<div class="mt-6">~(customerDanger(e.ID, e.Initial.Name))</div>
+		})
+	</div>
+}
+
+elem (e customerEditor) fields(s formState[customerForm]) {
+	~~
+	v := s.Values
+	submit := "Create customer"
+	cancel := any(CustomersPath{})
+	if e.ID != 0 {
+		submit = "Save changes"
+		cancel = CustomerPath{ID: e.ID}
+	}
+	~~
+	~(formErrors(s.Errs))
+	<div class="space-y-6">
+		~card{
+			Title: "Contact",
+			Desc: "How to reach them about their orders.",
+			Body: <div class="grid grid-cols-1 gap-5 @xl:grid-cols-2">
+				<div class="@xl:col-span-2">
+					~field{Label: "Full name", Name: "name", Value: v.Name, Required: true, Error: s.Errs["name"], Desc: "customer's full name", Placeholder: "Ada Lovelace"}
+				</div>
+				~field{Label: "Email", Name: "email", Type: "email", Value: v.Email, Required: true, Error: s.Errs["email"], Desc: "customer's email address", Placeholder: "name@example.com"}
+				~field{Label: "Phone", Name: "phone", Type: "tel", Value: v.Phone, Error: s.Errs["phone"], Help: "Optional.", Desc: "customer's phone number, optional"}
+				<div class="@xl:col-span-2">
+					~field{Label: "Company", Name: "company", Value: v.Company, Error: s.Errs["company"], Help: "Optional. Shown on invoices.", Desc: "customer's company, optional"}
+				</div>
+			</div>,
+		}
+		~card{
+			Title: "Shipping",
+			Body: <div class="space-y-5">
+				~textArea{Label: "Default shipping address", Name: "address", Value: v.Address, Rows: 3, Required: true, Error: s.Errs["address"], Help: "New orders ship here unless you enter another address.", Desc: "customer's default shipping address", Placeholder: "Street, city, postcode"}
+				~textArea{Label: "Notes", Name: "notes", Value: v.Notes, Rows: 3, Help: "Only your team sees these.", Desc: "internal notes about the customer, optional"}
+			</div>,
+		}
+		<div class="flex flex-col-reverse gap-2 @xl:flex-row @xl:justify-end">
+			~>neui.Use{Desc: "leave the form without saving"} <a (doors.ALink{Model: cancel, Batch: true}) class=(btnGhost)>Cancel</a>
+			~>neui.Use{Desc: "save the customer with the values in the form"} <button type="submit" class=(btnPrimary)>~(submit)</button>
+		</div>
+	</div>
+}
+
+elem customerDanger(id int, name string) {
+	~~
+	n := len(shop.Orders(orderQuery{Customer: id}))
+	~~
+	~>neui.Space{Name: "delete_customer", Desc: "Deleting this customer, possible only while they have no orders"} ~card{
+		Title: "Delete customer",
+		Desc: "Removes the customer for good.",
+		Body: <>
+			~(if n > 0 {
+				~neui.Data{Text: fmt.Sprintf("This customer can't be deleted: they have %d orders, which are kept for the books.", n)}
+				<p class="text-sm text-stone-600">
+					~(name, " has ", n, " order", plural(n), ", so they can't be deleted: orders are kept for the books.")
+				</p>
+			} else {
+				~confirmAction{
+					Label: "Delete customer",
+					Icon: iconTrash,
+					Desc: "start deleting this customer; the user must then confirm it on the page",
+					Question: "Delete " + name + "?",
+					Detail: "Their contact details and notes are removed. This can't be undone.",
+					Confirm: "Delete customer",
+					Wait: "Deleting waits for the user: only they can press Delete customer in the confirmation.",
+					Do: func(ctx context.Context) error {
+						if err := shop.DeleteCustomer(ctx, id); err != nil {
+							return err
+						}
+						notify(ctx, name + " deleted")
+						navigate(ctx, CustomersPath{})
+						return nil
+					},
+				}
+			})
+		</>,
+	}
+}

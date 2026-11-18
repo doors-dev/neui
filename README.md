@@ -51,7 +51,7 @@ Every open page runs on the server, integrated with the agent harness. You mark 
 **Works the real UI.** The agent reads, fills and clicks the elements you mark, as the user would, and your handlers run as usual. There's no state to mirror and no action to re-implement.
 
 ```gox
-~>neui.Input{
+~>neui.Use{
     Desc: "Customer's email",
     // RW: the agent reads the value in the user's browser or writes its own.
     Rights: neui.RW,
@@ -106,7 +106,7 @@ An agentic app is a program the agent writes and runs for the user in an island,
 	Library: func(l neui.Library) error {
 		l.Tool("overdue", "Overdue invoices, one page at a time", invoices.Overdue)
 		l.Tool("remind", "Send a payment reminder", invoices.Remind)
-		return neisland.RegisterAll(l)
+		return nekit.IslandRegisterAll(l)
 	},
 }
 ```
@@ -117,7 +117,7 @@ An agentic app is a program the agent writes and runs for the user in an island,
 - **App changes on the fly.** The user can ask for an extra column, another step or a different check, and the agent updates the running app without losing their work.
 - **Runs with the user's permissions.** The app is sandboxed and can do only what the signed-in user can, through the components and functions you declared, with no endpoints to build.
 
-**Widgets included.** `neui.dev/neisland` is a general-purpose widget set built to cover any business flow, from data entry to review and reporting. It takes your theme from CSS variables, and your own components work alongside it.
+**Widgets included.** `neui.dev/nekit` includes a general-purpose widget set built to cover any business flow, from data entry to review and reporting. It takes your theme from CSS variables, and your own components work alongside it.
 
 - **Layout.** Columns, rows and grids that compose widgets into typical layouts.
 - **Form.** Declarative forms for any purpose: every field type, groups, repeatable lists and multi-step flows, with live validation.
@@ -131,7 +131,7 @@ An agentic app is a program the agent writes and runs for the user in an island,
 Neui ships a complete chat experience out of the box. Use it as is, configure its theme and features, or fork it to build something of your own.
 
 - **Controls users already know.** Stop a run, edit and resend a message, queue the next one while the agent works, or duplicate a thread to try another path.
-- **Persistence out of the box.** History, the thread list and search are built in. Use the default storage or plug in your own.
+- **Persistence out of the box.** History, the thread list and search are built in. Use the included storages or plug in your own.
 - **Runs on the server.** The conversation, the running answer and the agent's tools live on the server, and the browser only displays them. Nothing sensitive reaches the client, and a reload or a second tab picks up where the user left off.
 - **Files both ways.** Users attach files to a message, and the agent returns finished files as downloads in its answer.
 - **Long conversations keep working.** Older turns are summarized in the background when the context fills up, without interrupting the user.
@@ -169,8 +169,8 @@ Each row was checked against neui's code and the competitors' current docs and s
 
 ## Getting started
 
-Neui is a Go module (`neui.dev`) that plugs into a Doors app: you configure the agent once with options on the Doors app, turn it on per session once the user is known, and render the chat widget from the `nechat` package on the pages where the user should talk to the agent.
+Neui is a Go module (`neui.dev`) that plugs into a Doors app: you configure the agent once with options on the Doors app, turn it on per session once the user is known, and render `nekit.Chat` on the pages where the user should talk to the agent.
 
-Claude, GPT and DeepSeek providers are included, and chat storage is pluggable.
+Claude, GPT and DeepSeek providers are included, as are SQLite thread storage and disk or S3 upload storage.
 
-Installation and a runnable walkthrough are being written alongside the public release. Until then, see the package documentation in [`doc.go`](doc.go), [`api/doc.go`](api/doc.go) and [`nechat/doc.go`](nechat/doc.go), and the Doors documentation for building the app itself.
+Start with the [quick start](docs/00-quick-start.md) and the [back office example](examples/business-systems/backoffice), and see the package documentation in [`doc.go`](doc.go), [`api/doc.go`](api/doc.go) and [`nekit/doc.go`](nekit/doc.go), and the Doors documentation for building the app itself.

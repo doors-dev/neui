@@ -1,0 +1,25 @@
+package main
+
+import (
+	"github.com/doors-dev/gox"
+	"neui.dev"
+)
+
+elem reportPanel() {
+	~card{
+		Title: "Report",
+		Desc: "Ask the assistant for a report and it appears here.",
+		Body: neui.Island{
+			Name: "report",
+			Desc: "Report panel on the dashboard, for read-only reports built from layouts, markdown and tables; no forms or buttons. Scripts read data with app.orders(filter), app.customers() and app.products()",
+			Placeholder: <div class="flex items-center gap-3 rounded-lg border border-dashed border-stone-300 px-4 py-6 text-sm text-stone-500">
+				~(icon(iconSparkles, "size-5 text-amber-600"))
+				<p>Try “which customers order the most?” or “revenue by product this month”.</p>
+			</div>,
+			Template: func(slot gox.Comp) gox.Elem {
+				return <div>~(slot)</div>
+			},
+			Library: reportLibrary,
+		}.Main(),
+	}
+}

@@ -1,0 +1,382 @@
+package main
+
+import (
+	"cmp"
+	"context"
+	"fmt"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/doors-dev/doors"
+	"github.com/doors-dev/gox"
+	"neui.dev"
+)
+
+type ordersToolInput struct {
+	Status string `json:"status,omitempty" description:"paid, unpaid, refunded or cancelled; empty for all"`
+	From string `json:"from,omitempty" description:"first order date, YYYY-MM-DD; empty for no limit"`
+	To string `json:"to,omitempty" description:"last order date, YYYY-MM-DD; empty for no limit"`
+	Search string `json:"search,omitempty" description:"order id, customer name or email, or part of the address"`
+	Sort string `json:"sort,omitempty" description:"date, total, customer or id; prefix - for descending; empty for newest first"`
+	Page int `json:"page,omitempty" description:"page of the table, 1-based; 0 for the first"`
+}
+
+type ordersToolOutput struct {
+	Shown []order `json:"shown" description:"orders now on the user's screen"`
+	Page pageInfo `json:"page"`
+}
+
+type itemInput struct {
+	Product int `json:"product" required:"true" description:"product id"`
+	Qty int `json:"qty" required:"true" description:"units, at least 1"`
+}
+
+type createOrderInput struct {
+	Customer int `json:"customer" required:"true" description:"customer id"`
+	Items []itemInput `json:"items" required:"true" description:"products and quantities, each product once"`
+	Status string `json:"status,omitempty" description:"paid or unpaid; empty for unpaid"`
+	Address string `json:"address,omitempty" description:"shipping address; empty for the customer's address on file"`
+}
+
+type created struct {
+	ID int `json:"id" description:"id of the new record"`
+}
+
+func (p OrdersPath) query() orderQuery {
+	return orderQuery{Status: status(p.Status), From: p.From, To: p.To, Search: p.Search, Sort: p.Sort}
+}
+
+func (p OrdersPath) filters() OrdersPath {
+	return OrdersPath{Status: p.Status, From: p.From, To: p.To, Search: p.Search}
+}
+
+func (p OrdersPath) withSort(sort string) any {
+	p.Sort, p.Page = sort, 0
+	return p
+}
+
+func (p OrdersPath) withPage(page int) any {
+	p.Page = page
+	if page == 1 {
+		p.Page = 0
+	}
+	return p
+}
+
+elem ordersPage(path doors.Source[OrdersPath]) {
+	~>neui.Space{
+		Name: "orders",
+		Desc: "Orders list: filters, a sortable table of orders and its pages. The filters live in the address, so the user can share or reload them",
+	} <div>
+		~pageHeader{
+			Title: "Orders",
+			Meta: <span>Every order, newest first. Click a column to sort.</span>,
+			Actions: <>
+				~>neui.Use{Desc: "open the form to create a new order"} <a
+					(doors.ALink{Model: OrdersPath{View: ListNew}, Batch: true, After: scrollTop})
+					class=(btnPrimary)>
+					~(icon(iconPlus, "size-4"))
+					New order
+				</a>
+			</>,
+		}
+		~neui.Tool[createOrderInput, created]{
+			Name: "create_order",
+			Desc: "Create an order, checked like the New order form, and open its page for the user. Stock is taken when it is created",
+			Handler: func(ctx context.Context, in createOrderInput) (created, error) {
+				f := orderForm{Customer: strconv.Itoa(in.Customer), Address: in.Address, Status: cmp.Or(in.Status, string(unpaid))}
+				for _, it := range in.Items {
+					f.Lines = append(f.Lines, lineForm{Product: strconv.Itoa(it.Product), Qty: strconv.Itoa(it.Qty)})
+				}
+				id, errs := shop.SaveOrder(ctx, 0, f)
+				if err := errs.err(); err != nil {
+					return created{}, err
+				}
+				notify(ctx, fmt.Sprintf("Order #%d created", id))
+				navigate(ctx, OrderPath{ID: id})
+				return created{ID: id}, nil
+			},
+		}
+		<section class="overflow-hidden rounded-xl bg-white shadow-xs ring-1 ring-stone-200">
+			~(orderFilters(path))
+			~>(new(doors.Door)) ~({
+				_, _ = shop.version.Effect(ctx)
+				p, ok := path.Effect(ctx)
+				if !ok {
+					return nil
+				}
+				return ordersTable(p)
+			})
+		</section>
+	</div>
+}
+
+func checkDate(name string, v string) error {
+	if v == "" {
+		return nil
+	}
+	if _, err := time.Parse(time.DateOnly, v); err != nil {
+		return fmt.Errorf("%s %q is not a date in the form YYYY-MM-DD", name, v)
+	}
+	return nil
+}
+
+func validStatus(s string) bool {
+	for _, v := range statuses {
+		if string(v) == s {
+			return true
+		}
+	}
+	return false
+}
+
+elem orderFilters(path doors.Source[OrdersPath]) {
+	~~
+	set := func(ctx context.Context, change func(p *OrdersPath)) {
+		path.Mutate(ctx, func(p OrdersPath) OrdersPath {
+			change(&p)
+			p.Page = 0
+			return p
+		})
+	}
+	options := []option{}
+	for _, s := range statuses {
+		options = append(options, option{Value: string(s), Label: "Status: " + strings.ToUpper(string(s[:1])) + string(s[1:])})
+	}
+	active := doors.DeriveBeam(path, func(p OrdersPath) bool {
+		return p.filters() != OrdersPath{}
+	})
+	~~
+	~>neui.Space{
+		Name: "filters",
+		Desc: "Filters of the orders table: search, status and date range; each applies as soon as it changes",
+	} <div class="flex flex-col gap-3 border-b border-stone-100 bg-stone-50/50 px-5 py-4 @4xl:flex-row @4xl:items-center">
+		~neui.Tool[ordersToolInput, ordersToolOutput]{
+			Name: "filter_orders",
+			Desc: "Set the filters, sort and page of the orders table the user sees, replacing all of them; an empty field clears it",
+			Handler: func(ctx context.Context, in ordersToolInput) (ordersToolOutput, error) {
+				next := OrdersPath{Status: in.Status, From: in.From, To: in.To, Search: in.Search, Sort: in.Sort, Page: in.Page}
+				if next.Status != "" && !validStatus(next.Status) {
+					return ordersToolOutput{}, fmt.Errorf("unknown status %q", in.Status)
+				}
+				if err := cmp.Or(checkDate("from", next.From), checkDate("to", next.To), checkSort(next.Sort, "date", "total", "customer", "id")); err != nil {
+					return ordersToolOutput{}, err
+				}
+				if next.From != "" && next.To != "" && next.From > next.To {
+					return ordersToolOutput{}, fmt.Errorf("from %s is after to %s", next.From, next.To)
+				}
+				shown, info := paginate(shop.Orders(next.query()), next.Page, pageSize)
+				next.Page = info.Page
+				if next.Page == 1 {
+					next.Page = 0
+				}
+				path.Update(ctx, next)
+				return ordersToolOutput{Shown: shown, Page: info}, nil
+			},
+		}
+		<div class="relative flex-1 @4xl:min-w-56">
+			<label for="orders-search" class="sr-only">Search orders</label>
+			<span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-stone-400">
+				~(icon(iconSearch, "size-4"))
+			</span>
+			~(keepTyped(doors.DeriveBeam(path, func(p OrdersPath) string {
+				return p.Search
+			}), func(v string, typed func(v string)) gox.Elem {
+				return <>
+					~>neui.Use{Desc: "search orders by id, customer name, email or address; applies on Enter or when the field loses focus"} <input
+						(doors.AChange{
+							Race: doors.RaceLatest,
+							On: func(ctx context.Context, r doors.RequestChange) bool {
+								typed(r.Event().Value)
+								set(ctx, func(p *OrdersPath) {
+									p.Search = r.Event().Value
+								})
+								return false
+							},
+						})
+						id="orders-search"
+						type="search"
+						placeholder="Search by order, customer, email or address"
+						value=(v)
+						class=(inputBase.Add("pl-9"))>
+				</>
+			}))
+		</div>
+		<div class="grid grid-cols-1 gap-3 @xl:grid-cols-3 @4xl:flex @4xl:items-center">
+			<div class="@4xl:w-44">
+				~(keepTyped(doors.DeriveBeam(path, func(p OrdersPath) string {
+					return p.Status
+				}), func(v string, typed func(v string)) gox.Elem {
+					return <>
+						~selectField{
+							Label: "Status",
+							Hide: true,
+							Name: "status",
+							Value: v,
+							Placeholder: "All statuses",
+							Options: options,
+							Desc: "show only orders with this status",
+							Change: func(ctx context.Context, v string) {
+								typed(v)
+								set(ctx, func(p *OrdersPath) {
+									p.Status = v
+								})
+							},
+						}
+					</>
+				}))
+			</div>
+			~(keepTyped(doors.DeriveBeam(path, func(p OrdersPath) string {
+				return p.From
+			}), func(v string, typed func(v string)) gox.Elem {
+				return dateFilter("from", "From", v, "show orders on or after this date", func(ctx context.Context, v string) {
+					typed(v)
+					set(ctx, func(p *OrdersPath) {
+						p.From = v
+					})
+				})
+			}))
+			~(keepTyped(doors.DeriveBeam(path, func(p OrdersPath) string {
+				return p.To
+			}), func(v string, typed func(v string)) gox.Elem {
+				return dateFilter("to", "To", v, "show orders on or before this date", func(ctx context.Context, v string) {
+					typed(v)
+					set(ctx, func(p *OrdersPath) {
+						p.To = v
+					})
+				})
+			}))
+		</div>
+		~(active.Bind(func(on bool) gox.Elem {
+			if !on {
+				return nil
+			}
+			return <>
+				~>neui.Use{Desc: "clear every filter and the search"} <a
+					(doors.ALink{Model: OrdersPath{}, Batch: true})
+					class=(btnGhost)>
+					~(icon(iconClose, "size-4"))
+					Clear
+				</a>
+			</>
+		}))
+	</div>
+}
+
+elem keepTyped(value doors.Beam[string], field func(v string, typed func(v string)) gox.Elem) {
+	~~
+	door := new(doors.Door)
+	var mu sync.Mutex
+	shown, _ := value.Read(ctx)
+	first := shown
+	typed := func(v string) {
+		mu.Lock()
+		shown = v
+		mu.Unlock()
+	}
+	value.Sub(ctx, func(ctx context.Context, v string) bool {
+		mu.Lock()
+		changed := v != shown
+		shown = v
+		mu.Unlock()
+		if changed {
+			door.Inner(ctx, field(v, typed))
+		}
+		return false
+	})
+	~~
+	~>(door) <>~(field(first, typed))</>
+}
+
+elem dateFilter(name string, label string, value string, desc string, change func(ctx context.Context, v string)) {
+	<label class="flex items-center gap-2 text-sm text-stone-500">
+		<span class="w-10 shrink-0 @4xl:w-auto">~(label)</span>
+		~>neui.Use{Desc: desc} <input
+			(doors.AChange{
+				Scope: &doors.ScopeDebounce{Duration: 400 * time.Millisecond},
+				Race: doors.RaceLatest,
+				On: func(ctx context.Context, r doors.RequestChange) bool {
+					change(ctx, r.Event().Value)
+					return false
+				},
+			})
+			type="date"
+			name=(name)
+			value=(value)
+			class=(inputBase.Add("@4xl:w-40"))>
+	</label>
+}
+
+elem ordersTable(p OrdersPath) {
+	~~
+	all := shop.Orders(p.query())
+	rows, info := paginate(all, p.Page, pageSize)
+	sort := p.Sort
+	if sort == "" {
+		sort = "-date"
+	}
+	~~
+	~>neui.Space{
+		Name: "table",
+		Desc: "Orders matching the filters, one page at a time; the column headers sort it",
+	} <div>
+		~neui.Data{Text: "orders shown in the table", Object: rows}
+		~neui.Data{Text: fmt.Sprintf("page %d of %d; %d orders match the filters", info.Page, info.Pages, info.Total)}
+		~(if len(all) == 0 {
+			~emptyState{
+				Icon: iconSearch,
+				Title: "No orders match",
+				Body: "Try another status, a wider date range or a shorter search.",
+				Action: <>
+					~>neui.Use{Desc: "clear every filter and the search"} <a (doors.ALink{Model: OrdersPath{}, Batch: true}) class=(btnSecondary)>Clear filters</a>
+				</>,
+			}
+		} else {
+			<div class="overflow-x-auto">
+				<table class=(tableClass)>
+					<thead>
+						<tr>
+							~sortHeader{Label: "Order", Key: "id", First: "-id", Current: sort, Model: p.withSort}
+							~sortHeader{Label: "Customer", Key: "customer", First: "customer", Current: sort, Model: p.withSort}
+							~sortHeader{Label: "Date", Key: "date", First: "-date", Current: sort, Class: "hidden @xl:table-cell", Model: p.withSort}
+							<th class=(thClass.Add("hidden @xl:table-cell"))>Status</th>
+							~sortHeader{Label: "Total", Key: "total", First: "-total", Current: sort, Right: true, Model: p.withSort}
+						</tr>
+					</thead>
+					<tbody>
+						~(for _, o := range rows {
+							~(orderRow(o))
+						})
+					</tbody>
+				</table>
+			</div>
+		})
+	</div>
+	~(if len(all) > 0 {
+		~pager{Info: info, Noun: "orders", Model: p.withPage}
+	})
+}
+
+elem orderRow(o order) {
+	<tr class=(rowClass)>
+		<td class=(tdClass)>
+			~>neui.Use{Desc: fmt.Sprintf("open order #%d", o.ID)} <a (doors.ALink{Model: OrderPath{ID: o.ID}, Batch: true, After: scrollTop}) class=(linkText)>
+				~("#", o.ID)
+			</a>
+			<div class="mt-1 @xl:hidden">~(badge(o.Status))</div>
+		</td>
+		<td class=(tdClass)>
+			~>neui.Use{Desc: fmt.Sprintf("open customer %s of order #%d", o.Customer, o.ID)} <a
+				(doors.ALink{Model: CustomerPath{ID: o.CustomerID}, Batch: true, After: scrollTop})
+				class="text-stone-700 hover:text-stone-900 hover:underline">
+				~(o.Customer)
+			</a>
+			<p class="mt-0.5 text-xs text-stone-500 tabular-nums @xl:hidden">~(o.Date)</p>
+		</td>
+		<td class=(tdClass.Add("hidden text-stone-500 tabular-nums @xl:table-cell"))>~(o.Date)</td>
+		<td class=(tdClass.Add("hidden @xl:table-cell"))>~(badge(o.Status))</td>
+		<td class=(tdClass.Add("text-right font-medium tabular-nums"))>~(money(o.Total))</td>
+	</tr>
+}

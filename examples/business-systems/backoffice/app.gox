@@ -1,0 +1,203 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/doors-dev/doors"
+	"github.com/doors-dev/gox"
+	"neui.dev"
+	"neui.dev/examples/business-systems/backoffice/css"
+	"neui.dev/nekit"
+)
+
+type App struct {
+	Threads nekit.SQLiteMessages
+}
+
+type openInput struct {
+	ID int `json:"id" required:"true" description:"id, like 1042 for an order or 7 for a customer"`
+}
+
+func openOrder(ctx context.Context, in openInput) (order, error) {
+	o, ok := shop.Order(in.ID)
+	if !ok {
+		return order{}, fmt.Errorf("no order %d", in.ID)
+	}
+	navigate(ctx, OrderPath{ID: in.ID})
+	return o, nil
+}
+
+func openCustomer(ctx context.Context, in openInput) (customerRow, error) {
+	c, ok := shop.Customer(in.ID)
+	if !ok {
+		return customerRow{}, fmt.Errorf("no customer %d", in.ID)
+	}
+	navigate(ctx, CustomerPath{ID: in.ID})
+	return c, nil
+}
+
+elem (a App) Main() {
+	~~
+	if err := neui.Enable(ctx, neui.OptionMessageStorage(a.Threads.User("demo"))); err != nil {
+		doors.Logger(ctx).Error("neui enable", "err", err)
+	}
+	~~
+	<!doctype html>
+	<html lang="en" data-theme="light" class="bg-stone-50">
+		<head>
+			<meta charset="utf-8">
+			<meta name="viewport" content="width=device-width, initial-scale=1">
+			<title>Kettle & Burr</title>
+			<link rel="stylesheet" href=(css.Style) name="backoffice.css">
+		</head>
+		<body class="bg-stone-50">
+			<div id="app" class="min-h-dvh text-stone-900 antialiased">
+				<div id="top" class="side:pl-64">
+					~(sidebar())
+					~neui.Data{Text: "Today is " + time.Now().Format("Monday, 2006-01-02")}
+					~neui.Tool[openInput, order]{
+						Name: "open_order",
+						Desc: "Open the page of an order for the user",
+						Handler: openOrder,
+					}
+					~neui.Tool[openInput, customerRow]{
+						Name: "open_customer",
+						Desc: "Open the page of a customer for the user",
+						Handler: openCustomer,
+					}
+					<main class="@container mx-auto max-w-6xl px-4 pt-6 pb-24 sm:px-6 side:px-10 side:pt-10">
+						~(routes())
+					</main>
+				</div>
+				~(workbenchPanel())
+				~(toast())
+			</div>
+			~nekit.Chat{ThemeLight: chatTheme}
+		</body>
+	</html>
+}
+
+elem routes() {
+	~(doors.Route(
+		doors.RouteModel[HomePath](doors.RouteComp[HomePath](dashboardPage())),
+		doors.RouteModel[OrdersPath](
+			doors.RouteMatch(func(p OrdersPath) bool {
+				return p.View == ListNew
+			}, doors.RouteBind(func(p OrdersPath) gox.Elem {
+				return orderCreatePage(p.Customer)
+			})),
+			doors.RouteSource(ordersPage),
+		),
+		doors.RouteModel[OrderPath](
+			doors.RouteMatch(func(p OrderPath) bool {
+				return p.View == ItemEdit
+			}, doors.RouteBind(func(p OrderPath) gox.Elem {
+				return orderEditPage(p.ID)
+			})),
+			doors.RouteBind(func(p OrderPath) gox.Elem {
+				return orderPage(p.ID)
+			}),
+		),
+		doors.RouteModel[CustomersPath](
+			doors.RouteMatch(func(p CustomersPath) bool {
+				return p.View == ListNew
+			}, doors.RouteComp[CustomersPath](customerFormPage(0))),
+			doors.RouteSource(customersPage),
+		),
+		doors.RouteModel[CustomerPath](
+			doors.RouteMatch(func(p CustomerPath) bool {
+				return p.View == ItemEdit
+			}, doors.RouteBind(func(p CustomerPath) gox.Elem {
+				return customerFormPage(p.ID)
+			})),
+			doors.RouteSource(customerPage),
+		),
+		doors.RouteModel[ProductsPath](
+			doors.RouteMatch(func(p ProductsPath) bool {
+				return p.View == ListNew
+			}, doors.RouteComp[ProductsPath](productFormPage(0))),
+			doors.RouteSource(productsPage),
+		),
+		doors.RouteModel[ProductPath](doors.RouteBind(func(p ProductPath) gox.Elem {
+			return productFormPage(p.ID)
+		})),
+		doors.RouteComp[doors.Location](notFound("Page", crumb{Label: "Back to the dashboard", Model: HomePath{}})),
+	))
+}
+
+elem sidebar() {
+	~>neui.Space{
+		Name: "navigation",
+		Desc: "Main menu, on every page: links to the dashboard, orders, customers and products",
+	} <aside class="sticky top-0 z-30 border-b border-stone-200 bg-white/90 backdrop-blur side:fixed side:inset-y-0 side:left-0 side:w-64 side:border-r side:border-b-0 side:bg-white">
+		<div class="flex h-full flex-col side:px-4 side:py-6">
+			~>neui.Use{Desc: "the shop logo: goes to the dashboard"} <a
+				(doors.ALink{Model: HomePath{}, Batch: true})
+				class="flex w-fit items-center gap-2.5 rounded-lg px-4 pt-3 transition-opacity hover:opacity-80 side:px-2 side:pt-0">
+				<span class="flex size-8 items-center justify-center rounded-lg bg-amber-600 text-white shadow-xs">
+					~(icon(iconCup, "size-5"))
+				</span>
+				<div class="leading-tight">
+					<p class="text-sm font-semibold text-stone-900">Kettle & Burr</p>
+					<p class="text-xs text-stone-500">Back office</p>
+				</div>
+			</a>
+			<nav class="mt-2 flex gap-1 overflow-x-auto px-3 pb-2 side:mt-8 side:flex-col side:overflow-visible side:px-0 side:pb-0" aria-label="Main">
+				~(navItem("Dashboard", iconDashboard, HomePath{}, false, "go to the dashboard"))
+				~(navItem("Orders", iconOrders, OrdersPath{}, true, "go to the orders list"))
+				~(navItem("Customers", iconCustomers, CustomersPath{}, true, "go to the customers list"))
+				~(navItem("Products", iconProducts, ProductsPath{}, true, "go to the products list"))
+			</nav>
+			<div class="mt-auto hidden rounded-lg bg-stone-50 p-3 text-xs text-stone-500 ring-1 ring-stone-200 side:block">
+				<p class="font-medium text-stone-700">Assistant</p>
+				<p class="mt-1">Open the chat in the corner and ask it to filter, fill a form or build you an app.</p>
+			</div>
+		</div>
+	</aside>
+}
+
+elem navItem(label string, d string, model any, starts bool, desc string) {
+	~~
+	matcher := doors.PathMatcherFull()
+	if starts {
+		matcher = doors.PathMatcherStarts()
+	}
+	~~
+	~>neui.Use{Desc: desc} <a
+		(doors.ALink{
+			Model: model,
+			Batch: true,
+			After: scrollTop,
+			Active: doors.Active{
+				Indicator: doors.IndicateAttr("aria-current", "page"),
+				PathMatcher: matcher,
+				QueryMatcher: doors.QueryMatcherIgnoreAll(),
+			},
+		})
+		class="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap text-stone-600 transition-colors hover:bg-stone-100 hover:text-stone-900 aria-[current=page]:bg-stone-900 aria-[current=page]:text-white">
+		~(icon(d, "hidden size-5 opacity-80 sm:block"))
+		~(label)
+	</a>
+}
+
+elem toast() {
+	~(notices(ctx).Bind(func(n notice) gox.Elem {
+		return toastView(n)
+	}))
+}
+
+elem toastView(n notice) {
+	~(if n.Text != "" {
+		<div
+			class="animate-toast pointer-events-none fixed inset-x-0 top-4 z-40 flex justify-center px-4 side:top-6 side:pl-64"
+			role="status"
+			aria-live="polite">
+			<div class="pointer-events-auto flex items-center gap-2.5 rounded-xl bg-stone-900 py-2.5 pr-4 pl-3 text-sm text-white shadow-lg">
+				~(icon(iconCheck, "size-5 text-emerald-400"))
+				~(n.Text)
+			</div>
+		</div>
+	})
+}

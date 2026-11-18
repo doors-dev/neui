@@ -1,0 +1,371 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"slices"
+	"strconv"
+	"strings"
+
+	"github.com/doors-dev/doors"
+	"github.com/doors-dev/gox"
+	"neui.dev"
+)
+
+type formState[T any] struct {
+	Values T
+	Errs fieldErrors
+}
+
+func always[T any](T, T) bool {
+	return false
+}
+
+elem orderCreatePage(customerID int) {
+	~~
+	initial := orderForm{Status: string(unpaid), Lines: []lineForm{{Qty: "1"}}}
+	if customerID != 0 {
+		initial.Customer = strconv.Itoa(customerID)
+	}
+	~~
+	~orderEditor{Initial: initial}
+}
+
+elem orderEditPage(id int) {
+	~~
+	o, found := shop.Order(id)
+	prices := map[int]float64{}
+	for _, l := range o.Lines {
+		prices[l.ProductID] = l.Price
+	}
+	~~
+	~(if !found {
+		~(notFound(fmt.Sprintf("Order #%d", id), crumb{Label: "Back to orders", Model: OrdersPath{}}))
+	} else if o.Status == refunded || o.Status == cancelled {
+		~pageHeader{
+			Crumbs: []crumb{{Label: "Orders", Model: OrdersPath{}}, {Label: fmt.Sprintf("#%d", o.ID), Model: OrderPath{ID: o.ID}}},
+			Title: fmt.Sprintf("Order #%d can't be edited", o.ID),
+			Meta: <span>It is ~(string(o.Status)), so it is closed.</span>,
+		}
+	} else {
+		~orderEditor{ID: id, Initial: o.form(), Prices: prices}
+	})
+}
+
+type orderEditor struct {
+	ID int
+	Initial orderForm
+	Prices map[int]float64
+}
+
+elem (e orderEditor) Main() {
+	~~
+	state := doors.NewSourceEqual(formState[orderForm]{Values: e.Initial}, always)
+	lines := doors.NewSourceEqual(e.Initial.Lines, always)
+	customer := doors.NewSource(e.Initial.Customer)
+	title := "New order"
+	crumbs := []crumb{{Label: "Orders", Model: OrdersPath{}}, {Label: "New", Model: OrdersPath{View: ListNew}}}
+	desc := "Form creating an order: pick the customer, add items with quantities, set the shipping address and payment status, then press Create order"
+	if e.ID != 0 {
+		title = fmt.Sprintf("Edit order #%d", e.ID)
+		crumbs = []crumb{{Label: "Orders", Model: OrdersPath{}}, {Label: fmt.Sprintf("#%d", e.ID), Model: OrderPath{ID: e.ID}}, {Label: "Edit", Model: OrderPath{View: ItemEdit, ID: e.ID}}}
+		desc = fmt.Sprintf("Form editing order #%d: customer, items, shipping address and payment status; press Save changes to keep them", e.ID)
+	}
+	~~
+	~>neui.Space{Name: "order_form", Desc: desc} <div>
+		~pageHeader{Crumbs: crumbs, Title: title}
+		<form
+			(doors.ASubmit[orderForm]{
+				Scope: &doors.ScopeBlocking{},
+				Indicator: doors.IndicateAttrSubmitter("aria-busy", "true"),
+				Batch: true,
+				On: func(ctx context.Context, r doors.RequestForm[orderForm]) bool {
+					e.submit(ctx, r, state, lines)
+					return false
+				},
+			})
+			novalidate>
+			<button type="submit" name="intent" value="save" class="sr-only" tabindex="-1" aria-hidden="true">Save</button>
+			~(state.Bind(func(s formState[orderForm]) gox.Elem {
+				return e.fields(s, lines, customer)
+			}))
+		</form>
+	</div>
+}
+
+func (e orderEditor) submit(ctx context.Context, r doors.RequestForm[orderForm], state doors.Source[formState[orderForm]], lines doors.Source[[]lineForm]) {
+	v := r.Data()
+	intent := v.Intent
+	v.Intent = ""
+	switch {
+	case intent == "add":
+		v.Lines = append(slices.Clone(v.Lines), lineForm{Qty: "1"})
+		state.Update(ctx, formState[orderForm]{Values: v})
+		lines.Update(ctx, v.Lines)
+		return
+	case strings.HasPrefix(intent, "remove-"):
+		i, _ := strconv.Atoi(strings.TrimPrefix(intent, "remove-"))
+		if i >= 0 && i < len(v.Lines) {
+			v.Lines = slices.Delete(slices.Clone(v.Lines), i, i + 1)
+		}
+		state.Update(ctx, formState[orderForm]{Values: v})
+		lines.Update(ctx, v.Lines)
+		return
+	}
+	id, errs := shop.SaveOrder(ctx, e.ID, v)
+	if len(errs) > 0 {
+		state.Update(ctx, formState[orderForm]{Values: v, Errs: errs})
+		lines.Update(ctx, v.Lines)
+		return
+	}
+	if e.ID == 0 {
+		notify(ctx, fmt.Sprintf("Order #%d created", id))
+	} else {
+		notify(ctx, fmt.Sprintf("Order #%d saved", id))
+	}
+	navigate(ctx, OrderPath{ID: id})
+	r.After(scrollTop)
+}
+
+elem (e orderEditor) fields(s formState[orderForm], lines doors.Source[[]lineForm], customer doors.Source[string]) {
+	~~
+	var customers []option
+	for _, c := range shop.AllCustomers() {
+		label := c.Name
+		if c.Company != "" {
+			label += " · " + c.Company
+		}
+		customers = append(customers, option{Value: strconv.Itoa(c.ID), Label: label})
+	}
+	var products []option
+	for _, p := range shop.Products("", "name") {
+		products = append(products, option{Value: strconv.Itoa(p.ID), Label: fmt.Sprintf("%s · %s · %d in stock", p.Name, money(p.Price), p.Stock)})
+	}
+	v := s.Values
+	submit := "Create order"
+	if e.ID != 0 {
+		submit = "Save changes"
+	}
+	~~
+	~(formErrors(s.Errs))
+	<div class="grid grid-cols-1 gap-6 @4xl:grid-cols-3">
+		<div class="space-y-6 @4xl:col-span-2">
+			~card{
+				Title: "Customer and shipping",
+				Body: <div class="grid grid-cols-1 gap-5 @xl:grid-cols-2">
+					<div class="@xl:col-span-2">
+						~selectField{
+							Label: "Customer",
+							Name: "customer",
+							Value: v.Customer,
+							Placeholder: "Choose a customer…",
+							Options: customers,
+							Required: true,
+							Error: s.Errs["customer"],
+							Desc: "customer who placed the order",
+							Change: func(ctx context.Context, value string) {
+								customer.Update(ctx, value)
+							},
+						}
+					</div>
+					<div class="@xl:col-span-2">
+						~textArea{
+							Label: "Shipping address",
+							Name: "address",
+							Value: v.Address,
+							Rows: 2,
+							Placeholder: "Street, city, postcode",
+							Error: s.Errs["address"],
+							Desc: "shipping address; leave empty to use the customer's address",
+						}
+						~(customer.Bind(func(id string) gox.Elem {
+							return addressHint(id, v.Address)
+						}))
+					</div>
+					~selectField{
+						Label: "Payment",
+						Name: "status",
+						Value: v.Status,
+						Options: []option{{Value: string(unpaid), Label: "Unpaid"}, {Value: string(paid), Label: "Paid"}},
+						Required: true,
+						Error: s.Errs["status"],
+						Desc: "payment status: paid or unpaid",
+					}
+				</div>,
+			}
+			~>neui.Space{Name: "items", Desc: "Item rows of the form: a product and a quantity each, with buttons to add and remove rows"} ~card{
+				Title: "Items",
+				Desc: "Products and quantities. Stock is checked when you save.",
+				Flush: true,
+				Body: <div>
+					<ul class="divide-y divide-stone-100">
+						~(for i, l := range v.Lines {
+							~(e.lineRow(i, l, s.Errs, products, lines))
+						})
+					</ul>
+					<div class="flex flex-wrap items-center gap-3 border-t border-stone-100 px-5 py-4">
+						~>neui.Use{Desc: "add another item row to the order"} <button type="submit" name="intent" value="add" formnovalidate class=(btnSecondary)>
+							~(icon(iconPlus, "size-4"))
+							Add item
+						</button>
+						~(if s.Errs["lines"] != "" {
+							<p class="flex items-center gap-1 text-sm text-red-600">
+								~(icon(iconWarning, "size-4"))
+								~(s.Errs["lines"])
+							</p>
+						})
+					</div>
+				</div>,
+			}
+		</div>
+		<div class="@4xl:sticky @4xl:top-6 @4xl:self-start">
+			~card{
+				Title: "Summary",
+				Body: <>
+					~(lines.Bind(func(ls []lineForm) gox.Elem {
+						return e.summary(ls)
+					}))
+					<div class="mt-5 flex flex-col gap-2">
+						~>neui.Use{Desc: "save the order with the values in the form"} <button type="submit" name="intent" value="save" class=(btnPrimary.Add("w-full"))>
+							~(submit)
+						</button>
+						~(if e.ID == 0 {
+							~>neui.Use{Desc: "leave the form without creating the order"} <a (doors.ALink{Model: OrdersPath{}, Batch: true}) class=(btnGhost.Add("w-full"))>Cancel</a>
+						} else {
+							~>neui.Use{Desc: "leave the form without saving the changes"} <a (doors.ALink{Model: OrderPath{ID: e.ID}, Batch: true}) class=(btnGhost.Add("w-full"))>Cancel</a>
+						})
+					</div>
+				</>,
+			}
+		</div>
+	</div>
+}
+
+elem addressHint(id string, typed string) {
+	~~
+	cid, _ := strconv.Atoi(id)
+	c, ok := shop.Customer(cid)
+	~~
+	~(if ok && typed == "" {
+		<p class="mt-1.5 text-sm text-stone-500">~("Leave empty to ship to ", c.Address, ".")</p>
+	} else if ok && typed != c.Address {
+		<p class="mt-1.5 text-sm text-stone-500">~("Customer's address on file: ", c.Address)</p>
+	})
+}
+
+elem (e orderEditor) lineRow(i int, l lineForm, errs fieldErrors, products []option, lines doors.Source[[]lineForm]) {
+	~~
+	key := fmt.Sprintf("lines.%d", i)
+	set := func(ctx context.Context, change func(l *lineForm)) {
+		lines.Mutate(ctx, func(ls []lineForm) []lineForm {
+			ls = slices.Clone(ls)
+			if i < len(ls) {
+				change(&ls[i])
+			}
+			return ls
+		})
+	}
+	~~
+	<li class="grid grid-cols-[1fr_auto] items-start gap-3 px-5 py-4 @xl:grid-cols-[1fr_8rem_auto]">
+		<div class="col-span-2 @xl:col-span-1">
+			~selectField{
+				Label: "Product",
+				Name: fmt.Sprintf("lines[%d].product", i),
+				Value: l.Product,
+				Placeholder: "Choose a product…",
+				Options: products,
+				Hide: i > 0,
+				Error: errs[key + ".product"],
+				Desc: fmt.Sprintf("product of item %d", i + 1),
+				Change: func(ctx context.Context, value string) {
+					set(ctx, func(l *lineForm) {
+						l.Product = value
+					})
+				},
+			}
+		</div>
+		<div>
+			~~
+			id := fieldID(fmt.Sprintf("lines[%d].qty", i))
+			~~
+			~(if i == 0 {
+				~(fieldLabel(id, "Qty", false))
+			})
+			~>neui.Use{Desc: fmt.Sprintf("quantity of item %d", i + 1)} <input
+				(doors.AChange{
+					Race: doors.RaceLatest,
+					On: func(ctx context.Context, r doors.RequestChange) bool {
+						set(ctx, func(l *lineForm) {
+							l.Qty = r.Event().Value
+						})
+						return false
+					},
+				})
+				id=(id)
+				name=(fmt.Sprintf("lines[%d].qty", i))
+				type="number"
+				min="1"
+				inputmode="numeric"
+				value=(l.Qty)
+				aria-label=(fmt.Sprintf("Quantity of item %d", i + 1))
+				aria-invalid=(ariaTrue(errs[key + ".qty"] != ""))
+				aria-describedby=(id + "-note")
+				class=(inputBase.Add("tabular-nums", when(i == 0, "mt-1.5")))>
+			~(fieldNote(id, "", errs[key + ".qty"]))
+		</div>
+		<div class=(when(i == 0, "pt-7"))>
+			~>neui.Use{Desc: fmt.Sprintf("remove item %d from the order", i + 1)} <button
+				type="submit"
+				name="intent"
+				value=(fmt.Sprintf("remove-%d", i))
+				formnovalidate
+				class=(btnGhost.Add("px-2.5"))
+				aria-label=(fmt.Sprintf("Remove item %d", i + 1))>
+				~(icon(iconTrash, "size-4"))
+			</button>
+		</div>
+	</li>
+}
+
+elem (e orderEditor) summary(ls []lineForm) {
+	~~
+	type row struct {
+		Name string
+		Qty int
+		Amount float64
+	}
+	var rows []row
+	total := 0.0
+	for _, l := range ls {
+		pid, _ := strconv.Atoi(l.Product)
+		p, ok := shop.Product(pid)
+		qty, err := strconv.Atoi(strings.TrimSpace(l.Qty))
+		if !ok || err != nil || qty < 1 {
+			continue
+		}
+		price := p.Price
+		if old, ok := e.Prices[pid]; ok {
+			price = old
+		}
+		rows = append(rows, row{Name: p.Name, Qty: qty, Amount: round(float64(qty) * price)})
+		total += float64(qty) * price
+	}
+	~~
+	~neui.Data{Text: "order total for the items picked so far, USD", Object: round(total)}
+	~(if len(rows) == 0 {
+		<p class="text-sm text-stone-500">Pick products to see the total.</p>
+	} else {
+		<ul class="space-y-2 text-sm">
+			~(for _, r := range rows {
+				<li class="flex justify-between gap-3">
+					<span class="text-stone-600">~(r.Qty, " × ", r.Name)</span>
+					<span class="text-stone-900 tabular-nums">~(money(r.Amount))</span>
+				</li>
+			})
+		</ul>
+	})
+	<div class="mt-4 flex items-baseline justify-between border-t border-stone-100 pt-4">
+		<span class="text-sm font-medium text-stone-600">Total</span>
+		<span class="text-xl font-semibold text-stone-900 tabular-nums">~(money(total))</span>
+	</div>
+}

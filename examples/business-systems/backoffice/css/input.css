@@ -1,0 +1,42 @@
+@import "tailwindcss" source(none);
+@source "../*.gox";
+@source "../ui.go";
+
+@custom-variant side {
+	@media (width >= 80rem) {
+		@slot;
+	}
+	@media (width >= 64rem) and (width < 80rem) {
+		&:where(html:not(:has(.nechat-widget[data-mode="dock"])) *) {
+			@slot;
+		}
+	}
+}
+
+@custom-variant docked {
+	@media (width >= 40rem) {
+		&:where(html:has(.nechat-widget[data-mode="dock"]) *) {
+			@slot;
+		}
+	}
+}
+
+@theme {
+	--animate-toast: toast 3.6s ease-in-out forwards;
+
+	@keyframes toast {
+		0% {
+			opacity: 0;
+			transform: translateY(-0.5rem);
+		}
+		8%, 82% {
+			opacity: 1;
+			transform: none;
+		}
+		100% {
+			opacity: 0;
+			transform: translateY(-0.5rem);
+			visibility: hidden;
+		}
+	}
+}

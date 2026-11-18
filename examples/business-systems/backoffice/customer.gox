@@ -1,0 +1,214 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"strconv"
+	"time"
+
+	"github.com/doors-dev/doors"
+	"github.com/doors-dev/gox"
+	"neui.dev"
+)
+
+elem customerPage(path doors.Source[CustomerPath]) {
+	~~
+	id := doors.DeriveBeam(path, func(p CustomerPath) int {
+		return p.ID
+	})
+	page := doors.DeriveBeam(path, func(p CustomerPath) int {
+		return p.Page
+	})
+	~~
+	~(id.Bind(func(id int) gox.Elem {
+		return customerView(id, page)
+	}))
+}
+
+elem customerView(id int, page doors.Beam[int]) {
+	~>(new(doors.Door)) ~({
+		_, ok := shop.version.Effect(ctx)
+		if !ok {
+			return nil
+		}
+		c, found := shop.Customer(id)
+		if !found {
+			return notFound(fmt.Sprintf("Customer %d", id), crumb{Label: "Back to customers", Model: CustomersPath{}})
+		}
+		return customerDetail(c, page)
+	})
+}
+
+type customerPatch struct {
+	Name *string `json:"name,omitempty" description:"omit to keep"`
+	Email *string `json:"email,omitempty" description:"omit to keep"`
+	Phone *string `json:"phone,omitempty" description:"omit to keep; empty to clear"`
+	Company *string `json:"company,omitempty" description:"omit to keep; empty to clear"`
+	Address *string `json:"address,omitempty" description:"default shipping address; omit to keep"`
+	Notes *string `json:"notes,omitempty" description:"internal notes; omit to keep, empty to clear"`
+}
+
+func patch(to *string, from *string) {
+	if from != nil {
+		*to = *from
+	}
+}
+
+elem customerDetail(c customerRow, page doors.Beam[int]) {
+	~~
+	all := shop.Orders(orderQuery{Customer: c.ID})
+	last := "—"
+	if len(all) > 0 {
+		last = shortDate(all[0].Date)
+	}
+	~~
+	~>neui.Space{
+		Name: "customer",
+		Desc: fmt.Sprintf("Page of customer %s: totals, contact details and their orders", c.Name),
+	} <div>
+		~neui.Data{Text: "the customer on this page", Object: c.customer}
+		~pageHeader{
+			Crumbs: []crumb{{Label: "Customers", Model: CustomersPath{}}, {Label: c.Name, Model: CustomerPath{ID: c.ID}}},
+			Title: c.Name,
+			Meta: <>
+				~(if c.Company != "" {
+					<span>~(c.Company)</span>
+				})
+				<span>~(c.Email)</span>
+			</>,
+			Actions: <>
+				~>neui.Use{Desc: "open the edit form of this customer"} <a
+					(doors.ALink{Model: CustomerPath{View: ItemEdit, ID: c.ID}, Batch: true, After: scrollTop})
+					class=(btnSecondary)>
+					~(icon(iconEdit, "size-4"))
+					Edit
+				</a>
+				~>neui.Use{Desc: "start a new order for this customer"} <a
+					(doors.ALink{Model: OrdersPath{View: ListNew, Customer: c.ID}, Batch: true, After: scrollTop})
+					class=(btnPrimary)>
+					~(icon(iconPlus, "size-4"))
+					New order
+				</a>
+			</>,
+		}
+		<dl class="mb-6 grid grid-cols-3 divide-x divide-stone-100 rounded-xl bg-white shadow-xs ring-1 ring-stone-200">
+			~(stat("Orders", strconv.Itoa(c.Orders)))
+			~(stat("Paid", money(c.Spent)))
+			~(stat("Last order", last))
+		</dl>
+		<div class="grid grid-cols-1 gap-6 @4xl:grid-cols-3">
+			~>neui.Space{Name: "orders", Desc: "Orders of " + c.Name + ", newest first, with pages"} <div class="@4xl:col-span-2">
+				~card{
+					Title: "Orders",
+					Flush: true,
+					Body: page.Bind(func(n int) gox.Elem {
+						return customerOrders(c, all, n)
+					}),
+				}
+			</div>
+			~>neui.Space{Name: "contact", Desc: "Contact details of " + c.Name} <div>
+				~neui.Tool[customerPatch, struct{}]{
+					Name: "update_customer",
+					Desc: "Change the contact details of this customer, checked like the edit form; omitted fields stay as they are",
+					Handler: func(ctx context.Context, in customerPatch) (struct{}, error) {
+						f := c.customer.form()
+						patch(&f.Name, in.Name)
+						patch(&f.Email, in.Email)
+						patch(&f.Phone, in.Phone)
+						patch(&f.Company, in.Company)
+						patch(&f.Address, in.Address)
+						patch(&f.Notes, in.Notes)
+						if _, errs := shop.SaveCustomer(ctx, c.ID, f); len(errs) > 0 {
+							return struct{}{}, errs.err()
+						}
+						notify(ctx, "Customer saved")
+						return struct{}{}, nil
+					},
+				}
+				~card{
+					Title: "Contact",
+					Body: dl(
+						dlRow("Email", c.Email),
+						dlRow("Phone", dash(c.Phone)),
+						dlRow("Company", dash(c.Company)),
+						dlRow("Address", c.Address),
+						dlRow("Notes", dash(c.Notes)),
+					),
+				}
+			</div>
+		</div>
+	</div>
+}
+
+elem customerOrders(c customerRow, all []order, n int) {
+	~~
+	rows, info := paginate(all, n, 8)
+	~~
+	~neui.Data{Text: fmt.Sprintf("orders of %s shown on this page of the table (page %d of %d)", c.Name, info.Page, info.Pages), Object: rows}
+	~(if len(all) == 0 {
+		~emptyState{
+			Icon: iconOrders,
+			Title: "No orders yet",
+			Body: c.Name + " hasn't ordered anything yet.",
+			Action: <>
+				~>neui.Use{Desc: "start the first order for " + c.Name} <a (doors.ALink{Model: OrdersPath{View: ListNew, Customer: c.ID}, Batch: true}) class=(btnSecondary)>Create their first order</a>
+			</>,
+		}
+	} else {
+		<div class="overflow-x-auto">
+			<table class=(tableClass)>
+				<thead>
+					<tr>
+						<th class=(thClass)>Order</th>
+						<th class=(thClass.Add("hidden @xl:table-cell"))>Date</th>
+						<th class=(thClass.Add("hidden @2xl:table-cell"))>Items</th>
+						<th class=(thClass)>Status</th>
+						<th class=(thClass.Add("text-right"))>Total</th>
+					</tr>
+				</thead>
+				<tbody>
+					~(for _, o := range rows {
+						<tr class=(rowClass)>
+							<td class=(tdClass)>
+								~>neui.Use{Desc: fmt.Sprintf("open order #%d", o.ID)} <a (doors.ALink{Model: OrderPath{ID: o.ID}, Batch: true, After: scrollTop}) class=(linkText)>~("#", o.ID)</a>
+								<p class="mt-0.5 text-xs text-stone-500 tabular-nums @xl:hidden">~(o.Date)</p>
+							</td>
+							<td class=(tdClass.Add("hidden text-stone-500 tabular-nums @xl:table-cell"))>~(o.Date)</td>
+							<td class=(tdClass.Add("hidden text-stone-500 @2xl:table-cell"))>~(len(o.Lines), " item", plural(len(o.Lines)))</td>
+							<td class=(tdClass)>~(badge(o.Status))</td>
+							<td class=(tdClass.Add("text-right font-medium tabular-nums"))>~(money(o.Total))</td>
+						</tr>
+					})
+				</tbody>
+			</table>
+		</div>
+		~pager{
+			Info: info,
+			Noun: "orders",
+			Model: func(n int) any {
+				if n == 1 {
+					n = 0
+				}
+				return CustomerPath{ID: c.ID, Page: n}
+			},
+		}
+	})
+}
+
+elem stat(label string, value string) {
+	<div class="px-4 py-3 @xl:px-5 @xl:py-4">
+		<dt class="text-xs font-medium text-stone-500">~(label)</dt>
+		<dd class="mt-1 truncate text-base font-semibold text-stone-900 tabular-nums @xl:text-xl">~(value)</dd>
+	</div>
+}
+
+func shortDate(date string) string {
+	t, err := time.Parse(time.DateOnly, date)
+	if err != nil {
+		return date
+	}
+	if t.Year() == time.Now().Year() {
+		return t.Format("Jan 2")
+	}
+	return t.Format("Jan 2, 2006")
+}

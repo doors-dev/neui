@@ -1,0 +1,181 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"slices"
+	"strconv"
+
+	"github.com/doors-dev/doors"
+	"github.com/doors-dev/gox"
+	"neui.dev"
+)
+
+elem productFormPage(id int) {
+	~~
+	p, found := shop.Product(id)
+	initial := productForm{}
+	if found {
+		initial = p.form()
+	}
+	~~
+	~(if id != 0 && !found {
+		~(notFound(fmt.Sprintf("Product %d", id), crumb{Label: "Back to products", Model: ProductsPath{}}))
+	} else {
+		~productEditor{ID: id, Initial: initial, Stock: p.Stock}
+	})
+}
+
+type productEditor struct {
+	ID int
+	Initial productForm
+	Stock int
+}
+
+elem (e productEditor) Main() {
+	~~
+	state := doors.NewSourceEqual(formState[productForm]{Values: e.Initial}, always)
+	live := doors.NewSource(e.Stock)
+	if e.ID != 0 {
+		shop.version.Sub(ctx, func(ctx context.Context, _ int) bool {
+			if p, ok := shop.Product(e.ID); ok {
+				live.Update(ctx, p.Stock)
+			}
+			return false
+		})
+	}
+	title := "New product"
+	crumbs := []crumb{{Label: "Products", Model: ProductsPath{}}, {Label: "New", Model: ProductsPath{View: ListNew}}}
+	desc := "Form adding a product: SKU, name, price and units in stock; press Create product to save"
+	if e.ID != 0 {
+		title = e.Initial.Name
+		crumbs = []crumb{{Label: "Products", Model: ProductsPath{}}, {Label: e.Initial.Name, Model: ProductPath{ID: e.ID}}}
+		desc = fmt.Sprintf("Form editing product %s (%s): price and stock among others; press Save changes to keep them", e.Initial.Name, e.Initial.SKU)
+	}
+	~~
+	<div class="mx-auto max-w-3xl">
+		~>neui.Space{Name: "product_form", Desc: desc} <div>
+			~pageHeader{
+				Crumbs: crumbs,
+				Title: title,
+				Meta: <>
+					~(if e.ID != 0 {
+						<>
+							<span class="font-mono text-xs">~(e.Initial.SKU)</span>
+							~(live.Bind(stockBadge))
+						</>
+					})
+				</>,
+			}
+			<form
+				(doors.ASubmit[productForm]{
+					Scope: &doors.ScopeBlocking{},
+					Indicator: doors.IndicateAttrSubmitter("aria-busy", "true"),
+					Batch: true,
+					On: func(ctx context.Context, r doors.RequestForm[productForm]) bool {
+						id, errs := shop.SaveProduct(ctx, e.ID, r.Data())
+						if len(errs) > 0 {
+							state.Update(ctx, formState[productForm]{Values: r.Data(), Errs: errs})
+							return false
+						}
+						if e.ID == 0 {
+							notify(ctx, "Product added")
+							navigate(ctx, ProductPath{ID: id})
+						} else {
+							notify(ctx, "Product saved")
+							navigate(ctx, ProductsPath{})
+						}
+						r.After(scrollTop)
+						return false
+					},
+				})
+				novalidate>
+				~(state.Bind(func(s formState[productForm]) gox.Elem {
+					return e.fields(s, live)
+				}))
+			</form>
+		</div>
+		~(if e.ID != 0 {
+			<div class="mt-6">~(productDanger(e.ID, e.Initial.Name))</div>
+		})
+	</div>
+}
+
+elem (e productEditor) fields(s formState[productForm], live doors.Beam[int]) {
+	~~
+	v := s.Values
+	stock := new(doors.Door)
+	live.ReadAndSub(ctx, func(ctx context.Context, n int) bool {
+		stock.Inner(ctx, stockField(strconv.Itoa(n), ""))
+		return false
+	})
+	submit := "Create product"
+	if e.ID != 0 {
+		submit = "Save changes"
+	}
+	~~
+	~(formErrors(s.Errs))
+	~card{
+		Title: "Product",
+		Body: <div class="grid grid-cols-1 gap-5 @xl:grid-cols-2">
+			<div class="@xl:col-span-2">
+				~field{Label: "Name", Name: "name", Value: v.Name, Required: true, Error: s.Errs["name"], Desc: "product name", Placeholder: "Pour-over kettle"}
+			</div>
+			~field{Label: "SKU", Name: "sku", Value: v.SKU, Required: true, Error: s.Errs["sku"], Help: "Unique code on the shelf label.", Desc: "stock keeping unit, unique, like SKU-109", Placeholder: "SKU-109"}
+			<div></div>
+			~field{Label: "Price", Name: "price", Value: v.Price, Prefix: "$", Mode: "decimal", Required: true, Error: s.Errs["price"], Help: "Per unit, in US dollars.", Desc: "price per unit in USD, like 24.90", Placeholder: "0.00"}
+			~>(stock) ~(stockField(v.Stock, s.Errs["stock"]))
+		</div>,
+	}
+	<div class="mt-6 flex flex-col-reverse gap-2 @xl:flex-row @xl:justify-end">
+		~>neui.Use{Desc: "leave the form without saving"} <a (doors.ALink{Model: ProductsPath{}, Batch: true}) class=(btnGhost)>Cancel</a>
+		~>neui.Use{Desc: "save the product with the values in the form"} <button type="submit" class=(btnPrimary)>~(submit)</button>
+	</div>
+}
+
+elem stockField(value string, err string) {
+	~field{Label: "In stock", Name: "stock", Type: "number", Value: value, Mode: "numeric", Required: true, Error: err, Help: "Units on the shelf now.", Desc: "units in stock, a whole number", Placeholder: "0"}
+}
+
+elem productDanger(id int, name string) {
+	~~
+	n := 0
+	for _, o := range shop.Orders(orderQuery{}) {
+		if slices.ContainsFunc(o.Lines, func(l line) bool {
+			return l.ProductID == id
+		}) {
+			n++
+		}
+	}
+	~~
+	~>neui.Space{Name: "delete_product", Desc: "Deleting this product, possible only while it is on no order"} ~card{
+		Title: "Delete product",
+		Desc: "Removes the product from the catalogue for good.",
+		Body: <>
+			~(if n > 0 {
+				~neui.Data{Text: fmt.Sprintf("This product can't be deleted: it is on %d orders. Setting its stock to 0 stops selling it.", n)}
+				<p class="text-sm text-stone-600">
+					~(name, " is on ", n, " order", plural(n), ", so it can't be deleted. Set its stock to 0 to stop selling it.")
+				</p>
+			} else {
+				~confirmAction{
+					Label: "Delete product",
+					Icon: iconTrash,
+					Desc: "start deleting this product; the user must then confirm it on the page",
+					Question: "Delete " + name + "?",
+					Detail: "This can't be undone.",
+					Confirm: "Delete product",
+					Wait: "Deleting waits for the user: only they can press Delete product in the confirmation.",
+					Do: func(ctx context.Context) error {
+						if err := shop.DeleteProduct(ctx, id); err != nil {
+							return err
+						}
+						notify(ctx, name + " deleted")
+						navigate(ctx, ProductsPath{})
+						return nil
+					},
+				}
+			})
+		</>,
+	}
+}

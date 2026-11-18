@@ -1,0 +1,221 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"strconv"
+
+	"github.com/doors-dev/doors"
+	"github.com/doors-dev/gox"
+	"neui.dev"
+)
+
+type productsToolInput struct {
+	Search string `json:"search,omitempty" description:"part of a product name or SKU; empty for all"`
+	Sort string `json:"sort,omitempty" description:"name, sku, price or stock; prefix - for descending; empty for by name"`
+	Page int `json:"page,omitempty" description:"page of the table, 1-based; 0 for the first"`
+}
+
+type productsToolOutput struct {
+	Shown []product `json:"shown" description:"products now on the user's screen"`
+	Page pageInfo `json:"page"`
+}
+
+type productInput struct {
+	SKU string `json:"sku" required:"true" description:"unique code without spaces, like SKU-109"`
+	Name string `json:"name" required:"true"`
+	Price float64 `json:"price" required:"true" description:"USD per unit"`
+	Stock int `json:"stock" description:"units in stock"`
+}
+
+type productPatch struct {
+	ID int `json:"id" required:"true" description:"product id"`
+	SKU *string `json:"sku,omitempty" description:"omit to keep"`
+	Name *string `json:"name,omitempty" description:"omit to keep"`
+	Price *float64 `json:"price,omitempty" description:"USD per unit; omit to keep"`
+	Stock *int `json:"stock,omitempty" description:"units in stock; omit to keep, or use adjust_stock to add or take away"`
+}
+
+func (in productInput) form() productForm {
+	return productForm{SKU: in.SKU, Name: in.Name, Price: strconv.FormatFloat(in.Price, 'f', -1, 64), Stock: strconv.Itoa(in.Stock)}
+}
+
+func (p ProductsPath) withSort(sort string) any {
+	p.Sort, p.Page = sort, 0
+	return p
+}
+
+func (p ProductsPath) withPage(page int) any {
+	p.Page = page
+	if page == 1 {
+		p.Page = 0
+	}
+	return p
+}
+
+elem productsPage(path doors.Source[ProductsPath]) {
+	~~
+	search := doors.DeriveBeam(path, func(p ProductsPath) string {
+		return p.Search
+	})
+	~~
+	~>neui.Space{
+		Name: "products",
+		Desc: "Products list: a search box, a sortable table of price and stock and its pages; sort by stock to see what runs low",
+	} <div>
+		~pageHeader{
+			Title: "Products",
+			Meta: <span>~("What the shop sells. Items with ", lowStock, " or fewer units are flagged.")</span>,
+			Actions: <>
+				~>neui.Use{Desc: "open the form to add a new product"} <a
+					(doors.ALink{Model: ProductsPath{View: ListNew}, Batch: true, After: scrollTop})
+					class=(btnPrimary)>
+					~(icon(iconPlus, "size-4"))
+					New product
+				</a>
+			</>,
+		}
+		~neui.Tool[productInput, created]{
+			Name: "create_product",
+			Desc: "Add a product, checked like the New product form, and open its page for the user",
+			Handler: func(ctx context.Context, in productInput) (created, error) {
+				id, errs := shop.SaveProduct(ctx, 0, in.form())
+				if err := errs.err(); err != nil {
+					return created{}, err
+				}
+				notify(ctx, "Product added")
+				navigate(ctx, ProductPath{ID: id})
+				return created{ID: id}, nil
+			},
+		}
+		<section class="overflow-hidden rounded-xl bg-white shadow-xs ring-1 ring-stone-200">
+			~>neui.Space{Name: "search", Desc: "Search box of the products table"} <div>
+				~neui.Tool[productsToolInput, productsToolOutput]{
+					Name: "search_products",
+					Desc: "Set the search, sort and page of the products table the user sees; an empty field clears it",
+					Handler: func(ctx context.Context, in productsToolInput) (productsToolOutput, error) {
+						next := ProductsPath{Search: in.Search, Sort: in.Sort, Page: in.Page}
+						if err := checkSort(next.Sort, "name", "sku", "price", "stock"); err != nil {
+							return productsToolOutput{}, err
+						}
+						shown, info := paginate(shop.Products(next.Search, next.Sort), next.Page, pageSize)
+						next.Page = info.Page
+						if next.Page == 1 {
+							next.Page = 0
+						}
+						path.Update(ctx, next)
+						return productsToolOutput{Shown: shown, Page: info}, nil
+					},
+				}
+				~(search.Bind(func(q string) gox.Elem {
+					return searchBar("products-search", "Search by name or SKU", q, "search products by name or SKU; applies on Enter or when the field loses focus", func(ctx context.Context, v string) {
+						path.Mutate(ctx, func(p ProductsPath) ProductsPath {
+							p.Search, p.Page = v, 0
+							return p
+						})
+					})
+				}))
+			</div>
+			~>(new(doors.Door)) ~({
+				_, _ = shop.version.Effect(ctx)
+				p, ok := path.Effect(ctx)
+				if !ok {
+					return nil
+				}
+				return productsTable(p)
+			})
+		</section>
+	</div>
+}
+
+elem productsTable(p ProductsPath) {
+	~~
+	all := shop.Products(p.Search, p.Sort)
+	rows, info := paginate(all, p.Page, pageSize)
+	sort := p.Sort
+	if sort == "" {
+		sort = "name"
+	}
+	~~
+	~>neui.Space{Name: "table", Desc: "Products matching the search with price and stock, one page at a time; the column headers sort it"} <div>
+		~neui.Data{Text: "products shown in the table", Object: rows}
+		~neui.Data{Text: fmt.Sprintf("page %d of %d; %d products match", info.Page, info.Pages, info.Total)}
+		~neui.Tool[productPatch, struct{}]{
+			Name: "update_product",
+			Desc: "Change a product's SKU, name, price or stock, checked like the product form; omitted fields stay as they are",
+			Handler: func(ctx context.Context, in productPatch) (struct{}, error) {
+				p, ok := shop.Product(in.ID)
+				if !ok {
+					return struct{}{}, fmt.Errorf("no product %d", in.ID)
+				}
+				f := p.form()
+				patch(&f.SKU, in.SKU)
+				patch(&f.Name, in.Name)
+				if in.Price != nil {
+					f.Price = strconv.FormatFloat(*in.Price, 'f', -1, 64)
+				}
+				if in.Stock != nil {
+					f.Stock = strconv.Itoa(*in.Stock)
+				}
+				if _, errs := shop.SaveProduct(ctx, in.ID, f); len(errs) > 0 {
+					return struct{}{}, errs.err()
+				}
+				notify(ctx, f.Name + " saved")
+				return struct{}{}, nil
+			},
+		}
+		~neui.Tool[adjustStockInput, product]{
+			Name: "adjust_stock",
+			Desc: "Add units to a product's stock, or take them away with a negative change. Returns the product after the change",
+			Handler: func(ctx context.Context, in adjustStockInput) (product, error) {
+				p, err := shop.AdjustStock(ctx, in.ID, in.Change)
+				if err != nil {
+					return product{}, err
+				}
+				notify(ctx, fmt.Sprintf("%s: %d in stock", p.Name, p.Stock))
+				return p, nil
+			},
+		}
+		~(if len(all) == 0 {
+			~emptyState{
+				Icon: iconProducts,
+				Title: "No products found",
+				Body: "Nothing matches this search.",
+				Action: <>
+					~>neui.Use{Desc: "clear the search"} <a (doors.ALink{Model: ProductsPath{}, Batch: true}) class=(btnSecondary)>Clear search</a>
+				</>,
+			}
+		} else {
+			<div class="overflow-x-auto">
+				<table class=(tableClass)>
+					<thead>
+						<tr>
+							~sortHeader{Label: "Product", Key: "name", First: "name", Current: sort, Model: p.withSort}
+							~sortHeader{Label: "SKU", Key: "sku", First: "sku", Current: sort, Class: "hidden @xl:table-cell", Model: p.withSort}
+							~sortHeader{Label: "Price", Key: "price", First: "-price", Current: sort, Right: true, Model: p.withSort}
+							~sortHeader{Label: "Stock", Key: "stock", First: "stock", Current: sort, Right: true, Model: p.withSort}
+						</tr>
+					</thead>
+					<tbody>
+						~(for _, it := range rows {
+							<tr class=(rowClass)>
+								<td class=(tdClass)>
+									~>neui.Use{Desc: "open product " + it.Name + " to edit it"} <a (doors.ALink{Model: ProductPath{ID: it.ID}, Batch: true, After: scrollTop}) class="font-medium text-stone-900 hover:underline">
+										~(it.Name)
+									</a>
+									<p class="text-xs text-stone-500 @xl:hidden">~(it.SKU)</p>
+								</td>
+								<td class=(tdClass.Add("hidden font-mono text-xs text-stone-500 @xl:table-cell"))>~(it.SKU)</td>
+								<td class=(tdClass.Add("text-right tabular-nums"))>~(money(it.Price))</td>
+								<td class=(tdClass.Add("text-right"))>~(stockBadge(it.Stock))</td>
+							</tr>
+						})
+					</tbody>
+				</table>
+			</div>
+		})
+	</div>
+	~(if len(all) > 0 {
+		~pager{Info: info, Noun: "products", Model: p.withPage}
+	})
+}

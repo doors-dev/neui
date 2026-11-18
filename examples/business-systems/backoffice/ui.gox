@@ -1,0 +1,561 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"github.com/doors-dev/doors"
+	"github.com/doors-dev/gox"
+	"neui.dev"
+)
+
+elem icon(d string, class string) {
+	<svg
+		class=(doors.Class("shrink-0", class))
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="1.6"
+		aria-hidden="true">
+		<path stroke-linecap="round" stroke-linejoin="round" d=(d)></path>
+	</svg>
+}
+
+type crumb struct {
+	Label string
+	Model any
+}
+
+type pageHeader struct {
+	Crumbs []crumb
+	Title string
+	Meta gox.Elem
+	Actions gox.Elem
+}
+
+elem (h pageHeader) Main() {
+	<title>~(h.Title, " · Kettle & Burr")</title>
+	<header class="mb-6 flex flex-col gap-4 @xl:flex-row @xl:items-end @xl:justify-between">
+		<div class="min-w-0">
+			~(if len(h.Crumbs) > 0 {
+				<nav class="mb-2 flex items-center gap-1 text-sm text-stone-500" aria-label="Breadcrumb">
+					~(for i, c := range h.Crumbs {
+						~(if i > 0 {
+							~(icon(iconRight, "size-3.5 text-stone-400"))
+						})
+						~>neui.Use{Desc: crumbDesc(i, len(h.Crumbs), c.Label)} <a
+							(doors.ALink{Model: c.Model, Batch: true, After: scrollTop})
+							class="rounded hover:text-stone-900 hover:underline">
+							~(c.Label)
+						</a>
+					})
+				</nav>
+			})
+			<h1 class="truncate text-2xl font-semibold tracking-tight text-stone-900">~(h.Title)</h1>
+			~(if h.Meta != nil {
+				<div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-stone-500">~(h.Meta)</div>
+			})
+		</div>
+		~(if h.Actions != nil {
+			<div class="flex flex-wrap items-center gap-2">~(h.Actions)</div>
+		})
+	</header>
+}
+
+func crumbDesc(i int, n int, label string) string {
+	if i == n - 1 {
+		return "breadcrumb to this page, " + label
+	}
+	return "breadcrumb back to " + label
+}
+
+type card struct {
+	Title string
+	Desc string
+	Actions gox.Elem
+	Body gox.Elem
+	Flush bool
+}
+
+elem (c card) Main() {
+	<section class="overflow-hidden rounded-xl bg-white shadow-xs ring-1 ring-stone-200">
+		~(if c.Title != "" {
+			<div class="flex flex-wrap items-center justify-between gap-3 border-b border-stone-100 px-5 py-4">
+				<div>
+					<h2 class="text-base font-semibold text-stone-900">~(c.Title)</h2>
+					~(if c.Desc != "" {
+						<p class="mt-0.5 text-sm text-stone-500">~(c.Desc)</p>
+					})
+				</div>
+				~(c.Actions)
+			</div>
+		})
+		~(if c.Flush {
+			~(c.Body)
+		} else {
+			<div class="px-5 py-5">~(c.Body)</div>
+		})
+	</section>
+}
+
+elem badge(s status) {
+	~~
+	tone := map[status]string{
+		paid: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
+		unpaid: "bg-amber-50 text-amber-800 ring-amber-600/25",
+		refunded: "bg-sky-50 text-sky-700 ring-sky-600/20",
+		cancelled: "bg-stone-100 text-stone-600 ring-stone-500/20",
+	}[s]
+	dot := map[status]string{
+		paid: "bg-emerald-500",
+		unpaid: "bg-amber-500",
+		refunded: "bg-sky-500",
+		cancelled: "bg-stone-400",
+	}[s]
+	~~
+	<span class=(doors.Class("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium capitalize ring-1 ring-inset", tone))>
+		<span class=(doors.Class("size-1.5 rounded-full", dot))></span>
+		~(string(s))
+	</span>
+}
+
+elem stockBadge(n int) {
+	~(if n == 0 {
+		<span class="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 ring-1 ring-red-600/20 ring-inset">
+			Out of stock
+		</span>
+	} else if n <= lowStock {
+		<span class="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800 ring-1 ring-amber-600/25 ring-inset">
+			Low · ~(n) left
+		</span>
+	} else {
+		<span class="text-stone-700 tabular-nums">~(n)</span>
+	})
+}
+
+type field struct {
+	Label string
+	Name string
+	Value string
+	Type string
+	Placeholder string
+	Help string
+	Error string
+	Desc string
+	Required bool
+	Prefix string
+	Mode string
+}
+
+func fieldID(name string) string {
+	return "f-" + strings.NewReplacer("[", "-", "]", "", ".", "-").Replace(name)
+}
+
+elem (f field) Main() {
+	~~
+	id := fieldID(f.Name)
+	kind := f.Type
+	if kind == "" {
+		kind = "text"
+	}
+	~~
+	<div>
+		~(fieldLabel(id, f.Label, f.Required))
+		<div class="relative mt-1.5">
+			~(if f.Prefix != "" {
+				<span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-sm text-stone-400">~(f.Prefix)</span>
+			})
+			~>neui.Use{Desc: f.Desc} <input
+				id=(id)
+				name=(f.Name)
+				type=(kind)
+				value=(f.Value)
+				placeholder=(opt(f.Placeholder))
+				inputmode=(opt(f.Mode))
+				aria-required=(ariaTrue(f.Required))
+				aria-invalid=(ariaTrue(f.Error != ""))
+				aria-describedby=(id + "-note")
+				class=(inputBase.Add(when(f.Prefix != "", "pl-7")))>
+		</div>
+		~(fieldNote(id, f.Help, f.Error))
+	</div>
+}
+
+type textArea struct {
+	Label string
+	Name string
+	Value string
+	Placeholder string
+	Help string
+	Error string
+	Desc string
+	Required bool
+	Rows int
+}
+
+elem (f textArea) Main() {
+	~~
+	id := fieldID(f.Name)
+	~~
+	<div>
+		~(fieldLabel(id, f.Label, f.Required))
+		~>neui.Use{Desc: f.Desc} <textarea
+			id=(id)
+			name=(f.Name)
+			rows=(max(f.Rows, 2))
+			placeholder=(opt(f.Placeholder))
+			aria-required=(ariaTrue(f.Required))
+			aria-invalid=(ariaTrue(f.Error != ""))
+			aria-describedby=(id + "-note")
+			class=(inputBase.Add("mt-1.5"))>
+			~(f.Value)
+		</textarea>
+		~(fieldNote(id, f.Help, f.Error))
+	</div>
+}
+
+type option struct {
+	Value string
+	Label string
+}
+
+type selectField struct {
+	Label string
+	Name string
+	Value string
+	Options []option
+	Placeholder string
+	Help string
+	Error string
+	Desc string
+	Required bool
+	Hide bool
+	Change func(ctx context.Context, value string)
+}
+
+elem (f selectField) Main() {
+	~~
+	id := fieldID(f.Name)
+	~~
+	<div>
+		~(if f.Hide {
+			<label for=(id) class="sr-only">~(f.Label)</label>
+		} else {
+			~(fieldLabel(id, f.Label, f.Required))
+		})
+		<div class=(doors.Class("relative", when(!f.Hide, "mt-1.5")))>
+			~>neui.Use{Desc: f.Desc} <select
+				id=(id)
+				name=(f.Name)
+				aria-required=(ariaTrue(f.Required))
+				aria-invalid=(ariaTrue(f.Error != ""))
+				aria-describedby=(id + "-note")
+				class=(inputBase.Add("cursor-pointer appearance-none truncate pr-9"))
+				(f.onChange())>
+				~(if f.Placeholder != "" {
+					<option value="" selected=(f.Value == "")>~(f.Placeholder)</option>
+				})
+				~(for _, o := range f.Options {
+					<option value=(o.Value) selected=(o.Value == f.Value)>~(o.Label)</option>
+				})
+			</select>
+			<span class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-stone-400">
+				~(icon(iconUpDown, "size-4"))
+			</span>
+		</div>
+		~(fieldNote(id, f.Help, f.Error))
+	</div>
+}
+
+func (f selectField) onChange() gox.Modify {
+	if f.Change == nil {
+		return gox.ModifyFunc(func(context.Context, string, gox.Attrs) error {
+			return nil
+		})
+	}
+	return doors.AChange{
+		Race: doors.RaceLatest,
+		On: func(ctx context.Context, r doors.RequestChange) bool {
+			f.Change(ctx, r.Event().Value)
+			return false
+		},
+	}
+}
+
+elem fieldLabel(id string, label string, required bool) {
+	<label for=(id) class="block text-sm font-medium text-stone-800">
+		~(label)
+		~(if required {
+			<span class="text-amber-600" aria-hidden="true">~" *"</span>
+		})
+	</label>
+}
+
+elem fieldNote(id string, help string, err string) {
+	~(if err != "" {
+		<p id=(id + "-note") class="mt-1.5 flex items-start gap-1 text-sm text-red-600">
+			~(icon(iconWarning, "mt-0.5 size-4"))
+			~(err)
+		</p>
+	} else if help != "" {
+		<p id=(id + "-note") class="mt-1.5 text-sm text-stone-500">~(help)</p>
+	})
+}
+
+elem formErrors(errs fieldErrors) {
+	~(if len(errs) > 0 {
+		<div class="mb-6 flex gap-3 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-800 ring-1 ring-red-200" role="alert">
+			~(icon(iconWarning, "size-5 text-red-500"))
+			<div>
+				<p class="font-medium">
+					~(if len(errs) == 1 {
+						Please fix the highlighted field.
+					} else {
+						~(fmt.Sprintf("Please fix the %d highlighted fields.", len(errs)))
+					})
+				</p>
+				~(if errs[""] != "" {
+					<p class="mt-1">~(errs[""])</p>
+				})
+			</div>
+		</div>
+		~neui.Data{Text: "The last save was refused; fix these fields (keys are field names) and save again", Object: errs}
+	})
+}
+
+type pager struct {
+	Info pageInfo
+	Noun string
+	Model func(page int) any
+}
+
+elem (p pager) Main() {
+	~(if p.Info.Pages > 1 {
+		~>(neui.Space{Name: "pager", Desc: "Pages of the " + p.Noun + " table: which rows are shown and links to the other pages"}) ~(p.bar())
+	} else {
+		~(p.bar())
+	})
+}
+
+elem (p pager) bar() {
+	<div class="flex flex-col items-center justify-between gap-3 border-t border-stone-100 px-5 py-3 text-sm text-stone-600 @xl:flex-row">
+		<p>
+			~(if p.Info.Total == 0 {
+				No ~(p.Noun)
+			} else {
+				Showing
+				<span class="font-medium text-stone-900">~(" ", p.Info.From, "–", p.Info.To, " ")</span>
+				of
+				<span class="font-medium text-stone-900">~(" ", p.Info.Total, " ")</span>
+				~(p.Noun)
+			})
+		</p>
+		~(if p.Info.Pages > 1 {
+			<nav class="flex items-center gap-1" aria-label="Pagination">
+				~(p.step(p.Info.Page - 1, iconLeft, "Previous"))
+				~(for n := 1; n <= p.Info.Pages; n++ {
+					~(if n == p.Info.Page {
+						<span
+							class="inline-flex size-8 items-center justify-center rounded-lg bg-stone-900 text-sm font-medium text-white tabular-nums"
+							aria-current="page">
+							~(n)
+						</span>
+					} else {
+						~>neui.Use{Desc: fmt.Sprintf("show page %d of the %s", n, p.Noun)} <a
+							(doors.ALink{Model: p.Model(n), Batch: true})
+							class="inline-flex size-8 items-center justify-center rounded-lg text-sm font-medium text-stone-700 tabular-nums hover:bg-stone-100">
+							~(n)
+						</a>
+					})
+				})
+				~(p.step(p.Info.Page + 1, iconRight, "Next"))
+			</nav>
+		})
+	</div>
+}
+
+elem (p pager) step(n int, d string, label string) {
+	~(if n < 1 || n > p.Info.Pages {
+		<span class="inline-flex size-8 items-center justify-center rounded-lg text-stone-300" aria-hidden="true">~(icon(d, "size-4"))</span>
+	} else {
+		~>neui.Use{Desc: "show the " + strings.ToLower(label) + " page of the " + p.Noun} <a
+			(doors.ALink{Model: p.Model(n), Batch: true})
+			class="inline-flex size-8 items-center justify-center rounded-lg text-stone-600 hover:bg-stone-100"
+			aria-label=(label + " page")>
+			~(icon(d, "size-4"))
+		</a>
+	})
+}
+
+type sortHeader struct {
+	Label string
+	Key string
+	First string
+	Current string
+	Right bool
+	Class string
+	Model func(sort string) any
+}
+
+elem (s sortHeader) Main() {
+	~~
+	key := strings.TrimPrefix(s.Current, "-")
+	active := key == s.Key
+	arrow := iconUpDown
+	var order any
+	desc := "sort the table by " + strings.ToLower(s.Label)
+	if active && strings.HasPrefix(s.Current, "-") {
+		arrow, order = iconDown, "descending"
+		desc += ", now descending; press again for ascending"
+	} else if active {
+		arrow, order = iconUp, "ascending"
+		desc += ", now ascending; press again for descending"
+	}
+	~~
+	<th
+		class=(thClass.Add(when(s.Right, "text-right"), s.Class))
+		aria-sort=(order)>
+		~>neui.Use{Desc: desc} <a
+			(doors.ALink{Model: s.Model(nextSort(s.Current, s.Key, s.First)), Batch: true})
+			class=(doors.Class("group inline-flex items-center gap-1 hover:text-stone-900", when(active, "text-stone-900")))>
+			~(s.Label)
+			~(icon(arrow, when(!active, "text-stone-300 group-hover:text-stone-500") + " size-3.5"))
+		</a>
+	</th>
+}
+
+type emptyState struct {
+	Icon string
+	Title string
+	Body string
+	Action gox.Elem
+}
+
+elem (e emptyState) Main() {
+	<div class="flex flex-col items-center px-6 py-14 text-center">
+		<div class="flex size-12 items-center justify-center rounded-full bg-stone-100 text-stone-500">
+			~(icon(e.Icon, "size-6"))
+		</div>
+		<h3 class="mt-4 text-sm font-semibold text-stone-900">~(e.Title)</h3>
+		<p class="mt-1 max-w-sm text-sm text-stone-500">~(e.Body)</p>
+		~(if e.Action != nil {
+			<div class="mt-5">~(e.Action)</div>
+		})
+	</div>
+}
+
+elem notFound(what string, back crumb) {
+	~(doors.Status(404))
+	<title>Not found · Kettle & Burr</title>
+	<div class="mx-auto max-w-md py-20 text-center">
+		<p class="text-sm font-semibold text-amber-700">404</p>
+		<h1 class="mt-2 text-2xl font-semibold tracking-tight text-stone-900">~(what) not found</h1>
+		<p class="mt-2 text-sm text-stone-500">It may have been deleted, or the link is wrong.</p>
+		~neui.Data{Text: what + " not found: the id in the address does not exist"}
+		<div class="mt-6">
+			~>neui.Use{Desc: strings.ToLower(back.Label)} <a (doors.ALink{Model: back.Model, Batch: true}) class=(btnSecondary)>
+				~(icon(iconBack, "size-4"))
+				~(back.Label)
+			</a>
+		</div>
+	</div>
+}
+
+elem dl(items ...gox.Elem) {
+	<dl class="divide-y divide-stone-100">
+		~(for _, it := range items {
+			~(it)
+		})
+	</dl>
+}
+
+elem dlRow(label string, value any) {
+	<div class="grid grid-cols-3 gap-4 py-3 first:pt-0 last:pb-0">
+		<dt class="text-sm text-stone-500">~(label)</dt>
+		<dd class="col-span-2 text-sm text-stone-900">~(value)</dd>
+	</div>
+}
+
+type confirmAction struct {
+	Label string
+	Icon string
+	Desc string
+	Question string
+	Detail string
+	Confirm string
+	Wait string
+	Full bool
+	Do func(ctx context.Context) error
+}
+
+type confirmState struct {
+	Open bool
+	Err string
+}
+
+elem (c confirmAction) Main() {
+	~~
+	state := doors.NewSource(confirmState{})
+	~~
+	~(state.Bind(func(s confirmState) gox.Elem {
+		return c.view(state, s)
+	}))
+}
+
+elem (c confirmAction) view(state doors.Source[confirmState], s confirmState) {
+	~(if !s.Open {
+		~>neui.Use{Desc: c.Desc} <button
+			(doors.AClick{
+				On: func(ctx context.Context, _ doors.RequestPointer) bool {
+					state.Update(ctx, confirmState{Open: true})
+					return false
+				},
+			})
+			type="button"
+			class=(btnDangerSoft.Add(when(c.Full, "w-full")))>
+			~(icon(c.Icon, "size-4"))
+			~(c.Label)
+		</button>
+	} else {
+		<div class="rounded-lg bg-red-50 p-4 ring-1 ring-red-200" role="alertdialog" aria-label=(c.Question)>
+			~neui.Data{Text: c.Wait}
+			<p class="text-sm font-semibold text-red-900">~(c.Question)</p>
+			~(if c.Detail != "" {
+				<p class="mt-1 text-sm text-red-800">~(c.Detail)</p>
+			})
+			~(if s.Err != "" {
+				<p class="mt-2 text-sm font-medium text-red-700">~(s.Err)</p>
+			})
+			<div class="mt-3 flex flex-wrap gap-2">
+				<button
+					(doors.AClick{
+						Scope: &doors.ScopeBlocking{},
+						Indicator: doors.IndicateAttr("aria-busy", "true"),
+						Batch: true,
+						On: func(ctx context.Context, _ doors.RequestPointer) bool {
+							if err := c.Do(ctx); err != nil {
+								state.Update(ctx, confirmState{Open: true, Err: err.Error()})
+							}
+							return false
+						},
+					})
+					type="button"
+					class=(btnDanger)>
+					~(c.Confirm)
+				</button>
+				~>neui.Use{Desc: "close the confirmation without doing it"} <button
+					(doors.AClick{
+						On: func(ctx context.Context, _ doors.RequestPointer) bool {
+							state.Update(ctx, confirmState{})
+							return false
+						},
+					})
+					type="button"
+					class=(btnSecondary)>
+					Keep it
+				</button>
+			</div>
+		</div>
+	})
+}
