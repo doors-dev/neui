@@ -107,6 +107,7 @@ func (k Chat) Main() gox.Elem {
 				return false
 			}
 			s, _ := doors.SessionStore(ctx).Load(windowStateKey{}).(layout.State)
+			s.Aside = false
 			state.Update(ctx, &windowStateWrapper{State: &s})
 			return false
 		})

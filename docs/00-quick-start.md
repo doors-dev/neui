@@ -176,6 +176,30 @@ It floats over the page as a button in the corner, so your markup stays as it is
 
 It shows only while neui is enabled for the session, so render it unconditionally.
 
+### Questions in the chat
+
+During a conversation the agent can also ask the user something right in the chat: a small form shown in place of the message box, whose answer goes back to the agent. Any module can provide such questions with `Module.Ask`. Its handler gets the agent's input and returns the form and its submit button, which hands the answer back:
+
+```gox
+// app.gox
+m.Ask("confirm", "Ask the user to confirm an action", func(in ConfirmInput, answer neui.Answer[bool]) api.ChatAsk {
+	return api.ChatAsk{
+		Form:   <p>~(in.Question)</p>,
+		Button: <button (doors.AClick{On: func(ctx context.Context, _ doors.RequestPointer) bool {
+			answer.Submit(ctx, true)
+			return false
+		}})>Confirm</button>,
+	}
+})
+```
+
+If the user dismisses the question, the agent's call fails. nekit ships the most common one, picking from a list of options with an optional answer of their own. Register it like any module:
+
+```go
+// main.go
+neui.WithModules(nekit.ModuleAsk())
+```
+
 > `nekit.Chat` has layout, feature and theming options; see its godoc. For full control, build your own chat on `neui.Instance`, or start from a copy of `nekit.Chat`.
 
 ## Modules
