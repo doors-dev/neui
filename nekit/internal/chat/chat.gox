@@ -100,6 +100,9 @@ func (k Chat) Main() gox.Elem {
 		enabled := doors.DeriveBeam(inst.State(), func(s api.InstanceState) bool {
 			return s.Status != api.InstanceDisabled
 		})
+		if err := cur.Comp(css.Style(params.ThemeDark, params.ThemeLight, params.Layout)); err != nil {
+			return err
+		}
 		return cur.Comp(state.Route(
 			doors.RouteMatch(
 				func(ws *windowStateWrapper) bool {
@@ -221,7 +224,6 @@ elem (k *widget) Main() {
 		dockIcon, undockIcon = icons.DockLeft, icons.UndockLeft
 	}
 	~~
-	~(css.Style(k.params.ThemeDark, k.params.ThemeLight, k.params.Layout))
 	<div
 		(shell)
 		data-mode=(mode)
@@ -260,8 +262,8 @@ elem (k *widget) Main() {
 					~>(doors.Class("nechat-ic")) ~(undockIcon())
 				</button>
 			})
-			~>(toggle) <button type="button" class="nechat-iconbtn" title="Collapse" aria-label="Collapse">
-				~>(doors.Class("nechat-ic")) ~(icons.Close())
+			~>(toggle) <button type="button" class="nechat-iconbtn nechat-wctl-collapse" title="Collapse" aria-label="Collapse">
+				~>(doors.Class("nechat-ic")) ~(icons.Minus())
 			</button>
 		</div>
 		~(if !k.params.Off(params.Sidebar) {

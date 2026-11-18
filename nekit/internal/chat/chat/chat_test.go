@@ -41,7 +41,7 @@ type reloadThread struct {
 func (reloadThread) Reload(context.Context) {}
 
 func TestTooLongChatShowsItsOwnCard(t *testing.T) {
-	c := &chat{thread: reloadThread{}}
+	c := &chat{thread: reloadThread{}, badge: doors.NewSource(Badge{})}
 	app := doors.NewApp(func(ctx context.Context, r doors.Request) gox.Elem {
 		return c.body(closedKindOf(api.ErrCompactionFailed))
 	})

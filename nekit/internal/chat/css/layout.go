@@ -57,7 +57,7 @@ func (l Layout) write(b *bytes.Buffer, key string) {
 		b.WriteString(widget)
 		b.WriteString(`[data-mode]:not([data-mode="dock"]){`)
 		if left {
-			b.WriteString("right:auto;left:1rem;")
+			b.WriteString("right:auto;left:1rem;transform-origin:bottom left;")
 		}
 		if l.Width != "" {
 			b.WriteString("width:" + l.Width + ";")
