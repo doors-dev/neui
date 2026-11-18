@@ -31,7 +31,7 @@ import (
 
 func TestIslandPathIsCanonical(t *testing.T) {
 	p := NewPage(context.Background())
-	isl := island.NewIsland(gox.Elem(func(gox.Cursor) error { return nil }), func(slot gox.Comp) gox.Elem { return slot.Main() }, nil, nil, island.NewLibrary())
+	isl := island.NewIsland(context.Background(), gox.Elem(func(gox.Cursor) error { return nil }), func(slot gox.Comp) gox.Elem { return slot.Main() }, nil, nil, island.NewLibrary())
 	t.Cleanup(isl.Unmount)
 	p.space.children = []*space{{root: p, ctx: context.Background(), name: "isl", path: "isl", island: isl}}
 	got, path, err := p.Island(context.Background(), "isl")

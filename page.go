@@ -355,6 +355,7 @@ func (i Island) Main() gox.Elem {
 			return cur.Any(i.Placeholder)
 		}
 		island := island.NewIsland(
+			doors.DetachedContext(cur.Context()),
 			i.Placeholder,
 			i.Template,
 			i.Success,

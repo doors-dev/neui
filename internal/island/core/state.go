@@ -35,11 +35,10 @@ import (
 )
 
 type Run interface {
-	Context() context.Context
 	TurnContext() context.Context
 	PauseTurn()
 	ResumeTurn()
-	PageContext() context.Context
+	IslandContext() context.Context
 	Library() Library
 	Notify(script uint, data json.RawMessage, idle bool)
 	Note(note string)
@@ -64,7 +63,7 @@ func NewState(run Run) State {
 		slots:   make(map[uint]*slot),
 		applied: applied,
 	}
-	doors.OnBatch(run.PageContext(), func(context.Context) {
+	doors.OnBatch(run.IslandContext(), func(context.Context) {
 		close(applied)
 	})
 	return s
@@ -227,7 +226,7 @@ func (s *state) toolCreate(ctx context.Context, arg createArg) (uint, error) {
 	ctx = context.WithValue(ctx, common.KeyIslandWidget, common.IslandWidget{Name: arg.Name, ID: id})
 	widget, err := s.run.Library().newWidget(ctx, arg.Name, arg.Params, func(ctx context.Context, output any) bool {
 		s.mu.Lock()
-		if s.run.Context().Err() != nil || s.hook == nil {
+		if s.run.TurnContext().Err() != nil || s.hook == nil {
 			s.mu.Unlock()
 			return false
 		}
@@ -535,7 +534,7 @@ func (s *state) FlushNotifications(idle bool) {
 func (s *state) send(prevStash *submit, idle bool) {
 	applied := make(chan struct{})
 	s.applied = applied
-	doors.OnBatch(s.run.PageContext(), func(context.Context) {
+	doors.OnBatch(s.run.IslandContext(), func(context.Context) {
 		close(applied)
 	}, func(ctx context.Context) {
 		ctx = context.WithValue(ctx, common.KeyIslandStore, s.run.Store())

@@ -42,6 +42,7 @@ func NewLibrary() Library {
 type Island = *island
 
 func NewIsland(
+	ctx context.Context,
 	placeholder gox.Elem,
 	template func(slot gox.Comp) gox.Elem,
 	success func(close func(ctx context.Context)) gox.Elem,
@@ -49,6 +50,7 @@ func NewIsland(
 	lib Library,
 ) Island {
 	island := &island{
+		ctx:         ctx,
 		id:          doors.IDRand(),
 		placeholder: placeholder,
 		template:    template,
@@ -63,6 +65,7 @@ func NewIsland(
 }
 
 type island struct {
+	ctx         context.Context
 	mu          sync.Mutex
 	id          string
 	placeholder gox.Elem
@@ -150,7 +153,7 @@ func (i *island) StartCode(ctx context.Context, space string, comment string, co
 			go func() {
 				select {
 				case <-ch:
-				case <-old.pageContext.Done():
+				case <-i.ctx.Done():
 					return
 				}
 				i.mu.Lock()
@@ -159,7 +162,7 @@ func (i *island) StartCode(ctx context.Context, space string, comment string, co
 					return
 				}
 				i.run = nil
-				i.updateStatusScreen(old.pageContext, noAppStatus, i.placeholder)
+				i.updateStatusScreen(i.ctx, noAppStatus, i.placeholder)
 			}()
 			i.mu.Lock()
 			return 0, 0, context.Cause(ctx)

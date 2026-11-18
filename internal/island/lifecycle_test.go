@@ -25,7 +25,7 @@ import (
 
 func newTestIsland(t *testing.T) (*island, context.Context) {
 	t.Helper()
-	i := NewIsland(gox.Elem(func(gox.Cursor) error { return nil }), func(slot gox.Comp) gox.Elem { return slot.Main() }, nil, nil, NewLibrary())
+	i := NewIsland(context.Background(), gox.Elem(func(gox.Cursor) error { return nil }), func(slot gox.Comp) gox.Elem { return slot.Main() }, nil, nil, NewLibrary())
 	t.Cleanup(i.Unmount)
 	return i, context.Background()
 }
@@ -33,11 +33,10 @@ func newTestIsland(t *testing.T) (*island, context.Context) {
 func hungRun(i *island) *run {
 	ctx, cancel := context.WithCancelCause(context.Background())
 	r := &run{
-		island:      i,
-		pageContext: context.Background(),
-		ctx:         ctx,
-		cancel:      cancel,
-		end:         make(chan struct{}),
+		island: i,
+		ctx:    ctx,
+		cancel: cancel,
+		end:    make(chan struct{}),
 	}
 	i.mu.Lock()
 	i.seq++

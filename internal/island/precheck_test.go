@@ -34,7 +34,7 @@ func TestPrecheckRefusesPart(t *testing.T) {
 	if err := lib.View("note", "", func(context.Context, precheckNote) (api.Widget[precheckNote], error) { return nil, nil }); err != nil {
 		t.Fatal(err)
 	}
-	i := NewIsland(gox.Elem(func(gox.Cursor) error { return nil }), func(slot gox.Comp) gox.Elem { return slot.Main() }, nil, nil, lib)
+	i := NewIsland(context.Background(), gox.Elem(func(gox.Cursor) error { return nil }), func(slot gox.Comp) gox.Elem { return slot.Main() }, nil, nil, lib)
 	t.Cleanup(i.Unmount)
 	ctx := context.Background()
 	old := hungRun(i)

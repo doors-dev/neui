@@ -121,9 +121,8 @@ func newRun(ctx context.Context, island *island, seq uint, space string, comment
 		vm:               vm,
 		fs:               ctrl.FS(),
 		log:              log,
-		pageContext:      ctrl.PageContext(),
 		ctx:              ctx,
-		exec:             ctx,
+		turnCtx:          ctx,
 		cancel:           cancel,
 		end:              make(chan struct{}),
 		store:            doors.NewStore(),
@@ -187,10 +186,9 @@ type run struct {
 	task             common.Task
 	scripts          uint
 	current          uint
-	pageContext      context.Context
 	ctx              context.Context
-	exec             context.Context
-	turn             *time.Timer
+	turnCtx          context.Context
+	turnTimer        *time.Timer
 	cancel           context.CancelCauseFunc
 	state            core.State
 	end              chan struct{}
@@ -208,24 +206,20 @@ func (r *run) Store() doors.Store {
 	return r.store
 }
 
-func (r *run) PageContext() context.Context {
-	return r.pageContext
-}
-
-func (r *run) Context() context.Context {
-	return r.ctx
+func (r *run) IslandContext() context.Context {
+	return r.island.ctx
 }
 
 func (r *run) TurnContext() context.Context {
-	return r.exec
+	return r.turnCtx
 }
 
 func (r *run) PauseTurn() {
-	r.turn.Stop()
+	r.turnTimer.Stop()
 }
 
 func (r *run) ResumeTurn() {
-	r.turn.Reset(r.config.TurnTime)
+	r.turnTimer.Reset(r.config.TurnTime)
 }
 
 func (r *run) Seed(ctx context.Context, root gox.Comp) {
@@ -304,7 +298,7 @@ func (r *run) run() {
 		var result json.RawMessage
 		defer func() {
 			r.clean()
-			r.island.ended(r.pageContext, r.seq, r.task.ID(), r.endErr)
+			r.island.ended(r.island.ctx, r.seq, r.task.ID(), r.endErr)
 			if r.endErr != nil {
 				r.task.Err(r.endErr)
 			} else {
@@ -354,14 +348,17 @@ func (r *run) run() {
 			r.current = eval.script
 			r.runner.reset()
 			r.mu.Unlock()
-			exec, cancelExec := context.WithCancelCause(r.ctx)
-			r.exec = exec
-			r.turn = time.AfterFunc(r.config.TurnTime, func() {
-				cancelExec(fmt.Errorf("%s: %w", r.config.TurnTime, errTurnTime))
+			turnCtx, cancelTurn := context.WithCancelCause(common.AttachThread(r.island.ctx, r.ctx))
+			stopRun := context.AfterFunc(r.ctx, func() {
+				cancelTurn(context.Cause(r.ctx))
+			})
+			r.turnCtx = turnCtx
+			r.turnTimer = time.AfterFunc(r.config.TurnTime, func() {
+				cancelTurn(fmt.Errorf("%s: %w", r.config.TurnTime, errTurnTime))
 			})
 			done := make(chan struct{})
 			exited := make(chan struct{})
-			stop := context.AfterFunc(exec, func() {
+			stop := context.AfterFunc(turnCtx, func() {
 				defer close(exited)
 				for {
 					r.interrupt()
@@ -373,15 +370,16 @@ func (r *run) run() {
 				}
 			})
 			err := r.execute(eval.code)
-			r.turn.Stop()
+			r.turnTimer.Stop()
 			close(done)
 			if !stop() {
 				<-exited
 			}
-			if err != nil && errors.Is(context.Cause(exec), errTurnTime) {
-				err = context.Cause(exec)
+			if err != nil && errors.Is(context.Cause(turnCtx), errTurnTime) {
+				err = context.Cause(turnCtx)
 			}
-			cancelExec(nil)
+			cancelTurn(nil)
+			stopRun()
 			switch {
 			case r.ctx.Err() != nil:
 			case err != nil && !r.isAlive():
