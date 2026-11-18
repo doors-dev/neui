@@ -238,9 +238,9 @@ func TestTableSetPageTurnsTheUsersPage(t *testing.T) {
 	if ids(v) != "r11 r12" || v.Page != 3 {
 		t.Fatalf("set_page 3 read %+v, want rows r11 r12 on page 3", v)
 	}
-	a.shows(".neisland-table-status-text", "Showing 11–12 of 12")
+	a.shows(".neisland-table-current", "3")
 	a.refused("set_page", map[string]any{"page": 4}, "no page 4: the last is 3")
-	a.shows(".neisland-table-status-text", "Showing 11–12 of 12")
+	a.shows(".neisland-table-current", "3")
 }
 
 func TestTableSetPageWithoutTotalNeedsRows(t *testing.T) {
@@ -265,7 +265,7 @@ func TestTableSetSearchTypesForTheUser(t *testing.T) {
 		t.Fatalf("set_search read %+v, want r1 r10 r11 r12 on page 1 for row 1", v)
 	}
 	a.shows(".neisland-table-search", "row 1")
-	a.shows(".neisland-table-status-text", "Showing 1–4 of 4")
+	a.shows(".neisland-table-row > .neisland-table-cell:nth-child(2)", "Row 1 | Row 10 | Row 11 | Row 12")
 	v = a.then("set_search", map[string]any{"text": ""})
 	if v.Search != "" || *v.Pages != 3 {
 		t.Fatalf("an empty search read %+v, want every row back", v)
@@ -304,7 +304,7 @@ func TestTableSelectionTools(t *testing.T) {
 	a.call("submit_selected", map[string]any{})
 	a.submitted(table.Submit{Rows: []string{"r2", "r4", "r7"}})
 	a.call("clear_selected", map[string]any{})
-	a.shows(".neisland-table-status-text", "Showing 6–10 of 12")
+	a.shows(".neisland-table-status-text", "0 selected")
 	stack.ExpectJSON(t, a.call("get_selected", map[string]any{}), `{"ids": []}`)
 	a.refused("submit_selected", map[string]any{}, "nothing is selected")
 }

@@ -79,7 +79,7 @@ const footerJS = `() => {
 func TestTableFooterStatusSlotKeepsSizeWithSelection(t *testing.T) {
 	a := layoutApp(t, 1280, `ui.table({columns: [{title: "Name"}], select: {}, rows: `+tableRows(57)+`})`)
 	status := a.Find(".neisland-table-footer > .neisland-table-status")
-	status.Find(".neisland-table-status-text").WaitText("Showing 1–20 of 57")
+	status.Find(".neisland-table-status-text").WaitText("0 selected")
 	before := a.Page.MustEval(footerJS).String()
 	if f := strings.Fields(before); f[0] != "208" || f[1] != "24" || f[2] != "12" || f[3] != "12" || f[5] != "false" {
 		t.Fatalf("footer %q, want a 208 by 24 status at the 12px inset on the left and the pager at the right one on one line", before)
@@ -90,15 +90,15 @@ func TestTableFooterStatusSlotKeepsSizeWithSelection(t *testing.T) {
 	status.WaitCount(".neisland-button", 1)
 	expectEval(t, a, footerJS, before, "status slot and pager keep their place with a selection")
 	status.Find(".neisland-table-clear").Click()
-	status.Find(".neisland-table-status-text").WaitText("Showing 1–20 of 57")
+	status.Find(".neisland-table-status-text").WaitText("0 selected")
 	expectEval(t, a, footerJS, before, "status slot and pager keep their place after clear")
 	a.Find(".neisland-table-pager > .neisland-table-page:last-child").Click()
-	status.Find(".neisland-table-status-text").WaitText("Showing 41–57 of 57")
+	a.Find(".neisland-table-current").WaitText("3")
 }
 
 func TestTableFooterWrapsPagerOnNarrowPage(t *testing.T) {
 	a := layoutApp(t, 390, `ui.table({columns: [{title: "Name"}], select: {}, pageSize: 10, rows: `+tableRows(100)+`})`)
-	a.Find(".neisland-table-status-text").WaitText("Showing 1–10 of 100")
+	a.Find(".neisland-table-status-text").WaitText("0 selected")
 	got := a.Page.MustEval(footerJS).String()
 	if f := strings.Fields(got); f[0] != "208" || f[1] != "24" || f[2] != "12" || f[4] != "12" || f[5] != "true" || f[6] != "true" {
 		t.Fatalf("footer %q, want the 208 by 24 status first and the pager wrapped below it at the 12px inset on the left, no page scroll", got)
@@ -142,13 +142,13 @@ func tableRowsWithActions(n int) string {
 func TestTableLastPageOfRowsPadsWithFillers(t *testing.T) {
 	a := layoutApp(t, 1280, `ui.table({columns: [{title: "Name"}, {title: "Note"}], select: {}, pageSize: 5, rows: `+tableRowsWithActions(12)+`})`)
 	status := a.Find(".neisland-table-status-text")
-	status.WaitText("Showing 1–5 of 12")
+	status.WaitText("0 selected")
 	first := strings.Fields(a.Page.MustEval(fillerJS).String())
 	if first[1] != "5" || first[2] != "0" {
 		t.Fatalf("page 1 %v, want 5 rows and no fillers", first)
 	}
 	a.Find(".neisland-table-pager > .neisland-table-page:last-child").Click()
-	status.WaitText("Showing 11–12 of 12")
+	a.Find(".neisland-table-current").WaitText("3")
 	expectEval(t, a, fillerJS, first[0]+" 2 3 true", "last page keeps the height with 3 plain hidden fillers")
 	a.Find(`thead .neisland-table-checkbox`).Click()
 	status.WaitText("2 selected")
@@ -191,8 +191,8 @@ func TestTableSinglePageHasNoFillers(t *testing.T) {
 	a := layoutApp(t, 1280, `ui.column({}, ui.table({columns: [{title: "Name"}], select: {}, pageSize: 5, rows: `+tableRows(3)+`}), ui.table({columns: [{title: "Entry"}], pageSize: 5, query: String(function (p) {
 		return {rows: [{id: "a", cells: ["a"]}, {id: "b", cells: ["b"]}]}
 	})}))`)
-	a.Find(".neisland-table-card:nth-of-type(1) .neisland-table-status-text").WaitText("Showing 1–3 of 3")
-	expectEval(t, a, `() => Array.from(document.querySelectorAll(".neisland-table-status-text")).map((s) => s.textContent).join("|") + " " + document.querySelectorAll(".neisland-table-filler").length`, "Showing 1–3 of 3|Showing 1–2 0", "single-page tables have no fillers")
+	a.Find(".neisland-table-card:nth-of-type(1) .neisland-table-status-text").WaitText("0 selected")
+	expectEval(t, a, `() => Array.from(document.querySelectorAll(".neisland-table-status-text")).map((s) => s.textContent).join("|") + " " + document.querySelectorAll(".neisland-table-filler").length`, "0 selected|Showing 1–2 0", "single-page tables have no fillers")
 }
 
 const narrowCellsJS = `() => {
@@ -256,7 +256,7 @@ func TestTableRendersAsOneCard(t *testing.T) {
 
 func TestTableCardCheckColumnKeepsPadding(t *testing.T) {
 	a := layoutApp(t, 1280, `ui.table({columns: [{title: "Name"}], select: {}, rows: [{id: "a", cells: ["Ann"]}, {id: "b", cells: ["Bob"]}]})`)
-	a.Find(".neisland-table-status-text").WaitText("Showing 1–2 of 2")
+	a.Find(".neisland-table-status-text").WaitText("0 selected")
 	expectEval(t, a, `() => {
 		const card = document.querySelector(".neisland-table-card")
 		const box = card.querySelector(".neisland-table-card-box")
