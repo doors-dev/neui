@@ -1056,12 +1056,9 @@
   font-weight: var(--font-weight-medium, 500);
   color: var(--secondary-ink-hover);
 }
-.nechat-thread_new {
-  color: var(--secondary-ink-off);
-}
 .nechat-thread_new:hover {
   background-color: transparent;
-  color: var(--secondary-ink-quiet-hover);
+  color: var(--secondary-ink-hover);
 }
 .nechat-dot {
   display: flex;

@@ -1030,8 +1030,7 @@
 .nechat-thread:hover { @apply bg-(--secondary-bg-hover) text-(--secondary-ink-hover) }
 .nechat-thread:focus-visible { @apply border-(--panel-border-focus) }
 .nechat-thread_active { @apply bg-(--secondary-bg-selected) text-(--secondary-ink-hover) font-medium cursor-default }
-.nechat-thread_new { @apply text-(--secondary-ink-off) }
-.nechat-thread_new:hover { @apply bg-transparent text-(--secondary-ink-quiet-hover) }
+.nechat-thread_new:hover { @apply bg-transparent text-(--secondary-ink-hover) }
 .nechat-dot { @apply flex items-center justify-center w-4 h-4 flex-none text-(--app-ink-quiet) }
 .nechat-dot::before { @apply content-[''] w-1.5 h-1.5 rounded-full bg-current }
 .nechat-dot_off::before { @apply bg-transparent inset-ring inset-ring-current }
