@@ -72,11 +72,13 @@ func (t *thinking) Main() gox.Elem {
 	} else if !t.closed {
 		t.thoughtsDoor = new(doors.Door)
 		thoughts = t.thoughtsPlaceholder()
+	} else {
+		thoughts = thoughtsLabel()
 	}
 
-//line thinking.gox:71
+//line thinking.gox:73
 		__e = __c.Any(block{"Reasoning", t.slot, thoughts}); if __e != nil { return }
-//line thinking.gox:72
+//line thinking.gox:74
 		__e = __c.Any(func() any {
 		if t.summaryStreamer != nil {
 			return t.summaryBlock()
@@ -88,35 +90,52 @@ func (t *thinking) Main() gox.Elem {
 		return t.summaryDoor
 	}()); if __e != nil { return }
 	return })
-//line thinking.gox:82
+//line thinking.gox:84
 }
 
-//line thinking.gox:84
+//line thinking.gox:86
 func (t *thinking) thoughtsPlaceholder() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line thinking.gox:85
+//line thinking.gox:87
 		__e = (t.thoughtsDoor).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line thinking.gox:85
+//line thinking.gox:87
 				__e = __c.Set("class", "nechat-col nechat-think"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line thinking.gox:85
+//line thinking.gox:87
 				__e = __c.Any(summary); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
-//line thinking.gox:86
+//line thinking.gox:88
 }
 
-//line thinking.gox:88
+//line thinking.gox:90
+func thoughtsLabel() gox.Elem {
+	return gox.Elem(func(__c gox.Cursor) (__e error) {
+		ctx := __c.Context(); _ = ctx
+		__e = __c.Init("div"); if __e != nil { return }
+		{
+//line thinking.gox:91
+			__e = __c.Set("class", "nechat-col nechat-think"); if __e != nil { return }
+			__e = __c.Submit(); if __e != nil { return }
+//line thinking.gox:91
+			__e = __c.Any(summary); if __e != nil { return }
+		}
+		__e = __c.Close(); if __e != nil { return }
+	return })
+//line thinking.gox:92
+}
+
+//line thinking.gox:94
 func (t *thinking) summaryBlock() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line thinking.gox:89
+//line thinking.gox:95
 		__e = __c.Any(block{
 		"Summary",
 		t.summarySlot,
@@ -124,51 +143,51 @@ func (t *thinking) summaryBlock() gox.Elem {
 			ctx := __c.Context(); _ = ctx
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line thinking.gox:92
+//line thinking.gox:98
 				__e = __c.Set("class", "nechat-col nechat-summary"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line thinking.gox:93
+//line thinking.gox:99
 				__e = __c.Any(t.summaryStreamer); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line thinking.gox:94
+//line thinking.gox:100
 		return }),
 	}); if __e != nil { return }
 	return })
-//line thinking.gox:96
+//line thinking.gox:102
 }
 
-//line thinking.gox:98
+//line thinking.gox:104
 func (t *thinking) thoughtsBlock() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("details"); if __e != nil { return }
 		{
-//line thinking.gox:99
+//line thinking.gox:105
 			__e = __c.Set("class", "nechat-col nechat-think"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Init("summary"); if __e != nil { return }
 			{
-//line thinking.gox:100
+//line thinking.gox:106
 				__e = __c.Set("class", "nechat-think-head"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line thinking.gox:100
+//line thinking.gox:106
 				__e = __c.Any(summary); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line thinking.gox:101
+//line thinking.gox:107
 				__e = __c.Set("class", "nechat-think-body"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line thinking.gox:102
+//line thinking.gox:108
 				__e = __c.Any(t.thoughtsStreamer); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line thinking.gox:105
+//line thinking.gox:111
 }
 
 func (t *thinking) Append(e api.IndexedEvent) {
@@ -231,9 +250,6 @@ func (t *thinking) close() {
 	}
 	if t.thoughtsStreamer != nil {
 		t.thoughtsStreamer.Close()
-	}
-	if t.thoughtsDoor != nil {
-		t.thoughtsDoor.Static(context.Background(), nil)
 	}
 	if t.summaryDoor != nil {
 		t.summaryDoor.Static(context.Background(), nil)

@@ -398,7 +398,7 @@ func library(l neui.Library) error {
 
 Each one is a Go function that renders your component from the params the script passes.
 
-Island scripts can call your agent's modules except page and JS. Give an island the tools its apps need in its library; `l.Add` takes the same `neui.Tool` struct you render on the page. The island also exposes them to the agent as tools of its space.
+Island scripts can call your agent's modules except page and JS. Give an island the tools its apps need in its library; `l.Add` takes the same `neui.Tool` struct you render on the page. The island also exposes them to the agent as tools of its app space.
 
 ```gox
 // app.gox

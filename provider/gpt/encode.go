@@ -151,6 +151,17 @@ func encodeTools(set settings, tools []api.Tool) ([]toolDef, error) {
 		params := t.Schema
 		if params == nil {
 			params = map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false}
+		} else {
+			raw, err := json.Marshal(params)
+			if err != nil {
+				return nil, fmt.Errorf("gpt: tool %s schema: %w", t.Name, err)
+			}
+			var schema any
+			if err := json.Unmarshal(raw, &schema); err != nil {
+				return nil, fmt.Errorf("gpt: tool %s schema: %w", t.Name, err)
+			}
+			dropFormats(schema)
+			params = schema
 		}
 		out = append(out, toolDef{
 			Type:        "function",
@@ -161,6 +172,27 @@ func encodeTools(set settings, tools []api.Tool) ([]toolDef, error) {
 		})
 	}
 	return out, nil
+}
+
+var strictFormats = map[string]bool{
+	"date-time": true, "time": true, "date": true, "duration": true, "email": true,
+	"hostname": true, "ipv4": true, "ipv6": true, "uuid": true,
+}
+
+func dropFormats(v any) {
+	switch v := v.(type) {
+	case map[string]any:
+		if f, ok := v["format"].(string); ok && !strictFormats[f] {
+			delete(v, "format")
+		}
+		for _, child := range v {
+			dropFormats(child)
+		}
+	case []any:
+		for _, child := range v {
+			dropFormats(child)
+		}
+	}
 }
 
 func encodeToolChoice(c api.ToolChoice) any {

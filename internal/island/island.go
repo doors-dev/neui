@@ -341,9 +341,15 @@ func (s screen) Main() gox.Elem {
 func (i *island) Main() gox.Elem {
 	return func(cur gox.Cursor) error {
 		space := getSpace(cur.Context())
-		for _, t := range core.Tools(i.lib) {
-			if err := space.AddTool(cur.Context(), t); err != nil {
+		if tools := core.Tools(i.lib); len(tools) > 0 {
+			ctx, err := space.AddSpace(cur.Context(), appSpaceName, appSpaceDesc)
+			if err != nil {
 				return err
+			}
+			for _, t := range tools {
+				if err := getSpace(ctx).AddTool(ctx, t); err != nil {
+					return err
+				}
 			}
 		}
 		ctx, err := space.AddSpace(cur.Context(), screenSpaceName, screenSpaceDesc)

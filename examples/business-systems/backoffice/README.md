@@ -8,6 +8,8 @@ Run it from the repo root:
 DEEPSEEK_API_KEY=sk-... go run ./examples/business-systems/backoffice
 ```
 
+With `OPENAI_API_KEY` instead, it runs on OpenAI, and with `ANTHROPIC_API_KEY` on Claude; when several are set, the first of DeepSeek, OpenAI and Claude is used.
+
 Open http://localhost:8095 (set `PORT` to change it). Threads are stored in `neui.db` in the working directory.
 
 After changing a `.gox` file run `gox gen ./examples/business-systems/backoffice`; after changing classes run `examples/business-systems/backoffice/css/build.sh` (Tailwind CSS v4 CLI) and commit `css/output.css`.

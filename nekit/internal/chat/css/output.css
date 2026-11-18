@@ -1844,6 +1844,10 @@ a.nechat-file_done:hover {
   overscroll-behavior-y: contain;
   mask-image: linear-gradient(to bottom, transparent, rgba(0,0,0,0.5) 0.5rem, #000 1.25rem, #000 calc(100% - 1.25rem), rgba(0,0,0,0.5) calc(100% - 0.5rem), transparent);
 }
+.nechat-section {
+  --nechat-tw-leading: 1.4;
+  line-height: 1.4;
+}
 .nechat-section[data-pending] {
   display: none;
 }
@@ -1867,7 +1871,6 @@ a.nechat-file_done:hover {
 }
 .nechat-blk {
   margin-inline-end: calc(var(--spacing, 0.25rem) * 4);
-  margin-top: calc(var(--spacing, 0.25rem) * 2);
   display: inline-grid;
   max-width: 100%;
   min-width: 0px;
@@ -1876,9 +1879,12 @@ a.nechat-file_done:hover {
   vertical-align: top;
 }
 .nechat-blk:has(> :is(.nechat-prose, .nechat-summary), > .nechat-col > .nechat-status, > .nechat-think[open]) {
+  margin-block: calc(var(--spacing, 0.25rem) * 2);
   margin-inline-end: 0px;
   display: grid;
   font-family: var(--font-serif, ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif);
+  --nechat-tw-leading: 1.6;
+  line-height: 1.6;
 }
 .nechat-blk > :is(.nechat-records, .nechat-tools-flat, div.nechat-think), .nechat-blk > .nechat-think:not([open]) > .nechat-think-head {
   display: block;
@@ -1895,6 +1901,8 @@ a.nechat-file_done:hover {
   align-items: center;
   justify-content: flex-end;
   gap: calc(var(--spacing, 0.25rem) * 2);
+  --nechat-tw-leading: 1.6;
+  line-height: 1.6;
 }
 .nechat-user > .nechat-gut {
   order: calc(1 * -1);
@@ -1906,7 +1914,7 @@ a.nechat-file_done:hover {
   grid-column: 1;
   grid-row: 1;
   display: flex;
-  height: 1.6em;
+  height: 1lh;
   align-items: center;
   justify-content: flex-start;
   align-self: start;

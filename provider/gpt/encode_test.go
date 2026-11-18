@@ -1310,3 +1310,16 @@ func BenchmarkDataURL(b *testing.B) {
 		dataURL("image/png", data)
 	}
 }
+
+func TestToolSchemaDropsFormatsStrictModeRejects(t *testing.T) {
+	schema := json.RawMessage(`{"type":"object","properties":{"data":{"type":"string","format":"base64"},"at":{"type":"string","format":"date-time"},"format":{"type":"string"}}}`)
+	body := encodeBody(t, testModel, defaultSettings(), api.Request{
+		Tools:    []api.Tool{{Name: "put", Desc: "x", Schema: schema}},
+		Messages: []api.Message{user(api.ContentText{Text: "hi"})},
+	})
+	params, _ := json.Marshal(body["tools"].([]any)[0].(map[string]any)["parameters"])
+	want := `{"properties":{"at":{"format":"date-time","type":"string"},"data":{"type":"string"},"format":{"type":"string"}},"type":"object"}`
+	if string(params) != want {
+		t.Fatalf("parameters went out as %s, want %s", params, want)
+	}
+}

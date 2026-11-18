@@ -25,12 +25,29 @@ import (
 	"github.com/doors-dev/gox"
 	_ "modernc.org/sqlite"
 	"neui.dev"
+	"neui.dev/api"
 	"neui.dev/nekit"
+	"neui.dev/provider/claude"
 	"neui.dev/provider/deepseek"
+	"neui.dev/provider/gpt"
 )
 
 func main() {
-	provider, err := deepseek.New(deepseek.Conf{Model: deepseek.Flash})
+	var provider api.Provider
+	var err error
+	switch {
+	case os.Getenv("DEEPSEEK_API_KEY") != "":
+		provider, err = deepseek.New(deepseek.Conf{Model: deepseek.Flash})
+	case os.Getenv("OPENAI_API_KEY") != "":
+		provider, err = gpt.New(gpt.Conf{Model: gpt.GPT61Terra}, gpt.WithReasoningEffort(gpt.EffortMedium))
+	case os.Getenv("ANTHROPIC_API_KEY") != "":
+		provider, err = claude.New(claude.Conf{Model: claude.Haiku55},
+			claude.WithThinking(claude.Thinking{Type: claude.ThinkingAdaptive, Display: claude.DisplaySummarized}),
+			claude.WithEffort(claude.EffortMedium),
+			claude.WithCacheBreakpoints(claude.CacheTools, claude.CacheMessages))
+	default:
+		log.Fatal("set DEEPSEEK_API_KEY, OPENAI_API_KEY or ANTHROPIC_API_KEY")
+	}
 	if err != nil {
 		log.Fatal(err)
 	}

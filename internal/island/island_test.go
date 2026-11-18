@@ -689,8 +689,8 @@ func TestIslandSpecListsScriptTools(t *testing.T) {
 func TestIslandAppFunctionIsATool(t *testing.T) {
 	marks := make(chan int, 1)
 	p := testkit.NewProvider(api.Model{},
-		testkit.Call("page__sync", map[string]any{"path": "board"}),
-		testkit.Call("page__tool", map[string]any{"path": "board", "tool": "mark", "arg": map[string]any{"N": 7}}),
+		testkit.Call("page__sync", map[string]any{"path": "board.app"}),
+		testkit.Call("page__tool", map[string]any{"path": "board.app", "tool": "mark", "arg": map[string]any{"N": 7}}),
 		testkit.Say("marked"),
 	)
 	page := func(cur gox.Cursor) error { return cur.Any(board(marks, nil)) }

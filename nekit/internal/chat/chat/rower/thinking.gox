@@ -66,6 +66,8 @@ elem (t *thinking) Main() {
 	} else if !t.closed {
 		t.thoughtsDoor = new(doors.Door)
 		thoughts = t.thoughtsPlaceholder()
+	} else {
+		thoughts = thoughtsLabel()
 	}
 	~~
 	~block{"Reasoning", t.slot, thoughts}
@@ -83,6 +85,10 @@ elem (t *thinking) Main() {
 
 elem (t *thinking) thoughtsPlaceholder() {
 	~>(t.thoughtsDoor) <div class="nechat-col nechat-think">~(summary)</div>
+}
+
+elem thoughtsLabel() {
+	<div class="nechat-col nechat-think">~(summary)</div>
 }
 
 elem (t *thinking) summaryBlock() {
@@ -164,9 +170,6 @@ func (t *thinking) close() {
 	}
 	if t.thoughtsStreamer != nil {
 		t.thoughtsStreamer.Close()
-	}
-	if t.thoughtsDoor != nil {
-		t.thoughtsDoor.Static(context.Background(), nil)
 	}
 	if t.summaryDoor != nil {
 		t.summaryDoor.Static(context.Background(), nil)

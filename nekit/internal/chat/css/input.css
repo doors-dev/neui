@@ -1569,6 +1569,7 @@ a.nechat-file_done:hover { @apply bg-(--secondary-bg-hover) }
 	mask-[linear-gradient(to_bottom,_transparent,_rgba(0,0,0,0.5)_0.5rem,_#000_1.25rem,_#000_calc(100%_-_1.25rem),_rgba(0,0,0,0.5)_calc(100%_-_0.5rem),_transparent)]
 }
 
+.nechat-section { @apply leading-[1.4] }
 .nechat-section[data-pending] { @apply hidden }
 .nechat-span { @apply h-[100cqh] absolute top-0 -z-10 w-full pointer-events-none }
 .nechat-follow { @apply h-0 }
@@ -1584,15 +1585,14 @@ a.nechat-file_done:hover { @apply bg-(--secondary-bg-hover) }
 	max-w-full
 	min-w-0
 	me-4
-	mt-2
 }
 
-.nechat-blk:has(> :is(.nechat-prose, .nechat-summary), > .nechat-col > .nechat-status, > .nechat-think[open]) { @apply grid me-0 font-serif }
+.nechat-blk:has(> :is(.nechat-prose, .nechat-summary), > .nechat-col > .nechat-status, > .nechat-think[open]) { @apply grid me-0 my-2 leading-[1.6] font-serif }
 
 .nechat-blk > :is(.nechat-records, .nechat-tools-flat, div.nechat-think),
 .nechat-blk > .nechat-think:not([open]) > .nechat-think-head { @apply block whitespace-nowrap overflow-hidden text-ellipsis }
 
-.nechat-user { @apply relative flex justify-end items-center gap-2 min-w-0 mt-5 mb-3 }
+.nechat-user { @apply relative flex justify-end items-center gap-2 min-w-0 mt-5 mb-3 leading-[1.6] }
 
 .nechat-user > .nechat-gut {
 	@apply
@@ -1610,7 +1610,7 @@ a.nechat-file_done:hover { @apply bg-(--secondary-bg-hover) }
 	flex
 	items-center
 	justify-start
-	h-[1.6em]
+	h-lh
 	text-(--app-ink-quiet)
 }
 
