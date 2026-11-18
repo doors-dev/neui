@@ -29,7 +29,7 @@ import (
 type Patch struct {
 	_ struct{} `additionalProperties:"false"`
 	Text *string `json:"text,omitempty" minLength:"0" maxLength:"16000" description:"new text, markdown as the text param; omit to keep the current one"`
-	Style string `json:"style,omitempty" enum:"plain,card,info,success,warning,danger" description:"new style, as the style param; omit to keep the current one"`
+	Style string `json:"style,omitempty" enum:"plain,card,info,success,warning,danger" description:"new style, as the style param; omit to keep the current one. When the text turns into an outcome, such as an error or a success, set the matching tone with it, so the user notices it"`
 }
 
 // Params is what a script passes to ui.markdown.

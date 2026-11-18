@@ -374,7 +374,7 @@ func TestIslandSpecItemOverPageRefused(t *testing.T) {
 	c := stack.Page(t, stack.Host{Provider: p, Page: board(make(chan int, 1), nil)})
 	c.Send("open the board")
 	c.Wait()
-	refused(t, testkit.Results(p.Request(t, 1))[0], "logs and files takes")
+	refused(t, testkit.Results(p.Request(t, 1))[0], "what to build takes")
 	refused(t, testkit.Results(p.Request(t, 1))[0], "a page holds")
 	refused(t, testkit.Results(p.Request(t, 1))[0], "larger than a page can hold")
 }
@@ -928,7 +928,7 @@ func TestIslandRelinkEndsAppWithTheValuesSinceItsLastDraw(t *testing.T) {
 	}
 }
 
-func TestIslandGuideHoldsMechanismAndSpecOnlyIslandParts(t *testing.T) {
+func TestIslandGuideLivesInTheSpec(t *testing.T) {
 	p := testkit.NewProvider(api.Model{},
 		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
 		testkit.Say("done"),
@@ -937,20 +937,40 @@ func TestIslandGuideHoldsMechanismAndSpecOnlyIslandParts(t *testing.T) {
 	c.Send("open the board")
 	c.Wait()
 	system := p.Request(t, 0).System
-	for _, heading := range []string{"Islands", "How an app runs", "The screen", "Views and controls", "App functions and your tools", "The typical loop"} {
-		if !strings.Contains(system, "\n\n"+heading+"\n\n") {
-			t.Fatalf("the page module's guide has no %q heading:\n%s", heading, system)
+	if !strings.Contains(system, "\n\nIslands\n\nAn island is a space where you run your own app for the user, ") || !strings.Contains(system, "read its spec with island_spec: it teaches how to write the app") {
+		t.Fatalf("the page module does not introduce islands and send the agent to island_spec:\n%s", system)
+	}
+	for _, text := range []string{"How an app runs", "The screen", "Views and controls", "App functions and your tools", "The typical loop", "ui.draw", "ui.root", "island_append"} {
+		if strings.Contains(system, text) {
+			t.Fatalf("the page module's system text still carries the guide's %q:\n%s", text, system)
 		}
 	}
 	_, _, spec := specText(t, testkit.Results(p.Request(t, 1))[0])
-	logs, rest, ok := strings.Cut(spec, "\nReading the reference\nSchemas are JSON Schema; ")
-	if !ok || !strings.HasPrefix(logs, "Logs and files\nconsole.log, info, warn and error append to the workspace file board.island.log, ") || strings.Count(logs, "\n") != 2 {
-		t.Fatalf("the spec does not open with its logs and files, then how to read the reference:\n%s", spec)
+	if !strings.HasPrefix(spec, "What to build\nBuild what the request needs, ") {
+		t.Fatalf("the spec does not open with the guide:\n%s", spec)
 	}
-	if _, library, _ := strings.Cut(rest, "\n"); !strings.HasPrefix(library, "\nControls are what the user acts on: ") {
+	last := 0
+	for _, heading := range []string{"How an app runs", "The screen", "Views and controls", "App functions and your tools", "Logs and files", "The typical loop", "Reading the reference"} {
+		at := strings.Index(spec, "\n\n"+heading+"\n")
+		if at < last {
+			t.Fatalf("the spec has no %q section after the one before it:\n%s", heading, spec)
+		}
+		last = at
+	}
+	guide, rest, ok := strings.Cut(spec, "\nReading the reference\nSchemas are JSON Schema; ")
+	if !ok || !strings.Contains(guide, "\nLogs and files\nconsole.log, info, warn and error append to the workspace file board.island.log, ") {
+		t.Fatalf("the spec does not name its logs and files before how to read the reference:\n%s", spec)
+	}
+	if _, library, _ := strings.Cut(rest, "\n"); !strings.HasPrefix(library, "\nControls: c = ui.<name>(params); c.update(patch)\n") {
 		t.Fatalf("the spec does not follow how to read the reference with the library:\n%s", spec)
 	}
-	if strings.Contains(spec, "Limits") {
-		t.Fatalf("the spec still carries a limits line:\n%s", spec)
+	for _, text := range []string{"Controls are what the user acts on", "Views show something", "Layouts arrange content", "ui.draw(ms) gives null"} {
+		if strings.Contains(rest, text) {
+			t.Fatalf("the reference still carries %q, which the guide says:\n%s", text, spec)
+		}
 	}
+	if strings.Contains(spec, "Your tools") || strings.Contains(spec, "Limits") {
+		t.Fatalf("the spec still carries a your tools section or a limits line:\n%s", spec)
+	}
+	t.Logf("page module system text: %d bytes; island_spec of the board: %d bytes", len(system), len(spec))
 }

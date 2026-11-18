@@ -15,7 +15,7 @@
 package markdown
 
 // Desc describes the markdown view to the agent, for Library.View.
-const Desc = "Shows any information: titles, messages, results and reports."
+const Desc = "Shows any information: titles, messages such as statuses, errors and confirmations, results, reports and cards."
 
 const getTextName = "get_text"
 const getTextDesc = "Read the text the user sees."

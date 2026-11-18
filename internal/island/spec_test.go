@@ -26,24 +26,41 @@ import (
 	"neui.dev/internal/testkit"
 )
 
-func TestSpecIntroIsLogsToolsThenReference(t *testing.T) {
+func TestSpecIsGuideThenReference(t *testing.T) {
 	i, _ := newTestIsland(t)
 	ctrl := testkit.NewController(t, testkit.Setup{Modules: []common.Module{timemod.Module(context.Background())}})
 	spec, ends, items := i.Spec(ctrl.Ctx(), "board")
-	if !slices.Equal(items, []string{"logs and files", "your tools", "reading the reference"}) || len(ends) != 3 || ends[2] != len(spec) {
-		t.Fatalf("items %v ending at %v of %d bytes, want logs and files, your tools, then reading the reference:\n%s", items, ends, len(spec), spec)
+	want := []string{"what to build", "how an app runs", "the screen", "views and controls", "app functions and your tools", "logs and files", "the typical loop", "reading the reference"}
+	if !slices.Equal(items, want) || len(ends) != len(want) || ends[len(ends)-1] != len(spec) {
+		t.Fatalf("items %v ending at %v of %d bytes, want %v:\n%s", items, ends, len(spec), want, spec)
 	}
-	logs := spec[:ends[0]]
-	if !strings.HasPrefix(logs, "Logs and files\n") || !strings.Contains(logs, " "+logFile("board")+", ") || !strings.Contains(logs, " "+islandDir("board")+", ") || !strings.HasSuffix(logs, "\n") {
-		t.Fatalf("the logs and files item reads:\n%s", logs)
+	texts := []string{
+		specWhatToBuild,
+		specHowAnAppRuns,
+		specScreen,
+		specViewsAndControls,
+		fmt.Sprintf(specAppFunctionsAndTools, "time__*"),
+		fmt.Sprintf(specLogsAndFiles, logFile("board"), islandDir("board")),
+		specTypicalLoop,
+		specReference,
 	}
-	if spec[ends[0]:ends[1]] != fmt.Sprintf(specTools, "time__*") || !strings.HasPrefix(specTools, "\nYour tools\n") {
-		t.Fatalf("the your tools item reads:\n%s", spec[ends[0]:ends[1]])
+	titles := []string{"What to build", "How an app runs", "The screen", "Views and controls", "App functions and your tools", "Logs and files", "The typical loop", "Reading the reference"}
+	prev := 0
+	for n, end := range ends {
+		item := spec[prev:end]
+		head := "\n" + titles[n] + "\n"
+		if n == 0 {
+			head = titles[n] + "\n"
+		}
+		if item != texts[n] || !strings.HasPrefix(item, head) || !strings.HasSuffix(item, "\n") || strings.HasSuffix(item, "\n\n") {
+			t.Fatalf("the %s item reads:\n%s", items[n], item)
+		}
+		prev = end
 	}
-	if spec[ends[1]:] != specReference || !strings.HasPrefix(specReference, "\nReading the reference\n") {
-		t.Fatalf("the reading the reference item reads:\n%s", spec[ends[1]:])
+	if !strings.Contains(spec, "the script has time__*.") || strings.Contains(spec, "Your tools") {
+		t.Fatalf("the spec does not name the script's tool modules in its app functions and tools section:\n%s", spec)
 	}
 	if strings.Contains(spec, "Limits") {
-		t.Fatalf("the intro still carries a limits line:\n%s", spec)
+		t.Fatalf("the spec still carries a limits line:\n%s", spec)
 	}
 }

@@ -34,5 +34,6 @@ Changes by id from any page; the open page follows and a toast says what changed
 
 The Workbench is a panel over the page where the agent builds small apps; it appears while an app runs and goes away when the app ends:
 
+- "I need to see all orders with the cold brew jar and adjust the quantities."
 - "Go through the unpaid orders older than a week one by one. For each, show the order and the customer's history, and let me choose: remind, extend, or cancel."
 - "Plan a restock: show what's running low, how fast each product sold over the last 30 days, and suggest how many to reorder. Let me adjust the numbers, then give me the purchase list as a spreadsheet."

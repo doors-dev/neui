@@ -82,24 +82,34 @@ type island struct {
 }
 
 func (i *island) Spec(ctx context.Context, space string) (string, []int, []string) {
-	b := strings.Builder{}
-	fmt.Fprintf(&b, "Logs and files\nconsole.log, info, warn and error append to the workspace file %s, which is emptied when an app starts. Views and controls keep their files, such as uploads, under the workspace dir %s, also emptied when an app starts: copy the files you want to keep elsewhere in the workspace.\n", logFile(space), islandDir(space))
-	logs := b.Len()
 	var modules []string
 	for module := range scriptModules(common.GetController(ctx)) {
 		modules = append(modules, module+"__*")
 	}
-	fmt.Fprintf(&b, specTools, strings.Join(modules, ", "))
-	tools := b.Len()
-	b.WriteString(specReference)
-	spec, ends, items := i.lib.Spec()
+	tools := strings.Join(modules, ", ")
+	b := strings.Builder{}
+	var ends []int
+	var items []string
+	write := func(item string, text string) {
+		b.WriteString(text)
+		ends = append(ends, b.Len())
+		items = append(items, item)
+	}
+	write("what to build", specWhatToBuild)
+	write("how an app runs", specHowAnAppRuns)
+	write("the screen", specScreen)
+	write("views and controls", specViewsAndControls)
+	write("app functions and your tools", fmt.Sprintf(specAppFunctionsAndTools, tools))
+	write("logs and files", fmt.Sprintf(specLogsAndFiles, logFile(space), islandDir(space)))
+	write("the typical loop", specTypicalLoop)
+	write("reading the reference", specReference)
+	spec, libEnds, libItems := i.lib.Spec()
 	start := b.Len()
 	b.WriteString(spec)
-	all := []int{logs, tools, start}
-	for _, end := range ends {
-		all = append(all, start+end)
+	for _, end := range libEnds {
+		ends = append(ends, start+end)
 	}
-	return b.String(), all, append([]string{"logs and files", "your tools", "reading the reference"}, items...)
+	return b.String(), ends, append(items, libItems...)
 }
 
 func (i *island) Enter() {
