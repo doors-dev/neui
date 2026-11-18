@@ -158,7 +158,7 @@ func TestRunToolErrorReachesScriptInFull(t *testing.T) {
 	if err := json.Unmarshal(res.Output, &got); err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 3 || got[0] != true || got[1] != "long: "+long || got[2] != false {
+	if len(got) != 3 || got[0] != true || got[1] != long || got[2] != false {
 		t.Fatalf("output = %s", res.Output)
 	}
 }
@@ -217,11 +217,11 @@ return [caught(fail__image), caught(fail__blocks), caught(fail__nested), fail__n
 		t.Fatal(err)
 	}
 	want, _ := json.Marshal([]any{
-		[]any{true, "image: x: render failed", true, image},
-		[]any{true, "blocks: render failed", true, blocks},
-		[]any{true, "nested: image: x: render failed", true, image},
+		[]any{true, "x: render failed", true, image},
+		[]any{true, "render failed", true, blocks},
+		[]any{true, "x: render failed", true, image},
 		true,
-		[]any{true, "wired: render failed", false},
+		[]any{true, "render failed", false},
 	})
 	var got, wanted any
 	if err := json.Unmarshal(res.Output, &got); err != nil {

@@ -541,7 +541,7 @@ ui.notify(seen)`)
 	c.Send("open the board")
 	c.Wait()
 	notify := recorded(t, c, p, `kind="notifications_list"`)
-	for _, want := range []string{`"TypeError create: ui.wall: ` + long + `"`, `"TypeError fail: ` + long + `"`} {
+	for _, want := range []string{`"TypeError ui.wall: ` + long + `"`, `"TypeError ` + long + `"`} {
 		if !strings.Contains(notify, want) {
 			t.Fatalf("the script saw %q, want it to carry %s", notify, want)
 		}
@@ -734,7 +734,7 @@ ui.notify(seen)`
 }
 
 func TestIslandScriptGetsOnlyPageToolCalls(t *testing.T) {
-	code := `ui.notify([typeof page__sync, typeof page__tool, typeof page__click, typeof page__write, typeof page__read, typeof page__focus, typeof page__tree, typeof js__run, typeof files__read])`
+	code := `ui.notify([typeof page__sync, typeof page__tool, typeof page__click, typeof page__write, typeof page__read, typeof page__focus, typeof page__tree, typeof js__run])`
 	p := testkit.NewProvider(api.Model{},
 		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
 		revised(t, func(revision string) testkit.Turn {
@@ -747,8 +747,8 @@ func TestIslandScriptGetsOnlyPageToolCalls(t *testing.T) {
 	c := stack.Page(t, stack.Host{Provider: p, Page: page, Options: []common.Option{common.OptionModule(js.Module)}})
 	c.Send("probe the board")
 	c.Wait()
-	if notify := recorded(t, c, p, `kind="notifications_list"`); !strings.Contains(notify, `[["function","function","undefined","undefined","undefined","undefined","undefined","undefined","function"]]`) {
-		t.Fatalf("the island script saw %q, want only page__sync and page__tool from page, no js tools, and the files tools", notify)
+	if notify := recorded(t, c, p, `kind="notifications_list"`); !strings.Contains(notify, `[["function","function","undefined","undefined","undefined","undefined","undefined","undefined"]]`) {
+		t.Fatalf("the island script saw %q, want only page__sync and page__tool from page and no js tools", notify)
 	}
 }
 

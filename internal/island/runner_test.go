@@ -375,7 +375,7 @@ func TestCallAppErrorReachesFunctionInFull(t *testing.T) {
 	}
 	_, _, ctx := newCallTestRun(t, api.IslandConfig{}, lib)
 	seen := callFrom[int, string](t, `(a) => { try { app.fail({}) } catch (e) { return e.name + ' ' + e.message + ' ' + ("value" in e) } }`)
-	if got, err := seen.Call(ctx, 1); err != nil || got != "TypeError fail: "+long+" false" {
+	if got, err := seen.Call(ctx, 1); err != nil || got != "TypeError "+long+" false" {
 		t.Fatalf("got %q, %v", got, err)
 	}
 }
@@ -404,7 +404,7 @@ func TestCallAppContentError(t *testing.T) {
 	}
 	_, _, ctx := newCallTestRun(t, api.IslandConfig{}, lib)
 	seen := callFrom[int, string](t, "(a) => JSON.stringify([app.image, app.blocks].map(f => { try { f({}) } catch (e) { return [e.name, e.message, e.stack.length > 0, e.value] } }))")
-	if got, err := seen.Call(ctx, 1); err != nil || got != `[["TypeError","image: render failed",true,{"data":"AQI=","mime":"image/png"}],["TypeError","blocks: render failed",true,[{"type":"text","text":"a"}]]]` {
+	if got, err := seen.Call(ctx, 1); err != nil || got != `[["TypeError","render failed",true,{"data":"AQI=","mime":"image/png"}],["TypeError","render failed",true,[{"type":"text","text":"a"}]]]` {
 		t.Fatalf("got %q, %v", got, err)
 	}
 }

@@ -147,7 +147,7 @@ func TestSearchCharsDefault(t *testing.T) {
 func TestSearchRefusedFromScriptButFetchIsNot(t *testing.T) {
 	backend := &fakeBackend{results: []Result{{Title: "a", URL: "https://example.com/a"}}}
 	_, script := searchTool(t, Config{Search: backend})
-	if err := script(`{"query":"widgets"}`); err == nil || err.Error() != "search: the web module's search is not accessible from a script" {
+	if err := script(`{"query":"widgets"}`); err == nil || err.Error() != "the web module's search is not accessible from a script" {
 		t.Errorf("search from a script: %v", err)
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

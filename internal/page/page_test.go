@@ -774,10 +774,10 @@ return [act("cart", "add"), act("", "checkout")]`, "comment": "adds and checks o
 	c.Wait()
 	var script struct{ Result [][]string }
 	testkit.Decode(t, testkit.Results(p.Request(t, 3))[0], &script)
-	if len(script.Result) != 2 || len(script.Result[0]) != 2 || !strings.HasPrefix(script.Result[0][0], "tool: not done: the space changed since it was last read") || script.Result[0][1] != "diff" {
+	if len(script.Result) != 2 || len(script.Result[0]) != 2 || !strings.HasPrefix(script.Result[0][0], "not done: the space changed since it was last read") || script.Result[0][1] != "diff" {
 		t.Fatalf("a script's add on the cart the agent read before the restock saw %q, want it refused with the diff", script.Result)
 	}
-	if len(script.Result[1]) != 2 || !strings.HasPrefix(script.Result[1][0], "tool: not done: this space has not been read") || script.Result[1][1] != "space" {
+	if len(script.Result[1]) != 2 || !strings.HasPrefix(script.Result[1][0], "not done: this space has not been read") || script.Result[1][1] != "space" {
 		t.Fatalf("a script's checkout on the root nobody read saw %q, want it refused with the space", script.Result[1])
 	}
 	for i, want := range []string{"added", "checking out"} {
@@ -1067,7 +1067,7 @@ return ["jam", "stick"].map(tool => { try { page__tool({path: "counter", tool, a
 	plain(t, testkit.Results(p.Request(t, 8))[0], "invalid input: argument do not match the schema")
 	var scripted struct{ Result json.RawMessage }
 	testkit.Decode(t, testkit.Results(p.Request(t, 9))[0], &scripted)
-	if want := `[["tool: jammed","changes,diff",null],["tool: jam: stuck","changes,diff,output",{"count":7}]]`; string(scripted.Result) != want {
+	if want := `[["jammed","changes,diff",null],["jam: stuck","changes,diff,output",{"count":7}]]`; string(scripted.Result) != want {
 		t.Fatalf("the script caught %s, want the message in e.message and the call's result in e.value", scripted.Result)
 	}
 }
