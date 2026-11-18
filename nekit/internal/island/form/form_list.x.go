@@ -405,7 +405,7 @@ func (f *listWidget) Main() gox.Elem {
 				__e = __c.Set("class", "neisland-form-items-foot"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 //line form_list.gox:333
-				__e = (neui.Input{Desc: "add an item"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+				__e = (neui.Use{Desc: "add an item"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 					ctx := __c.Context(); _ = ctx
 					__e = __c.Init("button"); if __e != nil { return }
 					{
@@ -577,7 +577,7 @@ func (f *listWidget) item(field *listItemWidget) gox.Elem {
 				}
 				__e = __c.Close(); if __e != nil { return }
 //line form_list.gox:417
-				__e = (neui.Input{Desc: "remove this item"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+				__e = (neui.Use{Desc: "remove this item"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 					ctx := __c.Context(); _ = ctx
 					__e = __c.Init("button"); if __e != nil { return }
 					{

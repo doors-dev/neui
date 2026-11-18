@@ -88,7 +88,7 @@ type FS interface {
 	// "/", "." or ".."), with a "(N)" suffix before the extension when the name
 	// is taken, and its MIME sniffed from the first 512 bytes. It returns the
 	// draft's entry; the draft stays hidden from Stat, ReadDir and reads until it is
-	// committed with FileStorage.FileCommit.
+	// committed with UploadStorage.FileCommit.
 	UserUpload(ctx context.Context, name string, r io.Reader) (FSEntry, error)
 	// UploadStat returns an upload's entry whether or not it is still a
 	// draft; Stat hides drafts, this is for whoever manages them. The name

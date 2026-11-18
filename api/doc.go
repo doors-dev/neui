@@ -2,7 +2,7 @@
 //
 // The protocol types (Request, Message, the Content blocks and the Event
 // stream a Provider emits) are what a provider adapter implements against.
-// MessageStorage and FileStorage are what a host implements to keep threads
+// MessageStorage and UploadStorage are what a host implements to keep threads
 // and uploaded files somewhere other than the defaults; WorkspaceStorage and
 // FS describe the workspace neui gives each thread, and FS is what a tool
 // works in. Instance and the Chat* types are the session-side view a chat UI

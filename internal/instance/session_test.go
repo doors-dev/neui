@@ -4,8 +4,13 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+
+	"neui.dev/api"
+	"neui.dev/internal/common"
+	"neui.dev/internal/storage/local"
 )
 
 func TestEnableRetriesLocalFileStorage(t *testing.T) {
@@ -47,5 +52,49 @@ func TestSessionEndRemovesTheLocalFileStorage(t *testing.T) {
 			t.Fatalf("the session ended but its file storage is still there: %v", entries)
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestAppUploadStorageIsUsedAndSessionOptionOverridesIt(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("TMPDIR", dir)
+	app, err := local.NewFileStorage(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewFileStorage: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), common.UploadStorageKey{}, api.UploadStorage(app)))
+	s := &session{ctx: ctx, instances: make(map[*instance]struct{})}
+	if err := s.Enable([]common.Option{common.OptionProvider(stubProvider{})}); err != nil {
+		t.Fatalf("Enable: %v", err)
+	}
+	if s.backend.UploadStorage() != app {
+		t.Fatal("the session does not use the app file storage")
+	}
+	if s.backend.WorkspaceStorage() != s.localFileStorage {
+		t.Fatal("the workspaces left the session's temporary directory")
+	}
+	own, err := local.NewFileStorage(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewFileStorage: %v", err)
+	}
+	if err := s.Enable([]common.Option{common.OptionForce(), common.OptionProvider(stubProvider{}), common.OptionUploadStorage(own)}); err != nil {
+		t.Fatalf("Enable: %v", err)
+	}
+	if s.backend.UploadStorage() != own {
+		t.Fatal("OptionUploadStorage did not override the app file storage")
+	}
+	if _, err := app.FilePut(ctx, "app", api.OriginUser, "a.txt", "text/plain", strings.NewReader("a"), false); err != nil {
+		t.Fatalf("FilePut: %v", err)
+	}
+	cancel()
+	deadline := time.Now().Add(5 * time.Second)
+	for entries, _ := os.ReadDir(dir); len(entries) != 0; entries, _ = os.ReadDir(dir) {
+		if time.Now().After(deadline) {
+			t.Fatalf("the session ended but its temporary directory is still there: %v", entries)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if _, err := app.FileStat(context.Background(), "app", api.OriginUser, "a.txt"); err != nil {
+		t.Fatalf("the session's end touched the app file storage: %v", err)
 	}
 }

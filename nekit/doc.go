@@ -12,15 +12,15 @@
 // Package nekit is the ready-made widget set for neui islands: layouts,
 // markdown, forms, tables and buttons. Register them on Island.Library:
 //
-//	Library: nekit.IslandRegister
+//	Library: nekit.IslandRegisterAll
 //
-// NewSQLite keeps the threads of all users in one SQLite database that the
+// NewSQLiteMessages keeps the threads of all users in one SQLite database that the
 // host opens with a driver of its choice, and User gives each session its
 // user's part:
 //
 //	import _ "modernc.org/sqlite"
 //
 //	db, err := sql.Open("sqlite", "neui.db")
-//	store, err := nekit.NewSQLite(db)
+//	store, err := nekit.NewSQLiteMessages(db)
 //	neui.Enable(ctx, neui.OptionMessageStorage(store.User(userID)))
 package nekit

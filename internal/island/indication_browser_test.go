@@ -26,7 +26,7 @@ func twoIslands() gox.Elem {
 				Template: func(slot gox.Comp) gox.Elem {
 					return func(cur gox.Cursor) error { return cur.Comp(slot) }
 				},
-				Library: nekit.IslandRegister,
+				Library: nekit.IslandRegisterAll,
 			}); err != nil {
 				return err
 			}

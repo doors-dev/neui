@@ -170,7 +170,7 @@ elem (f *widget) Main() {
 		<div class="neisland-form-actions neisland-form-actions-band">
 			~(for _, s := range f.params.Submits {
 				~(if s.Novalidate {
-					~>(neui.Input{Desc: s.Text}) <button
+					~>(neui.Use{Desc: s.Text}) <button
 						type="submit"
 						class=("neisland-button neisland-button-md neisland-button-" + s.Style)
 						name=(f.id)
@@ -180,7 +180,7 @@ elem (f *widget) Main() {
 						~(s.Text)
 					</button>
 				} else {
-					~>(neui.Input{Desc: s.Text}) <button
+					~>(neui.Use{Desc: s.Text}) <button
 						(&f.locked)
 						type="submit"
 						class=("neisland-button neisland-button-md neisland-button-" + s.Style)

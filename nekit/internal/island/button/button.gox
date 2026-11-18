@@ -29,7 +29,7 @@ type Params struct {
 
 // New builds a button widget for Library.Control: a click on the enabled
 // button submits its value param to the script waiting in ui.draw(). It is
-// also an Input described by its text, so the agent can click it.
+// also a Use described by its text, so the agent can click it.
 func New(ctx context.Context, p Params, submit func(ctx context.Context, value string) bool) (api.Widget[Patch], error) {
 	if p.Size == "" {
 		p.Size = "md"
@@ -66,7 +66,7 @@ elem (b widget) Main() {
 }
 
 elem (b widget) render(p Params) {
-	~>neui.Input{Desc: p.Text} ~>doors.AClick{
+	~>neui.Use{Desc: p.Text} ~>doors.AClick{
 		Scope: neui.IslandScope(ctx),
 		Indicator: pending.Indicator(ctx),
 		On: func(ctx context.Context, rp doors.RequestPointer) bool {

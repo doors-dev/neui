@@ -524,7 +524,7 @@ func TestRewindCancelsTheTasksOfTheCutRounds(t *testing.T) {
 
 func TestOnlyUserInputRoundsSweepDrafts(t *testing.T) {
 	th, _, _, origin := taskThread(t, "sweep-drafts")
-	files := th.link.backend.FileStorage()
+	files := th.link.backend.UploadStorage()
 	ctx := context.Background()
 	if _, err := files.FilePut(ctx, th.id, api.OriginUser, "edit.png", "image/png", strings.NewReader("png"), true); err != nil {
 		t.Fatalf("FilePut: %v", err)

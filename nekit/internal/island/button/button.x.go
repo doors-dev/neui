@@ -32,7 +32,7 @@ type Params struct {
 
 // New builds a button widget for Library.Control: a click on the enabled
 // button submits its value param to the script waiting in ui.draw(). It is
-// also an Input described by its text, so the agent can click it.
+// also a Use described by its text, so the agent can click it.
 func New(ctx context.Context, p Params, submit func(ctx context.Context, value string) bool) (api.Widget[Patch], error) {
 	if p.Size == "" {
 		p.Size = "md"
@@ -79,7 +79,7 @@ func (b widget) render(p Params) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 //line button.gox:69
-		__e = (neui.Input{Desc: p.Text}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+		__e = (neui.Use{Desc: p.Text}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
 //line button.gox:69
 			__e = (doors.AClick{

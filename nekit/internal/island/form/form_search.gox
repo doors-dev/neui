@@ -321,7 +321,7 @@ elem (f *searchWidget) picked(chosen []option) {
 			~~
 			<li class="neisland-form-search-chip">
 				~(o.Label)
-				~>(neui.Input{Desc: "remove " + o.Label}) <button
+				~>(neui.Use{Desc: "remove " + o.Label}) <button
 					(doors.AClick{
 						Scope: f.field.scope(),
 						Batch: true,
@@ -351,7 +351,7 @@ elem (f *searchWidget) entry(full bool) {
 			labelledby = nil
 		}
 		~~
-		~>(neui.Input{Desc: "search"}) <input
+		~>(neui.Use{Desc: "search"}) <input
 			(&f.controls)
 			(&f.invalid)
 			(&f.label)
@@ -411,7 +411,7 @@ elem (f *searchWidget) results(found searchFound) {
 				}
 				~~
 				<li>
-					~>(neui.Input{Desc: "choose " + o.Label}) <button
+					~>(neui.Use{Desc: "choose " + o.Label}) <button
 						(doors.AClick{
 							Scope: f.field.scope(),
 							Batch: true,

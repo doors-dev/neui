@@ -24,6 +24,7 @@ const (
 	metaName          = ".meta"
 	filesDirName      = "files"
 	workspacesDirName = "workspaces"
+	stagingDirName    = ".tmp"
 )
 
 func NewFileStorage(dir string) (*FileStorage, error) {
@@ -31,12 +32,31 @@ func NewFileStorage(dir string) (*FileStorage, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &FileStorage{base: base}, nil
+	if err := os.Mkdir(filepath.Join(base, stagingDirName), 0o755); err != nil {
+		os.RemoveAll(base)
+		return nil, err
+	}
+	return &FileStorage{base: base, pending: map[string]bool{}}, nil
+}
+
+func OpenFileStorage(base string) (*FileStorage, error) {
+	if err := os.MkdirAll(base, 0o755); err != nil {
+		return nil, err
+	}
+	staging := filepath.Join(base, stagingDirName)
+	if err := os.RemoveAll(staging); err != nil {
+		return nil, err
+	}
+	if err := os.Mkdir(staging, 0o755); err != nil {
+		return nil, err
+	}
+	return &FileStorage{base: base, pending: map[string]bool{}}, nil
 }
 
 type FileStorage struct {
 	mu      sync.Mutex
 	base    string
+	pending map[string]bool
 	removed bool
 }
 
@@ -69,31 +89,60 @@ func (l *FileStorage) FilePut(ctx context.Context, threadID api.ThreadID, origin
 	l.mu.Lock()
 	err := os.ErrClosed
 	if !l.removed {
-		err = os.MkdirAll(originDir, 0o755)
-	}
-	if err == nil {
-		err = os.Mkdir(dst, 0o755)
+		_, err = os.Lstat(dst)
+		switch {
+		case err == nil || l.pending[dst]:
+			err = api.ErrExists
+		case errors.Is(err, fs.ErrNotExist):
+			err = nil
+			l.pending[dst] = true
+		}
 	}
 	l.mu.Unlock()
-	if errors.Is(err, fs.ErrExist) {
-		return api.File{}, api.ErrExists
-	}
 	if err != nil {
 		return api.File{}, err
 	}
-	f, err := writeFile(ctx, dst, api.File{
-		ThreadID: threadID,
-		Name:     name,
-		MIME:     mime,
-		Origin:   origin,
-		Draft:    draft,
-	}, r)
+	var f api.File
+	staging, err := os.MkdirTemp(filepath.Join(l.base, stagingDirName), "")
+	if err == nil {
+		f, err = writeFile(ctx, staging, api.File{
+			ThreadID: threadID,
+			Name:     name,
+			MIME:     mime,
+			Origin:   origin,
+			Draft:    draft,
+		}, r)
+	}
+	l.mu.Lock()
+	switch {
+	case err != nil:
+	case l.removed:
+		err = os.ErrClosed
+	case !l.pending[dst]:
+		err = fmt.Errorf("%q deleted while being stored: %w", name, fs.ErrNotExist)
+	default:
+		err = os.MkdirAll(originDir, 0o755)
+		if err == nil {
+			if _, serr := os.Lstat(dst); serr == nil {
+				err = api.ErrExists
+			}
+		}
+		if err == nil {
+			err = os.Rename(staging, dst)
+		}
+		if errors.Is(err, fs.ErrExist) {
+			err = api.ErrExists
+		}
+	}
+	delete(l.pending, dst)
+	l.mu.Unlock()
 	if err != nil {
-		l.mu.Lock()
-		os.RemoveAll(dst)
-		l.mu.Unlock()
+		if staging != "" {
+			os.RemoveAll(staging)
+		}
 		return api.File{}, err
 	}
+	syncDir(originDir)
 	return f, nil
 }
 
@@ -103,6 +152,9 @@ func writeFile(ctx context.Context, dir string, f api.File, r io.Reader) (api.Fi
 		return api.File{}, err
 	}
 	size, err := copyChunked(ctx, w, r)
+	if err == nil {
+		err = w.Sync()
+	}
 	if cerr := w.Close(); err == nil {
 		err = cerr
 	}
@@ -111,18 +163,43 @@ func writeFile(ctx context.Context, dir string, f api.File, r io.Reader) (api.Fi
 	}
 	f.Size = size
 	f.CreatedAt = time.Now()
+	if err := writeMeta(dir, f); err != nil {
+		return api.File{}, err
+	}
+	syncDir(dir)
+	return f, nil
+}
+
+func writeMeta(dir string, f api.File) error {
 	b, err := json.Marshal(f)
 	if err != nil {
-		return api.File{}, err
+		return err
 	}
 	tmp := filepath.Join(dir, metaName+".tmp")
-	if err := os.WriteFile(tmp, b, 0o644); err != nil {
-		return api.File{}, err
+	w, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+	if err != nil {
+		return err
 	}
-	if err := os.Rename(tmp, filepath.Join(dir, metaName)); err != nil {
-		return api.File{}, err
+	_, err = w.Write(b)
+	if err == nil {
+		err = w.Sync()
 	}
-	return f, nil
+	if cerr := w.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return err
+	}
+	return os.Rename(tmp, filepath.Join(dir, metaName))
+}
+
+func syncDir(dir string) {
+	d, err := os.Open(dir)
+	if err != nil {
+		return
+	}
+	d.Sync()
+	d.Close()
 }
 
 func copyChunked(ctx context.Context, w io.Writer, r io.Reader) (int64, error) {
@@ -182,15 +259,7 @@ func (l *FileStorage) FileCommit(ctx context.Context, threadID api.ThreadID, ori
 		return nil
 	}
 	f.Draft = false
-	b, err := json.Marshal(f)
-	if err != nil {
-		return err
-	}
-	tmp := filepath.Join(dir, metaName+".tmp")
-	if err := os.WriteFile(tmp, b, 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, filepath.Join(dir, metaName))
+	return writeMeta(dir, f)
 }
 
 func (l *FileStorage) FileDiscardDrafts(ctx context.Context, threadID api.ThreadID, origin api.Origin, keep []string) error {
@@ -334,6 +403,7 @@ func (l *FileStorage) FileDelete(ctx context.Context, threadID api.ThreadID, ori
 	dir := filepath.Join(l.base, filesDirName, string(threadID), string(origin), name)
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	delete(l.pending, dir)
 	return os.RemoveAll(dir)
 }
 
@@ -348,6 +418,11 @@ func (l *FileStorage) FileDeleteAll(ctx context.Context, threadID api.ThreadID) 
 	workspaceDir := filepath.Join(l.base, workspacesDirName, string(threadID))
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	for p := range l.pending {
+		if strings.HasPrefix(p, threadDir+string(filepath.Separator)) {
+			delete(l.pending, p)
+		}
+	}
 	if err := os.RemoveAll(threadDir); err != nil {
 		return err
 	}

@@ -747,7 +747,7 @@ elem (f *fileWidget) zone(full bool) {
 		}
 		~~
 		<label class="neisland-form-file-zone">
-			~>(neui.Input{Desc: "file chooser"}) <input
+			~>(neui.Use{Desc: "file chooser"}) <input
 				(&f.empty)
 				(&f.label)
 				class="neisland-form-file-input"
@@ -824,7 +824,7 @@ elem (f *fileWidget) chip(e fileEntry) {
 		~(if e.retry {
 			<button type="button" class="neisland-form-file-retry" data-file-retry=(e.key) hidden>Retry</button>
 		})
-		~>(neui.Input{Desc: "remove " + e.name}) <button
+		~>(neui.Use{Desc: "remove " + e.name}) <button
 			(doors.AClick{
 				Scope: f.field.scope(),
 				Batch: true,

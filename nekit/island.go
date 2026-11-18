@@ -112,9 +112,9 @@ func IslandStyle() gox.Elem {
 	return island.Style()
 }
 
-// IslandRegister registers every layout and widget and adds IslandStyle to the
+// IslandRegisterAll registers every layout and widget and adds IslandStyle to the
 // head.
-func IslandRegister(l neui.Library) error {
+func IslandRegisterAll(l neui.Library) error {
 	l.Head(IslandStyle())
 	if err := l.Layout("column", IslandColumnDesc, layout.Column); err != nil {
 		return err

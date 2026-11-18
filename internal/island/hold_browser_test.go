@@ -38,7 +38,7 @@ func (h holder) Main() gox.Elem {
 		}}); err != nil {
 			return err
 		}
-		return (neui.Input{Desc: h.label, Rights: neui.W}).Proxy(cur, func(cur gox.Cursor) error {
+		return (neui.Use{Desc: h.label, Rights: neui.W}).Proxy(cur, func(cur gox.Cursor) error {
 			if err := cur.Init("button"); err != nil {
 				return err
 			}

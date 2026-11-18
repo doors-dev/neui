@@ -102,7 +102,7 @@ elem (f *textareaWidget) Main() {
 				))
 			</label>
 		})
-		~>(neui.Input{Desc: f.params.Label}) <textarea
+		~>(neui.Use{Desc: f.params.Label}) <textarea
 			(&f.invalid)
 			(&f.label)
 			(doors.AInput{

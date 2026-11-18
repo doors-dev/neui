@@ -385,13 +385,13 @@ func TestThreadDeleteRemovesTheThreadsFiles(t *testing.T) {
 	if _, err := backend.Storage().ThreadCreate(ctx, "delete-files"); err != nil {
 		t.Fatalf("ThreadCreate: %v", err)
 	}
-	if _, err := backend.FileStorage().FilePut(ctx, "delete-files", api.OriginUser, "a.txt", "text/plain", strings.NewReader("a"), false); err != nil {
+	if _, err := backend.UploadStorage().FilePut(ctx, "delete-files", api.OriginUser, "a.txt", "text/plain", strings.NewReader("a"), false); err != nil {
 		t.Fatalf("FilePut: %v", err)
 	}
 	if err := inst.ThreadDelete(ctx, "delete-files"); err != nil {
 		t.Fatalf("ThreadDelete: %v", err)
 	}
-	if _, err := backend.FileStorage().FileStat(ctx, "delete-files", api.OriginUser, "a.txt"); !errors.Is(err, api.ErrNotFound) {
+	if _, err := backend.UploadStorage().FileStat(ctx, "delete-files", api.OriginUser, "a.txt"); !errors.Is(err, api.ErrNotFound) {
 		t.Fatalf("the deleted thread's upload is still there: %v", err)
 	}
 }
@@ -410,13 +410,13 @@ func TestThreadDeleteOfAThreadNotInStorageTouchesNothing(t *testing.T) {
 		}
 	}()
 	backend := inst.backend.Load()
-	if _, err := backend.FileStorage().FilePut(ctx, "delete-foreign", api.OriginUser, "a.txt", "text/plain", strings.NewReader("a"), false); err != nil {
+	if _, err := backend.UploadStorage().FilePut(ctx, "delete-foreign", api.OriginUser, "a.txt", "text/plain", strings.NewReader("a"), false); err != nil {
 		t.Fatalf("FilePut: %v", err)
 	}
 	if err := inst.ThreadDelete(ctx, "delete-foreign"); err != nil {
 		t.Fatalf("ThreadDelete: %v", err)
 	}
-	if _, err := backend.FileStorage().FileStat(ctx, "delete-foreign", api.OriginUser, "a.txt"); err != nil {
+	if _, err := backend.UploadStorage().FileStat(ctx, "delete-foreign", api.OriginUser, "a.txt"); err != nil {
 		t.Fatalf("a delete of a thread not in storage removed its files: %v", err)
 	}
 }
@@ -496,7 +496,7 @@ func TestDeadLinkReadsAreUnlinked(t *testing.T) {
 }
 
 type failingPut struct {
-	api.FileStorage
+	api.UploadStorage
 }
 
 func (failingPut) FilePut(context.Context, api.ThreadID, api.Origin, string, string, io.Reader, bool) (api.File, error) {
@@ -507,7 +507,7 @@ func TestThreadCloneCopiesCommittedFiles(t *testing.T) {
 	inst := deadTestInstance(t)
 	ctx := context.Background()
 	backend := inst.backend.Load()
-	files := backend.FileStorage()
+	files := backend.UploadStorage()
 	if _, err := backend.Storage().ThreadCreate(ctx, "clone-files"); err != nil {
 		t.Fatalf("ThreadCreate: %v", err)
 	}
@@ -557,10 +557,10 @@ func TestThreadCloneIsDeletedWhenCopyingFilesFails(t *testing.T) {
 	if _, err := backend.Storage().ThreadCreate(ctx, "clone-fail"); err != nil {
 		t.Fatalf("ThreadCreate: %v", err)
 	}
-	if _, err := backend.FileStorage().FilePut(ctx, "clone-fail", api.OriginUser, "a.txt", "text/plain", strings.NewReader("a"), false); err != nil {
+	if _, err := backend.UploadStorage().FilePut(ctx, "clone-fail", api.OriginUser, "a.txt", "text/plain", strings.NewReader("a"), false); err != nil {
 		t.Fatalf("FilePut: %v", err)
 	}
-	store := backend.FileStorage()
+	store := backend.UploadStorage()
 	inst.backend.Store(common.NewBackend(inst.ctx, backend.Storage(), backend.WorkspaceStorage(), failingPut{store}, []common.Option{common.OptionProvider(stubProvider{})}))
 	before, err := backend.Storage().ThreadList(ctx, time.Time{}, time.Now().Add(time.Hour), true, 100, "")
 	if err != nil {

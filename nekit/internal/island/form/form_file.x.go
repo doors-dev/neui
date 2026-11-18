@@ -700,7 +700,7 @@ func (f *fileWidget) zone(full bool) gox.Elem {
 				__e = __c.Set("class", "neisland-form-file-zone"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 //line form_file.gox:750
-				__e = (neui.Input{Desc: "file chooser"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+				__e = (neui.Use{Desc: "file chooser"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 					ctx := __c.Context(); _ = ctx
 					__e = __c.InitVoid("input"); if __e != nil { return }
 					{
@@ -912,7 +912,7 @@ func (f *fileWidget) chip(e fileEntry) gox.Elem {
 				__e = __c.Close(); if __e != nil { return }
 			}
 //line form_file.gox:827
-			__e = (neui.Input{Desc: "remove " + e.name}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+			__e = (neui.Use{Desc: "remove " + e.name}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.Init("button"); if __e != nil { return }
 				{

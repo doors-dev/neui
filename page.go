@@ -136,7 +136,7 @@ func (d Data) Main() gox.Elem {
 
 var _ gox.Comp = Data{}
 
-// Rights sets what the agent may do with an Input.
+// Rights sets what the agent may do with a Use.
 type Rights int
 
 const (
@@ -161,11 +161,11 @@ func (r Rights) rights() page.Rights {
 	}
 }
 
-// Input exposes one interactive element to the agent in the enclosing space,
+// Use exposes one interactive element to the agent in the enclosing space,
 // so it can read, fill or click it as the user would. Wrap exactly one
 // element:
 //
-//	~>neui.Input{Desc: "delete this contact"} <button>Delete</button>
+//	~>neui.Use{Desc: "delete this contact"} <button>Delete</button>
 //
 // Supported tags are button, a, input, textarea and select; an input of type
 // submit, button, reset or image counts as a button, and a radio stands for
@@ -175,7 +175,11 @@ func (r Rights) rights() page.Rights {
 // type, name and static value (a button's or checkbox's value, a link's href)
 // are told apart only by Desc; when two cannot be told apart, the agent's call
 // on them fails and the error is logged.
-type Input struct {
+//
+// When the agent clicks or writes the element, the page briefly marks it with
+// an overlay of class neui-act plus neui-act-click or neui-act-write; style
+// those classes to restyle the cue.
+type Use struct {
 	// Desc tells the agent what the element does or holds.
 	Desc string
 	// Rights limits what the agent may do with it. Default RW.
@@ -183,9 +187,9 @@ type Input struct {
 }
 
 // Proxy renders el and registers its element. When el does not start with a
-// supported element, or the element is already wrapped by another Input, it
+// supported element, or the element is already wrapped by another Use, it
 // logs the error and renders el unregistered.
-func (u Input) Proxy(cur gox.Cursor, el gox.Elem) error {
+func (u Use) Proxy(cur gox.Cursor, el gox.Elem) error {
 	printer := &inputPrinter{
 		input: u,
 		cur:   cur,
@@ -203,7 +207,7 @@ const (
 
 type inputPrinter struct {
 	state  inputPrinterState
-	input  Input
+	input  Use
 	cur    gox.Cursor
 	script gox.Elem
 	id     uint64
@@ -216,7 +220,7 @@ func (p *inputPrinter) Send(j gox.Job) error {
 	case inputPrinterSeek:
 		open, ok := j.(*gox.JobOpen)
 		if !ok {
-			doors.Logger(j.Context()).Error("neui: Input must proxy an element directly", "desc", p.input.Desc)
+			doors.Logger(j.Context()).Error("neui: Use must proxy an element directly", "desc", p.input.Desc)
 			p.state = inputPrinterDone
 			return p.cur.Printer().Send(j)
 		}
@@ -228,7 +232,7 @@ func (p *inputPrinter) Send(j gox.Job) error {
 		}
 		script, err := p.target(open)
 		if err != nil {
-			doors.Logger(open.Ctx).Error("neui: Input not registered", "desc", p.input.Desc, "err", err)
+			doors.Logger(open.Ctx).Error("neui: Use not registered", "desc", p.input.Desc, "err", err)
 			p.state = inputPrinterDone
 			return p.cur.Printer().Send(open)
 		}
@@ -282,11 +286,11 @@ func (p *inputPrinter) target(open *gox.JobOpen) (gox.Elem, error) {
 	case strings.EqualFold(tag, "select"):
 		return space.Select(ctx, rights, desc, attrs)
 	default:
-		return nil, fmt.Errorf("unsupported tag %q for neui.Input", tag)
+		return nil, fmt.Errorf("unsupported tag %q for neui.Use", tag)
 	}
 }
 
-var _ gox.Proxy = Input{}
+var _ gox.Proxy = Use{}
 
 // Island is a region of the page where the agent runs an app: a script that
 // draws a UI from the views, controls and layouts its Library offers and

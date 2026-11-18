@@ -12,14 +12,17 @@ import (
 // Enable turns neui on for the doors session ctx belongs to, typically from an
 // auth hook or handler once the user is known; ctx must be a doors context of
 // that session. Every tab of the session, open now or later, links its chat to
-// it. The session's provider is the one OptionProvider sets, else the app's
+// it. Once enabled, later calls do nothing unless OptionForce is passed.
+//
+// The session's provider is the one OptionProvider sets, else the app's
 // WithProvider; when there is neither, Enable returns api.ErrNoProvider and
-// leaves the session as it was. Without OptionMessageStorage and
-// OptionFileStorage, threads are kept in memory and files in a per-session
-// temporary directory; neither is reachable after the session ends. The
-// directory also holds the thread workspaces, so Enable creates it even with
-// OptionFileStorage, and returns an error when it cannot; a later call tries
-// again. Once enabled, later calls do nothing unless OptionForce is passed.
+// leaves the session as it was.
+//
+// Without a message or file storage set, threads are kept in memory and files
+// in a per-session temporary directory, both lost when the session ends.
+//
+// Enable creates a per-session temporary directory for the agent's workspace
+// and returns an error when it cannot; a later call tries again.
 func Enable(ctx context.Context, opts ...Option) error {
 	return instance.GetSession(ctx).Enable(opts)
 }
@@ -93,12 +96,18 @@ func OptionMessageStorage(s api.MessageStorage) Option {
 	return common.OptionMessageStorage(s)
 }
 
-// OptionFileStorage sets where the session's uploaded files are stored, both
+// OptionUploadStorage sets where the session's uploaded files are stored, both
 // the user's (api.UserUploadsDir) and the agent's (api.AgentUploadsDir),
-// replacing the default temporary directory. Thread workspaces stay in the
-// temporary directory.
-func OptionFileStorage(s api.FileStorage) Option {
-	return common.OptionFileStorage(s)
+// overriding the app's WithUploadStorage and the default temporary directory.
+func OptionUploadStorage(s api.UploadStorage) Option {
+	return common.OptionUploadStorage(s)
+}
+
+// WithUploadStorage sets where every session's uploaded files are stored, as an
+// app option for doors.NewApp, replacing the per-session temporary directory.
+// OptionUploadStorage overrides it for one session.
+func WithUploadStorage(s api.UploadStorage) doors.With {
+	return doors.WithValue(common.UploadStorageKey{}, s)
 }
 
 // WithSystemPrompt adds text to the system prompt of every session the app

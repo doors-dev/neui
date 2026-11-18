@@ -203,7 +203,7 @@ type MessageStorage interface {
 	// missing source is ErrNotFound and a target already in use ErrExists.
 	ThreadClone(ctx context.Context, source ThreadID, target ThreadID) (Thread, error)
 	// ThreadDelete removes the thread with its rounds, compactions and records;
-	// its files and workspace are left to FileStorage and WorkspaceStorage. It
+	// its files and workspace are left to UploadStorage and WorkspaceStorage. It
 	// takes no seq, and a thread that is not there is not an error.
 	ThreadDelete(ctx context.Context, id ThreadID) error
 

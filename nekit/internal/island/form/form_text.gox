@@ -111,7 +111,7 @@ elem (f *textWidget) Main() {
 				))
 			</label>
 		})
-		~>(neui.Input{Desc: f.params.Label, Rights: rights}) <input
+		~>(neui.Use{Desc: f.params.Label, Rights: rights}) <input
 			(&f.invalid)
 			(&f.label)
 			(doors.AInput{

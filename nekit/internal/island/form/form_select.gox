@@ -212,7 +212,7 @@ elem (f *selectWidget) Main() {
 					~(required)
 				</label>
 			})
-			~>(neui.Input{Desc: f.params.Label}) <select
+			~>(neui.Use{Desc: f.params.Label}) <select
 				(&f.invalid)
 				(&f.label)
 				(change)
@@ -249,7 +249,7 @@ elem (f *selectWidget) Main() {
 				aria-describedby=(f.id + "-e")>
 				~(if f.params.Min == 0 {
 					<label class="neisland-form-check">
-						~>(neui.Input{Desc: f.params.Label}) <input
+						~>(neui.Use{Desc: f.params.Label}) <input
 							(&f.invalid)
 							(change)
 							class="neisland-form-radio"
@@ -264,7 +264,7 @@ elem (f *selectWidget) Main() {
 				})
 				~(for i, o := range f.params.Options {
 					<label class="neisland-form-check">
-						~>(neui.Input{Desc: f.params.Label}) <input
+						~>(neui.Use{Desc: f.params.Label}) <input
 							(&f.invalid)
 							(change)
 							class="neisland-form-radio"
@@ -296,7 +296,7 @@ elem (f *selectWidget) Main() {
 				aria-describedby=(f.id + "-e")>
 				~(for i, o := range f.params.Options {
 					<label class="neisland-form-check">
-						~>(neui.Input{Desc: f.params.Label + ": " + o.Label}) <input
+						~>(neui.Use{Desc: f.params.Label + ": " + o.Label}) <input
 							(&f.invalid)
 							(change)
 							class="neisland-form-checkbox"

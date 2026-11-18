@@ -24,7 +24,7 @@ type readOutput struct {
 func order(changes chan<- string, clicks chan<- struct{}) gox.Elem {
 	return func(cur gox.Cursor) error {
 		return (neui.Space{Name: "order", Desc: "the order"}).Proxy(cur, func(cur gox.Cursor) error {
-			if err := (neui.Input{Desc: "how many"}).Proxy(cur, func(cur gox.Cursor) error {
+			if err := (neui.Use{Desc: "how many"}).Proxy(cur, func(cur gox.Cursor) error {
 				if err := cur.InitVoid("input"); err != nil {
 					return err
 				}
@@ -41,7 +41,7 @@ func order(changes chan<- string, clicks chan<- struct{}) gox.Elem {
 			}); err != nil {
 				return err
 			}
-			return (neui.Input{Desc: "places the order", Rights: neui.W}).Proxy(cur, func(cur gox.Cursor) error {
+			return (neui.Use{Desc: "places the order", Rights: neui.W}).Proxy(cur, func(cur gox.Cursor) error {
 				if err := cur.Init("button"); err != nil {
 					return err
 				}
@@ -220,7 +220,7 @@ func TestRadioGroupStaysWritableAfterFirstMemberDoorIsRemoved(t *testing.T) {
 func TestReadReportsDisabled(t *testing.T) {
 	field := func(desc string, attrs ...any) gox.Elem {
 		return func(cur gox.Cursor) error {
-			return (neui.Input{Desc: desc}).Proxy(cur, func(cur gox.Cursor) error {
+			return (neui.Use{Desc: desc}).Proxy(cur, func(cur gox.Cursor) error {
 				if err := cur.InitVoid("input"); err != nil {
 					return err
 				}
@@ -234,7 +234,7 @@ func TestReadReportsDisabled(t *testing.T) {
 		}
 	}
 	size := func(cur gox.Cursor) error {
-		return (neui.Input{Desc: "the size"}).Proxy(cur, func(cur gox.Cursor) error {
+		return (neui.Use{Desc: "the size"}).Proxy(cur, func(cur gox.Cursor) error {
 			if err := cur.Init("select"); err != nil {
 				return err
 			}
@@ -325,7 +325,7 @@ func TestInputCallsReportChanges(t *testing.T) {
 	}
 	field := func(desc string, tag string, hook gox.Modify) gox.Elem {
 		return func(cur gox.Cursor) error {
-			return (neui.Input{Desc: desc}).Proxy(cur, func(cur gox.Cursor) error {
+			return (neui.Use{Desc: desc}).Proxy(cur, func(cur gox.Cursor) error {
 				if err := cur.Init(tag); err != nil {
 					return err
 				}
@@ -401,7 +401,7 @@ func TestFailedInputCallsReport(t *testing.T) {
 			if err := cur.Submit(); err != nil {
 				return err
 			}
-			if err := (neui.Input{Desc: "the ghost"}).Proxy(cur, func(cur gox.Cursor) error {
+			if err := (neui.Use{Desc: "the ghost"}).Proxy(cur, func(cur gox.Cursor) error {
 				if err := cur.InitVoid("input"); err != nil {
 					return err
 				}
@@ -494,7 +494,7 @@ func html(tag string, text string, parts ...any) gox.Elem {
 
 func exposed(desc string, el gox.Elem) gox.Elem {
 	return func(cur gox.Cursor) error {
-		return (neui.Input{Desc: desc}).Proxy(cur, el)
+		return (neui.Use{Desc: desc}).Proxy(cur, el)
 	}
 }
 

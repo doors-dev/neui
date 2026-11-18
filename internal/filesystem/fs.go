@@ -23,7 +23,7 @@ const tempDirPrefix = ".tmp-"
 
 type FS = *workFS
 
-func Open(threadID api.ThreadID, storage api.WorkspaceStorage, files api.FileStorage, config api.FilesConfig) FS {
+func Open(threadID api.ThreadID, storage api.WorkspaceStorage, files api.UploadStorage, config api.FilesConfig) FS {
 	return &workFS{
 		threadID: threadID,
 		storage:  storage,
@@ -40,7 +40,7 @@ type workFS struct {
 	wsMu      sync.Mutex
 	opened    bool
 	closed    bool
-	files     api.FileStorage
+	files     api.UploadStorage
 	temp      string
 	quota     *quota
 	mu        sync.Mutex

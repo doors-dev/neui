@@ -21,7 +21,7 @@ import (
 )
 
 func newLink(thread *thread, backend *common.Backend, page page.Page, meta any) *link {
-	fs := filesystem.Open(thread.id, backend.WorkspaceStorage(), backend.FileStorage(), backend.FilesConfig())
+	fs := filesystem.Open(thread.id, backend.WorkspaceStorage(), backend.UploadStorage(), backend.FilesConfig())
 	ctx, cancel := context.WithCancel(backend.Context())
 	toolkit := toolkit.NewToolkit(ctx, backend.Modules()...)
 	linkCtx, linkCancel := context.WithCancelCause(ctx)

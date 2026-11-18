@@ -261,7 +261,7 @@ func (f *selectWidget) Main() gox.Elem {
 					__e = __c.Close(); if __e != nil { return }
 				}
 //line form_select.gox:215
-				__e = (neui.Input{Desc: f.params.Label}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+				__e = (neui.Use{Desc: f.params.Label}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 					ctx := __c.Context(); _ = ctx
 					__e = __c.Init("select"); if __e != nil { return }
 					{
@@ -371,7 +371,7 @@ func (f *selectWidget) Main() gox.Elem {
 							__e = __c.Set("class", "neisland-form-check"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 //line form_select.gox:252
-							__e = (neui.Input{Desc: f.params.Label}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+							__e = (neui.Use{Desc: f.params.Label}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 								ctx := __c.Context(); _ = ctx
 								__e = __c.InitVoid("input"); if __e != nil { return }
 								{
@@ -408,7 +408,7 @@ func (f *selectWidget) Main() gox.Elem {
 							__e = __c.Set("class", "neisland-form-check"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 //line form_select.gox:267
-							__e = (neui.Input{Desc: f.params.Label}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+							__e = (neui.Use{Desc: f.params.Label}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 								ctx := __c.Context(); _ = ctx
 								__e = __c.InitVoid("input"); if __e != nil { return }
 								{
@@ -489,7 +489,7 @@ func (f *selectWidget) Main() gox.Elem {
 							__e = __c.Set("class", "neisland-form-check"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 //line form_select.gox:299
-							__e = (neui.Input{Desc: f.params.Label + ": " + o.Label}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+							__e = (neui.Use{Desc: f.params.Label + ": " + o.Label}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 								ctx := __c.Context(); _ = ctx
 								__e = __c.InitVoid("input"); if __e != nil { return }
 								{

@@ -150,7 +150,7 @@ elem (f *numberWidget) Main() {
 		})
 		~(if f.params.Type == "range" {
 			<div class="neisland-form-slider">
-				~>(neui.Input{Desc: f.params.Label}) <input
+				~>(neui.Use{Desc: f.params.Label}) <input
 					(&f.invalid)
 					(&f.label)
 					(doors.AInput{
@@ -177,7 +177,7 @@ elem (f *numberWidget) Main() {
 				~>(&f.output) <output class="neisland-form-output" for=(f.id)>~(value)</output>
 			</div>
 		} else {
-			~>(neui.Input{Desc: f.params.Label}) <input
+			~>(neui.Use{Desc: f.params.Label}) <input
 				(&f.invalid)
 				(&f.label)
 				(doors.AInput{

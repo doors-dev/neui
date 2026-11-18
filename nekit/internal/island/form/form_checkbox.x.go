@@ -94,7 +94,7 @@ func (f *checkboxWidget) Main() gox.Elem {
 				__e = __c.Set("class", "neisland-form-check neisland-form-check-single"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 //line form_checkbox.gox:82
-				__e = (neui.Input{Desc: f.params.Label}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+				__e = (neui.Use{Desc: f.params.Label}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 					ctx := __c.Context(); _ = ctx
 					__e = __c.InitVoid("input"); if __e != nil { return }
 					{

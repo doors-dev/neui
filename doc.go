@@ -11,7 +11,7 @@
 //
 // The agent acts through tools. A Module built with NewModule, or a built-in
 // one such as ModuleJS or ModuleWeb, serves tools to the threads of the
-// sessions it is registered for. On the page, Space, Tool, Data and Input
+// sessions it is registered for. On the page, Space, Tool, Data and Use
 // expose regions, actions, context and elements of what the user sees, and
 // Island gives the agent a region where it runs its own UI.
 package neui

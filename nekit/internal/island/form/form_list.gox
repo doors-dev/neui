@@ -330,7 +330,7 @@ elem (f *listWidget) Main() {
 			~(f.append)
 		</ol>
 		<div class="neisland-form-items-foot">
-			~>(neui.Input{Desc: "add an item"}) <button
+			~>(neui.Use{Desc: "add an item"}) <button
 				(&f.add)
 				(doors.AClick{
 					Scope: f.group.scope(),
@@ -414,7 +414,7 @@ elem (f *listWidget) item(field *listItemWidget) {
 			aria-label=(label)>
 			~(field.field)
 		</div>
-		~>(neui.Input{Desc: "remove this item"}) <button
+		~>(neui.Use{Desc: "remove this item"}) <button
 			(&field.removeLabel)
 			(doors.AClick{
 				Scope: f.group.scope(),

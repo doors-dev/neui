@@ -37,6 +37,13 @@ func AppProvider(ctx context.Context) api.Provider {
 	return p
 }
 
+type UploadStorageKey struct{}
+
+func AppUploadStorage(ctx context.Context) api.UploadStorage {
+	s, _ := ctx.Value(UploadStorageKey{}).(api.UploadStorage)
+	return s
+}
+
 func AppModules(ctx context.Context) []ModuleFactory {
 	m, _ := ctx.Value(ModulesKey{}).([]ModuleFactory)
 	return m

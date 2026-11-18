@@ -93,7 +93,7 @@ elem (f *dateWidget) Main() {
 				))
 			</label>
 		})
-		~>(neui.Input{Desc: f.params.Label}) <input
+		~>(neui.Use{Desc: f.params.Label}) <input
 			(&f.invalid)
 			(&f.label)
 			(doors.AInput{

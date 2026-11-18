@@ -883,7 +883,7 @@ func TestDraftUnreadableUntilCommitted(t *testing.T) {
 }
 
 type clashStorage struct {
-	api.FileStorage
+	api.UploadStorage
 	calls  int
 	drains int
 }
@@ -894,7 +894,7 @@ func (c *clashStorage) FilePut(ctx context.Context, threadID api.ThreadID, origi
 		io.Copy(io.Discard, r)
 		return api.File{}, api.ErrExists
 	}
-	return c.FileStorage.FilePut(ctx, threadID, origin, name, mime, r, draft)
+	return c.UploadStorage.FilePut(ctx, threadID, origin, name, mime, r, draft)
 }
 
 func TestUserUploadRetriesOnlyUnreadBody(t *testing.T) {
@@ -910,7 +910,7 @@ func TestUserUploadRetriesOnlyUnreadBody(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, store := newTestFS(t)
-			clash := &clashStorage{FileStorage: store, drains: tc.drains}
+			clash := &clashStorage{UploadStorage: store, drains: tc.drains}
 			w := Open(testThread, store, clash, api.FilesConfig{})
 			t.Cleanup(func() { w.Dispose() })
 			e, err := w.UserUpload(ctx, "f.txt", strings.NewReader(tc.body))

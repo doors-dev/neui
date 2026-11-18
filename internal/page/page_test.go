@@ -117,7 +117,7 @@ func shop() gox.Elem {
 			})); err != nil {
 				return err
 			}
-			if err := (neui.Input{Desc: "the order total", Rights: neui.R}).Proxy(cur, func(cur gox.Cursor) error {
+			if err := (neui.Use{Desc: "the order total", Rights: neui.R}).Proxy(cur, func(cur gox.Cursor) error {
 				if err := cur.InitVoid("input"); err != nil {
 					return err
 				}
@@ -128,7 +128,7 @@ func shop() gox.Elem {
 			}); err != nil {
 				return err
 			}
-			return (neui.Input{Desc: "pays the order", Rights: neui.W}).Proxy(cur, func(cur gox.Cursor) error {
+			return (neui.Use{Desc: "pays the order", Rights: neui.W}).Proxy(cur, func(cur gox.Cursor) error {
 				if err := cur.Init("button"); err != nil {
 					return err
 				}
@@ -326,7 +326,7 @@ func TestInputElementCarriesNeid(t *testing.T) {
 		return func(cur gox.Cursor) error {
 			p := page.NewPage(doors.InstanceContext(cur.Context()))
 			return doors.Ctx(context.WithValue(cur.Context(), common.KeySpace, p.Space())).Proxy(cur, func(cur gox.Cursor) error {
-				return (neui.Input{Desc: "the note"}).Proxy(cur, func(cur gox.Cursor) error {
+				return (neui.Use{Desc: "the note"}).Proxy(cur, func(cur gox.Cursor) error {
 					if err := cur.InitVoid("input"); err != nil {
 						return err
 					}
@@ -490,7 +490,7 @@ func TestInputRightsRefused(t *testing.T) {
 
 func radio(name string, value string, changes chan<- string) gox.Elem {
 	return func(cur gox.Cursor) error {
-		return (neui.Input{Desc: "size " + value}).Proxy(cur, func(cur gox.Cursor) error {
+		return (neui.Use{Desc: "size " + value}).Proxy(cur, func(cur gox.Cursor) error {
 			if err := cur.InitVoid("input"); err != nil {
 				return err
 			}
@@ -1164,7 +1164,7 @@ func TestInputIdsFollowContent(t *testing.T) {
 	redraws := doors.NewSource(0)
 	button := func(desc string, attrs ...any) gox.Elem {
 		return func(cur gox.Cursor) error {
-			return (neui.Input{Desc: desc}).Proxy(cur, func(cur gox.Cursor) error {
+			return (neui.Use{Desc: desc}).Proxy(cur, func(cur gox.Cursor) error {
 				if err := cur.InitVoid("input"); err != nil {
 					return err
 				}
@@ -1179,7 +1179,7 @@ func TestInputIdsFollowContent(t *testing.T) {
 	}
 	link := func(href string) gox.Elem {
 		return func(cur gox.Cursor) error {
-			return (neui.Input{Desc: "opens"}).Proxy(cur, func(cur gox.Cursor) error {
+			return (neui.Use{Desc: "opens"}).Proxy(cur, func(cur gox.Cursor) error {
 				if err := cur.Init("a"); err != nil {
 					return err
 				}
@@ -1310,7 +1310,7 @@ func TestStoredDigestsMatchARecount(t *testing.T) {
 						radio("size", "s", make(chan string, 1)),
 						radio("size", "m", make(chan string, 1)),
 						gox.Elem(func(cur gox.Cursor) error {
-							return (neui.Input{Desc: "the note"}).Proxy(cur, func(cur gox.Cursor) error {
+							return (neui.Use{Desc: "the note"}).Proxy(cur, func(cur gox.Cursor) error {
 								if err := cur.InitVoid("input"); err != nil {
 									return err
 								}

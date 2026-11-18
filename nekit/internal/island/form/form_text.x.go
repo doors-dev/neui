@@ -145,7 +145,7 @@ func (f *textWidget) Main() gox.Elem {
 				__e = __c.Close(); if __e != nil { return }
 			}
 //line form_text.gox:114
-			__e = (neui.Input{Desc: f.params.Label, Rights: rights}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+			__e = (neui.Use{Desc: f.params.Label, Rights: rights}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.InitVoid("input"); if __e != nil { return }
 				{

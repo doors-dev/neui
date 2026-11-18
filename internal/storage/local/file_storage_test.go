@@ -13,16 +13,56 @@ import (
 	"neui.dev/api"
 )
 
-func newFileStore(t *testing.T) *FileStorage {
-	t.Helper()
-	s, err := NewFileStorage("")
-	if err != nil {
-		t.Fatal(err)
+func TestFileStorage(t *testing.T) {
+	stores := []struct {
+		name string
+		open func(t *testing.T) (*FileStorage, error)
+	}{
+		{"temp", func(t *testing.T) (*FileStorage, error) { return NewFileStorage(t.TempDir()) }},
+		{"fixed", func(t *testing.T) (*FileStorage, error) {
+			return OpenFileStorage(filepath.Join(t.TempDir(), "uploads"))
+		}},
 	}
-	return s
+	tests := []struct {
+		name string
+		run  func(t *testing.T, s *FileStorage)
+	}{
+		{"PutRoundTrip", testFilePutRoundTrip},
+		{"PutDuplicate", testFilePutDuplicate},
+		{"PutReservesName", testFilePutReservesName},
+		{"PutFailureFreesName", testFilePutFailureFreesName},
+		{"PutDeletedMidway", testFilePutDeletedMidway},
+		{"OriginsSeparate", testFileOriginsSeparate},
+		{"PutInvalid", testFilePutInvalid},
+		{"ZeroByte", testFileZeroByte},
+		{"ReadRange", testFileReadRange},
+		{"Missing", testFileMissing},
+		{"Delete", testFileDelete},
+		{"ListSorted", testFileListSorted},
+		{"ListEmptyAndMissing", testFileListEmptyAndMissing},
+		{"ListCorruptMeta", testFileListCorruptMeta},
+		{"PutRefusesNamesTheDiskCannotHold", testFilePutRefusesNamesTheDiskCannotHold},
+		{"MetalessDirInvisible", testFileMetalessDirInvisible},
+		{"CancelledContext", testFileCancelledContext},
+		{"MethodsRejectInvalidNames", testFileMethodsRejectInvalidNames},
+		{"ThreadScopedMethodsRejectInvalidIDs", testFileThreadScopedMethodsRejectInvalidIDs},
+		{"DiscardDraftsKeepsCommitted", testFileDiscardDraftsKeepsCommitted},
+		{"ClosedAfterRemove", testFileStorageClosedAfterRemove},
+	}
+	for _, store := range stores {
+		for _, tc := range tests {
+			t.Run(store.name+"/"+tc.name, func(t *testing.T) {
+				s, err := store.open(t)
+				if err != nil {
+					t.Fatal(err)
+				}
+				tc.run(t, s)
+			})
+		}
+	}
 }
 
-func putText(t *testing.T, s api.FileStorage, thread api.ThreadID, name, body string) api.File {
+func putText(t *testing.T, s api.UploadStorage, thread api.ThreadID, name, body string) api.File {
 	t.Helper()
 	f, err := s.FilePut(context.Background(), thread, api.OriginUser, name, "text/plain", strings.NewReader(body), false)
 	if err != nil {
@@ -43,8 +83,7 @@ func readAll(t *testing.T, rc io.ReadCloser) string {
 	return string(b)
 }
 
-func TestFilePutRoundTrip(t *testing.T) {
-	s := newFileStore(t)
+func testFilePutRoundTrip(t *testing.T, s *FileStorage) {
 	f := putText(t, s, "t1", "f1.txt", "hello")
 	if f.Size != 5 || f.CreatedAt.IsZero() {
 		t.Fatalf("file = %+v", f)
@@ -68,8 +107,7 @@ func TestFilePutRoundTrip(t *testing.T) {
 	}
 }
 
-func TestFilePutDuplicate(t *testing.T) {
-	s := newFileStore(t)
+func testFilePutDuplicate(t *testing.T, s *FileStorage) {
 	putText(t, s, "t1", "f1.txt", "original")
 	_, err := s.FilePut(context.Background(), "t1", api.OriginUser, "f1.txt", "", strings.NewReader("clobber"), false)
 	if !errors.Is(err, api.ErrExists) {
@@ -114,8 +152,7 @@ func (r *touchReader) Read(p []byte) (int, error) {
 	return 0, io.EOF
 }
 
-func TestFilePutReservesName(t *testing.T) {
-	s := newFileStore(t)
+func testFilePutReservesName(t *testing.T, s *FileStorage) {
 	ctx := context.Background()
 	started, release := make(chan struct{}), make(chan struct{})
 	gate := &gateReader{started: started, release: release, body: strings.NewReader("first")}
@@ -151,8 +188,7 @@ func TestFilePutReservesName(t *testing.T) {
 	}
 }
 
-func TestFilePutFailureFreesName(t *testing.T) {
-	s := newFileStore(t)
+func testFilePutFailureFreesName(t *testing.T, s *FileStorage) {
 	ctx := context.Background()
 	if _, err := s.FilePut(ctx, "t1", api.OriginUser, "f.txt", "", failReader{}, false); err == nil {
 		t.Fatal("put with broken body succeeded")
@@ -160,11 +196,44 @@ func TestFilePutFailureFreesName(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(s.base, "files", "t1", "user", "f.txt")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("reserved dir survived: %v", err)
 	}
+	if entries, err := os.ReadDir(filepath.Join(s.base, stagingDirName)); err != nil || len(entries) != 0 {
+		t.Fatalf("staging = %v, %v, want empty", entries, err)
+	}
 	putText(t, s, "t1", "f.txt", "retry")
 }
 
-func TestFileOriginsSeparate(t *testing.T) {
-	s := newFileStore(t)
+func testFilePutDeletedMidway(t *testing.T, s *FileStorage) {
+	ctx := context.Background()
+	for _, del := range []func() error{
+		func() error { return s.FileDelete(ctx, "t1", api.OriginUser, "f.txt") },
+		func() error { return s.FileDeleteAll(ctx, "t1") },
+	} {
+		started, release := make(chan struct{}), make(chan struct{})
+		gate := &gateReader{started: started, release: release, body: strings.NewReader("late")}
+		done := make(chan error, 1)
+		go func() {
+			_, err := s.FilePut(ctx, "t1", api.OriginUser, "f.txt", "text/plain", gate, false)
+			done <- err
+		}()
+		<-started
+		if err := del(); err != nil {
+			t.Fatal(err)
+		}
+		close(release)
+		if err := <-done; err == nil {
+			t.Fatal("put survived a delete made while it was stored")
+		}
+		if _, err := s.FileStat(ctx, "t1", api.OriginUser, "f.txt"); !errors.Is(err, api.ErrNotFound) {
+			t.Fatalf("FileStat = %v, want ErrNotFound", err)
+		}
+		putText(t, s, "t1", "f.txt", "again")
+		if err := s.FileDelete(ctx, "t1", api.OriginUser, "f.txt"); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func testFileOriginsSeparate(t *testing.T, s *FileStorage) {
 	putText(t, s, "t1", "f1.txt", "user side")
 	if _, err := s.FilePut(context.Background(), "t1", api.OriginAgent, "f1.txt", "", strings.NewReader("agent side"), false); err != nil {
 		t.Fatal(err)
@@ -184,8 +253,7 @@ func TestFileOriginsSeparate(t *testing.T) {
 	}
 }
 
-func TestFilePutInvalid(t *testing.T) {
-	s := newFileStore(t)
+func testFilePutInvalid(t *testing.T, s *FileStorage) {
 	cases := []struct {
 		thread api.ThreadID
 		origin api.Origin
@@ -210,8 +278,7 @@ func TestFilePutInvalid(t *testing.T) {
 	}
 }
 
-func TestFileZeroByte(t *testing.T) {
-	s := newFileStore(t)
+func testFileZeroByte(t *testing.T, s *FileStorage) {
 	f := putText(t, s, "t1", "empty", "")
 	if f.Size != 0 {
 		t.Fatalf("Size = %d", f.Size)
@@ -225,8 +292,7 @@ func TestFileZeroByte(t *testing.T) {
 	}
 }
 
-func TestFileReadRange(t *testing.T) {
-	s := newFileStore(t)
+func testFileReadRange(t *testing.T, s *FileStorage) {
 	putText(t, s, "t1", "f1.txt", "hello world")
 	cases := []struct {
 		off, n int64
@@ -276,8 +342,7 @@ func TestFileReadRange(t *testing.T) {
 	}
 }
 
-func TestFileMissing(t *testing.T) {
-	s := newFileStore(t)
+func testFileMissing(t *testing.T, s *FileStorage) {
 	if _, err := s.FileStat(context.Background(), "t1", api.OriginUser, "ghost"); !errors.Is(err, api.ErrNotFound) {
 		t.Fatalf("FileStat = %v, want ErrNotFound", err)
 	}
@@ -292,8 +357,7 @@ func TestFileMissing(t *testing.T) {
 	}
 }
 
-func TestFileDelete(t *testing.T) {
-	s := newFileStore(t)
+func testFileDelete(t *testing.T, s *FileStorage) {
 	putText(t, s, "t1", "f1.txt", "hello")
 	if err := s.FileDelete(context.Background(), "t1", api.OriginUser, "f1.txt"); err != nil {
 		t.Fatal(err)
@@ -310,7 +374,7 @@ func TestFileDelete(t *testing.T) {
 	}
 }
 
-func collect(t *testing.T, s api.FileStorage, thread api.ThreadID, origin api.Origin) ([]api.File, []error) {
+func collect(t *testing.T, s api.UploadStorage, thread api.ThreadID, origin api.Origin) ([]api.File, []error) {
 	t.Helper()
 	var files []api.File
 	var errs []error
@@ -324,8 +388,7 @@ func collect(t *testing.T, s api.FileStorage, thread api.ThreadID, origin api.Or
 	return files, errs
 }
 
-func TestFileListSorted(t *testing.T) {
-	s := newFileStore(t)
+func testFileListSorted(t *testing.T, s *FileStorage) {
 	putText(t, s, "t1", "mango", "3")
 	putText(t, s, "t1", "zebra", "1")
 	putText(t, s, "t1", "apple", "2")
@@ -338,8 +401,7 @@ func TestFileListSorted(t *testing.T) {
 	}
 }
 
-func TestFileListEmptyAndMissing(t *testing.T) {
-	s := newFileStore(t)
+func testFileListEmptyAndMissing(t *testing.T, s *FileStorage) {
 	if files, errs := collect(t, s, "never-seen", api.OriginUser); len(files) != 0 || len(errs) != 0 {
 		t.Fatalf("missing thread: files = %v, errs = %v", files, errs)
 	}
@@ -355,8 +417,7 @@ func TestFileListEmptyAndMissing(t *testing.T) {
 	}
 }
 
-func TestFileListCorruptMeta(t *testing.T) {
-	s := newFileStore(t)
+func testFileListCorruptMeta(t *testing.T, s *FileStorage) {
 	putText(t, s, "t1", "good1", "a")
 	putText(t, s, "t1", "good2", "b")
 	putText(t, s, "t1", "bad", "c")
@@ -373,8 +434,7 @@ func TestFileListCorruptMeta(t *testing.T) {
 	}
 }
 
-func TestFilePutRefusesNamesTheDiskCannotHold(t *testing.T) {
-	s := newFileStore(t)
+func testFilePutRefusesNamesTheDiskCannotHold(t *testing.T, s *FileStorage) {
 	for _, name := range []string{strings.Repeat("a", 256), strings.Repeat("界", 86), "a\x00b"} {
 		if _, err := s.FilePut(context.Background(), "t1", api.OriginUser, name, "", strings.NewReader("x"), false); !errors.Is(err, api.ErrInvalidName) {
 			t.Errorf("FilePut %q = %v, want ErrInvalidName", name, err)
@@ -383,8 +443,7 @@ func TestFilePutRefusesNamesTheDiskCannotHold(t *testing.T) {
 	putText(t, s, "t1", strings.Repeat("a", 255), "x")
 }
 
-func TestFileMetalessDirInvisible(t *testing.T) {
-	s := newFileStore(t)
+func testFileMetalessDirInvisible(t *testing.T, s *FileStorage) {
 	putText(t, s, "t1", "f1.txt", "x")
 	base := s.base
 	if err := os.MkdirAll(filepath.Join(base, "files", "t1", "user", "ghost"), 0o755); err != nil {
@@ -402,8 +461,7 @@ func TestFileMetalessDirInvisible(t *testing.T) {
 	}
 }
 
-func TestFileCancelledContext(t *testing.T) {
-	s := newFileStore(t)
+func testFileCancelledContext(t *testing.T, s *FileStorage) {
 	putText(t, s, "t1", "f1.txt", "x")
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -433,8 +491,7 @@ func TestFileCancelledContext(t *testing.T) {
 	}
 }
 
-func TestFileMethodsRejectInvalidNames(t *testing.T) {
-	s := newFileStore(t)
+func testFileMethodsRejectInvalidNames(t *testing.T, s *FileStorage) {
 	ctx := context.Background()
 	putText(t, s, "t1", "f1.txt", "hello")
 	for _, name := range []string{"", ".", "..", "/", "a/b"} {
@@ -474,8 +531,7 @@ func must[T any](v T, err error) T {
 	return v
 }
 
-func TestFileThreadScopedMethodsRejectInvalidIDs(t *testing.T) {
-	s := newFileStore(t)
+func testFileThreadScopedMethodsRejectInvalidIDs(t *testing.T, s *FileStorage) {
 	ctx := context.Background()
 	putText(t, s, "t1", "f1.txt", "hello")
 	if _, err := s.WorkspaceOpen("t1"); err != nil {
@@ -512,8 +568,7 @@ func TestFileThreadScopedMethodsRejectInvalidIDs(t *testing.T) {
 	}
 }
 
-func TestFileDiscardDraftsKeepsCommitted(t *testing.T) {
-	s := newFileStore(t)
+func testFileDiscardDraftsKeepsCommitted(t *testing.T, s *FileStorage) {
 	ctx := context.Background()
 	for _, name := range []string{"a", "b"} {
 		if _, err := s.FilePut(ctx, "t1", api.OriginUser, name, "text/plain", strings.NewReader(name), true); err != nil {
@@ -534,8 +589,7 @@ func TestFileDiscardDraftsKeepsCommitted(t *testing.T) {
 	}
 }
 
-func TestFileStorageClosedAfterRemove(t *testing.T) {
-	s := newFileStore(t)
+func testFileStorageClosedAfterRemove(t *testing.T, s *FileStorage) {
 	ctx := context.Background()
 	if err := s.Remove(); err != nil {
 		t.Fatal(err)

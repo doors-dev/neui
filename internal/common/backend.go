@@ -111,9 +111,9 @@ func OptionMessageStorage(s api.MessageStorage) Option {
 	})
 }
 
-func OptionFileStorage(s api.FileStorage) Option {
+func OptionUploadStorage(s api.UploadStorage) Option {
 	return optionFunc(func(b *Backend) {
-		b.fileStorage = s
+		b.uploadStorage = s
 	})
 }
 
@@ -142,7 +142,7 @@ func NewBackend(
 	ctx context.Context,
 	messageStorage api.MessageStorage,
 	workspaceStorage api.WorkspaceStorage,
-	fileStorage api.FileStorage,
+	uploadStorage api.UploadStorage,
 	opts []Option,
 ) *Backend {
 	b := &Backend{
@@ -150,9 +150,12 @@ func NewBackend(
 		provider:         AppProvider(ctx),
 		messageStorage:   messageStorage,
 		workspaceStorage: workspaceStorage,
-		fileStorage:      fileStorage,
+		uploadStorage:    uploadStorage,
 		config:           AppConfig(ctx),
 		filesConfig:      AppFilesConfig(ctx),
+	}
+	if s := AppUploadStorage(ctx); s != nil {
+		b.uploadStorage = s
 	}
 	for _, w := range opts {
 		w.apply(b)
@@ -165,7 +168,7 @@ type Backend struct {
 	provider         api.Provider
 	messageStorage   api.MessageStorage
 	workspaceStorage api.WorkspaceStorage
-	fileStorage      api.FileStorage
+	uploadStorage    api.UploadStorage
 	system           []string
 	modules          []ModuleFactory
 	config           api.ThreadConfig
@@ -184,8 +187,8 @@ func (b *Backend) Modules() []ModuleFactory {
 	return b.modules
 }
 
-func (b *Backend) FileStorage() api.FileStorage {
-	return b.fileStorage
+func (b *Backend) UploadStorage() api.UploadStorage {
+	return b.uploadStorage
 }
 
 func (b *Backend) WorkspaceStorage() api.WorkspaceStorage {

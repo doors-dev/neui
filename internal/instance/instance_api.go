@@ -130,7 +130,7 @@ func (inst *instance) ThreadClone(ctx context.Context, id api.ThreadID) (api.Thr
 	if err != nil {
 		return "", err
 	}
-	files := backend.FileStorage()
+	files := backend.UploadStorage()
 	var f api.File
 copyFiles:
 	for _, origin := range []api.Origin{api.OriginUser, api.OriginAgent} {
@@ -187,7 +187,7 @@ func (inst *instance) ThreadDelete(ctx context.Context, id api.ThreadID) error {
 	if err := thread.Delete(context.WithoutCancel(ctx), backend.Storage(), id); err != nil {
 		return err
 	}
-	return backend.FileStorage().FileDeleteAll(context.WithoutCancel(ctx), id)
+	return backend.UploadStorage().FileDeleteAll(context.WithoutCancel(ctx), id)
 }
 
 func (inst *instance) ThreadGet(ctx context.Context, id api.ThreadID) (api.Thread, error) {

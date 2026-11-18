@@ -433,7 +433,7 @@ func (f *searchWidget) picked(chosen []option) gox.Elem {
 //line form_search.gox:323
 					__e = __c.Any(o.Label); if __e != nil { return }
 //line form_search.gox:324
-					__e = (neui.Input{Desc: "remove " + o.Label}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+					__e = (neui.Use{Desc: "remove " + o.Label}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 						ctx := __c.Context(); _ = ctx
 						__e = __c.Init("button"); if __e != nil { return }
 						{
@@ -483,7 +483,7 @@ func (f *searchWidget) entry(full bool) gox.Elem {
 		}
 
 //line form_search.gox:354
-			__e = (neui.Input{Desc: "search"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+			__e = (neui.Use{Desc: "search"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.InitVoid("input"); if __e != nil { return }
 				{
@@ -595,7 +595,7 @@ func (f *searchWidget) results(found searchFound) gox.Elem {
 					{
 						__e = __c.Submit(); if __e != nil { return }
 //line form_search.gox:414
-						__e = (neui.Input{Desc: "choose " + o.Label}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+						__e = (neui.Use{Desc: "choose " + o.Label}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 							ctx := __c.Context(); _ = ctx
 							__e = __c.Init("button"); if __e != nil { return }
 							{

@@ -37,18 +37,18 @@ type File struct {
 	Size      int64     `json:"size"`       // bytes, measured by storage
 	CreatedAt time.Time `json:"created_at"` // when FilePut committed it
 	// Draft marks a blob stored ahead of the message that will carry it. A
-	// draft is not part of the conversation: FileStorage lists it like any
+	// draft is not part of the conversation: UploadStorage lists it like any
 	// file, but FS leaves it out of Stat, ReadDir and every read. It stays a
 	// draft until FileCommit clears it or it is deleted.
 	Draft bool `json:"draft"`
 }
 
-// FileStorage keeps immutable blobs under caller-chosen (thread, origin,
+// UploadStorage keeps immutable blobs under caller-chosen (thread, origin,
 // name) keys. The contract mirrors S3 throughout, so a remote implementation
 // can stand in for a local one unchanged. The blob never changes; the one
 // mutable bit of the record is Draft, and FileCommit is the only way to flip
 // it.
-type FileStorage interface {
+type UploadStorage interface {
 	// FilePut streams r into a new blob and returns the record with Size
 	// and CreatedAt filled. Name is the key within the thread and origin:
 	// one path element, not empty, not "." or ".." and holding no

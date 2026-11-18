@@ -127,7 +127,7 @@ func (f *dateWidget) Main() gox.Elem {
 				__e = __c.Close(); if __e != nil { return }
 			}
 //line form_date.gox:96
-			__e = (neui.Input{Desc: f.params.Label}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+			__e = (neui.Use{Desc: f.params.Label}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.InitVoid("input"); if __e != nil { return }
 				{

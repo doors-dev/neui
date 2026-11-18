@@ -20,7 +20,7 @@ func TestLinkToAnotherBackendDropsThePendingInput(t *testing.T) {
 	state := startRound(t, th, r, api.Input{Text: "first"})
 	th.pending = true
 	th.input = api.Input{Text: "queued"}
-	other := common.NewBackend(th.link.ctx, old.Storage(), old.WorkspaceStorage(), old.FileStorage(), []common.Option{common.OptionProvider(old.Provider())})
+	other := common.NewBackend(th.link.ctx, old.Storage(), old.WorkspaceStorage(), old.UploadStorage(), []common.Option{common.OptionProvider(old.Provider())})
 	if _, err := openLink(state, commandLink{other, page.NewPage(context.Background()), true, nil, nil, NewResultResponse[Link]()}); err != nil {
 		t.Fatalf("link to another backend: %v", err)
 	}

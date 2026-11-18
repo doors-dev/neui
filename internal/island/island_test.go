@@ -64,7 +64,7 @@ func (p press) Main() gox.Elem {
 		}}); err != nil {
 			return err
 		}
-		return (neui.Input{Desc: p.params.Label, Rights: neui.W}).Proxy(cur, func(cur gox.Cursor) error {
+		return (neui.Use{Desc: p.params.Label, Rights: neui.W}).Proxy(cur, func(cur gox.Cursor) error {
 			if err := cur.Init("button"); err != nil {
 				return err
 			}
@@ -160,7 +160,7 @@ func fullBoard() gox.Elem {
 			Template: func(slot gox.Comp) gox.Elem {
 				return func(cur gox.Cursor) error { return cur.Comp(slot) }
 			},
-			Library: nekit.IslandRegister,
+			Library: nekit.IslandRegisterAll,
 		})
 	}
 }
@@ -272,7 +272,7 @@ func TestIslandSpecKeepsDefinitionsAtTheEnd(t *testing.T) {
 			t.Fatalf("%s is not under Definitions:\n%s", name, spec)
 		}
 	}
-	t.Logf("island_spec of nekit.IslandRegister: %d bytes", len(spec))
+	t.Logf("island_spec of nekit.IslandRegisterAll: %d bytes", len(spec))
 }
 
 func TestIslandSpecComesInPages(t *testing.T) {

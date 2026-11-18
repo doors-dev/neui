@@ -68,7 +68,7 @@ var migrations = [][]string{
 
 // Store keeps every user's threads in one SQLite database. Give each session
 // its user's part with User. Uploaded files are not stored here; set
-// neui.OptionFileStorage for them.
+// neui.OptionUploadStorage for them.
 type Store struct {
 	db *sql.DB
 }

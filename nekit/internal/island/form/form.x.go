@@ -189,7 +189,7 @@ func (f *widget) Main() gox.Elem {
 //line form.gox:172
 					if s.Novalidate {
 //line form.gox:173
-						__e = (neui.Input{Desc: s.Text}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+						__e = (neui.Use{Desc: s.Text}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 							ctx := __c.Context(); _ = ctx
 							__e = __c.Init("button"); if __e != nil { return }
 							{
@@ -212,7 +212,7 @@ func (f *widget) Main() gox.Elem {
 						return })); if __e != nil { return }
 					} else  {
 //line form.gox:183
-						__e = (neui.Input{Desc: s.Text}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+						__e = (neui.Use{Desc: s.Text}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 							ctx := __c.Context(); _ = ctx
 							__e = __c.Init("button"); if __e != nil { return }
 							{
