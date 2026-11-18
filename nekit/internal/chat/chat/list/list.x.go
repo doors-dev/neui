@@ -1,6 +1,20 @@
 // Managed by GoX v0.4.0
 
 //line list.gox:1
+// Copyright 2026 doors dev LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package list
 
 import (
@@ -79,28 +93,28 @@ func (l List) Main() gox.Elem {
 	return l.once
 }
 
-//line list.gox:79
+//line list.gox:93
 func (l List) main(active *api.Round, anchor api.RoundID) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line list.gox:81
+//line list.gox:95
 		seed, err := l.seed(ctx, active, anchor)
 
-//line list.gox:83
+//line list.gox:97
 		if err == nil {
-//line list.gox:84
+//line list.gox:98
 			__e = __c.Any(seed); if __e != nil { return }
 		} else  {
-//line list.gox:87
+//line list.gox:101
 			doors.Logger(ctx).Error("list", "err", err)
 
-//line list.gox:89
+//line list.gox:103
 			__e = __c.Any(doors.Go(func(ctx context.Context) {
 			l.fail(ctx, err)
 		})); if __e != nil { return }
 		}
 	return })
-//line list.gox:93
+//line list.gox:107
 }
 
 func (l List) seed(ctx context.Context, active *api.Round, anchor api.RoundID) (gox.Comp, error) {
@@ -436,14 +450,14 @@ func (e entry) remove(ctx context.Context) {
 	e.door.Static(ctx, nil)
 }
 
-//line list.gox:428
+//line list.gox:442
 func (e entry) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line list.gox:429
+//line list.gox:443
 		__e = __c.Any(e.door); if __e != nil { return }
 	return })
-//line list.gox:430
+//line list.gox:444
 }
 
 func (l List) loadAfter(ctx context.Context, cursor api.RoundID, num int, stop api.RoundID, strip bool) ([][]api.Round, bool, error) {
@@ -600,11 +614,11 @@ type section struct {
 	after any
 }
 
-//line list.gox:586
+//line list.gox:600
 func (s *section) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line list.gox:588
+//line list.gox:602
 		var batch any
 	if s.batch != 0 {
 		batch = s.batch
@@ -612,53 +626,53 @@ func (s *section) Main() gox.Elem {
 
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line list.gox:593
+//line list.gox:607
 			__e = __c.Set("class", "nechat-section"); if __e != nil { return }
-//line list.gox:593
+//line list.gox:607
 			__e = __c.Set("data-id", int(s.id)); if __e != nil { return }
-//line list.gox:593
+//line list.gox:607
 			__e = __c.Set("data-batch", batch); if __e != nil { return }
-//line list.gox:593
+//line list.gox:607
 			__e = __c.Set("data-pending", s.batch != 0); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line list.gox:594
+//line list.gox:608
 			for _, r := range s.rounds {
-//line list.gox:595
+//line list.gox:609
 				__e = __c.Any(r); if __e != nil { return }
 			}
-//line list.gox:597
+//line list.gox:611
 			if s.seam != "" {
-//line list.gox:598
+//line list.gox:612
 				__e = __c.Any(seam(s.seam)); if __e != nil { return }
 			}
-//line list.gox:600
+//line list.gox:614
 			__e = __c.Any(s.after); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line list.gox:602
+//line list.gox:616
 }
 
-//line list.gox:604
+//line list.gox:618
 func seam(label string) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line list.gox:605
+//line list.gox:619
 			__e = __c.Set("class", "nechat-seam"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Init("span"); if __e != nil { return }
 			{
 				__e = __c.Submit(); if __e != nil { return }
-//line list.gox:605
+//line list.gox:619
 				__e = __c.Any(label); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line list.gox:606
+//line list.gox:620
 }
 
 type liveSection struct {
@@ -670,11 +684,11 @@ type liveSection struct {
 	hidden bool
 }
 
-//line list.gox:617
+//line list.gox:631
 func (s *liveSection) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line list.gox:619
+//line list.gox:633
 		var setter gox.Modify = gox.ModifyFunc(func(ctx context.Context, tag string, attrs gox.Attrs) error {
 		return nil
 	})
@@ -684,31 +698,31 @@ func (s *liveSection) Main() gox.Elem {
 
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line list.gox:626
+//line list.gox:640
 			__e = __c.Set("class", "nechat-section"); if __e != nil { return }
-//line list.gox:626
+//line list.gox:640
 			__e = __c.Modify(setter); if __e != nil { return }
-//line list.gox:626
+//line list.gox:640
 			__e = __c.Set("data-id", int(s.id)); if __e != nil { return }
-//line list.gox:626
+//line list.gox:640
 			__e = __c.Set("hidden", s.hidden); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line list.gox:627
+//line list.gox:641
 			for _, r := range s.rounds {
-//line list.gox:628
+//line list.gox:642
 				__e = __c.Any(r); if __e != nil { return }
 			}
-//line list.gox:630
+//line list.gox:644
 			if s.live != nil {
-//line list.gox:631
+//line list.gox:645
 				__e = __c.Any(s.live); if __e != nil { return }
 			}
-//line list.gox:633
+//line list.gox:647
 			__e = __c.Any(s.appender); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line list.gox:635
+//line list.gox:649
 }
 
 type seed struct {
@@ -720,72 +734,72 @@ type seed struct {
 	greeting gox.Comp
 }
 
-//line list.gox:646
+//line list.gox:660
 func (s *seed) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line list.gox:647
+//line list.gox:661
 		__e = __c.Any(s.prepender); if __e != nil { return }
-//line list.gox:648
+//line list.gox:662
 		for _, d := range s.history {
-//line list.gox:649
+//line list.gox:663
 			__e = __c.Any(d); if __e != nil { return }
 		}
-//line list.gox:651
+//line list.gox:665
 		__e = __c.Any(s.historyAppender); if __e != nil { return }
-//line list.gox:652
+//line list.gox:666
 		__e = __c.Any(s.last); if __e != nil { return }
-//line list.gox:653
+//line list.gox:667
 		__e = __c.Any(s.greeting); if __e != nil { return }
-//line list.gox:654
+//line list.gox:668
 		__e = __c.Any(s.appender); if __e != nil { return }
 	return })
-//line list.gox:655
+//line list.gox:669
 }
 
-//line list.gox:657
+//line list.gox:671
 func greeting(title any, body any) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line list.gox:659
+//line list.gox:673
 		text, isText := body.(string)
 
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line list.gox:661
+//line list.gox:675
 			__e = __c.Set("class", "nechat-greet"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line list.gox:662
+//line list.gox:676
 			if title != nil && title != "" {
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line list.gox:663
+//line list.gox:677
 					__e = __c.Set("class", "nechat-greet-title"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line list.gox:663
+//line list.gox:677
 					__e = __c.Any(title); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
 			}
-//line list.gox:665
+//line list.gox:679
 			if isText && text != "" {
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line list.gox:666
+//line list.gox:680
 					__e = __c.Set("class", "nechat-greet-body nechat-greet-body_text"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line list.gox:666
+//line list.gox:680
 					__e = __c.Any(text); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
-//line list.gox:667
+//line list.gox:681
 			} else if !isText && body != nil {
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line list.gox:668
+//line list.gox:682
 					__e = __c.Set("class", "nechat-greet-body"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line list.gox:668
+//line list.gox:682
 					__e = __c.Any(body); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
@@ -793,5 +807,5 @@ func greeting(title any, body any) gox.Elem {
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line list.gox:671
+//line list.gox:685
 }

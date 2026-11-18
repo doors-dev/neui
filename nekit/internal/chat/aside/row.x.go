@@ -1,6 +1,20 @@
 // Managed by GoX v0.4.0
 
 //line row.gox:1
+// Copyright 2026 doors dev LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package aside
 
 import (
@@ -26,81 +40,81 @@ type row struct {
 	day *doors.Door
 }
 
-//line row.gox:26
+//line row.gox:40
 func (r *row) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line row.gox:27
+//line row.gox:41
 			__e = __c.Set("class", "nechat-row"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line row.gox:28
+//line row.gox:42
 			if !r.aside.Params.Off(params.ThreadEdit) {
-//line row.gox:29
+//line row.gox:43
 				__e = __c.Any(r.aside.menu.BindPop(chatMenu{id: r.thread.ID, mode: chatMenuOpen}, func(hide func(context.Context)) gox.Elem {
 				return gox.Elem(func(__c gox.Cursor) (__e error) {
 					ctx := __c.Context(); _ = ctx
-//line row.gox:30
+//line row.gox:44
 					__e = __c.Any(r.actions(hide)); if __e != nil { return }
 				return })
-//line row.gox:31
+//line row.gox:45
 			})); if __e != nil { return }
-//line row.gox:32
+//line row.gox:46
 				__e = __c.Any(r.aside.menu.BindPop(chatMenu{id: r.thread.ID, mode: chatMenuRename}, func(hide func(context.Context)) gox.Elem {
 				return gox.Elem(func(__c gox.Cursor) (__e error) {
 					ctx := __c.Context(); _ = ctx
-//line row.gox:33
+//line row.gox:47
 					__e = __c.Any(r.rename(hide)); if __e != nil { return }
 				return })
-//line row.gox:34
+//line row.gox:48
 			})); if __e != nil { return }
-//line row.gox:35
+//line row.gox:49
 				__e = __c.Any(r.aside.menu.BindPop(chatMenu{id: r.thread.ID, mode: chatMenuDelete}, func(hide func(context.Context)) gox.Elem {
 				return gox.Elem(func(__c gox.Cursor) (__e error) {
 					ctx := __c.Context(); _ = ctx
-//line row.gox:36
+//line row.gox:50
 					__e = __c.Any(r.confirm(hide)); if __e != nil { return }
 				return })
-//line row.gox:37
+//line row.gox:51
 			})); if __e != nil { return }
 			}
-//line row.gox:39
+//line row.gox:53
 			__e = __c.Any(r.open()); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line row.gox:41
+//line row.gox:55
 }
 
-//line row.gox:43
+//line row.gox:57
 func (r *row) open() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line row.gox:44
+//line row.gox:58
 		if r.instance == r.aside.Instance.ID() {
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line row.gox:45
+//line row.gox:59
 				__e = __c.Set("class", "nechat-thread nechat-thread_active"); if __e != nil { return }
-//line row.gox:45
+//line row.gox:59
 				__e = __c.Set("aria-current", "true"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Init("span"); if __e != nil { return }
 				{
-//line row.gox:46
+//line row.gox:60
 					__e = __c.Set("class", "nechat-dot"); if __e != nil { return }
-//line row.gox:46
+//line row.gox:60
 					__e = __c.Set("aria-hidden", "true"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
-//line row.gox:47
+//line row.gox:61
 				__e = __c.Any(name(r.thread.Name)); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		} else  {
-//line row.gox:50
+//line row.gox:64
 			__e = (doors.AClick{
 			Scope: new(doors.ScopeBlocking),
 			On: func(ctx context.Context, rp doors.RequestPointer) bool {
@@ -117,16 +131,16 @@ func (r *row) open() gox.Elem {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.Init("button"); if __e != nil { return }
 				{
-//line row.gox:62
+//line row.gox:76
 					__e = __c.Set("class", "nechat-thread"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line row.gox:63
+//line row.gox:77
 					if r.instance == "" {
 						__e = __c.Init("span"); if __e != nil { return }
 						{
-//line row.gox:64
+//line row.gox:78
 							__e = __c.Set("class", "nechat-dot nechat-dot_off"); if __e != nil { return }
-//line row.gox:64
+//line row.gox:78
 							__e = __c.Set("aria-hidden", "true"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 						}
@@ -134,52 +148,52 @@ func (r *row) open() gox.Elem {
 					} else  {
 						__e = __c.Init("span"); if __e != nil { return }
 						{
-//line row.gox:66
+//line row.gox:80
 							__e = __c.Set("class", "nechat-dot"); if __e != nil { return }
-//line row.gox:66
+//line row.gox:80
 							__e = __c.Set("aria-hidden", "true"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
 					}
-//line row.gox:68
+//line row.gox:82
 					__e = __c.Any(name(r.thread.Name)); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
 			return })); if __e != nil { return }
 		}
-//line row.gox:71
+//line row.gox:85
 		if !r.aside.Params.Off(params.ThreadEdit) {
-//line row.gox:72
+//line row.gox:86
 			__e = __c.Any(r.aside.menu.BindControls(
 			chatMenu{id: r.thread.ID, mode: chatMenuOpen},
 			func(show func(ctx context.Context)) gox.Elem {
 				return gox.Elem(func(__c gox.Cursor) (__e error) {
 					ctx := __c.Context(); _ = ctx
-//line row.gox:75
+//line row.gox:89
 					__e = __c.Any(r.kebab(show)); if __e != nil { return }
 				return })
-//line row.gox:76
+//line row.gox:90
 			},
 			func(hide func(ctx context.Context)) gox.Elem {
 				return gox.Elem(func(__c gox.Cursor) (__e error) {
 					ctx := __c.Context(); _ = ctx
-//line row.gox:78
+//line row.gox:92
 					__e = __c.Any(r.kebab(hide)); if __e != nil { return }
 				return })
-//line row.gox:79
+//line row.gox:93
 			},
 		)); if __e != nil { return }
 		}
 	return })
-//line row.gox:82
+//line row.gox:96
 }
 
-//line row.gox:84
+//line row.gox:98
 func (r *row) kebab(toggle func(ctx context.Context)) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line row.gox:85
+//line row.gox:99
 		__e = (doors.AClick{
 		Scope: new(doors.ScopeBlocking),
 		On: func(ctx context.Context, rp doors.RequestPointer) bool {
@@ -191,42 +205,42 @@ func (r *row) kebab(toggle func(ctx context.Context)) gox.Elem {
 			ctx := __c.Context(); _ = ctx
 			__e = __c.Init("button"); if __e != nil { return }
 			{
-//line row.gox:92
+//line row.gox:106
 				__e = __c.Set("class", "nechat-iconbtn"); if __e != nil { return }
-//line row.gox:92
+//line row.gox:106
 				__e = __c.Set("aria-label", "Chat actions"); if __e != nil { return }
-//line row.gox:92
+//line row.gox:106
 				__e = __c.Set("aria-haspopup", "menu"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line row.gox:93
+//line row.gox:107
 				__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 					ctx := __c.Context(); _ = ctx
-//line row.gox:93
+//line row.gox:107
 					__e = __c.Any(icons.DotsThreeVertical()); if __e != nil { return }
 				return })); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
-//line row.gox:95
+//line row.gox:109
 }
 
-//line row.gox:97
+//line row.gox:111
 func (r *row) actions(hide func(ctx context.Context)) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line row.gox:98
+//line row.gox:112
 			__e = __c.Set("class", "nechat-rowmenu nechat-popbody"); if __e != nil { return }
-//line row.gox:98
+//line row.gox:112
 			__e = __c.Set("role", "menu"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line row.gox:99
+//line row.gox:113
 			__e = __c.Any(r.action(icons.Pencil(), "Rename", func(ctx context.Context) {
 			r.aside.menu.Show(ctx, chatMenu{id: r.thread.ID, mode: chatMenuRename})
 		})); if __e != nil { return }
-//line row.gox:102
+//line row.gox:116
 			__e = __c.Any(r.action(icons.Copy(), "Clone", func(ctx context.Context) {
 			id, err := r.aside.Instance.ThreadClone(ctx, r.thread.ID)
 			if err != nil {
@@ -241,21 +255,21 @@ func (r *row) actions(hide func(ctx context.Context)) gox.Elem {
 			}
 			hide(ctx)
 		})); if __e != nil { return }
-//line row.gox:116
+//line row.gox:130
 			__e = __c.Any(r.action(icons.Trash(), "Delete chat", func(ctx context.Context) {
 			r.aside.menu.Show(ctx, chatMenu{id: r.thread.ID, mode: chatMenuDelete})
 		})); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line row.gox:120
+//line row.gox:134
 }
 
-//line row.gox:122
+//line row.gox:136
 func (r *row) action(icon gox.Elem, label string, on func(ctx context.Context)) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line row.gox:123
+//line row.gox:137
 		__e = (doors.AClick{
 		Scope: new(doors.ScopeBlocking),
 		On: func(ctx context.Context, rp doors.RequestPointer) bool {
@@ -267,21 +281,21 @@ func (r *row) action(icon gox.Elem, label string, on func(ctx context.Context)) 
 			ctx := __c.Context(); _ = ctx
 			__e = __c.Init("button"); if __e != nil { return }
 			{
-//line row.gox:130
+//line row.gox:144
 				__e = __c.Set("class", "nechat-act"); if __e != nil { return }
-//line row.gox:130
+//line row.gox:144
 				__e = __c.Set("role", "menuitem"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line row.gox:131
+//line row.gox:145
 				__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 					ctx := __c.Context(); _ = ctx
-//line row.gox:131
+//line row.gox:145
 					__e = __c.Any(icon); if __e != nil { return }
 				return })); if __e != nil { return }
 				__e = __c.Init("span"); if __e != nil { return }
 				{
 					__e = __c.Submit(); if __e != nil { return }
-//line row.gox:132
+//line row.gox:146
 					__e = __c.Any(label); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
@@ -289,14 +303,14 @@ func (r *row) action(icon gox.Elem, label string, on func(ctx context.Context)) 
 			__e = __c.Close(); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
-//line row.gox:134
+//line row.gox:148
 }
 
-//line row.gox:136
+//line row.gox:150
 func (r *row) rename(hide func(ctx context.Context)) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line row.gox:137
+//line row.gox:151
 		__e = (doors.ASubmit[renameForm]{
 		Scope: new(doors.ScopeBlocking),
 		On: func(ctx context.Context, rf doors.RequestForm[renameForm]) bool {
@@ -317,17 +331,17 @@ func (r *row) rename(hide func(ctx context.Context)) gox.Elem {
 			ctx := __c.Context(); _ = ctx
 			__e = __c.Init("form"); if __e != nil { return }
 			{
-//line row.gox:153
+//line row.gox:167
 				__e = __c.Set("class", "nechat-form"); if __e != nil { return }
-//line row.gox:153
+//line row.gox:167
 				__e = __c.Set("aria-label", "Rename chat"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line row.gox:154
+//line row.gox:168
 					__e = __c.Set("class", "nechat-form-field"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line row.gox:155
+//line row.gox:169
 					__e = (doors.AKeyDown{
 				Key: doors.Key{Key: "Escape"},
 				Scope: new(doors.ScopeBlocking),
@@ -340,18 +354,18 @@ func (r *row) rename(hide func(ctx context.Context)) gox.Elem {
 						ctx := __c.Context(); _ = ctx
 						__e = __c.InitVoid("input"); if __e != nil { return }
 						{
-//line row.gox:164
+//line row.gox:178
 							__e = __c.Set("class", "nechat-text"); if __e != nil { return }
-//line row.gox:165
+//line row.gox:179
 							__e = __c.Set("name", "name"); if __e != nil { return }
-//line row.gox:166
+//line row.gox:180
 							__e = __c.Set("value", r.thread.Name); if __e != nil { return }
-//line row.gox:167
+//line row.gox:181
 							__e = __c.Set("maxlength", "80"); if __e != nil { return }
 							__e = __c.Set("autofocus", true); if __e != nil { return }
-//line row.gox:169
+//line row.gox:183
 							__e = __c.Set("autocomplete", "off"); if __e != nil { return }
-//line row.gox:170
+//line row.gox:184
 							__e = __c.Set("aria-label", "Chat name"); if __e != nil { return }
 						}
 						__e = __c.Submit(); if __e != nil { return }
@@ -366,10 +380,10 @@ func (r *row) rename(hide func(ctx context.Context)) gox.Elem {
 				__e = __c.Close(); if __e != nil { return }
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line row.gox:177
+//line row.gox:191
 					__e = __c.Set("class", "nechat-form-actions"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line row.gox:178
+//line row.gox:192
 					__e = (doors.AClick{
 				Scope: new(doors.ScopeBlocking),
 				On: func(ctx context.Context, rp doors.RequestPointer) bool {
@@ -381,9 +395,9 @@ func (r *row) rename(hide func(ctx context.Context)) gox.Elem {
 						ctx := __c.Context(); _ = ctx
 						__e = __c.Init("button"); if __e != nil { return }
 						{
-//line row.gox:185
+//line row.gox:199
 							__e = __c.Set("type", "button"); if __e != nil { return }
-//line row.gox:185
+//line row.gox:199
 							__e = __c.Set("class", "nechat-btn nechat-btn_2nd"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.Text("Cancel"); if __e != nil { return }
@@ -392,9 +406,9 @@ func (r *row) rename(hide func(ctx context.Context)) gox.Elem {
 					return })); if __e != nil { return }
 					__e = __c.Init("button"); if __e != nil { return }
 					{
-//line row.gox:186
+//line row.gox:200
 						__e = __c.Set("type", "submit"); if __e != nil { return }
-//line row.gox:186
+//line row.gox:200
 						__e = __c.Set("class", "nechat-btn"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 						__e = __c.Text("Save"); if __e != nil { return }
@@ -406,14 +420,14 @@ func (r *row) rename(hide func(ctx context.Context)) gox.Elem {
 			__e = __c.Close(); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
-//line row.gox:189
+//line row.gox:203
 }
 
-//line row.gox:191
+//line row.gox:205
 func (r *row) confirm(hide func(ctx context.Context)) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line row.gox:193
+//line row.gox:207
 		label := r.thread.Name
 	if label == "" {
 		label = "Untitled"
@@ -421,23 +435,23 @@ func (r *row) confirm(hide func(ctx context.Context)) gox.Elem {
 
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line row.gox:198
+//line row.gox:212
 			__e = __c.Set("class", "nechat-form"); if __e != nil { return }
-//line row.gox:198
+//line row.gox:212
 			__e = __c.Set("role", "group"); if __e != nil { return }
-//line row.gox:198
+//line row.gox:212
 			__e = __c.Set("aria-label", "Delete chat"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line row.gox:199
+//line row.gox:213
 				__e = __c.Set("class", "nechat-form-text"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Text("Delete "); if __e != nil { return }
 				__e = __c.Init("b"); if __e != nil { return }
 				{
 					__e = __c.Submit(); if __e != nil { return }
-//line row.gox:199
+//line row.gox:213
 					__e = __c.Any(label); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
@@ -446,10 +460,10 @@ func (r *row) confirm(hide func(ctx context.Context)) gox.Elem {
 			__e = __c.Close(); if __e != nil { return }
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line row.gox:200
+//line row.gox:214
 				__e = __c.Set("class", "nechat-form-actions"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line row.gox:201
+//line row.gox:215
 				__e = (doors.AClick{
 				Scope: new(doors.ScopeBlocking),
 				On: func(ctx context.Context, rp doors.RequestPointer) bool {
@@ -461,16 +475,16 @@ func (r *row) confirm(hide func(ctx context.Context)) gox.Elem {
 					ctx := __c.Context(); _ = ctx
 					__e = __c.Init("button"); if __e != nil { return }
 					{
-//line row.gox:208
+//line row.gox:222
 						__e = __c.Set("type", "button"); if __e != nil { return }
-//line row.gox:208
+//line row.gox:222
 						__e = __c.Set("class", "nechat-btn nechat-btn_2nd"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 						__e = __c.Text("Cancel"); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
 				return })); if __e != nil { return }
-//line row.gox:209
+//line row.gox:223
 				__e = (doors.AClick{
 				Scope: new(doors.ScopeBlocking),
 				On: func(ctx context.Context, rp doors.RequestPointer) bool {
@@ -488,9 +502,9 @@ func (r *row) confirm(hide func(ctx context.Context)) gox.Elem {
 					ctx := __c.Context(); _ = ctx
 					__e = __c.Init("button"); if __e != nil { return }
 					{
-//line row.gox:222
+//line row.gox:236
 						__e = __c.Set("type", "button"); if __e != nil { return }
-//line row.gox:222
+//line row.gox:236
 						__e = __c.Set("class", "nechat-btn nechat-btn_del"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 						__e = __c.Text("Delete"); if __e != nil { return }
@@ -502,5 +516,5 @@ func (r *row) confirm(hide func(ctx context.Context)) gox.Elem {
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line row.gox:225
+//line row.gox:239
 }

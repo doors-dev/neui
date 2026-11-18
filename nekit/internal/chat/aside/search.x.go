@@ -1,6 +1,20 @@
 // Managed by GoX v0.4.0
 
 //line search.gox:1
+// Copyright 2026 doors dev LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package aside
 
 import (
@@ -22,25 +36,25 @@ import (
 
 const overview = 5
 
-//line search.gox:22
+//line search.gox:36
 func (p *Aside) overview(input string, open func(ctx context.Context, kind controller.SearchKind)) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line search.gox:24
+//line search.gox:38
 		body := new(doors.Door)
 	body.Inner(ctx, p.overviewBody(body, input, open))
 
-//line search.gox:27
+//line search.gox:41
 		__e = __c.Any(body); if __e != nil { return }
 	return })
-//line search.gox:28
+//line search.gox:42
 }
 
-//line search.gox:30
+//line search.gox:44
 func (p *Aside) overviewBody(body *doors.Door, input string, open func(ctx context.Context, kind controller.SearchKind)) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line search.gox:32
+//line search.gox:46
 		loc := p.Instance.Location()
 	current := p.Instance.State().Get().Thread.ID
 	var failed error
@@ -60,87 +74,87 @@ func (p *Aside) overviewBody(body *doors.Door, input string, open func(ctx conte
 		failed = err
 	}
 
-//line search.gox:51
+//line search.gox:65
 		if len(threads) != 0 {
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line search.gox:52
+//line search.gox:66
 				__e = __c.Set("class", "nechat-side-label"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Text("Chats"); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line search.gox:53
+//line search.gox:67
 			for _, t := range threads[:min(len(threads), overview)] {
-//line search.gox:54
+//line search.gox:68
 				__e = __c.Any(p.match(t)); if __e != nil { return }
 			}
-//line search.gox:56
+//line search.gox:70
 			if len(threads) > overview {
-//line search.gox:57
+//line search.gox:71
 				__e = __c.Any(p.more(open, controller.SearchNames)); if __e != nil { return }
 			}
 		}
-//line search.gox:60
+//line search.gox:74
 		if len(mine) != 0 {
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line search.gox:61
+//line search.gox:75
 				__e = __c.Set("class", "nechat-side-label"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Text("Messages here"); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line search.gox:62
+//line search.gox:76
 			for _, h := range mine[:min(len(mine), overview)] {
-//line search.gox:63
+//line search.gox:77
 				__e = __c.Any(p.hit(h, loc, false)); if __e != nil { return }
 			}
-//line search.gox:65
+//line search.gox:79
 			if len(mine) > overview {
-//line search.gox:66
+//line search.gox:80
 				__e = __c.Any(p.more(open, controller.SearchMessagesCurrent)); if __e != nil { return }
 			}
 		}
-//line search.gox:69
+//line search.gox:83
 		if len(others) != 0 {
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line search.gox:70
+//line search.gox:84
 				__e = __c.Set("class", "nechat-side-label"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Text("Other messages"); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line search.gox:71
+//line search.gox:85
 			for _, h := range others[:min(len(others), overview)] {
-//line search.gox:72
+//line search.gox:86
 				__e = __c.Any(p.hit(h, loc, true)); if __e != nil { return }
 			}
-//line search.gox:74
+//line search.gox:88
 			if len(others) > overview {
-//line search.gox:75
+//line search.gox:89
 				__e = __c.Any(p.more(open, controller.SearchMessagesAll)); if __e != nil { return }
 			}
 		}
-//line search.gox:78
+//line search.gox:92
 		if failed != nil {
-//line search.gox:79
+//line search.gox:93
 			__e = __c.Any(retry(body)); if __e != nil { return }
-//line search.gox:80
+//line search.gox:94
 		} else if len(threads) == 0 && len(mine) == 0 && len(others) == 0 {
-//line search.gox:81
+//line search.gox:95
 			__e = __c.Any(empty("No chats or messages match", "Try fewer words")); if __e != nil { return }
 		}
 	return })
-//line search.gox:83
+//line search.gox:97
 }
 
-//line search.gox:85
+//line search.gox:99
 func (p *Aside) noResults(kind controller.SearchKind) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line search.gox:87
+//line search.gox:101
 		text := "No chats or messages match"
 	switch kind {
 	case controller.SearchNames:
@@ -151,21 +165,21 @@ func (p *Aside) noResults(kind controller.SearchKind) gox.Elem {
 		text = "No messages in other chats match"
 	}
 
-//line search.gox:97
+//line search.gox:111
 		__e = __c.Any(empty(text, "")); if __e != nil { return }
 	return })
-//line search.gox:98
+//line search.gox:112
 }
 
-//line search.gox:100
+//line search.gox:114
 func retry(door *doors.Door) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line search.gox:101
+//line search.gox:115
 			__e = __c.Set("class", "nechat-side-retry"); if __e != nil { return }
-//line search.gox:101
+//line search.gox:115
 			__e = __c.Set("role", "alert"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Init("span"); if __e != nil { return }
@@ -174,7 +188,7 @@ func retry(door *doors.Door) gox.Elem {
 				__e = __c.Text("Couldn't load."); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line search.gox:103
+//line search.gox:117
 			__e = (doors.AClick{
 			Scope: new(doors.ScopeBlocking),
 			On: func(ctx context.Context, rp doors.RequestPointer) bool {
@@ -186,9 +200,9 @@ func retry(door *doors.Door) gox.Elem {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.Init("button"); if __e != nil { return }
 				{
-//line search.gox:110
+//line search.gox:124
 					__e = __c.Set("type", "button"); if __e != nil { return }
-//line search.gox:110
+//line search.gox:124
 					__e = __c.Set("class", "nechat-btn nechat-btn_2nd"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
 					__e = __c.Text("Retry"); if __e != nil { return }
@@ -198,33 +212,33 @@ func retry(door *doors.Door) gox.Elem {
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line search.gox:112
+//line search.gox:126
 }
 
-//line search.gox:114
+//line search.gox:128
 func empty(text string, hint string) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line search.gox:115
+//line search.gox:129
 			__e = __c.Set("class", "nechat-side-empty"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Init("div"); if __e != nil { return }
 			{
 				__e = __c.Submit(); if __e != nil { return }
-//line search.gox:116
+//line search.gox:130
 				__e = __c.Any(text); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line search.gox:117
+//line search.gox:131
 			if hint != "" {
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line search.gox:118
+//line search.gox:132
 					__e = __c.Set("class", "nechat-side-empty-hint"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line search.gox:118
+//line search.gox:132
 					__e = __c.Any(hint); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
@@ -232,19 +246,19 @@ func empty(text string, hint string) gox.Elem {
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line search.gox:121
+//line search.gox:135
 }
 
-//line search.gox:123
+//line search.gox:137
 func (p *Aside) more(open func(ctx context.Context, kind controller.SearchKind), kind controller.SearchKind) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line search.gox:124
+//line search.gox:138
 			__e = __c.Set("class", "nechat-row"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line search.gox:125
+//line search.gox:139
 			__e = (doors.AClick{
 			Scope: new(doors.ScopeBlocking),
 			On: func(ctx context.Context, rp doors.RequestPointer) bool {
@@ -256,18 +270,18 @@ func (p *Aside) more(open func(ctx context.Context, kind controller.SearchKind),
 				ctx := __c.Context(); _ = ctx
 				__e = __c.Init("button"); if __e != nil { return }
 				{
-//line search.gox:132
+//line search.gox:146
 					__e = __c.Set("class", "nechat-thread nechat-thread_new"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line search.gox:133
+//line search.gox:147
 					__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 						ctx := __c.Context(); _ = ctx
-//line search.gox:133
+//line search.gox:147
 						__e = __c.Any(icons.ArrowRight()); if __e != nil { return }
 					return })); if __e != nil { return }
 					__e = __c.Init("span"); if __e != nil { return }
 					{
-//line search.gox:134
+//line search.gox:148
 						__e = __c.Set("class", "nechat-thread-name"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 						__e = __c.Text("Show more"); if __e != nil { return }
@@ -279,14 +293,14 @@ func (p *Aside) more(open func(ctx context.Context, kind controller.SearchKind),
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line search.gox:137
+//line search.gox:151
 }
 
-//line search.gox:139
+//line search.gox:153
 func (p *Aside) hit(h api.Hit, loc *time.Location, named bool) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line search.gox:140
+//line search.gox:154
 		__e = (doors.AClick{
 		Scope: new(doors.ScopeBlocking),
 		On: func(ctx context.Context, rp doors.RequestPointer) bool {
@@ -303,24 +317,24 @@ func (p *Aside) hit(h api.Hit, loc *time.Location, named bool) gox.Elem {
 			ctx := __c.Context(); _ = ctx
 			__e = __c.Init("button"); if __e != nil { return }
 			{
-//line search.gox:152
+//line search.gox:166
 				__e = __c.Set("class", "nechat-hit"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line search.gox:153
+//line search.gox:167
 				if named {
 					__e = __c.Init("span"); if __e != nil { return }
 					{
-//line search.gox:154
+//line search.gox:168
 						__e = __c.Set("class", "nechat-hit-head"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line search.gox:155
+//line search.gox:169
 						__e = __c.Any(p.hitName(h)); if __e != nil { return }
 						__e = __c.Init("span"); if __e != nil { return }
 						{
-//line search.gox:156
+//line search.gox:170
 							__e = __c.Set("class", "nechat-date"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
-//line search.gox:156
+//line search.gox:170
 							__e = __c.Any(shortDate(h.Created, loc)); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
@@ -328,29 +342,29 @@ func (p *Aside) hit(h api.Hit, loc *time.Location, named bool) gox.Elem {
 					__e = __c.Close(); if __e != nil { return }
 					__e = __c.Init("span"); if __e != nil { return }
 					{
-//line search.gox:158
+//line search.gox:172
 						__e = __c.Set("class", "nechat-hit-snippet"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line search.gox:158
+//line search.gox:172
 						__e = __c.Any(h.Snippet); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
 				} else  {
 					__e = __c.Init("span"); if __e != nil { return }
 					{
-//line search.gox:160
+//line search.gox:174
 						__e = __c.Set("class", "nechat-date nechat-date_over"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line search.gox:160
+//line search.gox:174
 						__e = __c.Any(shortDate(h.Created, loc)); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
 					__e = __c.Init("span"); if __e != nil { return }
 					{
-//line search.gox:161
+//line search.gox:175
 						__e = __c.Set("class", "nechat-hit-snippet nechat-hit-snippet_under"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line search.gox:161
+//line search.gox:175
 						__e = __c.Any(h.Snippet); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
@@ -359,14 +373,14 @@ func (p *Aside) hit(h api.Hit, loc *time.Location, named bool) gox.Elem {
 			__e = __c.Close(); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
-//line search.gox:164
+//line search.gox:178
 }
 
-//line search.gox:166
+//line search.gox:180
 func (p *Aside) hitName(h api.Hit) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line search.gox:168
+//line search.gox:182
 		t, err := p.Instance.ThreadGet(ctx, h.Thread)
 	if err != nil {
 		doors.Logger(ctx).Error("aside: hit thread", "thread", h.Thread, "err", err)
@@ -378,15 +392,15 @@ func (p *Aside) hitName(h api.Hit) gox.Elem {
 
 		__e = __c.Init("span"); if __e != nil { return }
 		{
-//line search.gox:177
+//line search.gox:191
 			__e = __c.Set("class", "nechat-hit-name"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line search.gox:177
+//line search.gox:191
 			__e = __c.Any(n); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line search.gox:178
+//line search.gox:192
 }
 
 type hits struct {
@@ -398,11 +412,11 @@ type hits struct {
 	query string
 }
 
-//line search.gox:189
+//line search.gox:203
 func (h *hits) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line search.gox:190
+//line search.gox:204
 		__e = __c.Any(&window.List{
 		Margin: margin,
 		Driver: h,
@@ -410,7 +424,7 @@ func (h *hits) Main() gox.Elem {
 		SaveWindow: h.save,
 	}); if __e != nil { return }
 	return })
-//line search.gox:196
+//line search.gox:210
 }
 
 func (h *hits) Compare(a string, b string) int {
@@ -461,14 +475,14 @@ type hitRow struct {
 	hit api.Hit
 }
 
-//line search.gox:246
+//line search.gox:260
 func (r *hitRow) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line search.gox:247
+//line search.gox:261
 		__e = __c.Any(r.hits.aside.hit(r.hit, r.hits.aside.Instance.Location(), r.hits.exclude)); if __e != nil { return }
 	return })
-//line search.gox:248
+//line search.gox:262
 }
 
 func shortDate(t time.Time, loc *time.Location) string {
@@ -492,12 +506,12 @@ type names struct {
 	query string
 }
 
-//line search.gox:271
+//line search.gox:285
 func (n *names) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line search.gox:272
+//line search.gox:286
 		__e = __c.Any(&days{aside: n.aside, window: n.window, save: n.save, name: n.query, empty: n.aside.noResults(controller.SearchNames)}); if __e != nil { return }
 	return })
-//line search.gox:273
+//line search.gox:287
 }

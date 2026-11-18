@@ -1,6 +1,20 @@
 // Managed by GoX v0.4.0
 
 //line order.gox:1
+// Copyright 2026 doors dev LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -16,14 +30,14 @@ import (
 	"neui.dev"
 )
 
-//line order.gox:16
+//line order.gox:30
 func orderPage(id int) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line order.gox:17
+//line order.gox:31
 		__e = (new(doors.Door)).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
-//line order.gox:17
+//line order.gox:31
 			__e = __c.Any(func() any {
 		_, ok := shop.version.Effect(ctx)
 		if !ok {
@@ -38,7 +52,7 @@ func orderPage(id int) gox.Elem {
 	}()); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
-//line order.gox:29
+//line order.gox:43
 }
 
 type statusInput struct {
@@ -53,14 +67,14 @@ type removeItemInput struct {
 	Product int `json:"product" required:"true" description:"product id of the item to take off"`
 }
 
-//line order.gox:43
+//line order.gox:57
 func orderView(o order, c customerRow) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line order.gox:45
+//line order.gox:59
 		open := o.Status == paid || o.Status == unpaid
 
-//line order.gox:47
+//line order.gox:61
 		__e = (neui.Space{
 		Name: "order",
 		Desc: fmt.Sprintf("Page of order #%d: its items, shipping address, customer, payment status and refund or cancel", o.ID),
@@ -69,9 +83,9 @@ func orderView(o order, c customerRow) gox.Elem {
 			__e = __c.Init("div"); if __e != nil { return }
 			{
 				__e = __c.Submit(); if __e != nil { return }
-//line order.gox:51
+//line order.gox:65
 				__e = __c.Any(neui.Data{Text: "the order on this page", Object: o}); if __e != nil { return }
-//line order.gox:52
+//line order.gox:66
 				__e = __c.Any(pageHeader{
 			Crumbs: []crumb{{Label: "Orders", Model: OrdersPath{}}, {Label: fmt.Sprintf("#%d", o.ID), Model: OrderPath{ID: o.ID}}},
 			Title: fmt.Sprintf("Order #%d", o.ID),
@@ -79,43 +93,43 @@ func orderView(o order, c customerRow) gox.Elem {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.InitContainer(); if __e != nil { return }
 				{
-//line order.gox:56
+//line order.gox:70
 					__e = __c.Any(badge(o.Status)); if __e != nil { return }
 					__e = __c.Init("span"); if __e != nil { return }
 					{
 						__e = __c.Submit(); if __e != nil { return }
-//line order.gox:57
+//line order.gox:71
 						__e = __c.Many("Placed ", o.Date); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
 					__e = __c.Init("span"); if __e != nil { return }
 					{
 						__e = __c.Submit(); if __e != nil { return }
-//line order.gox:58
+//line order.gox:72
 						__e = __c.Any(money(o.Total)); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
-//line order.gox:59
+//line order.gox:73
 			return }),
 			Actions: gox.Elem(func(__c gox.Cursor) (__e error) {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.InitContainer(); if __e != nil { return }
 				{
-//line order.gox:61
+//line order.gox:75
 					if open {
-//line order.gox:62
+//line order.gox:76
 						__e = (neui.Use{Desc: "open the edit form of this order"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 							ctx := __c.Context(); _ = ctx
 							__e = __c.Init("a"); if __e != nil { return }
 							{
-//line order.gox:63
+//line order.gox:77
 								__e = __c.Modify(doors.ALink{Model: OrderPath{View: ItemEdit, ID: o.ID}, Batch: true, After: scrollTop}); if __e != nil { return }
-//line order.gox:64
+//line order.gox:78
 								__e = __c.Set("class", btnSecondary); if __e != nil { return }
 								__e = __c.Submit(); if __e != nil { return }
-//line order.gox:65
+//line order.gox:79
 								__e = __c.Any(icon(iconEdit, "size-4")); if __e != nil { return }
 								__e = __c.Text("Edit order"); if __e != nil { return }
 							}
@@ -124,28 +138,28 @@ func orderView(o order, c customerRow) gox.Elem {
 					}
 				}
 				__e = __c.Close(); if __e != nil { return }
-//line order.gox:69
+//line order.gox:83
 			return }),
 		}); if __e != nil { return }
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line order.gox:71
+//line order.gox:85
 					__e = __c.Set("class", "grid grid-cols-1 gap-6 @4xl:grid-cols-3"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
 					__e = __c.Init("div"); if __e != nil { return }
 					{
-//line order.gox:72
+//line order.gox:86
 						__e = __c.Set("class", "space-y-6 @4xl:col-span-2"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line order.gox:73
+//line order.gox:87
 						__e = (neui.Space{Name: "items", Desc: "Products on the order with quantities and amounts"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 							ctx := __c.Context(); _ = ctx
 							__e = __c.Init("div"); if __e != nil { return }
 							{
 								__e = __c.Submit(); if __e != nil { return }
-//line order.gox:74
+//line order.gox:88
 								if open {
-//line order.gox:75
+//line order.gox:89
 									__e = __c.Any(neui.Tool[itemInput, struct{}]{
 							Name: "add_item",
 							Desc: "Add a product to this order; when it is already on the order, its quantity grows by qty. Checked against stock like the edit form",
@@ -176,7 +190,7 @@ func orderView(o order, c customerRow) gox.Elem {
 								return struct{}{}, nil
 							},
 						}); if __e != nil { return }
-//line order.gox:105
+//line order.gox:119
 									__e = __c.Any(neui.Tool[removeItemInput, struct{}]{
 							Name: "remove_item",
 							Desc: "Take a product off this order and put its units back in stock; an order keeps at least one item",
@@ -201,7 +215,7 @@ func orderView(o order, c customerRow) gox.Elem {
 							},
 						}); if __e != nil { return }
 								}
-//line order.gox:129
+//line order.gox:143
 								__e = __c.Any(card{
 						Title: "Items",
 						Flush: true,
@@ -210,15 +224,15 @@ func orderView(o order, c customerRow) gox.Elem {
 							}
 							__e = __c.Close(); if __e != nil { return }
 						return })); if __e != nil { return }
-//line order.gox:135
+//line order.gox:149
 						__e = (neui.Space{Name: "shipping", Desc: "Where the order ships"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 							ctx := __c.Context(); _ = ctx
 							__e = __c.Init("div"); if __e != nil { return }
 							{
 								__e = __c.Submit(); if __e != nil { return }
-//line order.gox:136
+//line order.gox:150
 								if open {
-//line order.gox:137
+//line order.gox:151
 									__e = __c.Any(neui.Tool[addressInput, struct{}]{
 							Name: "update_shipping_address",
 							Desc: "Change where this order ships",
@@ -235,7 +249,7 @@ func orderView(o order, c customerRow) gox.Elem {
 							},
 						}); if __e != nil { return }
 								}
-//line order.gox:153
+//line order.gox:167
 								__e = __c.Any(card{
 						Title: "Shipping",
 						Body: gox.Elem(func(__c gox.Cursor) (__e error) {
@@ -244,18 +258,18 @@ func orderView(o order, c customerRow) gox.Elem {
 							{
 								__e = __c.Init("p"); if __e != nil { return }
 								{
-//line order.gox:156
+//line order.gox:170
 									__e = __c.Set("class", "text-sm whitespace-pre-line text-stone-900"); if __e != nil { return }
 									__e = __c.Submit(); if __e != nil { return }
-//line order.gox:156
+//line order.gox:170
 									__e = __c.Any(o.Address); if __e != nil { return }
 								}
 								__e = __c.Close(); if __e != nil { return }
-//line order.gox:157
+//line order.gox:171
 								if open {
 									__e = __c.Init("p"); if __e != nil { return }
 									{
-//line order.gox:158
+//line order.gox:172
 										__e = __c.Set("class", "mt-2 text-sm text-stone-500"); if __e != nil { return }
 										__e = __c.Submit(); if __e != nil { return }
 										__e = __c.Text("Wrong address? Fix it with Edit order."); if __e != nil { return }
@@ -264,7 +278,7 @@ func orderView(o order, c customerRow) gox.Elem {
 								}
 							}
 							__e = __c.Close(); if __e != nil { return }
-//line order.gox:160
+//line order.gox:174
 						return }),
 					}); if __e != nil { return }
 							}
@@ -274,64 +288,64 @@ func orderView(o order, c customerRow) gox.Elem {
 					__e = __c.Close(); if __e != nil { return }
 					__e = __c.Init("div"); if __e != nil { return }
 					{
-//line order.gox:164
+//line order.gox:178
 						__e = __c.Set("class", "space-y-6"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line order.gox:165
+//line order.gox:179
 						__e = (neui.Space{Name: "customer", Desc: "Who placed the order"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 							ctx := __c.Context(); _ = ctx
-//line order.gox:165
+//line order.gox:179
 							__e = __c.Any(card{
 					Title: "Customer",
 					Body: gox.Elem(func(__c gox.Cursor) (__e error) {
 						ctx := __c.Context(); _ = ctx
 						__e = __c.InitContainer(); if __e != nil { return }
 						{
-//line order.gox:168
+//line order.gox:182
 							__e = (neui.Use{Desc: "open the page of customer " + c.Name}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 								ctx := __c.Context(); _ = ctx
 								__e = __c.Init("a"); if __e != nil { return }
 								{
-//line order.gox:169
+//line order.gox:183
 									__e = __c.Modify(doors.ALink{Model: CustomerPath{ID: c.ID}, Batch: true, After: scrollTop}); if __e != nil { return }
-//line order.gox:170
+//line order.gox:184
 									__e = __c.Set("class", linkText); if __e != nil { return }
 									__e = __c.Submit(); if __e != nil { return }
-//line order.gox:171
+//line order.gox:185
 									__e = __c.Any(c.Name); if __e != nil { return }
 								}
 								__e = __c.Close(); if __e != nil { return }
 							return })); if __e != nil { return }
-//line order.gox:173
+//line order.gox:187
 							if c.Company != "" {
 								__e = __c.Init("p"); if __e != nil { return }
 								{
-//line order.gox:174
+//line order.gox:188
 									__e = __c.Set("class", "mt-0.5 text-sm text-stone-500"); if __e != nil { return }
 									__e = __c.Submit(); if __e != nil { return }
-//line order.gox:174
+//line order.gox:188
 									__e = __c.Any(c.Company); if __e != nil { return }
 								}
 								__e = __c.Close(); if __e != nil { return }
 							}
 							__e = __c.Init("div"); if __e != nil { return }
 							{
-//line order.gox:176
+//line order.gox:190
 								__e = __c.Set("class", "mt-3 space-y-1 text-sm text-stone-600"); if __e != nil { return }
 								__e = __c.Submit(); if __e != nil { return }
 								__e = __c.Init("p"); if __e != nil { return }
 								{
 									__e = __c.Submit(); if __e != nil { return }
-//line order.gox:177
+//line order.gox:191
 									__e = __c.Any(c.Email); if __e != nil { return }
 								}
 								__e = __c.Close(); if __e != nil { return }
-//line order.gox:178
+//line order.gox:192
 								if c.Phone != "" {
 									__e = __c.Init("p"); if __e != nil { return }
 									{
 										__e = __c.Submit(); if __e != nil { return }
-//line order.gox:179
+//line order.gox:193
 										__e = __c.Any(c.Phone); if __e != nil { return }
 									}
 									__e = __c.Close(); if __e != nil { return }
@@ -340,28 +354,28 @@ func orderView(o order, c customerRow) gox.Elem {
 							__e = __c.Close(); if __e != nil { return }
 							__e = __c.Init("p"); if __e != nil { return }
 							{
-//line order.gox:182
+//line order.gox:196
 								__e = __c.Set("class", "mt-3 text-xs text-stone-500"); if __e != nil { return }
 								__e = __c.Submit(); if __e != nil { return }
-//line order.gox:182
+//line order.gox:196
 								__e = __c.Many(c.Orders, " order", plural(c.Orders), " · ", money(c.Spent), " paid"); if __e != nil { return }
 							}
 							__e = __c.Close(); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
-//line order.gox:183
+//line order.gox:197
 					return }),
 				}); if __e != nil { return }
 						return })); if __e != nil { return }
-//line order.gox:185
+//line order.gox:199
 						__e = (neui.Space{Name: "actions", Desc: "Payment status and what can still be done with the order: refund a paid one, cancel an unpaid one"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 							ctx := __c.Context(); _ = ctx
 							__e = __c.Init("div"); if __e != nil { return }
 							{
 								__e = __c.Submit(); if __e != nil { return }
-//line order.gox:186
+//line order.gox:200
 								if open {
-//line order.gox:187
+//line order.gox:201
 									__e = __c.Any(neui.Tool[statusInput, struct{}]{
 							Name: "set_status",
 							Desc: "Mark this order paid or unpaid. Refunded and cancelled are not statuses to set: the refund and cancel buttons here open a confirmation only the user can press",
@@ -378,7 +392,7 @@ func orderView(o order, c customerRow) gox.Elem {
 							},
 						}); if __e != nil { return }
 								}
-//line order.gox:203
+//line order.gox:217
 								__e = __c.Any(card{Title: "Actions", Body: orderActions(o)}); if __e != nil { return }
 							}
 							__e = __c.Close(); if __e != nil { return }
@@ -391,21 +405,21 @@ func orderView(o order, c customerRow) gox.Elem {
 			__e = __c.Close(); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
-//line order.gox:208
+//line order.gox:222
 }
 
-//line order.gox:210
+//line order.gox:224
 func orderLines(o order) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line order.gox:211
+//line order.gox:225
 			__e = __c.Set("class", "overflow-x-auto"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Init("table"); if __e != nil { return }
 			{
-//line order.gox:212
+//line order.gox:226
 				__e = __c.Set("class", tableClass); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Init("thead"); if __e != nil { return }
@@ -416,7 +430,7 @@ func orderLines(o order) gox.Elem {
 						__e = __c.Submit(); if __e != nil { return }
 						__e = __c.Init("th"); if __e != nil { return }
 						{
-//line order.gox:215
+//line order.gox:229
 							__e = __c.Set("class", thClass); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.Text("Product"); if __e != nil { return }
@@ -424,7 +438,7 @@ func orderLines(o order) gox.Elem {
 						__e = __c.Close(); if __e != nil { return }
 						__e = __c.Init("th"); if __e != nil { return }
 						{
-//line order.gox:216
+//line order.gox:230
 							__e = __c.Set("class", thClass.Add("text-right")); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.Text("Qty"); if __e != nil { return }
@@ -432,7 +446,7 @@ func orderLines(o order) gox.Elem {
 						__e = __c.Close(); if __e != nil { return }
 						__e = __c.Init("th"); if __e != nil { return }
 						{
-//line order.gox:217
+//line order.gox:231
 							__e = __c.Set("class", thClass.Add("hidden text-right @xl:table-cell")); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.Text("Unit price"); if __e != nil { return }
@@ -440,7 +454,7 @@ func orderLines(o order) gox.Elem {
 						__e = __c.Close(); if __e != nil { return }
 						__e = __c.Init("th"); if __e != nil { return }
 						{
-//line order.gox:218
+//line order.gox:232
 							__e = __c.Set("class", thClass.Add("text-right")); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.Text("Amount"); if __e != nil { return }
@@ -453,39 +467,39 @@ func orderLines(o order) gox.Elem {
 				__e = __c.Init("tbody"); if __e != nil { return }
 				{
 					__e = __c.Submit(); if __e != nil { return }
-//line order.gox:222
+//line order.gox:236
 					for _, l := range o.Lines {
 						__e = __c.Init("tr"); if __e != nil { return }
 						{
-//line order.gox:223
+//line order.gox:237
 							__e = __c.Set("class", "border-t border-stone-100"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.Init("td"); if __e != nil { return }
 							{
-//line order.gox:224
+//line order.gox:238
 								__e = __c.Set("class", tdClass); if __e != nil { return }
 								__e = __c.Submit(); if __e != nil { return }
-//line order.gox:225
+//line order.gox:239
 								__e = (neui.Use{Desc: "open product " + l.Name}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 									ctx := __c.Context(); _ = ctx
 									__e = __c.Init("a"); if __e != nil { return }
 									{
-//line order.gox:225
+//line order.gox:239
 										__e = __c.Modify(doors.ALink{Model: ProductPath{ID: l.ProductID}, Batch: true, After: scrollTop}); if __e != nil { return }
-//line order.gox:225
+//line order.gox:239
 										__e = __c.Set("class", "font-medium text-stone-900 hover:underline"); if __e != nil { return }
 										__e = __c.Submit(); if __e != nil { return }
-//line order.gox:226
+//line order.gox:240
 										__e = __c.Any(l.Name); if __e != nil { return }
 									}
 									__e = __c.Close(); if __e != nil { return }
 								return })); if __e != nil { return }
 								__e = __c.Init("p"); if __e != nil { return }
 								{
-//line order.gox:228
+//line order.gox:242
 									__e = __c.Set("class", "text-xs text-stone-500"); if __e != nil { return }
 									__e = __c.Submit(); if __e != nil { return }
-//line order.gox:228
+//line order.gox:242
 									__e = __c.Any(l.SKU); if __e != nil { return }
 								}
 								__e = __c.Close(); if __e != nil { return }
@@ -493,28 +507,28 @@ func orderLines(o order) gox.Elem {
 							__e = __c.Close(); if __e != nil { return }
 							__e = __c.Init("td"); if __e != nil { return }
 							{
-//line order.gox:230
+//line order.gox:244
 								__e = __c.Set("class", tdClass.Add("text-right tabular-nums")); if __e != nil { return }
 								__e = __c.Submit(); if __e != nil { return }
-//line order.gox:230
+//line order.gox:244
 								__e = __c.Any(l.Qty); if __e != nil { return }
 							}
 							__e = __c.Close(); if __e != nil { return }
 							__e = __c.Init("td"); if __e != nil { return }
 							{
-//line order.gox:231
+//line order.gox:245
 								__e = __c.Set("class", tdClass.Add("hidden text-right text-stone-500 tabular-nums @xl:table-cell")); if __e != nil { return }
 								__e = __c.Submit(); if __e != nil { return }
-//line order.gox:231
+//line order.gox:245
 								__e = __c.Any(money(l.Price)); if __e != nil { return }
 							}
 							__e = __c.Close(); if __e != nil { return }
 							__e = __c.Init("td"); if __e != nil { return }
 							{
-//line order.gox:232
+//line order.gox:246
 								__e = __c.Set("class", tdClass.Add("text-right tabular-nums")); if __e != nil { return }
 								__e = __c.Submit(); if __e != nil { return }
-//line order.gox:232
+//line order.gox:246
 								__e = __c.Any(money(float64(l.Qty) * l.Price)); if __e != nil { return }
 							}
 							__e = __c.Close(); if __e != nil { return }
@@ -528,14 +542,14 @@ func orderLines(o order) gox.Elem {
 					__e = __c.Submit(); if __e != nil { return }
 					__e = __c.Init("tr"); if __e != nil { return }
 					{
-//line order.gox:237
+//line order.gox:251
 						__e = __c.Set("class", "border-t border-stone-200 bg-stone-50/60"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 						__e = __c.Init("td"); if __e != nil { return }
 						{
-//line order.gox:238
+//line order.gox:252
 							__e = __c.Set("class", tdClass.Add("font-medium")); if __e != nil { return }
-//line order.gox:238
+//line order.gox:252
 							__e = __c.Set("colspan", "2"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.Text("Total"); if __e != nil { return }
@@ -543,17 +557,17 @@ func orderLines(o order) gox.Elem {
 						__e = __c.Close(); if __e != nil { return }
 						__e = __c.Init("td"); if __e != nil { return }
 						{
-//line order.gox:239
+//line order.gox:253
 							__e = __c.Set("class", tdClass.Add("hidden @xl:table-cell")); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
 						__e = __c.Init("td"); if __e != nil { return }
 						{
-//line order.gox:240
+//line order.gox:254
 							__e = __c.Set("class", tdClass.Add("text-right text-base font-semibold tabular-nums")); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
-//line order.gox:240
+//line order.gox:254
 							__e = __c.Any(money(o.Total)); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
@@ -566,29 +580,29 @@ func orderLines(o order) gox.Elem {
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line order.gox:245
+//line order.gox:259
 }
 
-//line order.gox:247
+//line order.gox:261
 func orderActions(o order) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line order.gox:248
+//line order.gox:262
 		if o.Status == paid {
 			__e = __c.InitContainer(); if __e != nil { return }
 			{
 				__e = __c.Init("p"); if __e != nil { return }
 				{
-//line order.gox:250
+//line order.gox:264
 					__e = __c.Set("class", "mb-3 text-sm text-stone-500"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
 					__e = __c.Text("Paid in full. A refund returns "); if __e != nil { return }
-//line order.gox:250
+//line order.gox:264
 					__e = __c.Any(money(o.Total)); if __e != nil { return }
 					__e = __c.Text(" to the customer."); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
-//line order.gox:251
+//line order.gox:265
 				__e = __c.Any(confirmAction{
 				Label: "Refund order",
 				Icon: iconMoney,
@@ -608,19 +622,19 @@ func orderActions(o order) gox.Elem {
 			}); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line order.gox:269
+//line order.gox:283
 		} else if o.Status == unpaid {
 			__e = __c.InitContainer(); if __e != nil { return }
 			{
 				__e = __c.Init("p"); if __e != nil { return }
 				{
-//line order.gox:271
+//line order.gox:285
 					__e = __c.Set("class", "mb-3 text-sm text-stone-500"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
 					__e = __c.Text("Not paid yet. Mark it paid in Edit order, or cancel it to put the items back in stock."); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
-//line order.gox:272
+//line order.gox:286
 				__e = __c.Any(confirmAction{
 				Label: "Cancel order",
 				Icon: iconClose,
@@ -643,16 +657,16 @@ func orderActions(o order) gox.Elem {
 		} else  {
 			__e = __c.Init("p"); if __e != nil { return }
 			{
-//line order.gox:291
+//line order.gox:305
 				__e = __c.Set("class", "text-sm text-stone-500"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Text("This order is "); if __e != nil { return }
-//line order.gox:292
+//line order.gox:306
 				__e = __c.Any(string(o.Status)); if __e != nil { return }
 				__e = __c.Text(" and closed. Nothing more can be done with it."); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		}
 	return })
-//line order.gox:295
+//line order.gox:309
 }

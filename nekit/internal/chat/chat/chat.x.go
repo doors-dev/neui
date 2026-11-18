@@ -1,6 +1,20 @@
 // Managed by GoX v0.4.0
 
 //line chat.gox:1
+// Copyright 2026 doors dev LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package chat
 
 import (
@@ -99,26 +113,26 @@ func closedKindOf(err error) closedKind {
 	return failed
 }
 
-//line chat.gox:99
+//line chat.gox:113
 func (c Chat) Placeholder(enabled doors.Beam[bool]) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line chat.gox:101
+//line chat.gox:115
 		c.Badge.Mutate(ctx, func(b Badge) Badge {
 		return Badge{Collapsed: b.Collapsed, Block: "text"}
 	})
 
-//line chat.gox:105
+//line chat.gox:119
 		__e = __c.Any(enabled.Bind(func(loading bool) gox.Elem {
 		return gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line chat.gox:107
+//line chat.gox:121
 				__e = __c.Set("class", "nechat-pane nechat-widget_off"); if __e != nil { return }
-//line chat.gox:108
+//line chat.gox:122
 				__e = __c.Set("aria-disabled", "true"); if __e != nil { return }
-//line chat.gox:109
+//line chat.gox:123
 				__e = __c.Set("aria-busy", func() any {
 				if loading {
 					return "true"
@@ -128,41 +142,41 @@ func (c Chat) Placeholder(enabled doors.Beam[bool]) gox.Elem {
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line chat.gox:115
+//line chat.gox:129
 					__e = __c.Set("class", "nechat-top"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line chat.gox:116
+//line chat.gox:130
 					__e = __c.Set("class", "nechat-log nechat-log_scroll"); if __e != nil { return }
-//line chat.gox:116
+//line chat.gox:130
 					__e = __c.Set("role", "log"); if __e != nil { return }
-//line chat.gox:116
+//line chat.gox:130
 					__e = __c.Set("aria-label", "Chat messages"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line chat.gox:117
+//line chat.gox:131
 					__e = __c.Set("class", "nechat-composer"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
 					__e = __c.Init("div"); if __e != nil { return }
 					{
-//line chat.gox:118
+//line chat.gox:132
 						__e = __c.Set("class", "nechat-tray"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
 					__e = __c.Init("textarea"); if __e != nil { return }
 					{
-//line chat.gox:120
+//line chat.gox:134
 						__e = __c.Set("class", "nechat-draft"); if __e != nil { return }
-//line chat.gox:120
+//line chat.gox:134
 						__e = __c.Set("rows", "2"); if __e != nil { return }
-//line chat.gox:120
+//line chat.gox:134
 						__e = __c.Set("aria-label", "Message"); if __e != nil { return }
 						__e = __c.Set("disabled", true); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
@@ -170,28 +184,28 @@ func (c Chat) Placeholder(enabled doors.Beam[bool]) gox.Elem {
 					__e = __c.Close(); if __e != nil { return }
 					__e = __c.Init("div"); if __e != nil { return }
 					{
-//line chat.gox:121
+//line chat.gox:135
 						__e = __c.Set("class", "nechat-barrow"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 						__e = __c.Init("div"); if __e != nil { return }
 						{
-//line chat.gox:122
+//line chat.gox:136
 							__e = __c.Set("class", "nechat-barrow-left"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
-//line chat.gox:123
+//line chat.gox:137
 							if !c.Params.Off(params.Attachments) {
 								__e = __c.Init("button"); if __e != nil { return }
 								{
-//line chat.gox:124
+//line chat.gox:138
 									__e = __c.Set("class", "nechat-iconbtn"); if __e != nil { return }
-//line chat.gox:124
+//line chat.gox:138
 									__e = __c.Set("aria-label", "Attach files"); if __e != nil { return }
 									__e = __c.Set("disabled", true); if __e != nil { return }
 									__e = __c.Submit(); if __e != nil { return }
-//line chat.gox:125
+//line chat.gox:139
 									__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 										ctx := __c.Context(); _ = ctx
-//line chat.gox:125
+//line chat.gox:139
 										__e = __c.Any(icons.Attach()); if __e != nil { return }
 									return })); if __e != nil { return }
 								}
@@ -201,19 +215,19 @@ func (c Chat) Placeholder(enabled doors.Beam[bool]) gox.Elem {
 						__e = __c.Close(); if __e != nil { return }
 						__e = __c.Init("div"); if __e != nil { return }
 						{
-//line chat.gox:129
+//line chat.gox:143
 							__e = __c.Set("class", "nechat-barrow-right"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.Init("button"); if __e != nil { return }
 							{
-//line chat.gox:130
+//line chat.gox:144
 								__e = __c.Set("class", "nechat-iconbtn"); if __e != nil { return }
 								__e = __c.Set("disabled", true); if __e != nil { return }
 								__e = __c.Submit(); if __e != nil { return }
-//line chat.gox:131
+//line chat.gox:145
 								__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 									ctx := __c.Context(); _ = ctx
-//line chat.gox:131
+//line chat.gox:145
 									__e = __c.Any(icons.Submit()); if __e != nil { return }
 								return })); if __e != nil { return }
 							}
@@ -227,10 +241,10 @@ func (c Chat) Placeholder(enabled doors.Beam[bool]) gox.Elem {
 			}
 			__e = __c.Close(); if __e != nil { return }
 		return })
-//line chat.gox:137
+//line chat.gox:151
 	})); if __e != nil { return }
 	return })
-//line chat.gox:138
+//line chat.gox:152
 }
 
 type chat struct {
@@ -333,11 +347,11 @@ func (c *chat) Update(ctx context.Context, e api.ChatEvent) {
 	})
 }
 
-//line chat.gox:240
+//line chat.gox:254
 func (c *chat) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line chat.gox:242
+//line chat.gox:256
 		c.badge.Mutate(ctx, func(b Badge) Badge {
 		return Badge{
 			Collapsed: b.Collapsed,
@@ -349,9 +363,9 @@ func (c *chat) Main() gox.Elem {
 
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line chat.gox:252
+//line chat.gox:266
 			__e = __c.Set("class", "nechat-pane"); if __e != nil { return }
-//line chat.gox:253
+//line chat.gox:267
 			__e = __c.Set("data-attach", func() any {
 			if c.params.Off(params.Attachments) {
 				return "off"
@@ -361,18 +375,18 @@ func (c *chat) Main() gox.Elem {
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line chat.gox:259
+//line chat.gox:273
 				__e = __c.Set("class", "nechat-top nechat-top_menu"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line chat.gox:260
+//line chat.gox:274
 				__e = __c.Any(c.name.Bind(title)); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line chat.gox:262
+//line chat.gox:276
 			__e = __c.Any(notify.Toasts()); if __e != nil { return }
-//line chat.gox:263
+//line chat.gox:277
 			__e = __c.Any(c.dead.Bind(c.body)); if __e != nil { return }
-//line chat.gox:264
+//line chat.gox:278
 			__e = (doors.AHook[bool]{
 			Name: "escape",
 			Scope: new(doors.ScopeBlocking),
@@ -384,9 +398,9 @@ func (c *chat) Main() gox.Elem {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.Init("script"); if __e != nil { return }
 				{
-//line chat.gox:271
+//line chat.gox:285
 					__e = __c.Set("data:id", c.params.ID); if __e != nil { return }
-//line chat.gox:271
+//line chat.gox:285
 					__e = __c.Set("data:paste", pasteAsFile); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
 					__e = __c.Raw("const main = document.currentScript.parentElement\n\t\t\tconst widget = main.closest(\".nechat-widget\")\n\t\t\tconst id = $data(\"id\")\n\t\t\tconst pasteAsFile = $data(\"paste\")\n\t\t\tconst keydown = (e) => {\n\t\t\t\tif (e.key !== \"Escape\") return\n\t\t\t\tconst escape = new CustomEvent(\"nechat_escape\", { cancelable: true })\n\t\t\t\tif (!widget.dispatchEvent(escape)) return\n\t\t\t\tif (!main.contains(e.target)) return\n\t\t\t\t$hook(\"escape\", main.querySelector(\"#composer\" + id)?.contains(e.target) === true).catch((err) => {\n\t\t\t\t\tif (err instanceof HookErr)\n\t\t\t\t\t\twidget.dispatchEvent(new CustomEvent(\"nechat_error\", { detail: err.kind }))\n\t\t\t\t})\n\t\t\t}\n\t\t\twidget.addEventListener(\"keydown\", keydown)\n\t\t\t$sys.clean(() => widget.removeEventListener(\"keydown\", keydown))\n\t\t\tconst attach = (files) => {\n\t\t\t\tconst composer = main.querySelector(\"#composer\" + id)\n\t\t\t\tif (!composer || composer.getAttribute(\"aria-busy\") === \"true\") return false\n\t\t\t\tconst input = main.querySelector(\"#attach\" + id + \" input\")\n\t\t\t\tif (!input || !files.length) return false\n\t\t\t\tinput.files = files\n\t\t\t\tinput.dispatchEvent(new Event(\"change\"))\n\t\t\t\treturn true\n\t\t\t}\n\t\t\tmain.addEventListener(\"paste\", (e) => {\n\t\t\t\tconst files = e.clipboardData.files\n\t\t\t\tif (files.length) {\n\t\t\t\t\tif (attach(files)) e.preventDefault()\n\t\t\t\t\treturn\n\t\t\t\t}\n\t\t\t\tconst text = e.clipboardData.getData(\"text/plain\")\n\t\t\t\tif (main.dataset.attach === \"off\") return\n\t\t\t\tif (!text || new TextEncoder().encode(text).length <= pasteAsFile) return\n\t\t\t\tconst head = text.slice(0, 64).split(\"\\n\", 1)[0]\n\t\t\t\tconst base = head\n\t\t\t\t\t.replace(/[\\\\/:*?\"<>|\\x00-\\x1f]+/g, \" \")\n\t\t\t\t\t.replace(/\\s+/g, \" \")\n\t\t\t\t\t.replace(/^[.\\s]+/, \"\")\n\t\t\t\t\t.trim()\n\t\t\t\t\t.slice(0, 40)\n\t\t\t\tconst dt = new DataTransfer()\n\t\t\t\tdt.items.add(\n\t\t\t\t\tnew File([text], (base || \"pasted\") + \".txt\", { type: \"text/plain\" }),\n\t\t\t\t)\n\t\t\t\tif (attach(dt.files)) e.preventDefault()\n\t\t\t})\n\t\t\tmain.addEventListener(\"dragenter\", (e) => {\n\t\t\t\tif (!e.dataTransfer.types.includes(\"Files\")) return\n\t\t\t\te.preventDefault()\n\t\t\t})\n\t\t\tmain.addEventListener(\"dragover\", (e) => {\n\t\t\t\tif (!e.dataTransfer.types.includes(\"Files\")) return\n\t\t\t\te.preventDefault()\n\t\t\t})\n\t\t\tmain.addEventListener(\"drop\", (e) => {\n\t\t\t\tif (!e.dataTransfer.types.includes(\"Files\")) return\n\t\t\t\te.preventDefault()\n\t\t\t\tconst dt = new DataTransfer()\n\t\t\t\tfor (const item of e.dataTransfer.items) {\n\t\t\t\t\tif (item.kind !== \"file\") continue\n\t\t\t\t\tconst entry = item.webkitGetAsEntry()\n\t\t\t\t\tif (entry && entry.isDirectory) continue\n\t\t\t\t\tdt.items.add(item.getAsFile())\n\t\t\t\t}\n\t\t\t\tattach(dt.files)\n\t\t\t})"); if __e != nil { return }
@@ -396,35 +410,35 @@ func (c *chat) Main() gox.Elem {
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line chat.gox:341
+//line chat.gox:355
 }
 
-//line chat.gox:343
+//line chat.gox:357
 func (c *chat) body(kind closedKind) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line chat.gox:344
+//line chat.gox:358
 		if kind == alive {
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line chat.gox:345
+//line chat.gox:359
 				__e = __c.Set("class", "nechat-log nechat-log_scroll"); if __e != nil { return }
-//line chat.gox:345
+//line chat.gox:359
 				__e = __c.Set("role", "log"); if __e != nil { return }
-//line chat.gox:345
+//line chat.gox:359
 				__e = __c.Set("aria-label", "Chat messages"); if __e != nil { return }
-//line chat.gox:345
+//line chat.gox:359
 				__e = __c.Set("tabindex", "0"); if __e != nil { return }
-//line chat.gox:345
+//line chat.gox:359
 				__e = __c.Set("data-seeding", ""); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line chat.gox:346
+//line chat.gox:360
 				__e = __c.Any(c.list.Main()); if __e != nil { return }
-//line chat.gox:347
+//line chat.gox:361
 				__e = __c.Any(c.list.Script()); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line chat.gox:349
+//line chat.gox:363
 			__e = __c.Any(composer.Composer{
 			Controller: c.composer,
 			Params: c.params,
@@ -433,23 +447,23 @@ func (c *chat) body(kind closedKind) gox.Elem {
 		} else  {
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line chat.gox:355
+//line chat.gox:369
 				__e = __c.Set("class", "nechat-closed-area"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line chat.gox:356
+//line chat.gox:370
 				__e = __c.Any(c.closed(kind)); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		}
 	return })
-//line chat.gox:359
+//line chat.gox:373
 }
 
-//line chat.gox:361
+//line chat.gox:375
 func (c *chat) closed(kind closedKind) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line chat.gox:363
+//line chat.gox:377
 		c.badge.Mutate(ctx, func(b Badge) Badge {
 		return Badge{Collapsed: b.Collapsed, Block: "text", Ended: b.Ended, Failed: b.Failed}
 	})
@@ -469,41 +483,41 @@ func (c *chat) closed(kind closedKind) gox.Elem {
 
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line chat.gox:380
+//line chat.gox:394
 			__e = __c.Set("class", "nechat-closed-card"); if __e != nil { return }
-//line chat.gox:380
+//line chat.gox:394
 			__e = __c.Set("role", "alert"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line chat.gox:381
+//line chat.gox:395
 			__e = (doors.Class("nechat-ic nechat-closed-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 				ctx := __c.Context(); _ = ctx
-//line chat.gox:381
+//line chat.gox:395
 				__e = __c.Any(icon); if __e != nil { return }
 			return })); if __e != nil { return }
 			__e = __c.Init("p"); if __e != nil { return }
 			{
-//line chat.gox:382
+//line chat.gox:396
 				__e = __c.Set("class", "nechat-closed-title"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line chat.gox:382
+//line chat.gox:396
 				__e = __c.Any(head); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 			__e = __c.Init("p"); if __e != nil { return }
 			{
-//line chat.gox:383
+//line chat.gox:397
 				__e = __c.Set("class", "nechat-closed-text"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line chat.gox:383
+//line chat.gox:397
 				__e = __c.Any(text); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line chat.gox:384
+//line chat.gox:398
 				__e = __c.Set("class", "nechat-closed-acts"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line chat.gox:385
+//line chat.gox:399
 				__e = (doors.AClick{
 				Scope: new(doors.ScopeBlocking),
 				On: func(ctx context.Context, rp doors.RequestPointer) bool {
@@ -515,17 +529,17 @@ func (c *chat) closed(kind closedKind) gox.Elem {
 					ctx := __c.Context(); _ = ctx
 					__e = __c.Init("button"); if __e != nil { return }
 					{
-//line chat.gox:392
+//line chat.gox:406
 						__e = __c.Set("type", "button"); if __e != nil { return }
-//line chat.gox:392
+//line chat.gox:406
 						__e = __c.Set("class", "nechat-btn nechat-btn_auto"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 						__e = __c.Text("OK"); if __e != nil { return }
 						__e = __c.Init("i"); if __e != nil { return }
 						{
-//line chat.gox:392
+//line chat.gox:406
 							__e = __c.Set("class", "nechat-file-fill"); if __e != nil { return }
-//line chat.gox:392
+//line chat.gox:406
 							__e = __c.Set("aria-hidden", "true"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 						}
@@ -535,7 +549,7 @@ func (c *chat) closed(kind closedKind) gox.Elem {
 				return })); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line chat.gox:394
+//line chat.gox:408
 			__e = __c.Any(doors.Go(func(ctx context.Context) {
 			select {
 			case <-ctx.Done():
@@ -546,22 +560,22 @@ func (c *chat) closed(kind closedKind) gox.Elem {
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line chat.gox:402
+//line chat.gox:416
 }
 
-//line chat.gox:404
+//line chat.gox:418
 func title(name string) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("span"); if __e != nil { return }
 		{
-//line chat.gox:405
+//line chat.gox:419
 			__e = __c.Set("class", "nechat-top-title"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line chat.gox:405
+//line chat.gox:419
 			__e = __c.Any(name); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line chat.gox:406
+//line chat.gox:420
 }

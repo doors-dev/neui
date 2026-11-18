@@ -1,6 +1,20 @@
 // Managed by GoX v0.4.0
 
 //line form_group.gox:1
+// Copyright 2026 doors dev LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package form
 
 import (
@@ -68,46 +82,46 @@ func (f *groupWidget) destroy(ctx context.Context) {
 	f.group.destroy(ctx)
 }
 
-//line form_group.gox:68
+//line form_group.gox:82
 func (f *groupWidget) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line form_group.gox:69
+//line form_group.gox:83
 		if f.item {
-//line form_group.gox:70
+//line form_group.gox:84
 			for _, field := range f.fields {
-//line form_group.gox:71
+//line form_group.gox:85
 				__e = __c.Any(field); if __e != nil { return }
 			}
 		} else  {
-//line form_group.gox:74
+//line form_group.gox:88
 			__e = (neui.Space{Name: f.params.Name, Desc: f.params.Label}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.Init("fieldset"); if __e != nil { return }
 				{
-//line form_group.gox:74
+//line form_group.gox:88
 					__e = __c.Set("class", "neisland-form-box"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line form_group.gox:75
+//line form_group.gox:89
 					if f.params.Label != "" {
 						__e = __c.Init("legend"); if __e != nil { return }
 						{
-//line form_group.gox:76
+//line form_group.gox:90
 							__e = __c.Set("class", "neisland-form-box-legend"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
-//line form_group.gox:76
+//line form_group.gox:90
 							__e = __c.Any(f.params.Label); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
 					}
 					__e = __c.Init("div"); if __e != nil { return }
 					{
-//line form_group.gox:78
+//line form_group.gox:92
 						__e = __c.Set("class", "neisland-form-rail"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line form_group.gox:79
+//line form_group.gox:93
 						for _, field := range f.fields {
-//line form_group.gox:80
+//line form_group.gox:94
 							__e = __c.Any(field); if __e != nil { return }
 						}
 					}
@@ -117,5 +131,5 @@ func (f *groupWidget) Main() gox.Elem {
 			return })); if __e != nil { return }
 		}
 	return })
-//line form_group.gox:85
+//line form_group.gox:99
 }

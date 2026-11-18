@@ -1,6 +1,20 @@
 // Managed by GoX v0.4.0
 
 //line uploader.gox:1
+// Copyright 2026 doors dev LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package uploader
 
 import (
@@ -92,13 +106,13 @@ func (u *uploader) append(ctx context.Context, row gox.Comp) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.InitContainer(); if __e != nil { return }
 		{
-//line uploader.gox:89
+//line uploader.gox:103
 			__e = __c.Any(row); if __e != nil { return }
-//line uploader.gox:90
+//line uploader.gox:104
 			__e = __c.Any(next); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
-//line uploader.gox:91
+//line uploader.gox:105
 	return }))
 }
 
@@ -160,55 +174,55 @@ func (u *uploader) refuse(ctx context.Context, r doors.RequestRawHook, name stri
 	u.append(ctx, newFileErr(ctx, name, err, u.params))
 }
 
-//line uploader.gox:152
+//line uploader.gox:166
 func (u *uploader) List() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line uploader.gox:154
+//line uploader.gox:168
 		u.mu.Lock()
 	uploads := slices.Clone(u.uploads)
 	u.mu.Unlock()
 
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line uploader.gox:158
+//line uploader.gox:172
 			__e = __c.Set("class", "nechat-tray"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line uploader.gox:159
+//line uploader.gox:173
 			for _, name := range uploads {
-//line uploader.gox:160
+//line uploader.gox:174
 				__e = __c.Any(newFileDone(u.fs, u, name, u.params)); if __e != nil { return }
 			}
-//line uploader.gox:162
+//line uploader.gox:176
 			__e = __c.Any(u.appender); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line uploader.gox:164
+//line uploader.gox:178
 }
 
-//line uploader.gox:166
+//line uploader.gox:180
 func (u *uploader) Form(pending doors.Beam[bool]) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line uploader.gox:167
+//line uploader.gox:181
 		__e = __c.Any(pending.Bind(func(pending bool) gox.Elem {
 		return gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
-//line uploader.gox:168
+//line uploader.gox:182
 			if pending {
 				__e = __c.Init("button"); if __e != nil { return }
 				{
-//line uploader.gox:169
+//line uploader.gox:183
 					__e = __c.Set("class", "nechat-iconbtn"); if __e != nil { return }
-//line uploader.gox:169
+//line uploader.gox:183
 					__e = __c.Set("aria-label", "Attach files"); if __e != nil { return }
 					__e = __c.Set("disabled", true); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line uploader.gox:170
+//line uploader.gox:184
 					__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 						ctx := __c.Context(); _ = ctx
-//line uploader.gox:170
+//line uploader.gox:184
 						__e = __c.Any(icons.Attach()); if __e != nil { return }
 					return })); if __e != nil { return }
 				}
@@ -216,35 +230,35 @@ func (u *uploader) Form(pending doors.Beam[bool]) gox.Elem {
 			} else  {
 				__e = __c.Init("label"); if __e != nil { return }
 				{
-//line uploader.gox:173
+//line uploader.gox:187
 					__e = __c.Set("id", "attach" + u.params.ID); if __e != nil { return }
-//line uploader.gox:173
+//line uploader.gox:187
 					__e = __c.Set("class", "nechat-iconbtn"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line uploader.gox:174
+//line uploader.gox:188
 					__e = (doors.Class("nechat-ic nechat-icon_idle")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 						ctx := __c.Context(); _ = ctx
-//line uploader.gox:174
+//line uploader.gox:188
 						__e = __c.Any(icons.Attach()); if __e != nil { return }
 					return })); if __e != nil { return }
-//line uploader.gox:175
+//line uploader.gox:189
 					__e = (doors.Class("nechat-ic nechat-icon_busy")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 						ctx := __c.Context(); _ = ctx
-//line uploader.gox:175
+//line uploader.gox:189
 						__e = __c.Any(icons.Spinner()); if __e != nil { return }
 					return })); if __e != nil { return }
 					__e = __c.InitVoid("input"); if __e != nil { return }
 					{
-//line uploader.gox:176
+//line uploader.gox:190
 						__e = __c.Set("type", "file"); if __e != nil { return }
 						__e = __c.Set("multiple", true); if __e != nil { return }
-//line uploader.gox:176
+//line uploader.gox:190
 						__e = __c.Set("aria-label", "Attach files"); if __e != nil { return }
 					}
 					__e = __c.Submit(); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
-//line uploader.gox:178
+//line uploader.gox:192
 				__e = (doors.ARawHook{
 				Name: "upload",
 				On: u.upload,
@@ -255,7 +269,7 @@ func (u *uploader) Form(pending doors.Beam[bool]) gox.Elem {
 					ctx := __c.Context(); _ = ctx
 					__e = __c.Init("script"); if __e != nil { return }
 					{
-//line uploader.gox:184
+//line uploader.gox:198
 						__e = __c.Set("data:id", u.params.ID); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 						__e = __c.Raw("const input =\n\t\t\t\t\tdocument.currentScript.previousElementSibling.querySelector(\"input\")\n\t\t\t\tconst text = document.getElementById(\"text\" + $data(\"id\"))\n\t\t\t\tconst widget = input.closest(\".nechat-widget\")\n\t\t\t\tinput.addEventListener(\"change\", () => {\n\t\t\t\t\tconst files = [...input.files]\n\t\t\t\t\tinput.value = \"\"\n\t\t\t\t\ttext?.focus()\n\t\t\t\t\tPromise.allSettled(\n\t\t\t\t\t\tfiles.map((file) => {\n\t\t\t\t\t\t\tconst form = new FormData()\n\t\t\t\t\t\t\tform.append(\"file\", file)\n\t\t\t\t\t\t\treturn $fetch(\"upload\", form).catch((err) => {\n\t\t\t\t\t\t\t\tif (err instanceof HookErr && err.network())\n\t\t\t\t\t\t\t\t\twidget.dispatchEvent(\n\t\t\t\t\t\t\t\t\t\tnew CustomEvent(\"nechat_error\", { detail: err.kind }),\n\t\t\t\t\t\t\t\t\t)\n\t\t\t\t\t\t\t})\n\t\t\t\t\t\t}),\n\t\t\t\t\t)\n\t\t\t\t})"); if __e != nil { return }
@@ -264,8 +278,8 @@ func (u *uploader) Form(pending doors.Beam[bool]) gox.Elem {
 				return })); if __e != nil { return }
 			}
 		return })
-//line uploader.gox:208
+//line uploader.gox:222
 	})); if __e != nil { return }
 	return })
-//line uploader.gox:209
+//line uploader.gox:223
 }

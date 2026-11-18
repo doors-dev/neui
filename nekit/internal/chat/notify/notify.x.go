@@ -1,6 +1,20 @@
 // Managed by GoX v0.4.0
 
 //line notify.gox:1
+// Copyright 2026 doors dev LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package notify
 
 import (
@@ -31,7 +45,7 @@ func kind(err error) string {
 	return "server"
 }
 
-//line notify.gox:31
+//line notify.gox:45
 func Script() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
@@ -42,50 +56,50 @@ func Script() gox.Elem {
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line notify.gox:58
+//line notify.gox:72
 }
 
-//line notify.gox:60
+//line notify.gox:74
 func Toasts() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line notify.gox:61
+//line notify.gox:75
 			__e = __c.Set("class", "nechat-toasts"); if __e != nil { return }
-//line notify.gox:61
+//line notify.gox:75
 			__e = __c.Set("role", "status"); if __e != nil { return }
-//line notify.gox:61
+//line notify.gox:75
 			__e = __c.Set("aria-live", "polite"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Init("template"); if __e != nil { return }
 			{
-//line notify.gox:62
+//line notify.gox:76
 				__e = __c.Set("data-key", "network"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line notify.gox:63
+//line notify.gox:77
 					__e = __c.Set("class", "nechat-toast"); if __e != nil { return }
-//line notify.gox:63
+//line notify.gox:77
 					__e = __c.Set("data-key", "network"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
 					__e = __c.Init("span"); if __e != nil { return }
 					{
-//line notify.gox:64
+//line notify.gox:78
 						__e = __c.Set("class", "nechat-toast-lead"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line notify.gox:64
+//line notify.gox:78
 						__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 							ctx := __c.Context(); _ = ctx
-//line notify.gox:64
+//line notify.gox:78
 							__e = __c.Any(icons.Prohibit()); if __e != nil { return }
 						return })); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
 					__e = __c.Init("span"); if __e != nil { return }
 					{
-//line notify.gox:65
+//line notify.gox:79
 						__e = __c.Set("class", "nechat-toast-text"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 						__e = __c.Text("Network error occurred"); if __e != nil { return }
@@ -97,34 +111,34 @@ func Toasts() gox.Elem {
 			__e = __c.Close(); if __e != nil { return }
 			__e = __c.Init("template"); if __e != nil { return }
 			{
-//line notify.gox:68
+//line notify.gox:82
 				__e = __c.Set("data-key", "error"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line notify.gox:69
+//line notify.gox:83
 					__e = __c.Set("class", "nechat-toast"); if __e != nil { return }
-//line notify.gox:69
+//line notify.gox:83
 					__e = __c.Set("data-key", "error"); if __e != nil { return }
-//line notify.gox:69
+//line notify.gox:83
 					__e = __c.Set("role", "alert"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
 					__e = __c.Init("span"); if __e != nil { return }
 					{
-//line notify.gox:70
+//line notify.gox:84
 						__e = __c.Set("class", "nechat-toast-lead"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line notify.gox:70
+//line notify.gox:84
 						__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 							ctx := __c.Context(); _ = ctx
-//line notify.gox:70
+//line notify.gox:84
 							__e = __c.Any(icons.WarningFill()); if __e != nil { return }
 						return })); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
 					__e = __c.Init("span"); if __e != nil { return }
 					{
-//line notify.gox:71
+//line notify.gox:85
 						__e = __c.Set("class", "nechat-toast-text"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 						__e = __c.Text("Something went wrong"); if __e != nil { return }
@@ -137,5 +151,5 @@ func Toasts() gox.Elem {
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line notify.gox:75
+//line notify.gox:89
 }

@@ -1,6 +1,20 @@
 // Managed by GoX v0.4.0
 
 //line scroll.gox:1
+// Copyright 2026 doors dev LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package list
 
 import (
@@ -208,41 +222,41 @@ func (l *list) setTail(ctx context.Context, name string, value any) {
 	doors.Call(ctx, l.lastSection.setter.Set(name, value))
 }
 
-//line scroll.gox:208
+//line scroll.gox:222
 func seedScroll(head api.RoundID) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("script"); if __e != nil { return }
 		{
-//line scroll.gox:209
+//line scroll.gox:223
 			__e = __c.Set("data:head", int(head)); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Raw("const log = document.currentScript.closest(\".nechat-log\")\n\t\tconst target = log.querySelector(`.nechat-section[data-id=\"${$data(\"head\")}\"]`)\n\t\tif (target) {\n\t\t\tconst base = log.scrollTop - log.getBoundingClientRect().top\n\t\t\tlog.scrollTo({\n\t\t\t\ttop: target.getBoundingClientRect().top + base,\n\t\t\t\tbehavior: \"instant\",\n\t\t\t})\n\t\t} else if (!log.querySelector(\".nechat-span\")) {\n\t\t\tlog.scrollTo({ top: log.scrollHeight, behavior: \"instant\" })\n\t\t}\n\t\trequestAnimationFrame(() => log.removeAttribute(\"data-seeding\"))"); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line scroll.gox:223
+//line scroll.gox:237
 }
 
-//line scroll.gox:225
+//line scroll.gox:239
 func restoreScroll(batch int, edge string) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("script"); if __e != nil { return }
 		{
-//line scroll.gox:226
+//line scroll.gox:240
 			__e = __c.Set("data:batch", batch); if __e != nil { return }
-//line scroll.gox:226
+//line scroll.gox:240
 			__e = __c.Set("data:edge", edge); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Raw("const script = document.currentScript\n\t\tconst log = script.closest(\".nechat-log\")\n\t\tconst top = log.scrollTop\n\t\tconst h0 = log.scrollHeight\n\t\tfor (const s of log.querySelectorAll(\n\t\t\t`.nechat-section[data-batch=\"${$data(\"batch\")}\"]`,\n\t\t)) {\n\t\t\ts.removeAttribute(\"data-pending\")\n\t\t}\n\t\tconst grew = log.scrollHeight - h0\n\t\tif ($data(\"edge\") === \"top\") {\n\t\t\tlog.scrollTo({ top: top + grew, behavior: \"instant\" })\n\t\t} else {\n\t\t\tlog.scrollTo({ top, behavior: \"instant\" })\n\t\t}\n\t\tlog.dispatchEvent(new Event(\"scroll\"))"); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line scroll.gox:244
+//line scroll.gox:258
 }
 
-//line scroll.gox:246
+//line scroll.gox:260
 func scrollBottom() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
@@ -253,7 +267,7 @@ func scrollBottom() gox.Elem {
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line scroll.gox:251
+//line scroll.gox:265
 }
 
 type syncMsg struct {
@@ -261,11 +275,11 @@ type syncMsg struct {
 	Last api.RoundID `json:"last"`
 }
 
-//line scroll.gox:258
+//line scroll.gox:272
 func (l List) Script() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line scroll.gox:259
+//line scroll.gox:273
 		__e = (doors.AHook[syncMsg]{
 		Name: "sync",
 		Scope: &doors.ScopeRate{Tick: 100 * time.Millisecond},
@@ -285,5 +299,5 @@ func (l List) Script() gox.Elem {
 			__e = __c.Close(); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
-//line scroll.gox:316
+//line scroll.gox:330
 }

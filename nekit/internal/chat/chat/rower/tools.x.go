@@ -1,6 +1,20 @@
 // Managed by GoX v0.4.0
 
 //line tools.gox:1
+// Copyright 2026 doors dev LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package rower
 
 import (
@@ -166,14 +180,14 @@ func (t Tools) Append(e api.EventTool) {
 	b.WriteString(e.Name)
 }
 
-//line tools.gox:166
+//line tools.gox:180
 func (t Tools) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line tools.gox:167
+//line tools.gox:181
 		__e = (t.frame).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
-//line tools.gox:167
+//line tools.gox:181
 			__e = __c.Any(func() any {
 		t.mu.Lock()
 		defer t.mu.Unlock()
@@ -191,26 +205,26 @@ func (t Tools) Main() gox.Elem {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line tools.gox:180
+//line tools.gox:194
 					__e = __c.Set("class", "nechat-col nechat-tools-flat"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line tools.gox:181
+//line tools.gox:195
 					for _, c := range counts {
 						__e = __c.Init("span"); if __e != nil { return }
 						{
-//line tools.gox:182
+//line tools.gox:196
 							__e = __c.Set("class", "nechat-tool-flat"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
-//line tools.gox:183
+//line tools.gox:197
 							__e = __c.Any(c.name); if __e != nil { return }
-//line tools.gox:184
+//line tools.gox:198
 							if c.count > 1 {
 								__e = __c.Init("span"); if __e != nil { return }
 								{
-//line tools.gox:185
+//line tools.gox:199
 									__e = __c.Set("class", "nechat-tool-count"); if __e != nil { return }
 									__e = __c.Submit(); if __e != nil { return }
-//line tools.gox:185
+//line tools.gox:199
 									__e = __c.Any("×" + strconv.Itoa(c.count)); if __e != nil { return }
 								}
 								__e = __c.Close(); if __e != nil { return }
@@ -220,11 +234,11 @@ func (t Tools) Main() gox.Elem {
 					}
 				}
 				__e = __c.Close(); if __e != nil { return }
-//line tools.gox:189
+//line tools.gox:203
 			return }),
 		}
 	}()); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
-//line tools.gox:192
+//line tools.gox:206
 }

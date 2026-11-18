@@ -1,6 +1,20 @@
 // Managed by GoX v0.4.0
 
 //line controller.gox:1
+// Copyright 2026 doors dev LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package controller
 
 import (
@@ -72,18 +86,18 @@ func (s Controller) searchRoute(kind SearchKind, el searchElem) doors.BeamRoute[
 	}, doors.RouteBind(func(v string) gox.Elem {
 		return gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
-//line controller.gox:71
+//line controller.gox:85
 			state, ok := s.state.Read(ctx)
 		if !ok {
 			return nil
 		}
 
-//line controller.gox:76
+//line controller.gox:90
 			__e = __c.Any(el(v, state.window, func(ctx context.Context, w Window) {
 			s.saveWindow(ctx, kind, w)
 		})); if __e != nil { return }
 		return })
-//line controller.gox:79
+//line controller.gox:93
 	})))
 }
 
@@ -99,27 +113,27 @@ func (s Controller) Show(el gox.Elem) gox.Elem {
 		return nil
 	})
 }
-//line controller.gox:94
+//line controller.gox:108
 func (s Controller) Input(render func(v string) gox.Elem) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line controller.gox:95
+//line controller.gox:109
 		__e = __c.Any(s.inputReset.Bind(func(int) gox.Elem {
 		return gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
-//line controller.gox:97
+//line controller.gox:111
 			s, ok := s.state.Read(ctx)
 		if !ok {
 			return
 		}
 
-//line controller.gox:102
+//line controller.gox:116
 			__e = __c.Any(render(s.searchInput)); if __e != nil { return }
 		return })
-//line controller.gox:103
+//line controller.gox:117
 	})); if __e != nil { return }
 	return })
-//line controller.gox:104
+//line controller.gox:118
 }
 
 func (s Controller) Collapse(ctx context.Context) {
@@ -198,19 +212,19 @@ func (s Controller) RouteList(
 			ctx := __c.Context(); _ = ctx
 			__e = __c.InitContainer(); if __e != nil { return }
 			{
-//line controller.gox:180
+//line controller.gox:194
 				state, ok := s.state.Read(ctx)
 
-//line controller.gox:182
+//line controller.gox:196
 				if ok {
-//line controller.gox:183
+//line controller.gox:197
 					__e = __c.Any(days(state.window, func(ctx context.Context, w Window) {
 					s.saveWindow(ctx, searchNone, w)
 				})); if __e != nil { return }
 				}
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line controller.gox:187
+//line controller.gox:201
 		return }))),
 		s.searchRoute(searchAll, func(input string, _ Window, _ func(context.Context, Window)) gox.Elem {
 			return all(input, func(ctx context.Context, kind SearchKind) {

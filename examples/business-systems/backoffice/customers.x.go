@@ -1,6 +1,20 @@
 // Managed by GoX v0.4.0
 
 //line customers.gox:1
+// Copyright 2026 doors dev LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -45,16 +59,16 @@ func (p CustomersPath) withPage(page int) any {
 	return p
 }
 
-//line customers.gox:45
+//line customers.gox:59
 func customersPage(path doors.Source[CustomersPath]) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line customers.gox:47
+//line customers.gox:61
 		search := doors.DeriveBeam(path, func(p CustomersPath) string {
 		return p.Search
 	})
 
-//line customers.gox:51
+//line customers.gox:65
 		__e = (neui.Space{
 		Name: "customers",
 		Desc: "Customers list: a search box, a sortable table of customers and its pages; the search lives in the address",
@@ -63,7 +77,7 @@ func customersPage(path doors.Source[CustomersPath]) gox.Elem {
 			__e = __c.Init("div"); if __e != nil { return }
 			{
 				__e = __c.Submit(); if __e != nil { return }
-//line customers.gox:55
+//line customers.gox:69
 				__e = __c.Any(pageHeader{
 			Title: "Customers",
 			Meta: gox.Elem(func(__c gox.Cursor) (__e error) {
@@ -74,23 +88,23 @@ func customersPage(path doors.Source[CustomersPath]) gox.Elem {
 					__e = __c.Text("People and companies who buy from the shop."); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
-//line customers.gox:57
+//line customers.gox:71
 			return }),
 			Actions: gox.Elem(func(__c gox.Cursor) (__e error) {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.InitContainer(); if __e != nil { return }
 				{
-//line customers.gox:59
+//line customers.gox:73
 					__e = (neui.Use{Desc: "open the form to add a new customer"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 						ctx := __c.Context(); _ = ctx
 						__e = __c.Init("a"); if __e != nil { return }
 						{
-//line customers.gox:60
+//line customers.gox:74
 							__e = __c.Modify(doors.ALink{Model: CustomersPath{View: ListNew}, Batch: true, After: scrollTop}); if __e != nil { return }
-//line customers.gox:61
+//line customers.gox:75
 							__e = __c.Set("class", btnPrimary); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
-//line customers.gox:62
+//line customers.gox:76
 							__e = __c.Any(icon(iconPlus, "size-4")); if __e != nil { return }
 							__e = __c.Text("New customer"); if __e != nil { return }
 						}
@@ -98,10 +112,10 @@ func customersPage(path doors.Source[CustomersPath]) gox.Elem {
 					return })); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
-//line customers.gox:65
+//line customers.gox:79
 			return }),
 		}); if __e != nil { return }
-//line customers.gox:67
+//line customers.gox:81
 				__e = __c.Any(neui.Tool[customerInput, created]{
 			Name: "create_customer",
 			Desc: "Add a customer, checked like the New customer form, and open their page for the user",
@@ -117,16 +131,16 @@ func customersPage(path doors.Source[CustomersPath]) gox.Elem {
 		}); if __e != nil { return }
 				__e = __c.Init("section"); if __e != nil { return }
 				{
-//line customers.gox:80
+//line customers.gox:94
 					__e = __c.Set("class", "overflow-hidden rounded-xl bg-white shadow-xs ring-1 ring-stone-200"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line customers.gox:81
+//line customers.gox:95
 					__e = (neui.Space{Name: "search", Desc: "Search box of the customers table"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 						ctx := __c.Context(); _ = ctx
 						__e = __c.Init("div"); if __e != nil { return }
 						{
 							__e = __c.Submit(); if __e != nil { return }
-//line customers.gox:82
+//line customers.gox:96
 							__e = __c.Any(neui.Tool[customersToolInput, customersToolOutput]{
 					Name: "search_customers",
 					Desc: "Set the search, sort and page of the customers table the user sees; an empty field clears it",
@@ -144,7 +158,7 @@ func customersPage(path doors.Source[CustomersPath]) gox.Elem {
 						return customersToolOutput{Shown: shown, Page: info}, nil
 					},
 				}); if __e != nil { return }
-//line customers.gox:99
+//line customers.gox:113
 							__e = __c.Any(search.Bind(func(q string) gox.Elem {
 					return searchBar("customers-search", "Search by name, email, company or phone", q, "search customers by name, email, company or phone; applies on Enter or when the field loses focus", func(ctx context.Context, v string) {
 						path.Mutate(ctx, func(p CustomersPath) CustomersPath {
@@ -156,10 +170,10 @@ func customersPage(path doors.Source[CustomersPath]) gox.Elem {
 						}
 						__e = __c.Close(); if __e != nil { return }
 					return })); if __e != nil { return }
-//line customers.gox:108
+//line customers.gox:122
 					__e = (new(doors.Door)).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 						ctx := __c.Context(); _ = ctx
-//line customers.gox:108
+//line customers.gox:122
 						__e = __c.Any(func() any {
 				_, _ = shop.version.Effect(ctx)
 				p, ok := path.Effect(ctx)
@@ -175,49 +189,49 @@ func customersPage(path doors.Source[CustomersPath]) gox.Elem {
 			__e = __c.Close(); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
-//line customers.gox:118
+//line customers.gox:132
 }
 
-//line customers.gox:120
+//line customers.gox:134
 func searchBar(id string, placeholder string, value string, desc string, change func(ctx context.Context, v string)) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line customers.gox:121
+//line customers.gox:135
 			__e = __c.Set("class", "border-b border-stone-100 bg-stone-50/50 px-5 py-4"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line customers.gox:122
+//line customers.gox:136
 				__e = __c.Set("class", "relative max-w-md"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Init("label"); if __e != nil { return }
 				{
-//line customers.gox:123
+//line customers.gox:137
 					__e = __c.Set("for", id); if __e != nil { return }
-//line customers.gox:123
+//line customers.gox:137
 					__e = __c.Set("class", "sr-only"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line customers.gox:123
+//line customers.gox:137
 					__e = __c.Any(placeholder); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
 				__e = __c.Init("span"); if __e != nil { return }
 				{
-//line customers.gox:124
+//line customers.gox:138
 					__e = __c.Set("class", "pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-stone-400"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line customers.gox:125
+//line customers.gox:139
 					__e = __c.Any(icon(iconSearch, "size-4")); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
-//line customers.gox:127
+//line customers.gox:141
 				__e = (neui.Use{Desc: desc}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 					ctx := __c.Context(); _ = ctx
 					__e = __c.InitVoid("input"); if __e != nil { return }
 					{
-//line customers.gox:128
+//line customers.gox:142
 						__e = __c.Modify(doors.AChange{
 					Race: doors.RaceLatest,
 					On: func(ctx context.Context, r doors.RequestChange) bool {
@@ -225,15 +239,15 @@ func searchBar(id string, placeholder string, value string, desc string, change 
 						return false
 					},
 				}); if __e != nil { return }
-//line customers.gox:135
+//line customers.gox:149
 						__e = __c.Set("id", id); if __e != nil { return }
-//line customers.gox:136
+//line customers.gox:150
 						__e = __c.Set("type", "search"); if __e != nil { return }
-//line customers.gox:137
+//line customers.gox:151
 						__e = __c.Set("placeholder", placeholder); if __e != nil { return }
-//line customers.gox:138
+//line customers.gox:152
 						__e = __c.Set("value", value); if __e != nil { return }
-//line customers.gox:139
+//line customers.gox:153
 						__e = __c.Set("class", inputBase.Add("pl-9")); if __e != nil { return }
 					}
 					__e = __c.Submit(); if __e != nil { return }
@@ -243,14 +257,14 @@ func searchBar(id string, placeholder string, value string, desc string, change 
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line customers.gox:142
+//line customers.gox:156
 }
 
-//line customers.gox:144
+//line customers.gox:158
 func customersTable(p CustomersPath) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line customers.gox:146
+//line customers.gox:160
 		all := shop.Customers(p.Search, p.Sort)
 	rows, info := paginate(all, p.Page, pageSize)
 	sort := p.Sort
@@ -258,19 +272,19 @@ func customersTable(p CustomersPath) gox.Elem {
 		sort = "name"
 	}
 
-//line customers.gox:153
+//line customers.gox:167
 		__e = (neui.Space{Name: "table", Desc: "Customers matching the search, one page at a time; the column headers sort it"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
 			__e = __c.Init("div"); if __e != nil { return }
 			{
 				__e = __c.Submit(); if __e != nil { return }
-//line customers.gox:154
+//line customers.gox:168
 				__e = __c.Any(neui.Data{Text: "customers shown in the table, with their order count and paid total", Object: rows}); if __e != nil { return }
-//line customers.gox:155
+//line customers.gox:169
 				__e = __c.Any(neui.Data{Text: fmt.Sprintf("page %d of %d; %d customers match", info.Page, info.Pages, info.Total)}); if __e != nil { return }
-//line customers.gox:156
+//line customers.gox:170
 				if len(all) == 0 {
-//line customers.gox:157
+//line customers.gox:171
 					__e = __c.Any(emptyState{
 				Icon: iconCustomers,
 				Title: "No customers found",
@@ -279,14 +293,14 @@ func customersTable(p CustomersPath) gox.Elem {
 					ctx := __c.Context(); _ = ctx
 					__e = __c.InitContainer(); if __e != nil { return }
 					{
-//line customers.gox:162
+//line customers.gox:176
 						__e = (neui.Use{Desc: "clear the search"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 							ctx := __c.Context(); _ = ctx
 							__e = __c.Init("a"); if __e != nil { return }
 							{
-//line customers.gox:162
+//line customers.gox:176
 								__e = __c.Modify(doors.ALink{Model: CustomersPath{}, Batch: true}); if __e != nil { return }
-//line customers.gox:162
+//line customers.gox:176
 								__e = __c.Set("class", btnSecondary); if __e != nil { return }
 								__e = __c.Submit(); if __e != nil { return }
 								__e = __c.Text("Clear search"); if __e != nil { return }
@@ -295,18 +309,18 @@ func customersTable(p CustomersPath) gox.Elem {
 						return })); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
-//line customers.gox:163
+//line customers.gox:177
 				return }),
 			}); if __e != nil { return }
 				} else  {
 					__e = __c.Init("div"); if __e != nil { return }
 					{
-//line customers.gox:166
+//line customers.gox:180
 						__e = __c.Set("class", "overflow-x-auto"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 						__e = __c.Init("table"); if __e != nil { return }
 						{
-//line customers.gox:167
+//line customers.gox:181
 							__e = __c.Set("class", tableClass); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.Init("thead"); if __e != nil { return }
@@ -315,11 +329,11 @@ func customersTable(p CustomersPath) gox.Elem {
 								__e = __c.Init("tr"); if __e != nil { return }
 								{
 									__e = __c.Submit(); if __e != nil { return }
-//line customers.gox:170
+//line customers.gox:184
 									__e = __c.Any(sortHeader{Label: "Name", Key: "name", First: "name", Current: sort, Model: p.withSort}); if __e != nil { return }
 									__e = __c.Init("th"); if __e != nil { return }
 									{
-//line customers.gox:171
+//line customers.gox:185
 										__e = __c.Set("class", thClass.Add("hidden @2xl:table-cell")); if __e != nil { return }
 										__e = __c.Submit(); if __e != nil { return }
 										__e = __c.Text("Company"); if __e != nil { return }
@@ -327,15 +341,15 @@ func customersTable(p CustomersPath) gox.Elem {
 									__e = __c.Close(); if __e != nil { return }
 									__e = __c.Init("th"); if __e != nil { return }
 									{
-//line customers.gox:172
+//line customers.gox:186
 										__e = __c.Set("class", thClass.Add("hidden @4xl:table-cell")); if __e != nil { return }
 										__e = __c.Submit(); if __e != nil { return }
 										__e = __c.Text("Phone"); if __e != nil { return }
 									}
 									__e = __c.Close(); if __e != nil { return }
-//line customers.gox:173
+//line customers.gox:187
 									__e = __c.Any(sortHeader{Label: "Orders", Key: "orders", First: "-orders", Current: sort, Right: true, Class: "hidden @xl:table-cell", Model: p.withSort}); if __e != nil { return }
-//line customers.gox:174
+//line customers.gox:188
 									__e = __c.Any(sortHeader{Label: "Spent", Key: "spent", First: "-spent", Current: sort, Right: true, Model: p.withSort}); if __e != nil { return }
 								}
 								__e = __c.Close(); if __e != nil { return }
@@ -344,50 +358,50 @@ func customersTable(p CustomersPath) gox.Elem {
 							__e = __c.Init("tbody"); if __e != nil { return }
 							{
 								__e = __c.Submit(); if __e != nil { return }
-//line customers.gox:178
+//line customers.gox:192
 								for _, c := range rows {
 									__e = __c.Init("tr"); if __e != nil { return }
 									{
-//line customers.gox:179
+//line customers.gox:193
 										__e = __c.Set("class", rowClass); if __e != nil { return }
 										__e = __c.Submit(); if __e != nil { return }
 										__e = __c.Init("td"); if __e != nil { return }
 										{
-//line customers.gox:180
+//line customers.gox:194
 											__e = __c.Set("class", tdClass); if __e != nil { return }
 											__e = __c.Submit(); if __e != nil { return }
-//line customers.gox:181
+//line customers.gox:195
 											__e = (neui.Use{Desc: "open customer " + c.Name}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 												ctx := __c.Context(); _ = ctx
 												__e = __c.Init("a"); if __e != nil { return }
 												{
-//line customers.gox:181
+//line customers.gox:195
 													__e = __c.Modify(doors.ALink{Model: CustomerPath{ID: c.ID}, Batch: true, After: scrollTop}); if __e != nil { return }
-//line customers.gox:181
+//line customers.gox:195
 													__e = __c.Set("class", "group flex items-center gap-3"); if __e != nil { return }
 													__e = __c.Submit(); if __e != nil { return }
-//line customers.gox:182
+//line customers.gox:196
 													__e = __c.Any(avatar(c.Name)); if __e != nil { return }
 													__e = __c.Init("span"); if __e != nil { return }
 													{
-//line customers.gox:183
+//line customers.gox:197
 														__e = __c.Set("class", "min-w-0"); if __e != nil { return }
 														__e = __c.Submit(); if __e != nil { return }
 														__e = __c.Init("span"); if __e != nil { return }
 														{
-//line customers.gox:184
+//line customers.gox:198
 															__e = __c.Set("class", "block font-medium text-stone-900 group-hover:underline"); if __e != nil { return }
 															__e = __c.Submit(); if __e != nil { return }
-//line customers.gox:184
+//line customers.gox:198
 															__e = __c.Any(c.Name); if __e != nil { return }
 														}
 														__e = __c.Close(); if __e != nil { return }
 														__e = __c.Init("span"); if __e != nil { return }
 														{
-//line customers.gox:185
+//line customers.gox:199
 															__e = __c.Set("class", "block text-xs text-stone-500"); if __e != nil { return }
 															__e = __c.Submit(); if __e != nil { return }
-//line customers.gox:185
+//line customers.gox:199
 															__e = __c.Any(c.Email); if __e != nil { return }
 														}
 														__e = __c.Close(); if __e != nil { return }
@@ -400,37 +414,37 @@ func customersTable(p CustomersPath) gox.Elem {
 										__e = __c.Close(); if __e != nil { return }
 										__e = __c.Init("td"); if __e != nil { return }
 										{
-//line customers.gox:189
+//line customers.gox:203
 											__e = __c.Set("class", tdClass.Add("hidden text-stone-600 @2xl:table-cell")); if __e != nil { return }
 											__e = __c.Submit(); if __e != nil { return }
-//line customers.gox:189
+//line customers.gox:203
 											__e = __c.Any(dash(c.Company)); if __e != nil { return }
 										}
 										__e = __c.Close(); if __e != nil { return }
 										__e = __c.Init("td"); if __e != nil { return }
 										{
-//line customers.gox:190
+//line customers.gox:204
 											__e = __c.Set("class", tdClass.Add("hidden text-stone-600 tabular-nums @4xl:table-cell")); if __e != nil { return }
 											__e = __c.Submit(); if __e != nil { return }
-//line customers.gox:190
+//line customers.gox:204
 											__e = __c.Any(dash(c.Phone)); if __e != nil { return }
 										}
 										__e = __c.Close(); if __e != nil { return }
 										__e = __c.Init("td"); if __e != nil { return }
 										{
-//line customers.gox:191
+//line customers.gox:205
 											__e = __c.Set("class", tdClass.Add("hidden text-right tabular-nums @xl:table-cell")); if __e != nil { return }
 											__e = __c.Submit(); if __e != nil { return }
-//line customers.gox:191
+//line customers.gox:205
 											__e = __c.Any(c.Orders); if __e != nil { return }
 										}
 										__e = __c.Close(); if __e != nil { return }
 										__e = __c.Init("td"); if __e != nil { return }
 										{
-//line customers.gox:192
+//line customers.gox:206
 											__e = __c.Set("class", tdClass.Add("text-right font-medium tabular-nums")); if __e != nil { return }
 											__e = __c.Submit(); if __e != nil { return }
-//line customers.gox:192
+//line customers.gox:206
 											__e = __c.Any(money(c.Spent)); if __e != nil { return }
 										}
 										__e = __c.Close(); if __e != nil { return }
@@ -447,30 +461,30 @@ func customersTable(p CustomersPath) gox.Elem {
 			}
 			__e = __c.Close(); if __e != nil { return }
 		return })); if __e != nil { return }
-//line customers.gox:200
+//line customers.gox:214
 		if len(all) > 0 {
-//line customers.gox:201
+//line customers.gox:215
 			__e = __c.Any(pager{Info: info, Noun: "customers", Model: p.withPage}); if __e != nil { return }
 		}
 	return })
-//line customers.gox:203
+//line customers.gox:217
 }
 
-//line customers.gox:205
+//line customers.gox:219
 func avatar(name string) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("span"); if __e != nil { return }
 		{
-//line customers.gox:206
+//line customers.gox:220
 			__e = __c.Set("class", "flex size-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xs font-semibold text-amber-800"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line customers.gox:207
+//line customers.gox:221
 			__e = __c.Any(initials(name)); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line customers.gox:209
+//line customers.gox:223
 }
 
 func dash(s string) string {

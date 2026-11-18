@@ -1,6 +1,20 @@
 // Managed by GoX v0.4.0
 
 //line days.gox:1
+// Copyright 2026 doors dev LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package aside
 
 import (
@@ -35,11 +49,11 @@ type days struct {
 	active api.ThreadID
 }
 
-//line days.gox:35
+//line days.gox:49
 func (d *days) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line days.gox:36
+//line days.gox:50
 		__e = __c.Any(&window.List{
 		Margin: margin,
 		Driver: d,
@@ -48,7 +62,7 @@ func (d *days) Main() gox.Elem {
 		Empty: d.empty,
 	}); if __e != nil { return }
 	return })
-//line days.gox:43
+//line days.gox:57
 }
 
 func (d *days) Compare(a string, b string) int {
@@ -165,24 +179,24 @@ type day struct {
 	rows []api.Thread
 }
 
-//line days.gox:159
+//line days.gox:173
 func (d *day) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line days.gox:161
+//line days.gox:175
 		d.body.Inner(ctx, d.content())
 
-//line days.gox:163
+//line days.gox:177
 		__e = __c.Any(d.body); if __e != nil { return }
 	return })
-//line days.gox:164
+//line days.gox:178
 }
 
-//line days.gox:166
+//line days.gox:180
 func (d *day) content() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line days.gox:168
+//line days.gox:182
 		today := d.days.name == "" && d.start.Equal(d.days.today())
 	label := ""
 	switch {
@@ -260,48 +274,48 @@ func (d *day) content() gox.Elem {
 		}
 	}
 
-//line days.gox:245
+//line days.gox:259
 		if today || len(threads) != 0 || failed {
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line days.gox:246
+//line days.gox:260
 				__e = __c.Set("class", "nechat-side-label"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line days.gox:246
+//line days.gox:260
 				__e = __c.Any(label); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		}
-//line days.gox:248
+//line days.gox:262
 		if failed {
-//line days.gox:249
+//line days.gox:263
 			__e = __c.Any(retry(d.body)); if __e != nil { return }
 		}
-//line days.gox:251
+//line days.gox:265
 		if today {
-//line days.gox:252
+//line days.gox:266
 			if fresh {
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line days.gox:253
+//line days.gox:267
 					__e = __c.Set("class", "nechat-row"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
 					__e = __c.Init("button"); if __e != nil { return }
 					{
-//line days.gox:254
+//line days.gox:268
 						__e = __c.Set("class", "nechat-thread nechat-thread_active"); if __e != nil { return }
-//line days.gox:254
+//line days.gox:268
 						__e = __c.Set("aria-current", "true"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line days.gox:255
+//line days.gox:269
 						__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 							ctx := __c.Context(); _ = ctx
-//line days.gox:255
+//line days.gox:269
 							__e = __c.Any(icons.Plus()); if __e != nil { return }
 						return })); if __e != nil { return }
 						__e = __c.Init("span"); if __e != nil { return }
 						{
-//line days.gox:256
+//line days.gox:270
 							__e = __c.Set("class", "nechat-thread-name"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.Text("New chat"); if __e != nil { return }
@@ -314,10 +328,10 @@ func (d *day) content() gox.Elem {
 			} else  {
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line days.gox:260
+//line days.gox:274
 					__e = __c.Set("class", "nechat-row"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line days.gox:261
+//line days.gox:275
 					__e = (doors.AClick{
 					Scope: new(doors.ScopeBlocking),
 					On: func(ctx context.Context, rp doors.RequestPointer) bool {
@@ -334,18 +348,18 @@ func (d *day) content() gox.Elem {
 						ctx := __c.Context(); _ = ctx
 						__e = __c.Init("button"); if __e != nil { return }
 						{
-//line days.gox:273
+//line days.gox:287
 							__e = __c.Set("class", "nechat-thread nechat-thread_new"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
-//line days.gox:274
+//line days.gox:288
 							__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 								ctx := __c.Context(); _ = ctx
-//line days.gox:274
+//line days.gox:288
 								__e = __c.Any(icons.Plus()); if __e != nil { return }
 							return })); if __e != nil { return }
 							__e = __c.Init("span"); if __e != nil { return }
 							{
-//line days.gox:275
+//line days.gox:289
 								__e = __c.Set("class", "nechat-thread-name"); if __e != nil { return }
 								__e = __c.Submit(); if __e != nil { return }
 								__e = __c.Text("New chat"); if __e != nil { return }
@@ -358,11 +372,11 @@ func (d *day) content() gox.Elem {
 				__e = __c.Close(); if __e != nil { return }
 			}
 		}
-//line days.gox:280
+//line days.gox:294
 		for _, t := range threads {
-//line days.gox:281
+//line days.gox:295
 			__e = __c.Any(&row{aside: d.days.aside, thread: t, instance: all[t.ID].InstanceID, day: d.body}); if __e != nil { return }
 		}
 	return })
-//line days.gox:283
+//line days.gox:297
 }

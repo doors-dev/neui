@@ -1,6 +1,20 @@
 // Managed by GoX v0.4.0
 
 //line report.gox:1
+// Copyright 2026 doors dev LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -8,11 +22,11 @@ import (
 	"neui.dev"
 )
 
-//line report.gox:8
+//line report.gox:22
 func reportPanel() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line report.gox:9
+//line report.gox:23
 		__e = __c.Any(card{
 		Title: "Report",
 		Desc: "Ask the assistant for a report and it appears here.",
@@ -23,10 +37,10 @@ func reportPanel() gox.Elem {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line report.gox:15
+//line report.gox:29
 					__e = __c.Set("class", "flex items-center gap-3 rounded-lg border border-dashed border-stone-300 px-4 py-6 text-sm text-stone-500"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line report.gox:16
+//line report.gox:30
 					__e = __c.Any(icon(iconSparkles, "size-5 text-amber-600")); if __e != nil { return }
 					__e = __c.Init("p"); if __e != nil { return }
 					{
@@ -36,7 +50,7 @@ func reportPanel() gox.Elem {
 					__e = __c.Close(); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
-//line report.gox:18
+//line report.gox:32
 			return }),
 			Template: func(slot gox.Comp) gox.Elem {
 				return gox.Elem(func(__c gox.Cursor) (__e error) {
@@ -44,16 +58,16 @@ func reportPanel() gox.Elem {
 					__e = __c.Init("div"); if __e != nil { return }
 					{
 						__e = __c.Submit(); if __e != nil { return }
-//line report.gox:20
+//line report.gox:34
 						__e = __c.Any(slot); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
-//line report.gox:20
+//line report.gox:34
 				return })
 			},
 			Library: reportLibrary,
 		}.Main(),
 	}); if __e != nil { return }
 	return })
-//line report.gox:25
+//line report.gox:39
 }

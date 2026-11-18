@@ -1,6 +1,20 @@
 // Managed by GoX v0.4.0
 
 //line app.gox:1
+// Copyright 2026 doors dev LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -41,11 +55,11 @@ func openCustomer(ctx context.Context, in openInput) (customerRow, error) {
 	return c, nil
 }
 
-//line app.gox:41
+//line app.gox:55
 func (a App) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line app.gox:43
+//line app.gox:57
 		if err := neui.Enable(ctx, neui.OptionMessageStorage(a.Threads.User("demo"))); err != nil {
 		doors.Logger(ctx).Error("neui enable", "err", err)
 	}
@@ -53,11 +67,11 @@ func (a App) Main() gox.Elem {
 		__e = __c.Raw("<!doctype html>"); if __e != nil { return }
 		__e = __c.Init("html"); if __e != nil { return }
 		{
-//line app.gox:48
+//line app.gox:62
 			__e = __c.Set("lang", "en"); if __e != nil { return }
-//line app.gox:48
+//line app.gox:62
 			__e = __c.Set("data-theme", "light"); if __e != nil { return }
-//line app.gox:48
+//line app.gox:62
 			__e = __c.Set("class", "bg-stone-50"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Init("head"); if __e != nil { return }
@@ -65,15 +79,15 @@ func (a App) Main() gox.Elem {
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.InitVoid("meta"); if __e != nil { return }
 				{
-//line app.gox:50
+//line app.gox:64
 					__e = __c.Set("charset", "utf-8"); if __e != nil { return }
 				}
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.InitVoid("meta"); if __e != nil { return }
 				{
-//line app.gox:51
+//line app.gox:65
 					__e = __c.Set("name", "viewport"); if __e != nil { return }
-//line app.gox:51
+//line app.gox:65
 					__e = __c.Set("content", "width=device-width, initial-scale=1"); if __e != nil { return }
 				}
 				__e = __c.Submit(); if __e != nil { return }
@@ -85,11 +99,11 @@ func (a App) Main() gox.Elem {
 				__e = __c.Close(); if __e != nil { return }
 				__e = __c.InitVoid("link"); if __e != nil { return }
 				{
-//line app.gox:53
+//line app.gox:67
 					__e = __c.Set("rel", "stylesheet"); if __e != nil { return }
-//line app.gox:53
+//line app.gox:67
 					__e = __c.Set("href", css.Style); if __e != nil { return }
-//line app.gox:53
+//line app.gox:67
 					__e = __c.Set("name", "backoffice.css"); if __e != nil { return }
 				}
 				__e = __c.Submit(); if __e != nil { return }
@@ -97,34 +111,34 @@ func (a App) Main() gox.Elem {
 			__e = __c.Close(); if __e != nil { return }
 			__e = __c.Init("body"); if __e != nil { return }
 			{
-//line app.gox:55
+//line app.gox:69
 				__e = __c.Set("class", "bg-stone-50"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line app.gox:56
+//line app.gox:70
 					__e = __c.Set("id", "app"); if __e != nil { return }
-//line app.gox:56
+//line app.gox:70
 					__e = __c.Set("class", "min-h-dvh text-stone-900 antialiased"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
 					__e = __c.Init("div"); if __e != nil { return }
 					{
-//line app.gox:57
+//line app.gox:71
 						__e = __c.Set("id", "top"); if __e != nil { return }
-//line app.gox:57
+//line app.gox:71
 						__e = __c.Set("class", "side:pl-64"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line app.gox:58
+//line app.gox:72
 						__e = __c.Any(sidebar()); if __e != nil { return }
-//line app.gox:59
+//line app.gox:73
 						__e = __c.Any(neui.Data{Text: "Today is " + time.Now().Format("Monday, 2006-01-02")}); if __e != nil { return }
-//line app.gox:60
+//line app.gox:74
 						__e = __c.Any(neui.Tool[openInput, order]{
 						Name: "open_order",
 						Desc: "Open the page of an order for the user",
 						Handler: openOrder,
 					}); if __e != nil { return }
-//line app.gox:65
+//line app.gox:79
 						__e = __c.Any(neui.Tool[openInput, customerRow]{
 						Name: "open_customer",
 						Desc: "Open the page of a customer for the user",
@@ -132,36 +146,36 @@ func (a App) Main() gox.Elem {
 					}); if __e != nil { return }
 						__e = __c.Init("main"); if __e != nil { return }
 						{
-//line app.gox:70
+//line app.gox:84
 							__e = __c.Set("class", "@container mx-auto max-w-6xl px-4 pt-6 pb-24 sm:px-6 side:px-10 side:pt-10"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
-//line app.gox:71
+//line app.gox:85
 							__e = __c.Any(routes()); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
-//line app.gox:74
+//line app.gox:88
 					__e = __c.Any(workbenchPanel()); if __e != nil { return }
-//line app.gox:75
+//line app.gox:89
 					__e = __c.Any(toast()); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
-//line app.gox:77
+//line app.gox:91
 				__e = __c.Any(nekit.Chat{ThemeLight: chatTheme}); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line app.gox:80
+//line app.gox:94
 }
 
-//line app.gox:82
+//line app.gox:96
 func routes() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line app.gox:83
+//line app.gox:97
 		__e = __c.Any(doors.Route(
 		doors.RouteModel[HomePath](doors.RouteComp[HomePath](dashboardPage())),
 		doors.RouteModel[OrdersPath](
@@ -208,14 +222,14 @@ func routes() gox.Elem {
 		doors.RouteComp[doors.Location](notFound("Page", crumb{Label: "Back to the dashboard", Model: HomePath{}})),
 	)); if __e != nil { return }
 	return })
-//line app.gox:128
+//line app.gox:142
 }
 
-//line app.gox:130
+//line app.gox:144
 func sidebar() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line app.gox:131
+//line app.gox:145
 		__e = (neui.Space{
 		Name: "navigation",
 		Desc: "Main menu, on every page: links to the dashboard, orders, customers and products",
@@ -223,41 +237,41 @@ func sidebar() gox.Elem {
 			ctx := __c.Context(); _ = ctx
 			__e = __c.Init("aside"); if __e != nil { return }
 			{
-//line app.gox:134
+//line app.gox:148
 				__e = __c.Set("class", "sticky top-0 z-30 border-b border-stone-200 bg-white/90 backdrop-blur side:fixed side:inset-y-0 side:left-0 side:w-64 side:border-r side:border-b-0 side:bg-white"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line app.gox:135
+//line app.gox:149
 					__e = __c.Set("class", "flex h-full flex-col side:px-4 side:py-6"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line app.gox:136
+//line app.gox:150
 					__e = (neui.Use{Desc: "the shop logo: goes to the dashboard"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 						ctx := __c.Context(); _ = ctx
 						__e = __c.Init("a"); if __e != nil { return }
 						{
-//line app.gox:137
+//line app.gox:151
 							__e = __c.Modify(doors.ALink{Model: HomePath{}, Batch: true}); if __e != nil { return }
-//line app.gox:138
+//line app.gox:152
 							__e = __c.Set("class", "flex w-fit items-center gap-2.5 rounded-lg px-4 pt-3 transition-opacity hover:opacity-80 side:px-2 side:pt-0"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.Init("span"); if __e != nil { return }
 							{
-//line app.gox:139
+//line app.gox:153
 								__e = __c.Set("class", "flex size-8 items-center justify-center rounded-lg bg-amber-600 text-white shadow-xs"); if __e != nil { return }
 								__e = __c.Submit(); if __e != nil { return }
-//line app.gox:140
+//line app.gox:154
 								__e = __c.Any(icon(iconCup, "size-5")); if __e != nil { return }
 							}
 							__e = __c.Close(); if __e != nil { return }
 							__e = __c.Init("div"); if __e != nil { return }
 							{
-//line app.gox:142
+//line app.gox:156
 								__e = __c.Set("class", "leading-tight"); if __e != nil { return }
 								__e = __c.Submit(); if __e != nil { return }
 								__e = __c.Init("p"); if __e != nil { return }
 								{
-//line app.gox:143
+//line app.gox:157
 									__e = __c.Set("class", "text-sm font-semibold text-stone-900"); if __e != nil { return }
 									__e = __c.Submit(); if __e != nil { return }
 									__e = __c.Text("Kettle & Burr"); if __e != nil { return }
@@ -265,7 +279,7 @@ func sidebar() gox.Elem {
 								__e = __c.Close(); if __e != nil { return }
 								__e = __c.Init("p"); if __e != nil { return }
 								{
-//line app.gox:144
+//line app.gox:158
 									__e = __c.Set("class", "text-xs text-stone-500"); if __e != nil { return }
 									__e = __c.Submit(); if __e != nil { return }
 									__e = __c.Text("Back office"); if __e != nil { return }
@@ -278,29 +292,29 @@ func sidebar() gox.Elem {
 					return })); if __e != nil { return }
 					__e = __c.Init("nav"); if __e != nil { return }
 					{
-//line app.gox:147
+//line app.gox:161
 						__e = __c.Set("class", "mt-2 flex gap-1 overflow-x-auto px-3 pb-2 side:mt-8 side:flex-col side:overflow-visible side:px-0 side:pb-0"); if __e != nil { return }
-//line app.gox:147
+//line app.gox:161
 						__e = __c.Set("aria-label", "Main"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line app.gox:148
+//line app.gox:162
 						__e = __c.Any(navItem("Dashboard", iconDashboard, HomePath{}, false, "go to the dashboard")); if __e != nil { return }
-//line app.gox:149
+//line app.gox:163
 						__e = __c.Any(navItem("Orders", iconOrders, OrdersPath{}, true, "go to the orders list")); if __e != nil { return }
-//line app.gox:150
+//line app.gox:164
 						__e = __c.Any(navItem("Customers", iconCustomers, CustomersPath{}, true, "go to the customers list")); if __e != nil { return }
-//line app.gox:151
+//line app.gox:165
 						__e = __c.Any(navItem("Products", iconProducts, ProductsPath{}, true, "go to the products list")); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
 					__e = __c.Init("div"); if __e != nil { return }
 					{
-//line app.gox:153
+//line app.gox:167
 						__e = __c.Set("class", "mt-auto hidden rounded-lg bg-stone-50 p-3 text-xs text-stone-500 ring-1 ring-stone-200 side:block"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 						__e = __c.Init("p"); if __e != nil { return }
 						{
-//line app.gox:154
+//line app.gox:168
 							__e = __c.Set("class", "font-medium text-stone-700"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.Text("Assistant"); if __e != nil { return }
@@ -308,7 +322,7 @@ func sidebar() gox.Elem {
 						__e = __c.Close(); if __e != nil { return }
 						__e = __c.Init("p"); if __e != nil { return }
 						{
-//line app.gox:155
+//line app.gox:169
 							__e = __c.Set("class", "mt-1"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.Text("Open the chat in the corner and ask it to filter, fill a form or build you an app."); if __e != nil { return }
@@ -322,25 +336,25 @@ func sidebar() gox.Elem {
 			__e = __c.Close(); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
-//line app.gox:159
+//line app.gox:173
 }
 
-//line app.gox:161
+//line app.gox:175
 func navItem(label string, d string, model any, starts bool, desc string) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line app.gox:163
+//line app.gox:177
 		matcher := doors.PathMatcherFull()
 	if starts {
 		matcher = doors.PathMatcherStarts()
 	}
 
-//line app.gox:168
+//line app.gox:182
 		__e = (neui.Use{Desc: desc}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
 			__e = __c.Init("a"); if __e != nil { return }
 			{
-//line app.gox:169
+//line app.gox:183
 				__e = __c.Modify(doors.ALink{
 			Model: model,
 			Batch: true,
@@ -351,55 +365,55 @@ func navItem(label string, d string, model any, starts bool, desc string) gox.El
 				QueryMatcher: doors.QueryMatcherIgnoreAll(),
 			},
 		}); if __e != nil { return }
-//line app.gox:179
+//line app.gox:193
 				__e = __c.Set("class", "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap text-stone-600 transition-colors hover:bg-stone-100 hover:text-stone-900 aria-[current=page]:bg-stone-900 aria-[current=page]:text-white"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line app.gox:180
+//line app.gox:194
 				__e = __c.Any(icon(d, "hidden size-5 opacity-80 sm:block")); if __e != nil { return }
-//line app.gox:181
+//line app.gox:195
 				__e = __c.Any(label); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
-//line app.gox:183
+//line app.gox:197
 }
 
-//line app.gox:185
+//line app.gox:199
 func toast() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line app.gox:186
+//line app.gox:200
 		__e = __c.Any(notices(ctx).Bind(func(n notice) gox.Elem {
 		return toastView(n)
 	})); if __e != nil { return }
 	return })
-//line app.gox:189
+//line app.gox:203
 }
 
-//line app.gox:191
+//line app.gox:205
 func toastView(n notice) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line app.gox:192
+//line app.gox:206
 		if n.Text != "" {
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line app.gox:194
+//line app.gox:208
 				__e = __c.Set("class", "animate-toast pointer-events-none fixed inset-x-0 top-4 z-40 flex justify-center px-4 side:top-6 side:pl-64"); if __e != nil { return }
-//line app.gox:195
+//line app.gox:209
 				__e = __c.Set("role", "status"); if __e != nil { return }
-//line app.gox:196
+//line app.gox:210
 				__e = __c.Set("aria-live", "polite"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line app.gox:197
+//line app.gox:211
 					__e = __c.Set("class", "pointer-events-auto flex items-center gap-2.5 rounded-xl bg-stone-900 py-2.5 pr-4 pl-3 text-sm text-white shadow-lg"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line app.gox:198
+//line app.gox:212
 					__e = __c.Any(icon(iconCheck, "size-5 text-emerald-400")); if __e != nil { return }
-//line app.gox:199
+//line app.gox:213
 					__e = __c.Any(n.Text); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
@@ -407,5 +421,5 @@ func toastView(n notice) gox.Elem {
 			__e = __c.Close(); if __e != nil { return }
 		}
 	return })
-//line app.gox:203
+//line app.gox:217
 }

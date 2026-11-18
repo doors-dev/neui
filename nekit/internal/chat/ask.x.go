@@ -1,6 +1,20 @@
 // Managed by GoX v0.4.0
 
 //line ask.gox:1
+// Copyright 2026 doors dev LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package chat
 
 import (
@@ -173,17 +187,17 @@ func (a *ask) submit(ctx context.Context) {
 	a.answer.Submit(ctx, output)
 }
 
-//line ask.gox:173
+//line ask.gox:187
 func (a *ask) form() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line ask.gox:175
+//line ask.gox:189
 		state, ok := a.state.Read(ctx)
 	if !ok {
 		return nil
 	}
 
-//line ask.gox:180
+//line ask.gox:194
 		__e = (doors.AKeyDown{
 		Key: doors.Key{
 			Key: "Enter",
@@ -198,7 +212,7 @@ func (a *ask) form() gox.Elem {
 		OnError: notify.OnError,
 	}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
-//line ask.gox:192
+//line ask.gox:206
 			__e = (doors.AChange{
 		Scope: a.frame.Scope(false),
 		On: func(ctx context.Context, rc doors.RequestChange) bool {
@@ -232,61 +246,61 @@ func (a *ask) form() gox.Elem {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line ask.gox:221
+//line ask.gox:235
 					__e = __c.Set("class", "nechat-ask"); if __e != nil { return }
-//line ask.gox:221
+//line ask.gox:235
 					__e = __c.Set("role", "group"); if __e != nil { return }
-//line ask.gox:221
+//line ask.gox:235
 					__e = __c.Set("aria-label", a.input.Question); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
 					__e = __c.Init("p"); if __e != nil { return }
 					{
-//line ask.gox:222
+//line ask.gox:236
 						__e = __c.Set("class", "nechat-ask-q"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line ask.gox:222
+//line ask.gox:236
 						__e = __c.Any(a.input.Question); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
-//line ask.gox:223
+//line ask.gox:237
 					for i, option := range a.input.Options {
 						__e = __c.Init("label"); if __e != nil { return }
 						{
-//line ask.gox:224
+//line ask.gox:238
 							__e = __c.Set("class", "nechat-pick"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.InitVoid("input"); if __e != nil { return }
 							{
-//line ask.gox:226
+//line ask.gox:240
 								__e = __c.Set("type", a.kind); if __e != nil { return }
-//line ask.gox:227
+//line ask.gox:241
 								__e = __c.Set("name", func() any {
 						if a.input.Multiple {
 							return nil
 						}
 						return a.group
 					}()); if __e != nil { return }
-//line ask.gox:233
+//line ask.gox:247
 								__e = __c.Set("value", strconv.Itoa(i)); if __e != nil { return }
-//line ask.gox:234
+//line ask.gox:248
 								__e = __c.Set("checked", state.picked[i]); if __e != nil { return }
 							}
 							__e = __c.Submit(); if __e != nil { return }
-//line ask.gox:235
+//line ask.gox:249
 							if a.input.Multiple {
 								__e = __c.Init("span"); if __e != nil { return }
 								{
-//line ask.gox:236
+//line ask.gox:250
 									__e = __c.Set("class", "nechat-mark nechat-mark_check"); if __e != nil { return }
 									__e = __c.Submit(); if __e != nil { return }
-//line ask.gox:236
+//line ask.gox:250
 									__e = __c.Any(icons.Check()); if __e != nil { return }
 								}
 								__e = __c.Close(); if __e != nil { return }
 							} else  {
 								__e = __c.Init("span"); if __e != nil { return }
 								{
-//line ask.gox:238
+//line ask.gox:252
 									__e = __c.Set("class", "nechat-mark nechat-mark_radio"); if __e != nil { return }
 									__e = __c.Submit(); if __e != nil { return }
 									__e = __c.Init("span"); if __e != nil { return }
@@ -299,26 +313,26 @@ func (a *ask) form() gox.Elem {
 							}
 							__e = __c.Init("span"); if __e != nil { return }
 							{
-//line ask.gox:240
+//line ask.gox:254
 								__e = __c.Set("class", "nechat-pick-label"); if __e != nil { return }
 								__e = __c.Submit(); if __e != nil { return }
 								__e = __c.Init("span"); if __e != nil { return }
 								{
-//line ask.gox:241
+//line ask.gox:255
 									__e = __c.Set("class", "nechat-pick-name"); if __e != nil { return }
 									__e = __c.Submit(); if __e != nil { return }
-//line ask.gox:241
+//line ask.gox:255
 									__e = __c.Any(option.Name); if __e != nil { return }
 								}
 								__e = __c.Close(); if __e != nil { return }
-//line ask.gox:242
+//line ask.gox:256
 								if option.Desc != "" {
 									__e = __c.Init("span"); if __e != nil { return }
 									{
-//line ask.gox:243
+//line ask.gox:257
 										__e = __c.Set("class", "nechat-pick-desc"); if __e != nil { return }
 										__e = __c.Submit(); if __e != nil { return }
-//line ask.gox:243
+//line ask.gox:257
 										__e = __c.Any(option.Desc); if __e != nil { return }
 									}
 									__e = __c.Close(); if __e != nil { return }
@@ -328,45 +342,45 @@ func (a *ask) form() gox.Elem {
 						}
 						__e = __c.Close(); if __e != nil { return }
 					}
-//line ask.gox:248
+//line ask.gox:262
 					if a.input.Own {
 						__e = __c.Init("label"); if __e != nil { return }
 						{
-//line ask.gox:249
+//line ask.gox:263
 							__e = __c.Set("class", "nechat-pick nechat-pick_own"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.InitVoid("input"); if __e != nil { return }
 							{
-//line ask.gox:251
+//line ask.gox:265
 								__e = __c.Set("type", a.kind); if __e != nil { return }
-//line ask.gox:252
+//line ask.gox:266
 								__e = __c.Set("name", func() any {
 						if a.input.Multiple {
 							return nil
 						}
 						return a.group
 					}()); if __e != nil { return }
-//line ask.gox:258
+//line ask.gox:272
 								__e = __c.Set("value", "own"); if __e != nil { return }
-//line ask.gox:259
+//line ask.gox:273
 								__e = __c.Set("checked", state.own); if __e != nil { return }
 							}
 							__e = __c.Submit(); if __e != nil { return }
-//line ask.gox:260
+//line ask.gox:274
 							if a.input.Multiple {
 								__e = __c.Init("span"); if __e != nil { return }
 								{
-//line ask.gox:261
+//line ask.gox:275
 									__e = __c.Set("class", "nechat-mark nechat-mark_check"); if __e != nil { return }
 									__e = __c.Submit(); if __e != nil { return }
-//line ask.gox:261
+//line ask.gox:275
 									__e = __c.Any(icons.Check()); if __e != nil { return }
 								}
 								__e = __c.Close(); if __e != nil { return }
 							} else  {
 								__e = __c.Init("span"); if __e != nil { return }
 								{
-//line ask.gox:263
+//line ask.gox:277
 									__e = __c.Set("class", "nechat-mark nechat-mark_radio"); if __e != nil { return }
 									__e = __c.Submit(); if __e != nil { return }
 									__e = __c.Init("span"); if __e != nil { return }
@@ -377,7 +391,7 @@ func (a *ask) form() gox.Elem {
 								}
 								__e = __c.Close(); if __e != nil { return }
 							}
-//line ask.gox:265
+//line ask.gox:279
 							__e = (doors.AInput{
 					Scope: a.frame.Scope(false).And(&doors.ScopeRate{
 						Tick: 100 * time.Millisecond,
@@ -399,14 +413,14 @@ func (a *ask) form() gox.Elem {
 								ctx := __c.Context(); _ = ctx
 								__e = __c.Init("textarea"); if __e != nil { return }
 								{
-//line ask.gox:282
+//line ask.gox:296
 									__e = __c.Set("rows", "1"); if __e != nil { return }
-//line ask.gox:282
+//line ask.gox:296
 									__e = __c.Set("placeholder", "Type your own…"); if __e != nil { return }
-//line ask.gox:282
+//line ask.gox:296
 									__e = __c.Set("aria-label", "Type your own answer"); if __e != nil { return }
 									__e = __c.Submit(); if __e != nil { return }
-//line ask.gox:282
+//line ask.gox:296
 									__e = __c.Any(state.text); if __e != nil { return }
 								}
 								__e = __c.Close(); if __e != nil { return }
@@ -425,65 +439,65 @@ func (a *ask) form() gox.Elem {
 			return })); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
-//line ask.gox:297
+//line ask.gox:311
 }
 
-//line ask.gox:299
+//line ask.gox:313
 func (a *ask) button(arm askArm) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line ask.gox:300
+//line ask.gox:314
 		if arm.over {
 			__e = __c.Init("button"); if __e != nil { return }
 			{
-//line ask.gox:301
+//line ask.gox:315
 				__e = __c.Set("type", "button"); if __e != nil { return }
-//line ask.gox:301
+//line ask.gox:315
 				__e = __c.Set("class", "nechat-iconbtn"); if __e != nil { return }
-//line ask.gox:301
+//line ask.gox:315
 				__e = __c.Set("title", "Answer too long"); if __e != nil { return }
-//line ask.gox:301
+//line ask.gox:315
 				__e = __c.Set("aria-label", "Send"); if __e != nil { return }
 				__e = __c.Set("disabled", true); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line ask.gox:302
+//line ask.gox:316
 				__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 					ctx := __c.Context(); _ = ctx
-//line ask.gox:302
+//line ask.gox:316
 					__e = __c.Any(icons.Submit()); if __e != nil { return }
 				return })); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line ask.gox:304
+//line ask.gox:318
 		} else if arm.count == 0 {
 			__e = __c.Init("button"); if __e != nil { return }
 			{
-//line ask.gox:305
+//line ask.gox:319
 				__e = __c.Set("type", "button"); if __e != nil { return }
-//line ask.gox:305
+//line ask.gox:319
 				__e = __c.Set("class", "nechat-iconbtn"); if __e != nil { return }
-//line ask.gox:305
+//line ask.gox:319
 				__e = __c.Set("title", "Nothing picked"); if __e != nil { return }
-//line ask.gox:305
+//line ask.gox:319
 				__e = __c.Set("aria-label", "Send"); if __e != nil { return }
 				__e = __c.Set("disabled", true); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line ask.gox:306
+//line ask.gox:320
 				__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 					ctx := __c.Context(); _ = ctx
-//line ask.gox:306
+//line ask.gox:320
 					__e = __c.Any(icons.Submit()); if __e != nil { return }
 				return })); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		} else  {
-//line ask.gox:310
+//line ask.gox:324
 			label := "Send 1 answer"
 		if arm.count > 1 {
 			label = fmt.Sprintf("Send %d answers", arm.count)
 		}
 
-//line ask.gox:315
+//line ask.gox:329
 			__e = (doors.AClick{
 			Scope: a.frame.Scope(true),
 			On: func(ctx context.Context, rp doors.RequestPointer) bool {
@@ -495,19 +509,19 @@ func (a *ask) button(arm askArm) gox.Elem {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.Init("button"); if __e != nil { return }
 				{
-//line ask.gox:322
+//line ask.gox:336
 					__e = __c.Set("type", "button"); if __e != nil { return }
-//line ask.gox:322
+//line ask.gox:336
 					__e = __c.Set("class", "nechat-iconbtn"); if __e != nil { return }
-//line ask.gox:322
+//line ask.gox:336
 					__e = __c.Set("title", label); if __e != nil { return }
-//line ask.gox:322
+//line ask.gox:336
 					__e = __c.Set("aria-label", label); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line ask.gox:323
+//line ask.gox:337
 					__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 						ctx := __c.Context(); _ = ctx
-//line ask.gox:323
+//line ask.gox:337
 						__e = __c.Any(icons.Submit()); if __e != nil { return }
 					return })); if __e != nil { return }
 				}
@@ -515,5 +529,5 @@ func (a *ask) button(arm askArm) gox.Elem {
 			return })); if __e != nil { return }
 		}
 	return })
-//line ask.gox:326
+//line ask.gox:340
 }

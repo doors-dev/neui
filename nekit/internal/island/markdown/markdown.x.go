@@ -1,6 +1,20 @@
 // Managed by GoX v0.4.0
 
 //line markdown.gox:1
+// Copyright 2026 doors dev LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package markdown
 
 import (
@@ -70,30 +84,30 @@ func (t widget) Update(ctx context.Context, patch Patch) {
 	})
 }
 
-//line markdown.gox:70
+//line markdown.gox:84
 func (t widget) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line markdown.gox:71
+//line markdown.gox:85
 		__e = __c.Any(neui.Tool[struct{}, textView]{Name: getTextName, Desc: getTextDesc, Handler: t.getText}); if __e != nil { return }
-//line markdown.gox:72
+//line markdown.gox:86
 		__e = __c.Any(t.state.Bind(t.render)); if __e != nil { return }
 	return })
-//line markdown.gox:73
+//line markdown.gox:87
 }
 
-//line markdown.gox:75
+//line markdown.gox:89
 func (t widget) render(p Params) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line markdown.gox:77
+//line markdown.gox:91
 		if p.Text == "" {
 		return nil
 	}
 
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line markdown.gox:82
+//line markdown.gox:96
 			__e = __c.Set("class", func() any {
 			switch p.Style {
 			case "plain":
@@ -103,7 +117,7 @@ func (t widget) render(p Params) gox.Elem {
 			}
 			return "neisland-text neisland-prose neisland-text-card neisland-tone-" + p.Style
 		}()); if __e != nil { return }
-//line markdown.gox:91
+//line markdown.gox:105
 			__e = __c.Set("role", func() any {
 			switch p.Style {
 			case "warning", "danger":
@@ -114,22 +128,22 @@ func (t widget) render(p Params) gox.Elem {
 			return nil
 		}()); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line markdown.gox:100
+//line markdown.gox:114
 			if label := toneLabels[p.Style]; label != "" {
 				__e = __c.Init("span"); if __e != nil { return }
 				{
-//line markdown.gox:101
+//line markdown.gox:115
 					__e = __c.Set("class", "neisland-tone-label"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line markdown.gox:101
+//line markdown.gox:115
 					__e = __c.Any(label); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
 			}
-//line markdown.gox:103
+//line markdown.gox:117
 			__e = __c.Any(files.MarkdownBody(neui.IslandFS(ctx), markdown.Block(p.Text))); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line markdown.gox:105
+//line markdown.gox:119
 }

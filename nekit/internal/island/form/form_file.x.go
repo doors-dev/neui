@@ -1,6 +1,20 @@
 // Managed by GoX v0.4.0
 
 //line form_file.gox:1
+// Copyright 2026 doors dev LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package form
 
 import (
@@ -288,13 +302,13 @@ func (f *fileWidget) pick(ctx context.Context, picked []filePicked) []any {
 			ctx := __c.Context(); _ = ctx
 			__e = __c.InitContainer(); if __e != nil { return }
 			{
-//line form_file.gox:285
+//line form_file.gox:299
 				__e = __c.Any(e.door); if __e != nil { return }
-//line form_file.gox:286
+//line form_file.gox:300
 				__e = __c.Any(next); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line form_file.gox:287
+//line form_file.gox:301
 		return }))
 		f.edge = next
 	}
@@ -473,22 +487,22 @@ func (f *fileWidget) remove(ctx context.Context, key string) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("script"); if __e != nil { return }
 		{
-//line form_file.gox:461
+//line form_file.gox:475
 			__e = __c.Set("data:id", target); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Raw("const id = $data(\"id\")\n\t\tconst focus = (tries) => {\n\t\t\tconst el = document.getElementById(id)\n\t\t\tif (el) {\n\t\t\t\tel.focus()\n\t\t\t} else if (tries > 0) {\n\t\t\t\trequestAnimationFrame(() => focus(tries - 1))\n\t\t\t}\n\t\t}\n\t\tfocus(30)"); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
-//line form_file.gox:472
+//line form_file.gox:486
 	return }))
 	e.door.Static(ctx, nil)
 }
 
-//line form_file.gox:476
+//line form_file.gox:490
 func (f *fileWidget) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line form_file.gox:478
+//line form_file.gox:492
 		label, labelledby := any(nil), any(f.id + "-l")
 	if f.field.item != nil {
 		label, _ = f.field.item.ReadAndSub(ctx, func(ctx context.Context, name string) bool {
@@ -531,31 +545,31 @@ func (f *fileWidget) Main() gox.Elem {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line form_file.gox:516
+//line form_file.gox:530
 			__e = __c.Set("class", "neisland-form-field"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line form_file.gox:517
+//line form_file.gox:531
 			if label == nil {
 				__e = __c.Init("span"); if __e != nil { return }
 				{
-//line form_file.gox:518
+//line form_file.gox:532
 					__e = __c.Set("class", "neisland-form-label"); if __e != nil { return }
-//line form_file.gox:518
+//line form_file.gox:532
 					__e = __c.Set("id", f.id + "-l"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line form_file.gox:519
+//line form_file.gox:533
 					__e = __c.Any(f.params.Label); if __e != nil { return }
-//line form_file.gox:520
+//line form_file.gox:534
 					__e = __c.Any(empty.Bind(func(empty bool) gox.Elem {
 					return gox.Elem(func(__c gox.Cursor) (__e error) {
 						ctx := __c.Context(); _ = ctx
-//line form_file.gox:521
+//line form_file.gox:535
 						if empty {
 							__e = __c.Init("span"); if __e != nil { return }
 							{
-//line form_file.gox:522
+//line form_file.gox:536
 								__e = __c.Set("class", "neisland-form-required"); if __e != nil { return }
-//line form_file.gox:522
+//line form_file.gox:536
 								__e = __c.Set("aria-hidden", "true"); if __e != nil { return }
 								__e = __c.Submit(); if __e != nil { return }
 								__e = __c.Text("*"); if __e != nil { return }
@@ -563,68 +577,68 @@ func (f *fileWidget) Main() gox.Elem {
 							__e = __c.Close(); if __e != nil { return }
 						}
 					return })
-//line form_file.gox:524
+//line form_file.gox:538
 				})); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
 			}
 			__e = __c.Init("ul"); if __e != nil { return }
 			{
-//line form_file.gox:528
+//line form_file.gox:542
 				__e = __c.Modify(&f.label); if __e != nil { return }
-//line form_file.gox:529
+//line form_file.gox:543
 				__e = __c.Modify(&f.list); if __e != nil { return }
-//line form_file.gox:530
+//line form_file.gox:544
 				__e = __c.Set("class", "neisland-form-search-chosen"); if __e != nil { return }
-//line form_file.gox:531
+//line form_file.gox:545
 				__e = __c.Set("aria-label", label); if __e != nil { return }
-//line form_file.gox:532
+//line form_file.gox:546
 				__e = __c.Set("aria-labelledby", labelledby); if __e != nil { return }
-//line form_file.gox:533
+//line form_file.gox:547
 				__e = __c.Set("aria-describedby", describedby(isFull)); if __e != nil { return }
-//line form_file.gox:534
+//line form_file.gox:548
 				__e = __c.Set("aria-live", "polite"); if __e != nil { return }
-//line form_file.gox:535
+//line form_file.gox:549
 				__e = __c.Set("aria-relevant", "additions"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line form_file.gox:536
+//line form_file.gox:550
 				for _, e := range entries {
-//line form_file.gox:537
+//line form_file.gox:551
 					__e = __c.Any(e.door); if __e != nil { return }
 				}
-//line form_file.gox:539
+//line form_file.gox:553
 				__e = __c.Any(edge); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line form_file.gox:541
+//line form_file.gox:555
 			__e = __c.Any(full.Bind(f.zone)); if __e != nil { return }
-//line form_file.gox:542
+//line form_file.gox:556
 			__e = __c.Any(f.field.error.RouteBeam(
 			doors.RouteBeamMatch(shownErr, doors.RouteBind(func(err error) gox.Elem {
 				return gox.Elem(func(__c gox.Cursor) (__e error) {
 					ctx := __c.Context(); _ = ctx
 					__e = __c.Init("p"); if __e != nil { return }
 					{
-//line form_file.gox:544
+//line form_file.gox:558
 						__e = __c.Set("class", "neisland-form-error"); if __e != nil { return }
-//line form_file.gox:544
+//line form_file.gox:558
 						__e = __c.Set("id", f.id + "-e"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line form_file.gox:544
+//line form_file.gox:558
 						__e = __c.Any(err.Error()); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
-//line form_file.gox:544
+//line form_file.gox:558
 				return })
 			})),
 		)); if __e != nil { return }
-//line form_file.gox:547
+//line form_file.gox:561
 			__e = __c.Any(errorData(f.params.Name, f.field.error)); if __e != nil { return }
-//line form_file.gox:548
+//line form_file.gox:562
 			__e = __c.Any(focus); if __e != nil { return }
 			__e = __c.Init("script"); if __e != nil { return }
 			{
-//line form_file.gox:550
+//line form_file.gox:564
 				__e = __c.Modify(doors.AHook[[]filePicked]{
 				Name: "pick",
 				Scope: f.field.scope(),
@@ -633,7 +647,7 @@ func (f *fileWidget) Main() gox.Elem {
 					return f.pick(ctx, r.Data()), false
 				},
 			}); if __e != nil { return }
-//line form_file.gox:558
+//line form_file.gox:572
 				__e = __c.Modify(doors.AHook[string]{
 				Name: "retry",
 				Scope: f.field.scope(),
@@ -641,7 +655,7 @@ func (f *fileWidget) Main() gox.Elem {
 					return f.retry(ctx, r.Data()), false
 				},
 			}); if __e != nil { return }
-//line form_file.gox:565
+//line form_file.gox:579
 				__e = __c.Modify(doors.AHook[string]{
 				Name: "failed",
 				Scope: f.field.scope(),
@@ -650,7 +664,7 @@ func (f *fileWidget) Main() gox.Elem {
 					return nil, false
 				},
 			}); if __e != nil { return }
-//line form_file.gox:573
+//line form_file.gox:587
 				__e = __c.Set("data:upload", func() any {
 				url, _ := doors.ResourceHook(f.receive).URL(ctx)
 				return url
@@ -661,32 +675,32 @@ func (f *fileWidget) Main() gox.Elem {
 			__e = __c.Close(); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
-//line form_file.gox:730
+//line form_file.gox:744
 	return })
 
-//line form_file.gox:732
+//line form_file.gox:746
 		if f.field.item != nil {
-//line form_file.gox:733
+//line form_file.gox:747
 			__e = __c.Any(body); if __e != nil { return }
 		} else  {
-//line form_file.gox:735
+//line form_file.gox:749
 			__e = (neui.Space{Name: f.params.Name, Desc: f.params.Label}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 				ctx := __c.Context(); _ = ctx
-//line form_file.gox:735
+//line form_file.gox:749
 				__e = __c.Any(body); if __e != nil { return }
 			return })); if __e != nil { return }
 		}
 	return })
-//line form_file.gox:737
+//line form_file.gox:751
 }
 
-//line form_file.gox:739
+//line form_file.gox:753
 func (f *fileWidget) zone(full bool) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line form_file.gox:740
+//line form_file.gox:754
 		if !full {
-//line form_file.gox:742
+//line form_file.gox:756
 			count, _ := f.count.Read(ctx)
 		label, labelledby := any(nil), any(f.id + "-l")
 		if f.field.item != nil {
@@ -696,51 +710,51 @@ func (f *fileWidget) zone(full bool) gox.Elem {
 
 			__e = __c.Init("label"); if __e != nil { return }
 			{
-//line form_file.gox:749
+//line form_file.gox:763
 				__e = __c.Set("class", "neisland-form-file-zone"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line form_file.gox:750
+//line form_file.gox:764
 				__e = (neui.Use{Desc: "file chooser"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 					ctx := __c.Context(); _ = ctx
 					__e = __c.InitVoid("input"); if __e != nil { return }
 					{
-//line form_file.gox:751
+//line form_file.gox:765
 						__e = __c.Modify(&f.empty); if __e != nil { return }
-//line form_file.gox:752
+//line form_file.gox:766
 						__e = __c.Modify(&f.label); if __e != nil { return }
-//line form_file.gox:753
+//line form_file.gox:767
 						__e = __c.Set("class", "neisland-form-file-input"); if __e != nil { return }
-//line form_file.gox:754
+//line form_file.gox:768
 						__e = __c.Set("id", f.id); if __e != nil { return }
-//line form_file.gox:755
+//line form_file.gox:769
 						__e = __c.Set("type", "file"); if __e != nil { return }
-//line form_file.gox:756
+//line form_file.gox:770
 						__e = __c.Set("accept", f.params.Accept); if __e != nil { return }
-//line form_file.gox:757
+//line form_file.gox:771
 						__e = __c.Set("multiple", f.params.Max > 1); if __e != nil { return }
-//line form_file.gox:758
+//line form_file.gox:772
 						__e = __c.Set("aria-required", aria(f.params.Min > 0)); if __e != nil { return }
-//line form_file.gox:759
+//line form_file.gox:773
 						__e = __c.Set("aria-invalid", aria(shownErr(f.field.error.Get()))); if __e != nil { return }
-//line form_file.gox:760
+//line form_file.gox:774
 						__e = __c.Set("data-required-empty", f.params.Min > 0 && count.done == 0); if __e != nil { return }
-//line form_file.gox:761
+//line form_file.gox:775
 						__e = __c.Set("aria-label", label); if __e != nil { return }
-//line form_file.gox:762
+//line form_file.gox:776
 						__e = __c.Set("aria-labelledby", labelledby); if __e != nil { return }
-//line form_file.gox:763
+//line form_file.gox:777
 						__e = __c.Set("aria-describedby", f.id + "-z " + f.id + "-e"); if __e != nil { return }
 					}
 					__e = __c.Submit(); if __e != nil { return }
 				return })); if __e != nil { return }
 				__e = __c.Init("span"); if __e != nil { return }
 				{
-//line form_file.gox:764
+//line form_file.gox:778
 					__e = __c.Set("class", "neisland-form-file-summary"); if __e != nil { return }
-//line form_file.gox:764
+//line form_file.gox:778
 					__e = __c.Set("id", f.id + "-z"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line form_file.gox:765
+//line form_file.gox:779
 					if f.params.Max > 1 {
 						__e = __c.Text("Drop files or click to choose"); if __e != nil { return }
 					} else  {
@@ -750,41 +764,41 @@ func (f *fileWidget) zone(full bool) gox.Elem {
 				__e = __c.Close(); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line form_file.gox:772
+//line form_file.gox:786
 		} else if f.params.Max > 1 {
 			__e = __c.Init("p"); if __e != nil { return }
 			{
-//line form_file.gox:773
+//line form_file.gox:787
 				__e = __c.Set("class", "neisland-form-search-max"); if __e != nil { return }
-//line form_file.gox:773
+//line form_file.gox:787
 				__e = __c.Set("id", f.id + "-h"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Text("Maximum of "); if __e != nil { return }
-//line form_file.gox:773
+//line form_file.gox:787
 				__e = __c.Any(f.params.Max); if __e != nil { return }
 				__e = __c.Text(" chosen."); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		}
 	return })
-//line form_file.gox:775
+//line form_file.gox:789
 }
 
-//line form_file.gox:777
+//line form_file.gox:791
 func (f *fileWidget) chip(e fileEntry) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("li"); if __e != nil { return }
 		{
-//line form_file.gox:779
+//line form_file.gox:793
 			__e = __c.Set("class", "neisland-form-file-chip"); if __e != nil { return }
-//line form_file.gox:780
+//line form_file.gox:794
 			__e = __c.Set("data-key", e.key); if __e != nil { return }
-//line form_file.gox:781
+//line form_file.gox:795
 			__e = __c.Set("data-uploading", e.status == fileUploading); if __e != nil { return }
-//line form_file.gox:782
+//line form_file.gox:796
 			__e = __c.Set("data-failed", e.status == fileFailed); if __e != nil { return }
-//line form_file.gox:783
+//line form_file.gox:797
 			__e = __c.Set("style", func() any {
 			if e.status == fileUploading {
 				return "--neisland-file-p:0%"
@@ -794,67 +808,67 @@ func (f *fileWidget) chip(e fileEntry) gox.Elem {
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Init("span"); if __e != nil { return }
 			{
-//line form_file.gox:789
+//line form_file.gox:803
 				__e = __c.Set("class", "neisland-form-file-body"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line form_file.gox:790
+//line form_file.gox:804
 				if e.status == fileDone {
 					__e = __c.Init("a"); if __e != nil { return }
 					{
-//line form_file.gox:792
+//line form_file.gox:806
 						__e = __c.Set("class", "neisland-form-file-link"); if __e != nil { return }
-//line form_file.gox:793
+//line form_file.gox:807
 						__e = __c.Set("href", files.MarkdownServe(f.fs, e.path, true)); if __e != nil { return }
-//line form_file.gox:794
+//line form_file.gox:808
 						__e = __c.Set("download", path.Base(e.path)); if __e != nil { return }
-//line form_file.gox:795
+//line form_file.gox:809
 						__e = __c.Set("title", e.name); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line form_file.gox:796
+//line form_file.gox:810
 						__e = __c.Any(e.name); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
-//line form_file.gox:798
+//line form_file.gox:812
 					__e = __c.Any(" "); if __e != nil { return }
 					__e = __c.Init("span"); if __e != nil { return }
 					{
-//line form_file.gox:799
+//line form_file.gox:813
 						__e = __c.Set("class", "neisland-form-file-size"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line form_file.gox:799
+//line form_file.gox:813
 						__e = __c.Any(files.Size(e.size)); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
-//line form_file.gox:800
+//line form_file.gox:814
 				} else if e.status == fileUploading {
 					__e = __c.Init("span"); if __e != nil { return }
 					{
-//line form_file.gox:801
+//line form_file.gox:815
 						__e = __c.Set("class", "neisland-form-file-text"); if __e != nil { return }
-//line form_file.gox:801
+//line form_file.gox:815
 						__e = __c.Set("title", e.name); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line form_file.gox:801
+//line form_file.gox:815
 						__e = __c.Any(e.name); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
-//line form_file.gox:802
+//line form_file.gox:816
 					__e = __c.Any(" "); if __e != nil { return }
 					__e = __c.Init("span"); if __e != nil { return }
 					{
-//line form_file.gox:804
+//line form_file.gox:818
 						__e = __c.Set("class", "neisland-form-file-percent"); if __e != nil { return }
-//line form_file.gox:805
+//line form_file.gox:819
 						__e = __c.Set("role", "progressbar"); if __e != nil { return }
-//line form_file.gox:806
+//line form_file.gox:820
 						__e = __c.Set("aria-label", "Uploading " + e.name); if __e != nil { return }
-//line form_file.gox:807
+//line form_file.gox:821
 						__e = __c.Set("aria-valuemin", "0"); if __e != nil { return }
-//line form_file.gox:808
+//line form_file.gox:822
 						__e = __c.Set("aria-valuemax", "100"); if __e != nil { return }
-//line form_file.gox:809
+//line form_file.gox:823
 						__e = __c.Set("aria-valuenow", "0"); if __e != nil { return }
-//line form_file.gox:810
+//line form_file.gox:824
 						__e = __c.Set("aria-valuetext", "0%"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 						__e = __c.Text("0%"); if __e != nil { return }
@@ -863,47 +877,47 @@ func (f *fileWidget) chip(e fileEntry) gox.Elem {
 				} else  {
 					__e = __c.Init("span"); if __e != nil { return }
 					{
-//line form_file.gox:814
+//line form_file.gox:828
 						__e = __c.Set("class", "neisland-form-file-text"); if __e != nil { return }
-//line form_file.gox:814
+//line form_file.gox:828
 						__e = __c.Set("title", e.name); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line form_file.gox:814
+//line form_file.gox:828
 						__e = __c.Any(e.name); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
-//line form_file.gox:815
+//line form_file.gox:829
 					__e = __c.Any(" "); if __e != nil { return }
 					__e = __c.Init("span"); if __e != nil { return }
 					{
-//line form_file.gox:816
+//line form_file.gox:830
 						__e = __c.Set("class", "neisland-form-file-reason"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line form_file.gox:816
+//line form_file.gox:830
 						__e = __c.Any(e.reason); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
 				}
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line form_file.gox:819
+//line form_file.gox:833
 			if e.status == fileDone {
-//line form_file.gox:820
+//line form_file.gox:834
 				__e = __c.Any(neui.Data{Text: "uploaded file", Object: map[string]any{"name": e.name, "size": e.size, "path": e.path}}); if __e != nil { return }
-//line form_file.gox:821
+//line form_file.gox:835
 			} else if e.status == fileFailed {
-//line form_file.gox:822
+//line form_file.gox:836
 				__e = __c.Any(neui.Data{Text: "file not uploaded", Object: map[string]any{"name": e.name, "error": e.reason}}); if __e != nil { return }
 			}
-//line form_file.gox:824
+//line form_file.gox:838
 			if e.retry {
 				__e = __c.Init("button"); if __e != nil { return }
 				{
-//line form_file.gox:825
+//line form_file.gox:839
 					__e = __c.Set("type", "button"); if __e != nil { return }
-//line form_file.gox:825
+//line form_file.gox:839
 					__e = __c.Set("class", "neisland-form-file-retry"); if __e != nil { return }
-//line form_file.gox:825
+//line form_file.gox:839
 					__e = __c.Set("data-file-retry", e.key); if __e != nil { return }
 					__e = __c.Set("hidden", true); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
@@ -911,12 +925,12 @@ func (f *fileWidget) chip(e fileEntry) gox.Elem {
 				}
 				__e = __c.Close(); if __e != nil { return }
 			}
-//line form_file.gox:827
+//line form_file.gox:841
 			__e = (neui.Use{Desc: "remove " + e.name}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.Init("button"); if __e != nil { return }
 				{
-//line form_file.gox:828
+//line form_file.gox:842
 					__e = __c.Modify(doors.AClick{
 				Scope: f.field.scope(),
 				Batch: true,
@@ -925,15 +939,15 @@ func (f *fileWidget) chip(e fileEntry) gox.Elem {
 					return false
 				},
 			}); if __e != nil { return }
-//line form_file.gox:836
+//line form_file.gox:850
 					__e = __c.Set("type", "button"); if __e != nil { return }
-//line form_file.gox:837
+//line form_file.gox:851
 					__e = __c.Set("class", "neisland-form-remove"); if __e != nil { return }
-//line form_file.gox:838
+//line form_file.gox:852
 					__e = __c.Set("id", f.id + "-x" + e.key); if __e != nil { return }
-//line form_file.gox:839
+//line form_file.gox:853
 					__e = __c.Set("value", e.key); if __e != nil { return }
-//line form_file.gox:840
+//line form_file.gox:854
 					__e = __c.Set("aria-label", func() any {
 				switch e.status {
 				case fileUploading:
@@ -952,5 +966,5 @@ func (f *fileWidget) chip(e fileEntry) gox.Elem {
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line form_file.gox:853
+//line form_file.gox:867
 }

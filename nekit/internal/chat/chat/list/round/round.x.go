@@ -1,6 +1,20 @@
 // Managed by GoX v0.4.0
 
 //line round.gox:1
+// Copyright 2026 doors dev LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package round
 
 import (
@@ -115,11 +129,11 @@ func (l LiveRound) On(e api.IndexedEvent) {
 	l.tools.Append(tool)
 }
 
-//line round.gox:115
+//line round.gox:129
 func (r LiveRound) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line round.gox:117
+//line round.gox:131
 		s := new(doors.Setter)
 	state, _ := r.state.ReadAndSub(ctx, func(ctx context.Context, rs api.RoundState) bool {
 		doors.Call(ctx, s.Set("data-state", string(rs)))
@@ -132,37 +146,37 @@ func (r LiveRound) Main() gox.Elem {
 
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line round.gox:127
+//line round.gox:141
 			__e = __c.Set("class", "nechat-turn"); if __e != nil { return }
-//line round.gox:127
+//line round.gox:141
 			__e = __c.Modify(s); if __e != nil { return }
-//line round.gox:127
+//line round.gox:141
 			__e = __c.Set("data-state", string(state)); if __e != nil { return }
-//line round.gox:127
+//line round.gox:141
 			__e = __c.Set("data-rewind", string(rewind)); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line round.gox:128
+//line round.gox:142
 			if r.input.Len() != 0 {
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line round.gox:129
+//line round.gox:143
 					__e = __c.Set("class", "nechat-user"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line round.gox:130
+//line round.gox:144
 					if r.span {
-//line round.gox:131
+//line round.gox:145
 						__e = __c.Any(span()); if __e != nil { return }
 					}
-//line round.gox:133
+//line round.gox:147
 					__e = __c.Any(bubble(r.input, r.thread.FS())); if __e != nil { return }
 					__e = __c.Init("div"); if __e != nil { return }
 					{
-//line round.gox:134
+//line round.gox:148
 						__e = __c.Set("class", "nechat-gut"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line round.gox:135
+//line round.gox:149
 						if !r.params.Off(params.Edit) {
-//line round.gox:136
+//line round.gox:150
 							__e = __c.Any(rewindButton(r.rewinder, r.rewind, r.id, r.input)); if __e != nil { return }
 						}
 					}
@@ -172,52 +186,52 @@ func (r LiveRound) Main() gox.Elem {
 			}
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line round.gox:141
+//line round.gox:155
 				__e = __c.Set("class", "nechat-agent"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line round.gox:142
+//line round.gox:156
 				if !r.params.Off(params.Tools) {
-//line round.gox:143
+//line round.gox:157
 					__e = __c.Any(records(r.records)); if __e != nil { return }
 				}
-//line round.gox:145
+//line round.gox:159
 				__e = __c.Any(r.response); if __e != nil { return }
-//line round.gox:146
+//line round.gox:160
 				if !r.params.Off(params.Tools) {
-//line round.gox:147
+//line round.gox:161
 					__e = __c.Any(r.tools); if __e != nil { return }
 				}
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line round.gox:150
+//line round.gox:164
 			__e = __c.Any(r.state.Bind(func(rs api.RoundState) gox.Elem {
 			return gox.Elem(func(__c gox.Cursor) (__e error) {
 				ctx := __c.Context(); _ = ctx
-//line round.gox:151
+//line round.gox:165
 				if r.params.Off(params.Retry) {
-//line round.gox:152
+//line round.gox:166
 					__e = __c.Any(status(rs, time.Now(), nil)); if __e != nil { return }
 				} else  {
-//line round.gox:154
+//line round.gox:168
 					__e = __c.Any(status(rs, time.Now(), r.retry())); if __e != nil { return }
 				}
 			return })
-//line round.gox:156
+//line round.gox:170
 		})); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line round.gox:158
+//line round.gox:172
 }
 
-//line round.gox:160
+//line round.gox:174
 func (r LiveRound) retry() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line round.gox:161
+//line round.gox:175
 		__e = (new(doors.Door)).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
-//line round.gox:161
+//line round.gox:175
 			__e = __c.Any(func() any {
 		errored, ok := r.errored.Effect(ctx)
 		if !ok || !errored {
@@ -231,7 +245,7 @@ func (r LiveRound) retry() gox.Elem {
 	}()); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
-//line round.gox:172
+//line round.gox:186
 }
 
 type Round = *round
@@ -265,11 +279,11 @@ type round struct {
 	tools rower.Tools
 }
 
-//line round.gox:205
+//line round.gox:219
 func (r Round) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line round.gox:207
+//line round.gox:221
 		s := new(doors.Setter)
 	rewind, _ := r.rewind.ReadAndSub(ctx, func(ctx context.Context, rs rewindState) bool {
 		doors.Call(ctx, s.Set("data-rewind", string(rs)))
@@ -278,37 +292,37 @@ func (r Round) Main() gox.Elem {
 
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line round.gox:213
+//line round.gox:227
 			__e = __c.Set("class", "nechat-turn"); if __e != nil { return }
-//line round.gox:213
+//line round.gox:227
 			__e = __c.Modify(s); if __e != nil { return }
-//line round.gox:213
+//line round.gox:227
 			__e = __c.Set("data-state", string(r.state())); if __e != nil { return }
-//line round.gox:213
+//line round.gox:227
 			__e = __c.Set("data-rewind", string(rewind)); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line round.gox:214
+//line round.gox:228
 			if r.round.Input.Len() != 0 {
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line round.gox:215
+//line round.gox:229
 					__e = __c.Set("class", "nechat-user"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line round.gox:216
+//line round.gox:230
 					if r.span {
-//line round.gox:217
+//line round.gox:231
 						__e = __c.Any(span()); if __e != nil { return }
 					}
-//line round.gox:219
+//line round.gox:233
 					__e = __c.Any(bubble(r.round.Input, r.thread.FS())); if __e != nil { return }
 					__e = __c.Init("div"); if __e != nil { return }
 					{
-//line round.gox:220
+//line round.gox:234
 						__e = __c.Set("class", "nechat-gut"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line round.gox:221
+//line round.gox:235
 						if !r.params.Off(params.Edit) {
-//line round.gox:222
+//line round.gox:236
 							__e = __c.Any(rewindButton(r.rewinder, r.rewind, r.round.ID, r.round.Input)); if __e != nil { return }
 						}
 					}
@@ -318,39 +332,39 @@ func (r Round) Main() gox.Elem {
 			}
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line round.gox:227
+//line round.gox:241
 				__e = __c.Set("class", "nechat-agent"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line round.gox:228
+//line round.gox:242
 				if !r.params.Off(params.Tools) {
-//line round.gox:229
+//line round.gox:243
 					__e = __c.Any(records(r.round.PinnedRecords)); if __e != nil { return }
 				}
-//line round.gox:231
+//line round.gox:245
 				__e = __c.Any(func() any {
 				r := rower.NewResponse(r.params, r.round.Response, r.thread.FS())
 				r.Close()
 				return r
 			}()); if __e != nil { return }
-//line round.gox:236
+//line round.gox:250
 				if !r.params.Off(params.Tools) {
-//line round.gox:237
+//line round.gox:251
 					__e = __c.Any(r.tools); if __e != nil { return }
 				}
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line round.gox:240
+//line round.gox:254
 			if r.params.Off(params.Retry) {
-//line round.gox:241
+//line round.gox:255
 				__e = __c.Any(status(r.round.State, time.Time{}, nil)); if __e != nil { return }
 			} else  {
-//line round.gox:243
+//line round.gox:257
 				__e = __c.Any(status(r.round.State, time.Time{}, r.retry())); if __e != nil { return }
 			}
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line round.gox:246
+//line round.gox:260
 }
 
 func (r Round) state() api.RoundState {
@@ -360,68 +374,68 @@ func (r Round) state() api.RoundState {
 	return r.round.State
 }
 
-//line round.gox:255
+//line round.gox:269
 func (r Round) retry() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line round.gox:256
+//line round.gox:270
 		if r.errored {
-//line round.gox:257
+//line round.gox:271
 			__e = __c.Any(r.last.Bind(func(b bool) gox.Elem {
 			return gox.Elem(func(__c gox.Cursor) (__e error) {
 				ctx := __c.Context(); _ = ctx
-//line round.gox:258
+//line round.gox:272
 				if b {
-//line round.gox:259
+//line round.gox:273
 					__e = __c.Any(retryButton(r.thread)); if __e != nil { return }
 				}
 			return })
-//line round.gox:261
+//line round.gox:275
 		})); if __e != nil { return }
 		}
 	return })
-//line round.gox:263
+//line round.gox:277
 }
 
-//line round.gox:265
+//line round.gox:279
 func warnMark() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line round.gox:266
+//line round.gox:280
 		__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
-//line round.gox:266
+//line round.gox:280
 			__e = __c.Any(icons.Warning()); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
-//line round.gox:267
+//line round.gox:281
 }
 
-//line round.gox:269
+//line round.gox:283
 func stopMark() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line round.gox:270
+//line round.gox:284
 		__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
-//line round.gox:270
+//line round.gox:284
 			__e = __c.Any(icons.Square()); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
-//line round.gox:271
+//line round.gox:285
 }
 
-//line round.gox:273
+//line round.gox:287
 func rewindButton(composer Rewinder, rewind doors.Beam[rewindState], id api.RoundID, input api.Input) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line round.gox:274
+//line round.gox:288
 		__e = __c.Any(rewind.Bind(func(rs rewindState) gox.Elem {
 		return gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
-//line round.gox:275
+//line round.gox:289
 			if rs != rewindTarget {
-//line round.gox:276
+//line round.gox:290
 				__e = (doors.AClick{
 				Scope: new(doors.ScopeBlocking),
 				On: func(ctx context.Context, rp doors.RequestPointer) bool {
@@ -433,19 +447,19 @@ func rewindButton(composer Rewinder, rewind doors.Beam[rewindState], id api.Roun
 					ctx := __c.Context(); _ = ctx
 					__e = __c.Init("button"); if __e != nil { return }
 					{
-//line round.gox:283
+//line round.gox:297
 						__e = __c.Set("class", "nechat-iconbtn"); if __e != nil { return }
-//line round.gox:283
+//line round.gox:297
 						__e = __c.Set("type", "button"); if __e != nil { return }
-//line round.gox:283
+//line round.gox:297
 						__e = __c.Set("title", "Edit and resend this message"); if __e != nil { return }
-//line round.gox:283
+//line round.gox:297
 						__e = __c.Set("aria-label", "Edit and resend this message"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line round.gox:284
+//line round.gox:298
 						__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 							ctx := __c.Context(); _ = ctx
-//line round.gox:284
+//line round.gox:298
 							__e = __c.Any(icons.Pencil()); if __e != nil { return }
 						return })); if __e != nil { return }
 					}
@@ -453,26 +467,26 @@ func rewindButton(composer Rewinder, rewind doors.Beam[rewindState], id api.Roun
 				return })); if __e != nil { return }
 			}
 		return })
-//line round.gox:287
+//line round.gox:301
 	})); if __e != nil { return }
 	return })
-//line round.gox:288
+//line round.gox:302
 }
 
-//line round.gox:290
+//line round.gox:304
 func retryButton(thread api.ChatThread) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("i"); if __e != nil { return }
 		{
-//line round.gox:291
+//line round.gox:305
 			__e = __c.Set("class", "nechat-rule"); if __e != nil { return }
-//line round.gox:291
+//line round.gox:305
 			__e = __c.Set("aria-hidden", "true"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
-//line round.gox:292
+//line round.gox:306
 		__e = (doors.AClick{
 		Scope: new(doors.ScopeBlocking),
 		On: func(ctx context.Context, rp doors.RequestPointer) bool {
@@ -484,33 +498,33 @@ func retryButton(thread api.ChatThread) gox.Elem {
 			ctx := __c.Context(); _ = ctx
 			__e = __c.Init("button"); if __e != nil { return }
 			{
-//line round.gox:299
+//line round.gox:313
 				__e = __c.Set("class", "nechat-iconbtn"); if __e != nil { return }
-//line round.gox:299
+//line round.gox:313
 				__e = __c.Set("type", "button"); if __e != nil { return }
-//line round.gox:299
+//line round.gox:313
 				__e = __c.Set("aria-label", "Run this round again"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line round.gox:300
+//line round.gox:314
 				__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 					ctx := __c.Context(); _ = ctx
-//line round.gox:300
+//line round.gox:314
 					__e = __c.Any(icons.Retry()); if __e != nil { return }
 				return })); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
-//line round.gox:302
+//line round.gox:316
 }
 
-//line round.gox:304
+//line round.gox:318
 func status(s api.RoundState, live time.Time, retry gox.Elem) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line round.gox:305
+//line round.gox:319
 		if s == api.RoundInput && live.IsZero() {
-//line round.gox:306
+//line round.gox:320
 			__e = __c.Any(statusBlock(warnMark(), gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
 			__e = __c.InitContainer(); if __e != nil { return }
@@ -518,11 +532,11 @@ func status(s api.RoundState, live time.Time, retry gox.Elem) gox.Elem {
 				__e = __c.Text("no response received"); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line round.gox:306
+//line round.gox:320
 		return }), retry)); if __e != nil { return }
-//line round.gox:307
+//line round.gox:321
 		} else if s == api.RoundAbort {
-//line round.gox:308
+//line round.gox:322
 			__e = __c.Any(statusBlock(stopMark(), gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
 			__e = __c.InitContainer(); if __e != nil { return }
@@ -530,11 +544,11 @@ func status(s api.RoundState, live time.Time, retry gox.Elem) gox.Elem {
 				__e = __c.Text("stopped"); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line round.gox:308
+//line round.gox:322
 		return }), retry)); if __e != nil { return }
-//line round.gox:309
+//line round.gox:323
 		} else if s == api.RoundError {
-//line round.gox:310
+//line round.gox:324
 			__e = __c.Any(statusBlock(warnMark(), gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
 			__e = __c.InitContainer(); if __e != nil { return }
@@ -542,11 +556,11 @@ func status(s api.RoundState, live time.Time, retry gox.Elem) gox.Elem {
 				__e = __c.Text("request failed"); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line round.gox:310
+//line round.gox:324
 		return }), retry)); if __e != nil { return }
-//line round.gox:311
+//line round.gox:325
 		} else if s == api.RoundRefuse {
-//line round.gox:312
+//line round.gox:326
 			__e = __c.Any(statusBlock(warnMark(), gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
 			__e = __c.InitContainer(); if __e != nil { return }
@@ -554,20 +568,20 @@ func status(s api.RoundState, live time.Time, retry gox.Elem) gox.Elem {
 				__e = __c.Text("provider declined to answer"); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line round.gox:312
+//line round.gox:326
 		return }), retry)); if __e != nil { return }
 		}
 	return })
-//line round.gox:314
+//line round.gox:328
 }
 
-//line round.gox:316
+//line round.gox:330
 func records(recs []api.Record) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line round.gox:317
+//line round.gox:331
 		if len(recs) == 1 {
-//line round.gox:318
+//line round.gox:332
 			__e = __c.Any(recordsBlock(gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
 			__e = __c.InitContainer(); if __e != nil { return }
@@ -575,104 +589,104 @@ func records(recs []api.Record) gox.Elem {
 				__e = __c.Text("1 record"); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line round.gox:318
+//line round.gox:332
 		return }))); if __e != nil { return }
-//line round.gox:319
+//line round.gox:333
 		} else if len(recs) > 1 {
-//line round.gox:320
+//line round.gox:334
 			__e = __c.Any(recordsBlock(gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
 			__e = __c.InitContainer(); if __e != nil { return }
 			{
-//line round.gox:320
+//line round.gox:334
 				__e = __c.Any(len(recs)); if __e != nil { return }
 				__e = __c.Text(" records"); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line round.gox:320
+//line round.gox:334
 		return }))); if __e != nil { return }
 		}
 	return })
-//line round.gox:322
+//line round.gox:336
 }
 
-//line round.gox:324
+//line round.gox:338
 func recordsBlock(text any) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line round.gox:325
+//line round.gox:339
 			__e = __c.Set("class", "nechat-blk"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line round.gox:326
+//line round.gox:340
 				__e = __c.Set("class", "nechat-gut"); if __e != nil { return }
-//line round.gox:326
+//line round.gox:340
 				__e = __c.Set("aria-hidden", "true"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line round.gox:327
+//line round.gox:341
 				__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 					ctx := __c.Context(); _ = ctx
-//line round.gox:327
+//line round.gox:341
 					__e = __c.Any(icons.FloppyDisk()); if __e != nil { return }
 				return })); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line round.gox:329
+//line round.gox:343
 				__e = __c.Set("class", "nechat-col nechat-records"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line round.gox:329
+//line round.gox:343
 				__e = __c.Any(text); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line round.gox:331
+//line round.gox:345
 }
 
-//line round.gox:333
+//line round.gox:347
 func statusBlock(mark gox.Elem, text any, retry gox.Elem) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line round.gox:334
+//line round.gox:348
 			__e = __c.Set("class", "nechat-blk"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line round.gox:335
+//line round.gox:349
 				__e = __c.Set("class", "nechat-gut"); if __e != nil { return }
-//line round.gox:335
+//line round.gox:349
 				__e = __c.Set("aria-hidden", "true"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line round.gox:335
+//line round.gox:349
 				__e = __c.Any(mark); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line round.gox:336
+//line round.gox:350
 				__e = __c.Set("class", "nechat-col"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line round.gox:337
+//line round.gox:351
 					__e = __c.Set("class", "nechat-status"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
 					__e = __c.Init("span"); if __e != nil { return }
 					{
 						__e = __c.Submit(); if __e != nil { return }
-//line round.gox:338
+//line round.gox:352
 						__e = __c.Any(text); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
-//line round.gox:339
+//line round.gox:353
 					__e = __c.Any(retry); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
@@ -681,16 +695,16 @@ func statusBlock(mark gox.Elem, text any, retry gox.Elem) gox.Elem {
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line round.gox:343
+//line round.gox:357
 }
 
-//line round.gox:345
+//line round.gox:359
 func span() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line round.gox:346
+//line round.gox:360
 			__e = __c.Set("class", "nechat-span"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Init("script"); if __e != nil { return }
@@ -702,57 +716,57 @@ func span() gox.Elem {
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line round.gox:367
+//line round.gox:381
 }
 
-//line round.gox:369
+//line round.gox:383
 func bubble(input api.Input, fs api.FS) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line round.gox:370
+//line round.gox:384
 			__e = __c.Set("class", "nechat-bubble"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line round.gox:371
+//line round.gox:385
 			if input.Text != "" {
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line round.gox:372
+//line round.gox:386
 					__e = __c.Set("class", "nechat-bubble-text"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line round.gox:372
+//line round.gox:386
 					__e = __c.Any(input.Text); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
 			}
-//line round.gox:374
+//line round.gox:388
 			__e = __c.Any(files(input.Attachments, fs)); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line round.gox:376
+//line round.gox:390
 }
 
-//line round.gox:378
+//line round.gox:392
 func files(names []string, fs api.FS) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line round.gox:379
+//line round.gox:393
 		if len(names) != 0 {
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line round.gox:380
+//line round.gox:394
 				__e = __c.Set("class", "nechat-bubble-files"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line round.gox:381
+//line round.gox:395
 				for _, name := range names {
-//line round.gox:382
+//line round.gox:396
 					__e = __c.Any(uploader.Sent{FS: fs, Name: name}); if __e != nil { return }
 				}
 			}
 			__e = __c.Close(); if __e != nil { return }
 		}
 	return })
-//line round.gox:386
+//line round.gox:400
 }

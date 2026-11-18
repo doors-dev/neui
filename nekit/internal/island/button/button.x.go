@@ -1,6 +1,20 @@
 // Managed by GoX v0.4.0
 
 //line button.gox:1
+// Copyright 2026 doors dev LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package button
 
 import (
@@ -64,24 +78,24 @@ func (b widget) Update(ctx context.Context, patch Patch) {
 }
 
 
-//line button.gox:64
+//line button.gox:78
 func (b widget) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line button.gox:65
+//line button.gox:79
 		__e = __c.Any(b.state.Bind(b.render)); if __e != nil { return }
 	return })
-//line button.gox:66
+//line button.gox:80
 }
 
-//line button.gox:68
+//line button.gox:82
 func (b widget) render(p Params) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line button.gox:69
+//line button.gox:83
 		__e = (neui.Use{Desc: p.Text}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
-//line button.gox:69
+//line button.gox:83
 			__e = (doors.AClick{
 		Scope: neui.IslandScope(ctx),
 		Indicator: pending.Indicator(ctx),
@@ -96,23 +110,23 @@ func (b widget) render(p Params) gox.Elem {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.Init("button"); if __e != nil { return }
 				{
-//line button.gox:80
+//line button.gox:94
 					__e = __c.Set("type", "button"); if __e != nil { return }
-//line button.gox:81
+//line button.gox:95
 					__e = __c.Set("class", "neisland-button neisland-button-" + p.Size + " neisland-button-" + p.Style); if __e != nil { return }
-//line button.gox:82
+//line button.gox:96
 					__e = __c.Set("value", p.Value); if __e != nil { return }
-//line button.gox:83
+//line button.gox:97
 					__e = __c.Set("disabled", p.Disabled); if __e != nil { return }
-//line button.gox:84
+//line button.gox:98
 					__e = __c.Set("data-neui", "submit"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line button.gox:85
+//line button.gox:99
 					__e = __c.Any(p.Text); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
 			return })); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
-//line button.gox:87
+//line button.gox:101
 }
