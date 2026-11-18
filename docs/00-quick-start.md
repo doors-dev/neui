@@ -6,7 +6,13 @@ With Neui, a page instance of your Doors app gets an agent thread alongside it. 
 
 > New to Doors? Start with its [get started guide](https://doors.dev/docs/get-started).
 
-Create the Doors app with a provider and serve it:
+Add neui to your module:
+
+```sh
+go get neui.dev
+```
+
+Then create the Doors app with a provider and serve it:
 
 ```go
 // main.go

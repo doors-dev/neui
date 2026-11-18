@@ -169,6 +169,10 @@ Each row was checked against neui's code and the competitors' current docs and s
 
 ## Getting started
 
+```sh
+go get neui.dev
+```
+
 Neui is a Go module (`neui.dev`) that plugs into a Doors app: you configure the agent once with options on the Doors app, turn it on per session once the user is known, and render `nekit.Chat` on the pages where the user should talk to the agent.
 
 Claude, GPT and DeepSeek providers are included, as are SQLite thread storage and disk or S3 upload storage.
