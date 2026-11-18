@@ -18,7 +18,6 @@ import (
 	"cmp"
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -40,22 +39,6 @@ type ordersToolInput struct {
 type ordersToolOutput struct {
 	Shown []order `json:"shown" description:"orders now on the user's screen"`
 	Page pageInfo `json:"page"`
-}
-
-type itemInput struct {
-	Product int `json:"product" required:"true" description:"product id"`
-	Qty int `json:"qty" required:"true" description:"units, at least 1"`
-}
-
-type createOrderInput struct {
-	Customer int `json:"customer" required:"true" description:"customer id"`
-	Items []itemInput `json:"items" required:"true" description:"products and quantities, each product once"`
-	Status string `json:"status,omitempty" description:"paid or unpaid; empty for unpaid"`
-	Address string `json:"address,omitempty" description:"shipping address; empty for the customer's address on file"`
-}
-
-type created struct {
-	ID int `json:"id" description:"id of the new record"`
 }
 
 func (p OrdersPath) query() orderQuery {
@@ -95,23 +78,6 @@ elem ordersPage(path doors.Source[OrdersPath]) {
 					New order
 				</a>
 			</>,
-		}
-		~neui.Tool[createOrderInput, created]{
-			Name: "create_order",
-			Desc: "Create an order, checked like the New order form, and open its page for the user. Stock is taken when it is created",
-			Handler: func(ctx context.Context, in createOrderInput) (created, error) {
-				f := orderForm{Customer: strconv.Itoa(in.Customer), Address: in.Address, Status: cmp.Or(in.Status, string(unpaid))}
-				for _, it := range in.Items {
-					f.Lines = append(f.Lines, lineForm{Product: strconv.Itoa(it.Product), Qty: strconv.Itoa(it.Qty)})
-				}
-				id, errs := shop.SaveOrder(ctx, 0, f)
-				if err := errs.err(); err != nil {
-					return created{}, err
-				}
-				notify(ctx, fmt.Sprintf("Order #%d created", id))
-				navigate(ctx, OrderPath{ID: id})
-				return created{ID: id}, nil
-			},
 		}
 		<section class="overflow-hidden rounded-xl bg-white shadow-xs ring-1 ring-stone-200">
 			~(orderFilters(path))
@@ -356,12 +322,13 @@ elem ordersTable(p OrdersPath) {
 							~sortHeader{Label: "Customer", Key: "customer", First: "customer", Current: sort, Model: p.withSort}
 							~sortHeader{Label: "Date", Key: "date", First: "-date", Current: sort, Class: "hidden @xl:table-cell", Model: p.withSort}
 							<th class=(thClass.Add("hidden @xl:table-cell"))>Status</th>
+							<th class=(thClass.Add("hidden @4xl:table-cell"))>Due</th>
 							~sortHeader{Label: "Total", Key: "total", First: "-total", Current: sort, Right: true, Model: p.withSort}
 						</tr>
 					</thead>
 					<tbody>
 						~(for _, o := range rows {
-							~(orderRow(o))
+							~(orderRow(o, true))
 						})
 					</tbody>
 				</table>
@@ -373,7 +340,7 @@ elem ordersTable(p OrdersPath) {
 	})
 }
 
-elem orderRow(o order) {
+elem orderRow(o order, due bool) {
 	<tr class=(rowClass)>
 		<td class=(tdClass)>
 			~>neui.Use{Desc: fmt.Sprintf("open order #%d", o.ID)} <a (doors.ALink{Model: OrderPath{ID: o.ID}, Batch: true, After: scrollTop}) class=(linkText)>
@@ -391,6 +358,15 @@ elem orderRow(o order) {
 		</td>
 		<td class=(tdClass.Add("hidden text-stone-500 tabular-nums @xl:table-cell"))>~(o.Date)</td>
 		<td class=(tdClass.Add("hidden @xl:table-cell"))>~(badge(o.Status))</td>
+		~(if due {
+			<td class=(tdClass.Add("hidden tabular-nums @4xl:table-cell", when(overdue(o), "font-medium text-red-700"), when(!overdue(o), "text-stone-500")))>
+				~(if o.Status == unpaid {
+					~(o.Due)
+				} else {
+					—
+				})
+			</td>
+		})
 		<td class=(tdClass.Add("text-right font-medium tabular-nums"))>~(money(o.Total))</td>
 	</tr>
 }

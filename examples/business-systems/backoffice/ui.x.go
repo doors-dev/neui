@@ -1162,6 +1162,7 @@ type confirmAction struct {
 	Question string
 	Detail string
 	Confirm string
+	ConfirmDesc string
 	Wait string
 	Full bool
 	Do func(ctx context.Context) error
@@ -1172,47 +1173,78 @@ type confirmState struct {
 	Err string
 }
 
-//line ui.gox:511
+//line ui.gox:512
 func (c confirmAction) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line ui.gox:513
+//line ui.gox:514
 		state := doors.NewSource(confirmState{})
 
-//line ui.gox:515
+//line ui.gox:516
 		__e = __c.Any(state.Bind(func(s confirmState) gox.Elem {
 		return c.view(state, s)
 	})); if __e != nil { return }
 	return })
-//line ui.gox:518
+//line ui.gox:519
 }
 
-//line ui.gox:520
+//line ui.gox:521
+func (c confirmAction) confirm(state doors.Source[confirmState]) gox.Elem {
+	return gox.Elem(func(__c gox.Cursor) (__e error) {
+		ctx := __c.Context(); _ = ctx
+		__e = __c.Init("button"); if __e != nil { return }
+		{
+//line ui.gox:523
+			__e = __c.Modify(doors.AClick{
+			Scope: &doors.ScopeBlocking{},
+			Indicator: doors.IndicateAttr("aria-busy", "true"),
+			Batch: true,
+			On: func(ctx context.Context, _ doors.RequestPointer) bool {
+				if err := c.Do(ctx); err != nil {
+					state.Update(ctx, confirmState{Open: true, Err: err.Error()})
+				}
+				return false
+			},
+		}); if __e != nil { return }
+//line ui.gox:534
+			__e = __c.Set("type", "button"); if __e != nil { return }
+//line ui.gox:535
+			__e = __c.Set("class", btnDanger); if __e != nil { return }
+			__e = __c.Submit(); if __e != nil { return }
+//line ui.gox:536
+			__e = __c.Any(c.Confirm); if __e != nil { return }
+		}
+		__e = __c.Close(); if __e != nil { return }
+	return })
+//line ui.gox:538
+}
+
+//line ui.gox:540
 func (c confirmAction) view(state doors.Source[confirmState], s confirmState) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line ui.gox:521
+//line ui.gox:541
 		if !s.Open {
-//line ui.gox:522
+//line ui.gox:542
 			__e = (neui.Use{Desc: c.Desc}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.Init("button"); if __e != nil { return }
 				{
-//line ui.gox:523
+//line ui.gox:543
 					__e = __c.Modify(doors.AClick{
 				On: func(ctx context.Context, _ doors.RequestPointer) bool {
 					state.Update(ctx, confirmState{Open: true})
 					return false
 				},
 			}); if __e != nil { return }
-//line ui.gox:529
+//line ui.gox:549
 					__e = __c.Set("type", "button"); if __e != nil { return }
-//line ui.gox:530
+//line ui.gox:550
 					__e = __c.Set("class", btnDangerSoft.Add(when(c.Full, "w-full"))); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line ui.gox:531
+//line ui.gox:551
 					__e = __c.Any(icon(c.Icon, "size-4")); if __e != nil { return }
-//line ui.gox:532
+//line ui.gox:552
 					__e = __c.Any(c.Label); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
@@ -1220,91 +1252,83 @@ func (c confirmAction) view(state doors.Source[confirmState], s confirmState) go
 		} else  {
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line ui.gox:535
+//line ui.gox:555
 				__e = __c.Set("class", "rounded-lg bg-red-50 p-4 ring-1 ring-red-200"); if __e != nil { return }
-//line ui.gox:535
+//line ui.gox:555
 				__e = __c.Set("role", "alertdialog"); if __e != nil { return }
-//line ui.gox:535
+//line ui.gox:555
 				__e = __c.Set("aria-label", c.Question); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line ui.gox:536
-				__e = __c.Any(neui.Data{Text: c.Wait}); if __e != nil { return }
+//line ui.gox:556
+				if c.Wait != "" {
+//line ui.gox:557
+					__e = __c.Any(neui.Data{Text: c.Wait}); if __e != nil { return }
+				}
 				__e = __c.Init("p"); if __e != nil { return }
 				{
-//line ui.gox:537
+//line ui.gox:559
 					__e = __c.Set("class", "text-sm font-semibold text-red-900"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line ui.gox:537
+//line ui.gox:559
 					__e = __c.Any(c.Question); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
-//line ui.gox:538
+//line ui.gox:560
 				if c.Detail != "" {
 					__e = __c.Init("p"); if __e != nil { return }
 					{
-//line ui.gox:539
+//line ui.gox:561
 						__e = __c.Set("class", "mt-1 text-sm text-red-800"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line ui.gox:539
+//line ui.gox:561
 						__e = __c.Any(c.Detail); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
 				}
-//line ui.gox:541
+//line ui.gox:563
 				if s.Err != "" {
 					__e = __c.Init("p"); if __e != nil { return }
 					{
-//line ui.gox:542
+//line ui.gox:564
 						__e = __c.Set("class", "mt-2 text-sm font-medium text-red-700"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line ui.gox:542
+//line ui.gox:564
 						__e = __c.Any(s.Err); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
 				}
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line ui.gox:544
+//line ui.gox:566
 					__e = __c.Set("class", "mt-3 flex flex-wrap gap-2"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-					__e = __c.Init("button"); if __e != nil { return }
-					{
-//line ui.gox:546
-						__e = __c.Modify(doors.AClick{
-						Scope: &doors.ScopeBlocking{},
-						Indicator: doors.IndicateAttr("aria-busy", "true"),
-						Batch: true,
-						On: func(ctx context.Context, _ doors.RequestPointer) bool {
-							if err := c.Do(ctx); err != nil {
-								state.Update(ctx, confirmState{Open: true, Err: err.Error()})
-							}
-							return false
-						},
-					}); if __e != nil { return }
-//line ui.gox:557
-						__e = __c.Set("type", "button"); if __e != nil { return }
-//line ui.gox:558
-						__e = __c.Set("class", btnDanger); if __e != nil { return }
-						__e = __c.Submit(); if __e != nil { return }
-//line ui.gox:559
-						__e = __c.Any(c.Confirm); if __e != nil { return }
+//line ui.gox:567
+					if c.ConfirmDesc != "" {
+//line ui.gox:568
+						__e = (neui.Use{Desc: c.ConfirmDesc}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+							ctx := __c.Context(); _ = ctx
+//line ui.gox:568
+							__e = __c.Any(c.confirm(state)); if __e != nil { return }
+						return })); if __e != nil { return }
+					} else  {
+//line ui.gox:570
+						__e = __c.Any(c.confirm(state)); if __e != nil { return }
 					}
-					__e = __c.Close(); if __e != nil { return }
-//line ui.gox:561
+//line ui.gox:572
 					__e = (neui.Use{Desc: "close the confirmation without doing it"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 						ctx := __c.Context(); _ = ctx
 						__e = __c.Init("button"); if __e != nil { return }
 						{
-//line ui.gox:562
+//line ui.gox:573
 							__e = __c.Modify(doors.AClick{
 						On: func(ctx context.Context, _ doors.RequestPointer) bool {
 							state.Update(ctx, confirmState{})
 							return false
 						},
 					}); if __e != nil { return }
-//line ui.gox:568
+//line ui.gox:579
 							__e = __c.Set("type", "button"); if __e != nil { return }
-//line ui.gox:569
+//line ui.gox:580
 							__e = __c.Set("class", btnSecondary); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.Text("Keep it"); if __e != nil { return }
@@ -1317,5 +1341,5 @@ func (c confirmAction) view(state doors.Source[confirmState], s confirmState) go
 			__e = __c.Close(); if __e != nil { return }
 		}
 	return })
-//line ui.gox:575
+//line ui.gox:586
 }

@@ -34,15 +34,6 @@ type customersToolOutput struct {
 	Page pageInfo `json:"page"`
 }
 
-type customerInput struct {
-	Name string `json:"name" required:"true"`
-	Email string `json:"email" required:"true"`
-	Phone string `json:"phone,omitempty"`
-	Company string `json:"company,omitempty"`
-	Address string `json:"address" required:"true" description:"default shipping address"`
-	Notes string `json:"notes,omitempty" description:"internal notes"`
-}
-
 func (p CustomersPath) withSort(sort string) any {
 	p.Sort, p.Page = sort, 0
 	return p
@@ -77,19 +68,6 @@ elem customersPage(path doors.Source[CustomersPath]) {
 					New customer
 				</a>
 			</>,
-		}
-		~neui.Tool[customerInput, created]{
-			Name: "create_customer",
-			Desc: "Add a customer, checked like the New customer form, and open their page for the user",
-			Handler: func(ctx context.Context, in customerInput) (created, error) {
-				id, errs := shop.SaveCustomer(ctx, 0, customerForm(in))
-				if err := errs.err(); err != nil {
-					return created{}, err
-				}
-				notify(ctx, "Customer added")
-				navigate(ctx, CustomerPath{ID: id})
-				return created{ID: id}, nil
-			},
 		}
 		<section class="overflow-hidden rounded-xl bg-white shadow-xs ring-1 ring-stone-200">
 			~>neui.Space{Name: "search", Desc: "Search box of the customers table"} <div>

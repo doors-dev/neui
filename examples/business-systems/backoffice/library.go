@@ -29,11 +29,6 @@ type productsOutput struct {
 	Products []product `json:"products"`
 }
 
-type adjustStockInput struct {
-	ID     int `json:"id" required:"true" description:"product id"`
-	Change int `json:"change" required:"true" description:"units to add; negative to take away"`
-}
-
 func reportLibrary(l neui.Library) error {
 	if err := nekit.IslandRegisterLayout(l); err != nil {
 		return err
@@ -51,12 +46,7 @@ func workbenchLibrary(l neui.Library) error {
 	if err := nekit.IslandRegisterAll(l); err != nil {
 		return err
 	}
-	if err := addShopData(l); err != nil {
-		return err
-	}
-	return l.Tool("adjust_stock", "Add units to a product's stock, or take them away with a negative change; checked like the product form. Returns the product after the change", func(ctx context.Context, in adjustStockInput) (product, error) {
-		return shop.AdjustStock(ctx, in.ID, in.Change)
-	})
+	return addShopData(l)
 }
 
 func addShopData(l neui.Library) error {

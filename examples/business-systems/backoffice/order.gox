@@ -16,11 +16,8 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"slices"
-	"strconv"
-	"strings"
+	"time"
 
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
@@ -42,18 +39,6 @@ elem orderPage(id int) {
 	})
 }
 
-type statusInput struct {
-	Status string `json:"status" required:"true" description:"paid or unpaid"`
-}
-
-type addressInput struct {
-	Address string `json:"address" description:"new shipping address; empty for the customer's address on file"`
-}
-
-type removeItemInput struct {
-	Product int `json:"product" required:"true" description:"product id of the item to take off"`
-}
-
 elem orderView(o order, c customerRow) {
 	~~
 	open := o.Status == paid || o.Status == unpaid
@@ -69,6 +54,9 @@ elem orderView(o order, c customerRow) {
 			Meta: <>
 				~(badge(o.Status))
 				<span>~("Placed ", o.Date)</span>
+				~(if o.Status == unpaid {
+					<span class=(opt(when(overdue(o), "font-medium text-red-700")))>~("Due ", o.Due)</span>
+				})
 				<span>~(money(o.Total))</span>
 			</>,
 			Actions: <>
@@ -85,61 +73,6 @@ elem orderView(o order, c customerRow) {
 		<div class="grid grid-cols-1 gap-6 @4xl:grid-cols-3">
 			<div class="space-y-6 @4xl:col-span-2">
 				~>neui.Space{Name: "items", Desc: "Products on the order with quantities and amounts"} <div>
-					~(if open {
-						~neui.Tool[itemInput, struct{}]{
-							Name: "add_item",
-							Desc: "Add a product to this order; when it is already on the order, its quantity grows by qty. Checked against stock like the edit form",
-							Handler: func(ctx context.Context, in itemInput) (struct{}, error) {
-								line := 0
-								err := shop.ChangeOrder(ctx, o.ID, func(f *orderForm) error {
-									if in.Qty < 1 {
-										return fmt.Errorf("qty must be at least 1")
-									}
-									product := strconv.Itoa(in.Product)
-									i := slices.IndexFunc(f.Lines, func(l lineForm) bool {
-										return l.Product == product
-									})
-									if i < 0 {
-										line = len(f.Lines)
-										f.Lines = append(f.Lines, lineForm{Product: product, Qty: strconv.Itoa(in.Qty)})
-										return nil
-									}
-									line = i
-									qty, _ := strconv.Atoi(f.Lines[i].Qty)
-									f.Lines[i].Qty = strconv.Itoa(qty + in.Qty)
-									return nil
-								})
-								if err != nil {
-									return struct{}{}, errors.New(strings.ReplaceAll(err.Error(), "lines."+strconv.Itoa(line)+".", ""))
-								}
-								notify(ctx, fmt.Sprintf("Order #%d: item added", o.ID))
-								return struct{}{}, nil
-							},
-						}
-						~neui.Tool[removeItemInput, struct{}]{
-							Name: "remove_item",
-							Desc: "Take a product off this order and put its units back in stock; an order keeps at least one item",
-							Handler: func(ctx context.Context, in removeItemInput) (struct{}, error) {
-								err := shop.ChangeOrder(ctx, o.ID, func(f *orderForm) error {
-									product := strconv.Itoa(in.Product)
-									if !slices.ContainsFunc(f.Lines, func(l lineForm) bool {
-										return l.Product == product
-									}) {
-										return fmt.Errorf("product %d is not on order #%d", in.Product, o.ID)
-									}
-									f.Lines = slices.DeleteFunc(f.Lines, func(l lineForm) bool {
-										return l.Product == product
-									})
-									return nil
-								})
-								if err != nil {
-									return struct{}{}, err
-								}
-								notify(ctx, fmt.Sprintf("Order #%d: item removed", o.ID))
-								return struct{}{}, nil
-							},
-						}
-					})
 					~card{
 						Title: "Items",
 						Flush: true,
@@ -147,23 +80,6 @@ elem orderView(o order, c customerRow) {
 					}
 				</div>
 				~>neui.Space{Name: "shipping", Desc: "Where the order ships"} <div>
-					~(if open {
-						~neui.Tool[addressInput, struct{}]{
-							Name: "update_shipping_address",
-							Desc: "Change where this order ships",
-							Handler: func(ctx context.Context, in addressInput) (struct{}, error) {
-								err := shop.ChangeOrder(ctx, o.ID, func(f *orderForm) error {
-									f.Address = in.Address
-									return nil
-								})
-								if err != nil {
-									return struct{}{}, err
-								}
-								notify(ctx, fmt.Sprintf("Order #%d: shipping address saved", o.ID))
-								return struct{}{}, nil
-							},
-						}
-					})
 					~card{
 						Title: "Shipping",
 						Body: <>
@@ -197,23 +113,6 @@ elem orderView(o order, c customerRow) {
 					</>,
 				}
 				~>neui.Space{Name: "actions", Desc: "Payment status and what can still be done with the order: refund a paid one, cancel an unpaid one"} <div>
-					~(if open {
-						~neui.Tool[statusInput, struct{}]{
-							Name: "set_status",
-							Desc: "Mark this order paid or unpaid. Refunded and cancelled are not statuses to set: the refund and cancel buttons here open a confirmation only the user can press",
-							Handler: func(ctx context.Context, in statusInput) (struct{}, error) {
-								err := shop.ChangeOrder(ctx, o.ID, func(f *orderForm) error {
-									f.Status = in.Status
-									return nil
-								})
-								if err != nil {
-									return struct{}{}, err
-								}
-								notify(ctx, fmt.Sprintf("Order #%d marked %s", o.ID, in.Status))
-								return struct{}{}, nil
-							},
-						}
-					})
 					~card{Title: "Actions", Body: orderActions(o)}
 				</div>
 			</div>
@@ -265,39 +164,41 @@ elem orderActions(o order) {
 			~confirmAction{
 				Label: "Refund order",
 				Icon: iconMoney,
-				Desc: "start a refund of this order; the user must then confirm it on the page",
+				Desc: "start a refund of this order; Confirm refund in the confirmation completes it",
 				Question: fmt.Sprintf("Refund %s to %s?", money(o.Total), o.Customer),
 				Detail: "The money goes back to the customer's card. This can't be undone.",
 				Confirm: "Confirm refund",
 				Full: true,
-				Wait: "The refund waits for the user: only they can press Confirm refund. Ask them to confirm it on the page.",
+				ConfirmDesc: "refund this order now; it can't be undone",
 				Do: func(ctx context.Context) error {
-					if err := shop.Refund(ctx, o.ID); err != nil {
-						return err
-					}
-					notify(ctx, fmt.Sprintf("Order #%d refunded", o.ID))
-					return nil
+					_, err := refundOrder(ctx, orderInput{Order: o.ID})
+					return err
 				},
 			}
 		</>
 	} else if o.Status == unpaid {
 		<>
-			<p class="mb-3 text-sm text-stone-500">Not paid yet. Mark it paid in Edit order, or cancel it to put the items back in stock.</p>
+			<p class="mb-3 text-sm text-stone-500">
+				~("Not paid yet, due ", shortDate(o.Due), ". Mark it paid in Edit order, or cancel it to put the items back in stock.")
+			</p>
+			~(if o.Reminded != "" {
+				<p class="mb-3 flex items-center gap-1.5 text-sm text-stone-600">
+					~(icon(iconClock, "size-4 text-stone-400"))
+					~("Reminder sent ", shortDate(o.Reminded))
+				</p>
+			})
 			~confirmAction{
 				Label: "Cancel order",
 				Icon: iconClose,
-				Desc: "start cancelling this order; the user must then confirm it on the page",
+				Desc: "start cancelling this order; Cancel order in the confirmation completes it",
 				Question: fmt.Sprintf("Cancel order #%d?", o.ID),
 				Detail: "Its items go back into stock. A cancelled order can't be reopened.",
 				Confirm: "Cancel order",
 				Full: true,
-				Wait: "Cancelling waits for the user: only they can press Cancel order in the confirmation. Ask them to confirm it on the page.",
+				ConfirmDesc: "cancel this order now; it can't be undone",
 				Do: func(ctx context.Context) error {
-					if err := shop.Cancel(ctx, o.ID); err != nil {
-						return err
-					}
-					notify(ctx, fmt.Sprintf("Order #%d cancelled", o.ID))
-					return nil
+					_, err := cancelOrder(ctx, orderInput{Order: o.ID})
+					return err
 				},
 			}
 		</>
@@ -306,4 +207,8 @@ elem orderActions(o order) {
 			This order is ~(string(o.Status)) and closed. Nothing more can be done with it.
 		</p>
 	})
+}
+
+func overdue(o order) bool {
+	return o.Status == unpaid && o.Due < time.Now().Format(time.DateOnly)
 }

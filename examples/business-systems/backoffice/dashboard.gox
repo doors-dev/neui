@@ -90,7 +90,7 @@ elem dashboardBody(st stats, orders []order) {
 						</thead>
 						<tbody>
 							~(for _, o := range recent {
-								~(orderRow(o))
+								~(orderRow(o, false))
 							})
 						</tbody>
 					</table>

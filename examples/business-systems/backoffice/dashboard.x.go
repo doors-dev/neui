@@ -250,7 +250,7 @@ func dashboardBody(st stats, orders []order) gox.Elem {
 //line dashboard.gox:92
 								for _, o := range recent {
 //line dashboard.gox:93
-									__e = __c.Any(orderRow(o)); if __e != nil { return }
+									__e = __c.Any(orderRow(o, false)); if __e != nil { return }
 								}
 							}
 							__e = __c.Close(); if __e != nil { return }

@@ -17,7 +17,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"strconv"
 
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
@@ -33,25 +32,6 @@ type productsToolInput struct {
 type productsToolOutput struct {
 	Shown []product `json:"shown" description:"products now on the user's screen"`
 	Page pageInfo `json:"page"`
-}
-
-type productInput struct {
-	SKU string `json:"sku" required:"true" description:"unique code without spaces, like SKU-109"`
-	Name string `json:"name" required:"true"`
-	Price float64 `json:"price" required:"true" description:"USD per unit"`
-	Stock int `json:"stock" description:"units in stock"`
-}
-
-type productPatch struct {
-	ID int `json:"id" required:"true" description:"product id"`
-	SKU *string `json:"sku,omitempty" description:"omit to keep"`
-	Name *string `json:"name,omitempty" description:"omit to keep"`
-	Price *float64 `json:"price,omitempty" description:"USD per unit; omit to keep"`
-	Stock *int `json:"stock,omitempty" description:"units in stock; omit to keep, or use adjust_stock to add or take away"`
-}
-
-func (in productInput) form() productForm {
-	return productForm{SKU: in.SKU, Name: in.Name, Price: strconv.FormatFloat(in.Price, 'f', -1, 64), Stock: strconv.Itoa(in.Stock)}
 }
 
 func (p ProductsPath) withSort(sort string) any {
@@ -88,19 +68,6 @@ elem productsPage(path doors.Source[ProductsPath]) {
 					New product
 				</a>
 			</>,
-		}
-		~neui.Tool[productInput, created]{
-			Name: "create_product",
-			Desc: "Add a product, checked like the New product form, and open its page for the user",
-			Handler: func(ctx context.Context, in productInput) (created, error) {
-				id, errs := shop.SaveProduct(ctx, 0, in.form())
-				if err := errs.err(); err != nil {
-					return created{}, err
-				}
-				notify(ctx, "Product added")
-				navigate(ctx, ProductPath{ID: id})
-				return created{ID: id}, nil
-			},
 		}
 		<section class="overflow-hidden rounded-xl bg-white shadow-xs ring-1 ring-stone-200">
 			~>neui.Space{Name: "search", Desc: "Search box of the products table"} <div>
@@ -154,42 +121,6 @@ elem productsTable(p ProductsPath) {
 	~>neui.Space{Name: "table", Desc: "Products matching the search with price and stock, one page at a time; the column headers sort it"} <div>
 		~neui.Data{Text: "products shown in the table", Object: rows}
 		~neui.Data{Text: fmt.Sprintf("page %d of %d; %d products match", info.Page, info.Pages, info.Total)}
-		~neui.Tool[productPatch, struct{}]{
-			Name: "update_product",
-			Desc: "Change a product's SKU, name, price or stock, checked like the product form; omitted fields stay as they are",
-			Handler: func(ctx context.Context, in productPatch) (struct{}, error) {
-				p, ok := shop.Product(in.ID)
-				if !ok {
-					return struct{}{}, fmt.Errorf("no product %d", in.ID)
-				}
-				f := p.form()
-				patch(&f.SKU, in.SKU)
-				patch(&f.Name, in.Name)
-				if in.Price != nil {
-					f.Price = strconv.FormatFloat(*in.Price, 'f', -1, 64)
-				}
-				if in.Stock != nil {
-					f.Stock = strconv.Itoa(*in.Stock)
-				}
-				if _, errs := shop.SaveProduct(ctx, in.ID, f); len(errs) > 0 {
-					return struct{}{}, errs.err()
-				}
-				notify(ctx, f.Name + " saved")
-				return struct{}{}, nil
-			},
-		}
-		~neui.Tool[adjustStockInput, product]{
-			Name: "adjust_stock",
-			Desc: "Add units to a product's stock, or take them away with a negative change. Returns the product after the change",
-			Handler: func(ctx context.Context, in adjustStockInput) (product, error) {
-				p, err := shop.AdjustStock(ctx, in.ID, in.Change)
-				if err != nil {
-					return product{}, err
-				}
-				notify(ctx, fmt.Sprintf("%s: %d in stock", p.Name, p.Stock))
-				return p, nil
-			},
-		}
 		~(if len(all) == 0 {
 			~emptyState{
 				Icon: iconProducts,

@@ -74,6 +74,8 @@ type order struct {
 	CustomerID int     `json:"customer_id"`
 	Customer   string  `json:"customer"`
 	Date       string  `json:"date" description:"YYYY-MM-DD"`
+	Due        string  `json:"due" description:"payment due date, YYYY-MM-DD"`
+	Reminded   string  `json:"reminded,omitempty" description:"date of the last payment reminder, YYYY-MM-DD"`
 	Status     status  `json:"status"`
 	Address    string  `json:"address" description:"shipping address"`
 	Lines      []line  `json:"lines"`
@@ -191,6 +193,7 @@ func newShop() *shopData {
 			used[p.ID] = true
 			o.Lines = append(o.Lines, line{ProductID: p.ID, SKU: p.SKU, Name: p.Name, Qty: 1 + r.IntN(3), Price: p.Price})
 		}
+		o.Due = addDays(o.Date, dueDays)
 		orders = append(orders, o)
 	}
 	orders[36].CustomerID = 2
@@ -411,6 +414,16 @@ func (s *shopData) Product(id int) (product, bool) {
 
 const lowStock = 5
 
+const dueDays = 14
+
+func addDays(date string, days int) string {
+	t, err := time.Parse(time.DateOnly, date)
+	if err != nil {
+		return date
+	}
+	return t.AddDate(0, 0, days).Format(time.DateOnly)
+}
+
 type customerForm struct {
 	Name    string `form:"name"`
 	Email   string `form:"email"`
@@ -564,6 +577,10 @@ func (s *shopData) AdjustStock(ctx context.Context, id int, change int) (product
 	f := p.form()
 	f.Stock = strconv.Itoa(p.Stock + change)
 	if _, errs := s.SaveProduct(ctx, id, f); len(errs) > 0 {
+		if msg, ok := errs["stock"]; ok {
+			delete(errs, "stock")
+			errs["change"] = fmt.Sprintf("%s There are %d in stock.", msg, p.Stock)
+		}
 		return product{}, errs.err()
 	}
 	p, _ = s.Product(id)
@@ -618,7 +635,33 @@ func (s *shopData) ChangeOrder(ctx context.Context, id int, change func(f *order
 		return err
 	}
 	_, errs := s.SaveOrder(ctx, id, f)
-	return errs.err()
+	return errs.items(f)
+}
+
+func (e fieldErrors) items(f orderForm) error {
+	out := fieldErrors{}
+	for key, msg := range e {
+		rest, ok := strings.CutPrefix(key, "lines.")
+		if !ok {
+			if key == "lines" {
+				key = "items"
+			}
+			out[key] = msg
+			continue
+		}
+		n, field, _ := strings.Cut(rest, ".")
+		i, _ := strconv.Atoi(n)
+		product := ""
+		if i >= 0 && i < len(f.Lines) {
+			product = f.Lines[i].Product
+		}
+		if field == "qty" {
+			out["qty of product "+product] = msg
+		} else {
+			out["product "+product] = msg
+		}
+	}
+	return out.err()
 }
 
 func (s *shopData) SaveOrder(ctx context.Context, id int, f orderForm) (int, fieldErrors) {
@@ -636,7 +679,7 @@ func (s *shopData) SaveOrder(ctx context.Context, id int, f orderForm) (int, fie
 			return 0, fieldErrors{"": "Refunded and cancelled orders can't be changed."}
 		}
 	}
-	o := order{ID: id, Date: old.Date, Address: strings.TrimSpace(f.Address), Status: status(f.Status)}
+	o := order{ID: id, Date: old.Date, Due: old.Due, Reminded: old.Reminded, Address: strings.TrimSpace(f.Address), Status: status(f.Status)}
 	cid, _ := strconv.Atoi(f.Customer)
 	ci := slices.IndexFunc(s.customers, func(c customer) bool { return c.ID == cid })
 	if ci < 0 {
@@ -703,6 +746,7 @@ func (s *shopData) SaveOrder(ctx context.Context, id int, f orderForm) (int, fie
 		o.ID = s.nextID.order
 		s.nextID.order++
 		o.Date = time.Now().Format(time.DateOnly)
+		o.Due = addDays(o.Date, dueDays)
 		s.orders = append(s.orders, o)
 	} else {
 		i := slices.IndexFunc(s.orders, func(x order) bool { return x.ID == id })
@@ -724,7 +768,10 @@ func (s *shopData) Refund(ctx context.Context, id int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	i := slices.IndexFunc(s.orders, func(o order) bool { return o.ID == id })
-	if i < 0 || s.orders[i].Status != paid {
+	if i < 0 {
+		return fmt.Errorf("no order %d", id)
+	}
+	if s.orders[i].Status != paid {
 		return errors.New("only paid orders can be refunded")
 	}
 	s.orders[i].Status = refunded
@@ -736,7 +783,10 @@ func (s *shopData) Cancel(ctx context.Context, id int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	i := slices.IndexFunc(s.orders, func(o order) bool { return o.ID == id })
-	if i < 0 || s.orders[i].Status != unpaid {
+	if i < 0 {
+		return fmt.Errorf("no order %d", id)
+	}
+	if s.orders[i].Status != unpaid {
 		return errors.New("only unpaid orders can be cancelled; refund a paid one")
 	}
 	s.orders[i].Status = cancelled
@@ -745,6 +795,39 @@ func (s *shopData) Cancel(ctx context.Context, id int) error {
 	}
 	defer s.bump(ctx)
 	return nil
+}
+
+func (s *shopData) Remind(ctx context.Context, id int) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	i := slices.IndexFunc(s.orders, func(o order) bool { return o.ID == id })
+	if i < 0 {
+		return "", fmt.Errorf("no order %d", id)
+	}
+	if s.orders[i].Status != unpaid {
+		return "", errors.New("only unpaid orders get payment reminders")
+	}
+	s.orders[i].Reminded = time.Now().Format(time.DateOnly)
+	defer s.bump(ctx)
+	return s.view(s.orders[i]).Customer, nil
+}
+
+func (s *shopData) ExtendDue(ctx context.Context, id int, days int) (string, error) {
+	if days < 1 || days > 60 {
+		return "", errors.New("days: from 1 to 60")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	i := slices.IndexFunc(s.orders, func(o order) bool { return o.ID == id })
+	if i < 0 {
+		return "", fmt.Errorf("no order %d", id)
+	}
+	if s.orders[i].Status != unpaid {
+		return "", errors.New("only unpaid orders have a due date to extend")
+	}
+	s.orders[i].Due = addDays(s.orders[i].Due, days)
+	defer s.bump(ctx)
+	return s.orders[i].Due, nil
 }
 
 type stats struct {

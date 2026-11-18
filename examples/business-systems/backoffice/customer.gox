@@ -15,7 +15,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"strconv"
 	"time"
@@ -51,21 +50,6 @@ elem customerView(id int, page doors.Beam[int]) {
 		}
 		return customerDetail(c, page)
 	})
-}
-
-type customerPatch struct {
-	Name *string `json:"name,omitempty" description:"omit to keep"`
-	Email *string `json:"email,omitempty" description:"omit to keep"`
-	Phone *string `json:"phone,omitempty" description:"omit to keep; empty to clear"`
-	Company *string `json:"company,omitempty" description:"omit to keep; empty to clear"`
-	Address *string `json:"address,omitempty" description:"default shipping address; omit to keep"`
-	Notes *string `json:"notes,omitempty" description:"internal notes; omit to keep, empty to clear"`
-}
-
-func patch(to *string, from *string) {
-	if from != nil {
-		*to = *from
-	}
 }
 
 elem customerDetail(c customerRow, page doors.Beam[int]) {
@@ -121,24 +105,6 @@ elem customerDetail(c customerRow, page doors.Beam[int]) {
 				}
 			</div>
 			~>neui.Space{Name: "contact", Desc: "Contact details of " + c.Name} <div>
-				~neui.Tool[customerPatch, struct{}]{
-					Name: "update_customer",
-					Desc: "Change the contact details of this customer, checked like the edit form; omitted fields stay as they are",
-					Handler: func(ctx context.Context, in customerPatch) (struct{}, error) {
-						f := c.customer.form()
-						patch(&f.Name, in.Name)
-						patch(&f.Email, in.Email)
-						patch(&f.Phone, in.Phone)
-						patch(&f.Company, in.Company)
-						patch(&f.Address, in.Address)
-						patch(&f.Notes, in.Notes)
-						if _, errs := shop.SaveCustomer(ctx, c.ID, f); len(errs) > 0 {
-							return struct{}{}, errs.err()
-						}
-						notify(ctx, "Customer saved")
-						return struct{}{}, nil
-					},
-				}
 				~card{
 					Title: "Contact",
 					Body: dl(

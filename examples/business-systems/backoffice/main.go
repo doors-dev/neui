@@ -48,7 +48,7 @@ func main() {
 	}, neui.WithProvider(provider), neui.WithSystemPrompt(
 		"Back office of Kettle & Burr, a small coffee gear shop. "+
 			"The user works on the pages next to the chat: prefer acting there, so they see it happen. "+
-			"Refunds, cancellations and deletions happen only when the user confirms them on the page.",
+			"Deletions happen only when the user confirms them on the page.",
 	), neui.WithModules(
 		neui.ModuleJS,
 		neui.ModuleXLS(neui.XLSConfig{}),
