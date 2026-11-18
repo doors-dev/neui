@@ -111,7 +111,7 @@ func (l Library) Build() error {
 			if first {
 				first = false
 				if control {
-					b.WriteString("\nControls are what the user acts on: c = ui.<name>(params); c.update(patch)\nWhen the user acts on c, ev = ui.draw() is {id: c.id, output}, output shaped as c's output schema below. Read c's fields only from ev.output, never from ev itself: ev.output.x, not ev.x. ui.draw(ms) gives null if ms pass first.\n")
+					b.WriteString("\nControls are what the user acts on: c = ui.<name>(params); c.update(patch)\nWhen the user acts on c, action = ui.draw() is {id: c.id, output}, output shaped as c's output schema below. Read c's fields only from action.output, never from action itself: action.output.x, not action.x. ui.draw(ms) gives null if ms pass first.\n")
 				} else {
 					b.WriteString("\nViews show something: v = ui.<name>(params); v.update(patch)\n")
 				}

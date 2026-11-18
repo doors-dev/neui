@@ -412,6 +412,11 @@ func (r *run) Notify(script uint, data json.RawMessage, idle bool) {
 	r.task.Notify(data, meta)
 }
 
+func (r *run) Note(note string) {
+	data, _ := json.Marshal(note)
+	go r.task.Notify(data, map[string]any{"kind": "script_note", "script": r.current})
+}
+
 func (r *run) NotificationsCap() int {
 	return r.notificationsCap
 }

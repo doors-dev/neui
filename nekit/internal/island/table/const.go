@@ -1,7 +1,7 @@
 package table
 
 // Desc describes the table control to the agent, for Library.Control.
-const Desc = "For many rows, rows loaded on demand, or rows the user picks; a short table to read belongs in markdown. Set either query or rows. In a row, it fills the space left on its line."
+const Desc = "For many rows, rows loaded on demand, or rows the user picks; a short table to read belongs in markdown. With many records, a common pattern is a table whose row actions act on a row or open a form for it; one form holding every record gets too long to use. Set either query or rows. Inside ui.row, it takes the width the other items leave."
 
 const getPageName = "get_page"
 const getPageDesc = "Read the table as the user sees it."
@@ -16,13 +16,13 @@ const setSelectedDesc = "Select or unselect rows for the user. It does not submi
 const getSelectedName = "get_selected"
 const getSelectedDesc = "Read which rows are selected, on every page."
 const submitSelectedName = "submit_selected"
-const submitSelectedDesc = "Press the selection's submit button for the user. Returns once the script draws again or its part ends."
+const submitSelectedDesc = "Press the selection's submit button for the user. Returns once the script draws again or its part ends; a success means the script was waiting for the user's action."
 const clearSelectedName = "clear_selected"
 const clearSelectedDesc = "Unselect all rows, on every page."
 const clickRowName = "click_row"
-const clickRowDesc = "Click a row's first cell for the user. Returns once the script draws again or its part ends."
+const clickRowDesc = "Click a row's first cell for the user. Returns once the script draws again or its part ends; a success means the script was waiting for the user's action."
 const clickActionName = "click_action"
-const clickActionDesc = "Press one of a row's action buttons for the user. Returns once the script draws again or its part ends."
+const clickActionDesc = "Press one of a row's action buttons for the user. Returns once the script draws again or its part ends; a success means the script was waiting for the user's action."
 
 const rowsFailedMessage = "the rows could not be loaded: %w"
 const pastLastPageMessage = "no page %d: the last is %d"

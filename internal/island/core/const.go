@@ -17,6 +17,7 @@ const notificationsLimitMessage = "the ui.notify values since the last ui.draw w
 const nameMessage = "a library name must be a JS identifier"
 const nameTakenMessage = "a library name is already taken by another view, control, layout or fetch"
 const widgetKindNotFoundMessage = "no such view or control in this island: island_spec lists them"
+const drawFallbackNote = "Your script read %[1]s on what ui.draw() returned, but the control's fields are under .output. The script kept running and got .output%[1]s instead. In future scripts, read .output.<field>. You won't get any more notifications of this type this run."
 const definitionClashMessage = "two different types share this schema definition name even with its content hash appended: rename one of them"
 
 var errSlotNotFound = errors.New(slotNotFoundMessage)

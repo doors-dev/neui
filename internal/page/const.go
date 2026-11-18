@@ -55,6 +55,8 @@ Open one when it serves the user better than chat or direct page calls do:
 - Complex input: several fields, a choice from options, a confirmation, or a structured answer that would be clumsy to collect in prose.
 - A custom view: a table, summary, comparison or overview built from app data that the app itself doesn't show.
 
+Don't open one when a script alone does the job and you have the js module; for example, when bulk work on the page needs nothing from the user, such as the same steps over many rows.
+
 Build what the request needs, plus what the app needs to work and be easy to use. An app usually serves this one task and is then closed: skip undo, history, extra screens and write-backs nobody asked for.
 
 To the user, an island is part of the page: tell them what its app shows or asks, not how its script, parts and task work, unless they ask.
@@ -91,10 +93,10 @@ Example, with made-up names: the real views, controls, layouts and app functions
     ui.root.set(ui.column({}, ui.heading({ text: "Orders" }), notice, body))
     notice.set(ui.message({ text: "Pick an order to open it" }))
     body.set(ui.orderList({ orders: app.orders({}) }))
-    var ev = ui.draw()
+    var action = ui.draw()
     notice.set()
-    body.set(ui.orderEditor({ order: app.order({ id: ev.output }) }))
-    ev = ui.draw()
+    body.set(ui.orderEditor({ order: app.order({ id: action.output }) }))
+    action = ui.draw()
 
 What the island shows is also a space of the page: the island's screen child space. While an app runs, it holds a child space for each view and control on screen; otherwise it holds the island's own placeholder or end screen, which may have content of its own. A view or control may expose inputs, data or tools there, so you can help the user with the app or check it, but none has to.
 
@@ -108,7 +110,7 @@ For a dialog, such as a confirmation or a question for one step, keep the screen
     ui.root.set(main)
     ...
     ui.root.set(ui.column({}, ui.message({ text: "Delete order 7?" }), ui.row({}, yes, no)))
-    ev = ui.draw()
+    action = ui.draw()
     ui.root.set(main)
 
 App functions and your tools
@@ -136,26 +138,26 @@ Example, with made-up names:
     body.set(orders)
     function work() {
       while (true) {
-        var ev = ui.draw()
-        if (ev.id === done.id) {
+        var action = ui.draw()
+        if (action.id === done.id) {
           ui.notify({ saved: saved })
           ui.end()
-        } else if (ev.id === orders.id) {
-          editor = ui.orderEditor({ order: app.order({ id: ev.output }) })
+        } else if (action.id === orders.id) {
+          editor = ui.orderEditor({ order: app.order({ id: action.output }) })
           body.set(editor)
-        } else if (ev.id === editor.id) {
+        } else if (action.id === editor.id) {
           try {
-            app.saveOrder(ev.output)
+            app.saveOrder(action.output)
           } catch (e) {
             status.update({ text: e.message })
             continue
           }
           saved++
-          if (ev.output.refund > 0) {
-            ui.notify({ order: ev.output.id, refund: ev.output.refund })
+          if (action.output.refund > 0) {
+            ui.notify({ order: action.output.id, refund: action.output.refund })
             return // the part ends here
           }
-          status.update({ text: "Saved order " + ev.output.id })
+          status.update({ text: "Saved order " + action.output.id })
           body.set(orders) // the list as the user left it
         }
       }

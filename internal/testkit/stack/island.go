@@ -61,7 +61,7 @@ func Island(t *testing.T, app devkit.App) *IslandApp {
 	if err := page.WaitLoad(); err != nil {
 		t.Fatal(err)
 	}
-	a.Page = page.Timeout(a.guard)
+	a.Page = page.Timeout(time.Minute)
 	return a
 }
 

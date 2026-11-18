@@ -11,6 +11,7 @@ const ui = (() => {
 	const draw = __draw
 	const notify = __notify
 	const end = __end
+	const fallback = __fallback
 	delete globalThis.__create;
 	delete globalThis.__update;
 	delete globalThis.__release;
@@ -23,6 +24,7 @@ const ui = (() => {
 	delete globalThis.__draw
 	delete globalThis.__notify
 	delete globalThis.__end
+	delete globalThis.__fallback
 	const flatten = (content) => content.flat(Infinity).filter(c => c !== null && c !== undefined && c !== false)
 	const Widget = class {
 		static #reg = new FinalizationRegistry(id => release(id));
@@ -107,7 +109,19 @@ const ui = (() => {
 		if (result?.interrupt) {
 			while (true) { }
 		}
-		return result
+		if (result === null) {
+			return result
+		}
+		return new Proxy(result, {
+			get(target, key, receiver) {
+				const output = target.output
+				if (typeof key !== "string" || key in target || output === null || typeof output !== "object" || Array.isArray(output) || !Object.hasOwn(output, key)) {
+					return Reflect.get(target, key, receiver)
+				}
+				fallback(key)
+				return output[key]
+			}
+		})
 	}
 	ui.root = new Slot(true)
 	ui.notify = notify

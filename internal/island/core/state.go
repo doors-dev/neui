@@ -28,6 +28,7 @@ type Run interface {
 	PageContext() context.Context
 	Library() Library
 	Notify(script uint, data json.RawMessage, idle bool)
+	Note(note string)
 	Script() uint
 	NotificationsCap() int
 	Seed(context.Context, gox.Comp)
@@ -105,6 +106,7 @@ type state struct {
 	root               slot
 	seeded             bool
 	applied            chan struct{}
+	noted              bool
 }
 
 func (s *state) Release() {
@@ -165,6 +167,10 @@ func (s *state) RegisterTools(vm *quickjs.VM) error {
 		panic(err)
 	}
 	_, err = m.Add("draw", "", s.toolDraw)
+	if err != nil {
+		panic(err)
+	}
+	_, err = m.Add("fallback", "", s.toolFallback)
 	if err != nil {
 		panic(err)
 	}
@@ -390,6 +396,20 @@ func (s *state) toolDraw(ctx context.Context, ms int) (*Result, error) {
 		return nil, err
 	}
 	return s.collect()
+}
+
+func (s *state) toolFallback(ctx context.Context, key string) (struct{}, error) {
+	if s.noted {
+		return struct{}{}, nil
+	}
+	s.noted = true
+	path := "." + key
+	if !identifier.MatchString(key) {
+		quoted, _ := json.Marshal(key)
+		path = "[" + string(quoted) + "]"
+	}
+	s.run.Note(fmt.Sprintf(drawFallbackNote, path))
+	return struct{}{}, nil
 }
 
 func (s *state) collect() (*Result, error) {
