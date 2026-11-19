@@ -486,6 +486,46 @@ func (t *thread) switchStateRoundReplay(round api.Round, replay []api.Message) {
 	}
 }
 
+func (t *thread) rewind(cmd commandRewind) {
+	inputBytes := 0
+	for _, c := range cmd.input.Content() {
+		if text, ok := c.(api.ContentText); ok {
+			inputBytes += len(text.Text)
+		}
+	}
+	if inputBytes > replay.RoundItemBudget(cmd.link.backend.Config(), cmd.link.backend.Provider().Model()) {
+		cmd.Err(api.ErrInputTooLarge)
+		return
+	}
+	round, replay, removed, err := t.replay.Rewind(cmd.round, cmd.input)
+	if errors.Is(err, api.ErrWrongState) {
+		cmd.Err(err)
+		return
+	}
+	wasPending := t.pending
+	t.pending = false
+	if t.compaction.cut(cmd.round) {
+		t.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}, Final: false, CanCompact: t.canCompact()}))
+	}
+	if err != nil {
+		t.criticalErr(cmd.intoMessage(), err)
+		return
+	}
+	if t.link.taskCut(cmd.round) {
+		t.link.send(newMessageEvent(nil, api.ChatEventTasks{Tasks: t.link.taskList()}))
+	}
+	t.rewindAttachments(removed, cmd.input)
+	t.link.pageModule.Reset()
+	if err := t.sweepDrafts(); err != nil {
+		doors.Logger(t.link.backend.Context()).Error("thread: draft sweep failed", "thread", t.id, "err", err)
+	}
+	t.switchStateRoundReplay(round, replay)
+	if wasPending {
+		t.link.send(newMessageEvent(nil, api.ChatEventInputPending{Pending: false}))
+	}
+	t.link.send(newMessageEvent(cmd.intoMessage(), api.ChatEventRoundStart{Round: round, Truncate: cmd.round, Usage: t.replay.Usage(), CanCompact: t.canCompact()}))
+}
+
 func (t *thread) switchStateTools(round api.Round, calls []api.ContentToolUse) {
 	ch, cancel := t.link.useTools(round.ID, calls)
 	t.state = &threadTools{

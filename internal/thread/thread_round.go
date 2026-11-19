@@ -105,63 +105,19 @@ func (s *threadRound) on(cmd any) {
 			cmd.Err(api.ErrUnlinked)
 			return
 		}
-		defer s.thread.switchStateWait()
-		wasPending := s.thread.pending
-		s.thread.pending = false
-		s.cancel(api.ErrCanceledByUser)
-		usage, err := s.abort()
-		if err != nil {
-			s.thread.criticalErr(cmd.intoMessage(), err)
-			return
-		}
-		if wasPending {
-			s.thread.link.send(newMessageEvent(nil, api.ChatEventInputPending{Pending: false}))
-		}
-		s.thread.link.send(newMessageEvent(cmd.intoMessage(), api.ChatEventRoundEnd{Round: s.round.ID, State: api.RoundAbort, Error: "", Usage: usage, Final: true, CanCompact: s.thread.canCompact()}))
+		s.stop(cmd.intoMessage())
 		s.thread.applyHeldCompaction()
 	case commandRewind:
 		if cmd.link != s.thread.link {
 			cmd.Err(api.ErrUnlinked)
 			return
 		}
-		inputBytes := 0
-		for _, c := range cmd.input.Content() {
-			if text, ok := c.(api.ContentText); ok {
-				inputBytes += len(text.Text)
-			}
-		}
-		if inputBytes > replay.RoundItemBudget(cmd.link.backend.Config(), cmd.link.backend.Provider().Model()) {
-			cmd.Err(api.ErrInputTooLarge)
+		s.stop(nil)
+		if s.thread.replay == nil {
+			cmd.Err(api.ErrUnlinked)
 			return
 		}
-		round, replay, removed, err := s.thread.replay.Rewind(cmd.round, cmd.input)
-		if errors.Is(err, api.ErrWrongState) {
-			cmd.Err(err)
-			return
-		}
-		wasPending := s.thread.pending
-		s.thread.pending = false
-		s.cancel(api.ErrCanceledByUser)
-		if s.thread.compaction.cut(cmd.round) {
-			s.thread.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}, Final: false, CanCompact: s.thread.canCompact()}))
-		}
-		if err != nil {
-			s.thread.criticalErr(cmd.intoMessage(), err)
-			return
-		}
-		if s.thread.link.taskCut(cmd.round) {
-			s.thread.link.send(newMessageEvent(nil, api.ChatEventTasks{Tasks: s.thread.link.taskList()}))
-		}
-		s.thread.rewindAttachments(removed, cmd.input)
-		s.thread.link.pageModule.Reset()
-		if err := s.thread.sweepDrafts(); err != nil {
-			doors.Logger(s.thread.link.backend.Context()).Error("thread: draft sweep failed", "thread", s.thread.id, "err", err)
-		}
-		s.thread.switchStateRoundReplay(round, replay)
-		if wasPending {
-			s.thread.link.send(newMessageEvent(nil, api.ChatEventInputPending{Pending: false}))
-		}
-		s.thread.link.send(newMessageEvent(cmd.intoMessage(), api.ChatEventRoundStart{Round: round, Truncate: cmd.round, Usage: s.thread.replay.Usage(), CanCompact: s.thread.canCompact()}))
+		s.thread.rewind(cmd)
 	case commandApplyCompaction:
 		if cmd.seq != s.thread.compaction.seq {
 			return
@@ -170,6 +126,22 @@ func (s *threadRound) on(cmd any) {
 	default:
 		s.thread.on(cmd)
 	}
+}
+
+func (s *threadRound) stop(m *message) {
+	defer s.thread.switchStateWait()
+	wasPending := s.thread.pending
+	s.thread.pending = false
+	s.cancel(api.ErrCanceledByUser)
+	usage, err := s.abort()
+	if err != nil {
+		s.thread.criticalErr(m, err)
+		return
+	}
+	if wasPending {
+		s.thread.link.send(newMessageEvent(nil, api.ChatEventInputPending{Pending: false}))
+	}
+	s.thread.link.send(newMessageEvent(m, api.ChatEventRoundEnd{Round: s.round.ID, State: api.RoundAbort, Error: "", Usage: usage, Final: true, CanCompact: s.thread.canCompact()}))
 }
 
 func (s *threadRound) abort() (api.EventUsage, error) {

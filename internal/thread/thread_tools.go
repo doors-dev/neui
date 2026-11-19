@@ -109,60 +109,18 @@ func (s *threadTools) on(cmd any) {
 			return
 		}
 		cmd.NoMessage()
-		s.cancel(api.ErrCanceledByUser)
-		s.stopped = true
-		wasPending := s.thread.pending
-		s.thread.pending = false
-		if wasPending {
-			s.thread.link.send(newMessageEvent(nil, api.ChatEventInputPending{Pending: false}))
-		}
+		s.stop()
 	case commandRewind:
 		if cmd.link != s.thread.link {
 			cmd.Err(api.ErrUnlinked)
 			return
 		}
-		inputBytes := 0
-		for _, c := range cmd.input.Content() {
-			if text, ok := c.(api.ContentText); ok {
-				inputBytes += len(text.Text)
-			}
-		}
-		if inputBytes > replay.RoundItemBudget(cmd.link.backend.Config(), cmd.link.backend.Provider().Model()) {
-			cmd.Err(api.ErrInputTooLarge)
-			return
-		}
-		round, replay, removed, err := s.thread.replay.Rewind(cmd.round, cmd.input)
-		if errors.Is(err, api.ErrWrongState) {
-			cmd.Err(err)
-			return
-		}
-		wasPending := s.thread.pending
-		s.thread.pending = false
-		s.cancel(api.ErrCanceledByUser)
+		s.stop()
 		if s.ask != nil {
 			s.thread.link.send(newMessageEvent(nil, api.ChatEventAskDone{}))
 			s.ask = nil
 		}
-		if s.thread.compaction.cut(cmd.round) {
-			s.thread.link.send(newMessageEvent(nil, api.ChatEventCompacting{Running: false, Usage: api.EventUsage{}, Final: false, CanCompact: s.thread.canCompact()}))
-		}
-		if err != nil {
-			s.thread.criticalErr(cmd.intoMessage(), err)
-			return
-		}
-		if s.thread.link.taskCut(cmd.round) {
-			s.thread.link.send(newMessageEvent(nil, api.ChatEventTasks{Tasks: s.thread.link.taskList()}))
-		}
-		s.thread.rewindAttachments(removed, cmd.input)
-		s.thread.link.pageModule.Reset()
-		if err := s.thread.sweepDrafts(); err != nil {
-			doors.Logger(s.thread.link.backend.Context()).Error("thread: draft sweep failed", "thread", s.thread.id, "err", err)
-		}
-		s.thread.switchStateRoundReplay(round, replay)
-		if wasPending {
-			s.thread.link.send(newMessageEvent(nil, api.ChatEventInputPending{Pending: false}))
-		}
-		s.thread.link.send(newMessageEvent(cmd.intoMessage(), api.ChatEventRoundStart{Round: round, Truncate: cmd.round, Usage: s.thread.replay.Usage(), CanCompact: s.thread.canCompact()}))
+		s.thread.rewind(cmd)
 	case commandTask:
 		if s.thread.link == nil || s.thread.link.linkTasks != cmd.linkTasks {
 			cmd.Err(context.Canceled)
@@ -181,6 +139,16 @@ func (s *threadTools) on(cmd any) {
 		s.thread.compaction.held = &cmd
 	default:
 		s.thread.on(cmd)
+	}
+}
+
+func (s *threadTools) stop() {
+	s.cancel(api.ErrCanceledByUser)
+	s.stopped = true
+	wasPending := s.thread.pending
+	s.thread.pending = false
+	if wasPending {
+		s.thread.link.send(newMessageEvent(nil, api.ChatEventInputPending{Pending: false}))
 	}
 }
 
