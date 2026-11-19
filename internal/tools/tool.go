@@ -28,11 +28,14 @@ import (
 	"neui.dev/internal/utils"
 )
 
-func NewTool[I any, O any](name string, desc string, f func(ctx context.Context, input I) (O, error)) (common.Tool, error) {
+func NewTool[I any, O any](name string, desc string, f func(ctx context.Context, input I) (O, error), object bool) (common.Tool, error) {
 	name = utils.SanitizeName(name)
 	inputSchema, err := schema.NewSchema[I]()
 	if err != nil {
 		return tool{}, err
+	}
+	if object {
+		inputSchema = inputSchema.Object()
 	}
 	outputSchema, err := schema.NewSchema[O]()
 	if err != nil {
@@ -110,8 +113,12 @@ func NewRawTool(
 	inputSchema schema.Schema[any],
 	outputSchema schema.Schema[any],
 	f func(ctx context.Context, input json.RawMessage) (any, error),
+	object bool,
 ) (tool, error) {
 	name = utils.SanitizeName(name)
+	if object {
+		inputSchema = inputSchema.Object()
+	}
 	b := strings.Builder{}
 	b.WriteString(desc)
 	b.WriteString("\nOutput schema: ")
@@ -123,13 +130,14 @@ func NewRawTool(
 		if err := inputSchema.ValidateRaw(input); err != nil {
 			return nil, err
 		}
+		input, err := inputSchema.Unwrap(input)
+		if err != nil {
+			return nil, err
+		}
 		return f(ctx, input)
 	}
 	stringCall := func(ctx context.Context, input string) (any, error) {
-		if err := inputSchema.ValidateString(input); err != nil {
-			return nil, err
-		}
-		return f(ctx, json.RawMessage(input))
+		return rawCall(ctx, json.RawMessage(input))
 	}
 	return tool{
 		name:        name,
@@ -144,7 +152,7 @@ func NewRawTool(
 			if err := inputSchema.ValidateRaw(input); err != nil {
 				return nil, err
 			}
-			return input, nil
+			return inputSchema.Unwrap(input)
 		},
 		call: func(ctx context.Context, input any) (any, error) {
 			return f(ctx, input.(json.RawMessage))

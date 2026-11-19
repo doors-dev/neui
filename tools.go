@@ -406,7 +406,7 @@ type AnyTool = common.Tool
 // Tooler is a tool definition: a Tool or an Ask. The same value can be added
 // to a Module and, for a Tool, to an island Library or rendered on a page.
 type Tooler interface {
-	tool() (AnyTool, error)
+	tool(object bool) (AnyTool, error)
 }
 
 // Module is a tool module a host assembles with Add and Remove; they, the
@@ -453,7 +453,7 @@ type ToolID = tools.ToolID
 // Add adds the tool t defines and returns its ID; a tool with the same name is
 // replaced. It fails when the input or output type has no JSON schema.
 func (m Module) Add(t Tooler) (ToolID, error) {
-	tool, err := t.tool()
+	tool, err := t.tool(true)
 	if err != nil {
 		return 0, err
 	}

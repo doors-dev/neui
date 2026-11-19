@@ -35,6 +35,7 @@ import (
 var (
 	ErrInvalidInput     = errors.New("invalid input: argument is not valid JSON")
 	ErrInvalidArguments = errors.New("invalid input: argument do not match the schema")
+	ErrNoInput          = errors.New(`invalid input: arguments must be {"input": <value>}`)
 	errCallShape        = errors.New("schema: x-neui-call without allOf[0].properties arg and returns")
 )
 
@@ -53,19 +54,101 @@ func newSchema[T any](raw []byte, doc any, defaultDraft *jsonvalid.Draft) (Schem
 	if err != nil {
 		return Schema[T]{}, err
 	}
+	objectRaw, err := wrap(raw)
+	if err != nil {
+		return Schema[T]{}, err
+	}
 	schema := Schema[T]{
-		raw:    raw,
-		root:   raw,
-		Schema: validSchema,
+		raw:       raw,
+		root:      raw,
+		objectRaw: objectRaw,
+		Schema:    validSchema,
+	}
+	if objectRaw != nil {
+		objectDoc, err := jsonvalid.UnmarshalJSON(bytes.NewReader(objectRaw))
+		if err != nil {
+			return Schema[T]{}, err
+		}
+		c := jsonvalid.NewCompiler()
+		c.UseLoader(jsonvalid.SchemeURLLoader{})
+		c.DefaultDraft(defaultDraft)
+		if err := c.AddResource(loc, objectDoc); err != nil {
+			return Schema[T]{}, err
+		}
+		if schema.objectSchema, err = c.Compile(loc); err != nil {
+			return Schema[T]{}, err
+		}
 	}
 	return schema, nil
 }
 
+func wrap(raw []byte) ([]byte, error) {
+	var top map[string]json.RawMessage
+	if json.Unmarshal(raw, &top) != nil {
+		top = nil
+	}
+	if bytes.Equal(top["type"], []byte(`"object"`)) {
+		return nil, nil
+	}
+	doc := map[string]json.RawMessage{
+		"type":     json.RawMessage(`"object"`),
+		"required": json.RawMessage(`["input"]`),
+	}
+	inner := raw
+	if top != nil {
+		for _, key := range []string{"$schema", "definitions", "$defs"} {
+			if v, ok := top[key]; ok {
+				doc[key] = v
+				delete(top, key)
+			}
+		}
+		var err error
+		if inner, err = json.Marshal(top); err != nil {
+			return nil, err
+		}
+	}
+	doc["properties"] = json.RawMessage(`{"input":` + string(inner) + `}`)
+	object, err := json.Marshal(doc)
+	if err != nil {
+		return nil, err
+	}
+	return bytes.ReplaceAll(object, []byte(`"$ref":"#"`), []byte(`"$ref":"#/properties/input"`)), nil
+}
+
 type Schema[T any] struct {
-	raw  []byte
-	root []byte
-	defs map[string]json.RawMessage
+	raw          []byte
+	root         []byte
+	defs         map[string]json.RawMessage
+	objectRaw    []byte
+	objectSchema *jsonvalid.Schema
+	object       bool
 	*jsonvalid.Schema
+}
+
+func (s Schema[T]) Object() Schema[T] {
+	if s.objectRaw != nil {
+		s.object = true
+		s.Schema = s.objectSchema
+	}
+	return s
+}
+
+func (s Schema[T]) Unwrap(raw []byte) ([]byte, error) {
+	if !s.object {
+		return raw, nil
+	}
+	var arg map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &arg); err != nil {
+		if json.Valid(raw) {
+			return nil, ErrNoInput
+		}
+		return nil, fmt.Errorf("%w: %v", ErrInvalidInput, err)
+	}
+	inner, ok := arg["input"]
+	if !ok {
+		return nil, ErrNoInput
+	}
+	return inner, nil
 }
 
 func (s Schema[T]) DecodeString(str string) (T, error) {
@@ -73,6 +156,12 @@ func (s Schema[T]) DecodeString(str string) (T, error) {
 }
 
 func (s Schema[T]) Validate(v any) error {
+	if s.object {
+		arg, _ := v.(map[string]any)
+		if _, ok := arg["input"]; !ok {
+			return ErrNoInput
+		}
+	}
 	if err := s.Schema.Validate(v); err != nil {
 		if verr, ok := err.(*jsonvalid.ValidationError); ok {
 			verr.Causes = pruneAnyOf(verr.Causes)
@@ -140,6 +229,10 @@ func (s Schema[T]) Decode(raw []byte) (T, error) {
 	if err := s.ValidateRaw(raw); err != nil {
 		return arg, err
 	}
+	raw, err := s.Unwrap(raw)
+	if err != nil {
+		return arg, err
+	}
 	if err := json.Unmarshal(raw, &arg); err != nil {
 		return arg, fmt.Errorf("%w: %v", ErrInvalidInput, err)
 	}
@@ -147,10 +240,16 @@ func (s Schema[T]) Decode(raw []byte) (T, error) {
 }
 
 func (s Schema[T]) Raw() []byte {
+	if s.object {
+		return s.objectRaw
+	}
 	return s.raw
 }
 
 func (s Schema[T]) Root() []byte {
+	if s.object {
+		return []byte(`{"type":"object","properties":{"input":` + string(s.root) + `},"required":["input"]}`)
+	}
 	return s.root
 }
 
@@ -159,12 +258,12 @@ func (s Schema[T]) Defs() map[string]json.RawMessage {
 }
 
 func (s Schema[T]) MarshalJSON() ([]byte, error) {
-	return s.raw, nil
+	return s.Raw(), nil
 }
 
 func (s Schema[T]) Params() map[string]any {
 	var m map[string]any
-	if err := json.Unmarshal(s.raw, &m); err != nil {
+	if err := json.Unmarshal(s.Raw(), &m); err != nil {
 		panic(fmt.Sprintf("schema: corrupt Raw: %v", err))
 	}
 	return m

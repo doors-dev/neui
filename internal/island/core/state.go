@@ -132,7 +132,7 @@ func (s *state) Release() {
 }
 
 func (s *state) RegisterTools(vm *quickjs.VM) error {
-	m := tools.NewModule("", "")
+	m := tools.NewScriptModule("", "")
 	_, err := m.Add("release", "", s.toolRelease)
 	if err != nil {
 		panic(err)

@@ -572,7 +572,7 @@ func TestCallCannotLeaveStateOnApp(t *testing.T) {
 }
 
 func fetch[I, O any](lib Library, name string, f func(ctx context.Context, input I) (O, error)) error {
-	tool, err := tools.NewTool(name, "", f)
+	tool, err := tools.NewTool(name, "", f, false)
 	if err != nil {
 		return err
 	}

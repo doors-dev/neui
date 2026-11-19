@@ -37,7 +37,7 @@ func TestBuildWritesSharedDefinitionOnce(t *testing.T) {
 	if err := l.View("card", "", func(context.Context, struct{ Row specRow }) (api.Widget[struct{}], error) { return nil, nil }); err != nil {
 		t.Fatal(err)
 	}
-	find, err := tools.NewTool("find", "", func(context.Context, string) (struct{ Row specRow }, error) { return struct{ Row specRow }{}, nil })
+	find, err := tools.NewTool("find", "", func(context.Context, string) (struct{ Row specRow }, error) { return struct{ Row specRow }{}, nil }, false)
 	if err != nil {
 		t.Fatal(err)
 	}

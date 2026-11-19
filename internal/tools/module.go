@@ -35,6 +35,14 @@ type ToolID int
 
 func NewModule(name string, desc string) Module {
 	return &module{
+		name:   utils.SanitizeName(name),
+		desc:   desc,
+		object: true,
+	}
+}
+
+func NewScriptModule(name string, desc string) Module {
+	return &module{
 		name: utils.SanitizeName(name),
 		desc: desc,
 	}
@@ -46,10 +54,11 @@ type toolEntry struct {
 }
 
 type module struct {
-	id    ToolID
-	name  string
-	desc  string
-	tools []toolEntry
+	id     ToolID
+	name   string
+	desc   string
+	object bool
+	tools  []toolEntry
 }
 
 func (m Module) Name() string {
@@ -114,7 +123,7 @@ func (m Module) AddRaw(
 	output schema.Schema[any],
 	f func(ctx context.Context, input json.RawMessage) (any, error),
 ) (ToolID, error) {
-	tool, err := NewRawTool(name, desc, input, output, f)
+	tool, err := NewRawTool(name, desc, input, output, f, m.object)
 	if err != nil {
 		return 0, err
 	}
@@ -146,7 +155,7 @@ func (m Module) Ask[I any, O any](name string, desc string, f func(input I, repl
 }
 
 func (m Module) Add[I any, O any](name string, desc string, f func(ctx context.Context, input I) (O, error)) (ToolID, error) {
-	tool, err := NewTool(name, desc, f)
+	tool, err := NewTool(name, desc, f, m.object)
 	if err != nil {
 		return 0, err
 	}

@@ -842,7 +842,7 @@ func TestReadFromScriptIsTheText(t *testing.T) {
 	c := testkit.NewController(t, testkit.Setup{})
 	content := `{"cards":[1,2]}` + "\n" + strings.Repeat("y", 3000) + "\r\nlast"
 	write(t, c.FS(), "a.txt", content)
-	tool, err := tools.NewTool("read", readDesc, readTool)
+	tool, err := tools.NewTool("read", readDesc, readTool, false)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -46,8 +46,8 @@ github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSs
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/dlclark/regexp2 v1.11.0 h1:G/nrcoOa7ZXlpoa/91N3X7mM3r8eIlMBBJZvsz/mxKI=
 github.com/dlclark/regexp2 v1.11.0/go.mod h1:DHkYz0B9wPfa6wondMfaivmHpzrQ3v9q8cnmRbL6yW8=
-github.com/doors-dev/doors v0.19.0 h1:lzNx8ETKRiv/kV7iDoIlCOitR/O/ZmwnNtVAvTJ927A=
-github.com/doors-dev/doors v0.19.0/go.mod h1:1MWoOLtE8oSASpB3xXo7DFnBZLQxKy8EVmAVvmjjeGs=
+github.com/doors-dev/doors v0.19.1 h1:0q/rAg0LB2Y3Gi5RhRV3BLqQRajLczaveF/+9M2k2jw=
+github.com/doors-dev/doors v0.19.1/go.mod h1:1MWoOLtE8oSASpB3xXo7DFnBZLQxKy8EVmAVvmjjeGs=
 github.com/doors-dev/gox v0.4.0 h1:5JZS0BlsBsPU+KDAPLnrjrcKC0W13ZPEXvt6A6LY5jg=
 github.com/doors-dev/gox v0.4.0/go.mod h1:3T4sLrlkipWdizQ52OQymSR5FZBUboksWJQpzYdd3jw=
 github.com/dop251/goja v0.0.0-20261013122152-245c54f48cfc h1:61HkuIYSu9uC5wQnXcuGUEnZXVxJaOZNmKhn6B6LytU=

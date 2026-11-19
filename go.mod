@@ -6,7 +6,7 @@ require (
 	code.dny.dev/ssrf v0.3.0
 	codeberg.org/readeck/go-readability/v2 v2.1.2
 	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.2
-	github.com/doors-dev/doors v0.19.0
+	github.com/doors-dev/doors v0.19.1
 	github.com/doors-dev/gox v0.4.0
 	github.com/dop251/goja v0.0.0-20261013122152-245c54f48cfc
 	github.com/gammazero/deque v1.2.1

@@ -87,8 +87,8 @@ type Tool[I any, O any] struct {
 	Handler func(ctx context.Context, i I) (O, error)
 }
 
-func (a Tool[I, O]) tool() (AnyTool, error) {
-	return tools.NewTool(a.Name, a.Desc, a.Handler)
+func (a Tool[I, O]) tool(object bool) (AnyTool, error) {
+	return tools.NewTool(a.Name, a.Desc, a.Handler, object)
 }
 
 // Main adds the tool to the space it is rendered in, for as long as that
@@ -96,7 +96,7 @@ func (a Tool[I, O]) tool() (AnyTool, error) {
 // the render fails when I or O has no JSON schema.
 func (a Tool[I, O]) Main() gox.Elem {
 	return gox.Elem(func(cur gox.Cursor) error {
-		t, err := a.tool()
+		t, err := a.tool(false)
 		if err != nil {
 			return err
 		}
@@ -125,8 +125,8 @@ type Ask[I any, O any] struct {
 	Handler func(input I, answer Answer[O]) api.ChatAsk
 }
 
-func (a Ask[I, O]) tool() (AnyTool, error) {
-	return Tool[I, O]{Name: a.Name, Desc: a.Desc + tools.AskDesc, Handler: tools.Asking(a.Handler)}.tool()
+func (a Ask[I, O]) tool(object bool) (AnyTool, error) {
+	return Tool[I, O]{Name: a.Name, Desc: a.Desc + tools.AskDesc, Handler: tools.Asking(a.Handler)}.tool(object)
 }
 
 func (a Ask[I, O]) ask() {}
@@ -479,7 +479,7 @@ func (l Library) Add(t Tooler) error {
 	if _, ok := t.(interface{ ask() }); ok {
 		return api.ErrAskInIsland
 	}
-	tool, err := t.tool()
+	tool, err := t.tool(false)
 	if err != nil {
 		return err
 	}

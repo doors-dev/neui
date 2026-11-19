@@ -45,7 +45,7 @@ func NewLibrary() Library {
 	return &library{
 		widgets: map[string]anyWidgetFactory{},
 		layouts: map[string]anyLayoutFactory{},
-		tools:   tools.NewModule("", ""),
+		tools:   tools.NewScriptModule("", ""),
 	}
 }
 
@@ -75,7 +75,7 @@ func (l *library) RegisterApp(ctx func() context.Context, vm *quickjs.VM) error 
 	if err := js.RegisterTools(vm, ctx, "__fetch__", l.tools.List()); err != nil {
 		return err
 	}
-	m := tools.NewModule("", "")
+	m := tools.NewScriptModule("", "")
 	_, err := m.Add("fetches", "", func(ctx context.Context, _ struct{}) ([]string, error) {
 		return l.fetchNames(), nil
 	})
