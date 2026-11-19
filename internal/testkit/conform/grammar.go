@@ -46,6 +46,13 @@ func walkGrammar(t testing.TB, events []api.Event, unframed bool) {
 		if ended {
 			fail(i, "arrives after the stream already ended")
 		}
+		if i == 0 {
+			switch e.(type) {
+			case api.EventStart, api.EventErr:
+			default:
+				fail(i, "opens the stream, which only a start or an err may")
+			}
+		}
 		switch e := e.(type) {
 		case api.EventStart:
 			if i != 0 {
@@ -91,12 +98,9 @@ func walkGrammar(t testing.TB, events []api.Event, unframed bool) {
 				fail(i, "attaches meta to opaque block %d, whose Data is already the adapter's", idx)
 			}
 			if kinds[idx] == "" {
-				kinds[idx] = "meta"
+				fail(i, "opens block %d with meta, and the first event of a block names its kind", idx)
 			}
-		case kinds[idx] == "" || kinds[idx] == "meta":
-			if kind == "opaque" && kinds[idx] == "meta" {
-				fail(i, "opens opaque block %d, which already carries meta", idx)
-			}
+		case kinds[idx] == "":
 			kinds[idx] = kind
 		case kinds[idx] != kind:
 			fail(i, "fills %s block %d with a %s event", kinds[idx], idx, kind)

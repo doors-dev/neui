@@ -17,6 +17,8 @@ package deepseek
 import (
 	"bytes"
 	"encoding/base64"
+	"errors"
+	"fmt"
 	"strings"
 	"unsafe"
 
@@ -30,23 +32,24 @@ import (
 // every role unless a user or tool message carries an image to deepseek-flash,
 // so a message holding several blocks collapses into one string and the blocks
 // that are not text become separate fields or separate messages. A block this wire has no field for leaves a note
-// in its place and the turn goes out, stated at the arm it happens in; what is
-// refused instead is a block this wire does carry, filled with something it does
-// not take.
+// in its place and the turn goes out, stated at the arm it happens in, and so
+// does a block this wire does carry, filled with something it does not take.
+// The one refusal is a call whose arguments were discarded with no failed
+// result answering it.
 //
-// Two things go out in neither form, and both are parts of a reasoning block
-// rather than blocks: a stored summary, because reasoning_content is the
-// thinking and this wire has no second field a paraphrase could go in, and all
-// earlier thinking in a request without tools, because the server ignores it
-// there. Neither leaves a note. A note stands in for a block that is gone, and
-// the block is still there carrying everything this wire takes of it. Both are
-// stated at encodeAssistant.
+// One thing goes out in neither form: all earlier thinking in a request without
+// tools, because the server ignores it there. It leaves no note. A note stands
+// in for a block that is gone, and the block is still there carrying everything
+// this wire takes of it. It is stated at encodeAssistant.
 //
 // thinking always goes out, since it is the field that decides when
 // reasoning_effort is present too, and a disabled thinking never carries an
 // effort. Temperature and top_p go out as set: New refused them where a
 // declared model ignores them.
 func (p *Provider) encode(req api.Request) (*chatRequest, error) {
+	if len(req.Messages) == 0 {
+		return nil, errors.New("deepseek: request has no messages")
+	}
 	out := &chatRequest{
 		Model:         p.model.Name,
 		Stream:        true,
@@ -82,15 +85,10 @@ func (p *Provider) encode(req api.Request) (*chatRequest, error) {
 // thinking is on, which is what the server answers it with a 400 for; any other
 // model is sent the choice as it is.
 func (p *Provider) encodeTools(out *chatRequest, req api.Request) error {
-	seen := make(map[string]bool, len(req.Tools))
 	for _, t := range req.Tools {
-		if err := checkToolName(t.Name); err != nil {
-			return err
+		if t.Name == "" {
+			return errors.New("deepseek: tool has no name")
 		}
-		if seen[t.Name] {
-			return reqErrf("tool name %q is declared twice, DeepSeek requires unique names", t.Name)
-		}
-		seen[t.Name] = true
 		out.Tools = append(out.Tools, tool{
 			Type: "function",
 			Function: toolFunction{
@@ -102,7 +100,7 @@ func (p *Provider) encodeTools(out *chatRequest, req api.Request) error {
 	}
 	name, named := req.ToolChoice.Tool()
 	if p.family != familyUnknown && p.effort != EffortNone && (named || req.ToolChoice == api.ToolChoiceAny) {
-		return reqErrf("tool choice %q forces a tool call, which DeepSeek refuses in thinking mode; pass WithEffort(EffortNone) to force one", req.ToolChoice)
+		return fmt.Errorf("deepseek: tool choice %q forces a tool call, which DeepSeek refuses in thinking mode; pass WithEffort(EffortNone) to force one", req.ToolChoice)
 	}
 	if named {
 		out.ToolChoice = namedToolChoice{
@@ -122,25 +120,6 @@ func (p *Provider) encodeTools(out *chatRequest, req api.Request) error {
 	return nil
 }
 
-// checkToolName enforces the documented name rules. The server enforces them
-// too, with a 400 that does not say which tool was wrong.
-func checkToolName(name string) error {
-	if name == "" {
-		return &RequestError{Reason: "tool has no name"}
-	}
-	if len(name) > maxToolNameLen {
-		return reqErrf("tool name %q is %d characters, DeepSeek allows %d", name, len(name), maxToolNameLen)
-	}
-	for _, r := range name {
-		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_', r == '-':
-		default:
-			return reqErrf("tool name %q contains %q, DeepSeek allows only letters, digits, underscore and dash", name, r)
-		}
-	}
-	return nil
-}
-
 // encodeMessages lowers the whole conversation. The system prompt is an ordinary
 // leading message here; there is no top level field for it. Several blocks
 // become one string on every role, joined with the blank line api.Content
@@ -152,13 +131,23 @@ func checkToolName(name string) error {
 // the result answering a call is what says whether its arguments ever parsed.
 // The whole thread is scanned for it first: a result sits in a message after the
 // one carrying the call, so the call cannot be encoded on a single pass that has
-// not seen it.
+// not seen it. The same scan collects the calls that go out as a note, one with
+// no name and one written into a user message, because the result answering
+// such a call has no call left to answer and becomes a note as well.
 func (p *Provider) encodeMessages(req api.Request) ([]message, error) {
 	discarded := make(map[string]bool)
+	noted := make(map[string]bool)
 	for _, m := range req.Messages {
 		for _, c := range m.Content {
-			if r, ok := c.(api.ContentToolResult); ok && r.Error == api.ToolErrJSON {
-				discarded[r.ID] = true
+			switch c := c.(type) {
+			case api.ContentToolResult:
+				if c.Error == api.ToolErrJSON {
+					discarded[c.ID] = true
+				}
+			case api.ContentToolUse:
+				if c.Name == "" || m.Role == api.RoleUser {
+					noted[c.ID] = true
+				}
 			}
 		}
 	}
@@ -170,11 +159,11 @@ func (p *Provider) encodeMessages(req api.Request) ([]message, error) {
 		var err error
 		switch m.Role {
 		case api.RoleUser:
-			msgs, err = p.encodeUser(msgs, m, i)
+			msgs, err = p.encodeUser(msgs, m, i, noted)
 		case api.RoleAssistant:
 			msgs, err = p.encodeAssistant(msgs, m, i, discarded, len(req.Tools) > 0)
 		default:
-			err = reqErrf("message %d has role %q, which is neither user nor assistant", i, m.Role)
+			err = fmt.Errorf("deepseek: message %d has role %q, which is neither user nor assistant", i, m.Role)
 		}
 		if err != nil {
 			return nil, err
@@ -191,7 +180,7 @@ func (p *Provider) encodeMessages(req api.Request) ([]message, error) {
 //
 // A block this wire has no field for becomes a note among the text, which is
 // where the note belongs.
-func (p *Provider) encodeUser(msgs []message, m api.Message, at int) ([]message, error) {
+func (p *Provider) encodeUser(msgs []message, m api.Message, at int, noted map[string]bool) ([]message, error) {
 	var parts []any
 	var results []message
 	for _, c := range m.Content {
@@ -199,6 +188,10 @@ func (p *Provider) encodeUser(msgs []message, m api.Message, at int) ([]message,
 		case api.ContentText:
 			parts = append(parts, textPart{Type: "text", Text: c.Text})
 		case api.ContentToolResult:
+			if c.ID == "" || noted[c.ID] {
+				parts = append(parts, note(c, "a tool result with no tool call id, or one answering a call that went out as a note, answers no call, and a tool message that answers none is refused by the server"))
+				continue
+			}
 			results = append(results, p.toolResult(c))
 		case api.ContentImage:
 			parts = append(parts, p.image(c))
@@ -211,7 +204,7 @@ func (p *Provider) encodeUser(msgs []message, m api.Message, at int) ([]message,
 		case api.ContentOpaque:
 			parts = append(parts, note(c, "DeepSeek runs no tools of its own, so this wire has no field that could carry a payload back"))
 		default:
-			parts = append(parts, textPart{Type: "text", Text: lib.Unknown(Name, at, c)})
+			parts = append(parts, textPart{Type: "text", Text: lib.Unknown(providerName, at, c)})
 		}
 	}
 	msgs = append(msgs, results...)
@@ -229,17 +222,19 @@ func (p *Provider) encodeUser(msgs []message, m api.Message, at int) ([]message,
 // This adapter writes no Meta, because DeepSeek's reasoning is plain readable
 // text in a field of its own, sealed behind nothing, so there is no encoding of
 // it to replay verbatim and Thoughts is the whole of it. A block carrying Meta
-// or a Summary is therefore one another provider issued, and its Thoughts are
-// dropped with it rather than replayed as this model's own: reasoning_content
-// is the thinking, this adapter never produces a summary to put in it, and
-// there is no second field on this wire a paraphrase could go in.
+// or a Summary is therefore one another provider issued, and it leaves a note
+// among the text rather than being replayed as this model's own:
+// reasoning_content is the thinking, this adapter never produces a summary to
+// put in it, and there is no second field on this wire a paraphrase could go
+// in.
 //
 // A block this wire has no field for leaves a note among the text, an opaque
 // payload for the reason encodeUser gives.
 //
 // A call with no name is not a call. The field is required and naming nothing
-// dispatches nothing, so a stored turn that lost the name is refused here rather
-// than replayed as "name":"" for the model to make sense of.
+// dispatches nothing, so a stored turn that lost the name leaves a note among
+// the text rather than being replayed as "name":"" for the model to make sense
+// of.
 //
 // Arguments follow api.ContentToolUse: a call its paired result marks as
 // api.ToolErrJSON had its arguments thrown away before they were ever JSON, so
@@ -275,18 +270,21 @@ func (p *Provider) encodeAssistant(msgs []message, m api.Message, at int, discar
 		case api.ContentText:
 			text = append(text, c.Text)
 		case api.ContentReasoning:
-			if len(c.Meta) == 0 && len(c.Summary) == 0 {
-				reasoning = append(reasoning, c.Thoughts.Ordered()...)
+			if len(c.Meta) > 0 || len(c.Summary) > 0 {
+				text = append(text, lib.Omitted(c, "the block carries another provider's encoding or summary, and reasoning_content takes only this model's own thinking"))
+				continue
 			}
+			reasoning = append(reasoning, c.Thoughts.Ordered()...)
 		case api.ContentToolUse:
 			if c.Name == "" {
-				return nil, reqErrf("message %d replays tool call %q with no name, which names no tool", at, c.ID)
+				text = append(text, lib.Omitted(c, "a tool call with no name names no tool and is refused by the server"))
+				continue
 			}
 			args := "{}"
 			switch {
 			case discarded[c.ID]:
 			case bytes.Equal(c.Input, api.DiscardedArguments):
-				return nil, reqErrf("message %d replays tool call %q whose arguments were discarded, with no failed result answering it", at, c.ID)
+				return nil, fmt.Errorf("deepseek: message %d replays tool call %q whose arguments were discarded, with no failed result answering it", at, c.ID)
 			case len(c.Input) > 0:
 				args = string(c.Input)
 			}
@@ -307,7 +305,7 @@ func (p *Provider) encodeAssistant(msgs []message, m api.Message, at int, discar
 		case api.ContentOpaque:
 			text = append(text, lib.Omitted(c, "DeepSeek runs no tools of its own, so this wire has no field that could carry a payload back"))
 		default:
-			text = append(text, lib.Unknown(Name, at, c))
+			text = append(text, lib.Unknown(providerName, at, c))
 		}
 	}
 	msg := message{Role: "assistant", ToolCalls: calls}
@@ -370,8 +368,8 @@ func (p *Provider) image(c api.ContentImage) any {
 	if len(c.Data) == 0 {
 		return note(c, "an image with no bytes in it is refused by the server")
 	}
-	mime := strings.ToLower(strings.TrimSpace(c.Mime))
-	if !api.ImageMime(mime).IsValid() {
+	mime, ok := lib.ImageMime(c.Mime)
+	if !ok {
 		return note(c, "the server takes JPEG, PNG, GIF and WebP only")
 	}
 	url := make([]byte, len("data:")+len(mime)+len(";base64,")+base64.StdEncoding.EncodedLen(len(c.Data)))

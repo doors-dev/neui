@@ -18,7 +18,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -67,60 +66,19 @@ func collect(t *testing.T, p *Provider, req api.Request) []api.Event {
 	return got
 }
 
-// raw renders a payload that may be absent, because an empty one is the common
-// case and a trailing space is a bad thing to have to see in a fixture.
-func raw(r json.RawMessage) string {
-	if len(r) == 0 {
-		return "-"
-	}
-	return string(r)
-}
-
-func render(e api.Event) string {
-	switch e := e.(type) {
-	case api.EventStart:
-		return fmt.Sprintf("start %s %s", e.ID, e.Model)
-	case api.EventText:
-		return fmt.Sprintf("text %d %q", e.Index, e.Text)
-	case api.EventTool:
-		return fmt.Sprintf("tool %d %q %q %q", e.Index, e.ID, e.Name, e.Args)
-	case api.EventThinking:
-		return fmt.Sprintf("thinking %d part=%d %q", e.Index, e.Part, e.Text)
-	case api.EventSummary:
-		return fmt.Sprintf("summary %d part=%d %q", e.Index, e.Part, e.Text)
-	case api.EventMeta:
-		return fmt.Sprintf("meta %d %s", e.Index, raw(e.Data))
-	case api.EventOpaque:
-		return fmt.Sprintf("opaque %d %q %s %q", e.Index, e.Kind, raw(e.Data), e.Delta)
-	case api.EventClose:
-		return fmt.Sprintf("close %d", e.Index)
-	case api.EventUsage:
-		return fmt.Sprintf("usage in=%d out=%d rsn=%d cr=%d cw=%d", e.Input, e.Output, e.Reasoning, e.CacheRead, e.CacheWrite)
-	case api.EventOk:
-		return fmt.Sprintf("ok %s", e.Code)
-	case api.EventErr:
-		return fmt.Sprintf("err %s", e.Code)
-	}
-	return fmt.Sprintf("unknown %T", e)
-}
-
-func renderAll(events []api.Event) []string {
-	out := make([]string, 0, len(events))
-	for _, e := range events {
-		out = append(out, render(e))
-	}
-	return out
+func describes(have, want string) bool {
+	return have == want || strings.HasPrefix(want, "err ") && strings.HasPrefix(have, want+" ")
 }
 
 func equalSeq(t *testing.T, got []api.Event, want []string) {
 	t.Helper()
-	have := renderAll(got)
+	have := conform.DescribeAll(got)
 	if len(have) != len(want) {
 		t.Fatalf("event count %d, want %d\ngot:  %s\nwant: %s",
 			len(have), len(want), strings.Join(have, "\n      "), strings.Join(want, "\n      "))
 	}
 	for i := range want {
-		if have[i] != want[i] {
+		if !describes(have[i], want[i]) {
 			t.Fatalf("event %d = %s, want %s\ngot:  %s\nwant: %s",
 				i, have[i], want[i], strings.Join(have, "\n      "), strings.Join(want, "\n      "))
 		}
@@ -710,12 +668,12 @@ func TestLargeFrame(t *testing.T) {
 
 	text, ok := got[2].(api.EventText)
 	if !ok {
-		t.Fatalf("event 2 is %s, want text", render(got[2]))
+		t.Fatalf("event 2 is %s, want text", conform.Describe(got[2]))
 	}
 	if text.Text != big {
 		t.Fatalf("text is %d bytes, want %d", len(text.Text), len(big))
 	}
-	if last := render(got[len(got)-1]); last != "ok turn" {
+	if last := conform.Describe(got[len(got)-1]); !describes(last, "ok turn") {
 		t.Fatalf("last event %s", last)
 	}
 }
@@ -728,7 +686,7 @@ func TestFrameOverLimit(t *testing.T) {
 	p := testProvider(t, sseServer(body), WithTransport(lib.Options{Max: 1024}))
 	got := collect(t, p, hello())
 	conform.CheckGrammar(t, got)
-	if last := render(got[len(got)-1]); last != "err network" {
+	if last := conform.Describe(got[len(got)-1]); !describes(last, "err network") {
 		t.Fatalf("last event %s, want error transport", last)
 	}
 }
@@ -797,11 +755,11 @@ func TestHTTPErrorBeforeStream(t *testing.T) {
 			got := collect(t, p, hello())
 			conform.CheckGrammar(t, got)
 			if len(got) != 1 {
-				t.Fatalf("got %v, want one error", renderAll(got))
+				t.Fatalf("got %v, want one error", conform.DescribeAll(got))
 			}
 			ev, ok := got[0].(api.EventErr)
 			if !ok {
-				t.Fatalf("got %s, want an error", render(got[0]))
+				t.Fatalf("got %s, want an error", conform.Describe(got[0]))
 			}
 			if ev.Code != tc.want {
 				t.Fatalf("code %s, want %s", ev.Code, tc.want)
@@ -941,7 +899,7 @@ func TestCancelMidStream(t *testing.T) {
 	for _, e := range got {
 		switch e.(type) {
 		case api.EventOk, api.EventErr:
-			t.Fatalf("cancelling produced %s; a cancelled turn ends with no terminal event", render(e))
+			t.Fatalf("cancelling produced %s; a cancelled turn ends with no terminal event", conform.Describe(e))
 		}
 	}
 	if ctx.Err() == nil {
@@ -969,7 +927,7 @@ func TestCallerDeadlineIsSilent(t *testing.T) {
 	for _, e := range got {
 		switch e.(type) {
 		case api.EventOk, api.EventErr:
-			t.Fatalf("a caller's own deadline produced %s", render(e))
+			t.Fatalf("a caller's own deadline produced %s", conform.Describe(e))
 		}
 	}
 }
@@ -993,7 +951,7 @@ func TestIdleTimeout(t *testing.T) {
 	conform.CheckGrammar(t, got)
 	last, ok := got[len(got)-1].(api.EventErr)
 	if !ok {
-		t.Fatalf("last event %s, want an error", render(got[len(got)-1]))
+		t.Fatalf("last event %s, want an error", conform.Describe(got[len(got)-1]))
 	}
 	if last.Code != api.CodeNetwork {
 		t.Fatalf("code %s, want network", last.Code)
@@ -1044,7 +1002,7 @@ func TestMalformedFrame(t *testing.T) {
 	p := testProvider(t, sseServer(body))
 	got := collect(t, p, hello())
 	conform.CheckGrammar(t, got)
-	if last := render(got[len(got)-1]); last != "err network" {
+	if last := conform.Describe(got[len(got)-1]); !describes(last, "err network") {
 		t.Fatalf("last event %s, want error transport", last)
 	}
 }
@@ -1077,8 +1035,8 @@ func TestBrokenKnownFramesFail(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got := collect(t, testProvider(t, sseServer(sse(append([]string{"message_start", fixStart}, frames...)...))), hello())
 			conform.CheckGrammar(t, got)
-			if last := render(got[len(got)-1]); last != "err network" {
-				t.Fatalf("last event %s, want err network\n%s", last, strings.Join(renderAll(got), "\n"))
+			if last := conform.Describe(got[len(got)-1]); !describes(last, "err network") {
+				t.Fatalf("last event %s, want err network\n%s", last, strings.Join(conform.DescribeAll(got), "\n"))
 			}
 		})
 	}
@@ -1099,8 +1057,8 @@ func TestUnknownFramesAreIgnored(t *testing.T) {
 		"message_stop", fixStopFrame,
 	))), hello())
 	conform.CheckGrammar(t, got)
-	if last := render(got[len(got)-1]); last != "ok turn" {
-		t.Fatalf("last event %s, want ok turn\n%s", last, strings.Join(renderAll(got), "\n"))
+	if last := conform.Describe(got[len(got)-1]); !describes(last, "ok turn") {
+		t.Fatalf("last event %s, want ok turn\n%s", last, strings.Join(conform.DescribeAll(got), "\n"))
 	}
 }
 
@@ -1109,7 +1067,7 @@ func TestUnreachableHost(t *testing.T) {
 	got := collect(t, p, hello())
 	conform.CheckGrammar(t, got)
 	if len(got) != 1 {
-		t.Fatalf("got %v, want one error", renderAll(got))
+		t.Fatalf("got %v, want one error", conform.DescribeAll(got))
 	}
 	if ev := got[0].(api.EventErr); ev.Code != api.CodeNetwork {
 		t.Fatalf("code %s, want network", ev.Code)
@@ -1144,7 +1102,7 @@ func TestStopValues(t *testing.T) {
 		"refusal":                       "err refused",
 		"something_new":                 "err unknown",
 	} {
-		if got := render(stopEvent(native)); got != want {
+		if got := conform.Describe(stopEvent(native)); !describes(got, want) {
 			t.Errorf("stopEvent(%q) = %s, want %s", native, got, want)
 		}
 	}
@@ -1156,7 +1114,7 @@ func TestStopValues(t *testing.T) {
 func TestUnknownStopCarriesTheRawValue(t *testing.T) {
 	ev, ok := stopEvent("model_ran_out_of_ideas").(api.EventErr)
 	if !ok {
-		t.Fatalf("an unrecognized stop produced %s, want an error", render(stopEvent("model_ran_out_of_ideas")))
+		t.Fatalf("an unrecognized stop produced %s, want an error", conform.Describe(stopEvent("model_ran_out_of_ideas")))
 	}
 	if !strings.Contains(ev.Err.Error(), "model_ran_out_of_ideas") {
 		t.Fatalf("error %v does not carry the raw stop value", ev.Err)
@@ -1193,7 +1151,7 @@ func TestInbandSpendLimitIsAccess(t *testing.T) {
 		t.Fatalf("code = %q, want %q: a spend limit is not lifted by retrying", last.Code, api.CodeAccess)
 	}
 	var apiErr *APIError
-	if !errors.As(last.Err, &apiErr) || apiErr.ErrorCode != "enforced_spend_limit_reached" {
+	if !errors.As(last.Err, &apiErr) || apiErr.Code != "enforced_spend_limit_reached" {
 		t.Fatalf("error %#v does not carry the frame's error_code", last.Err)
 	}
 }
@@ -1203,14 +1161,50 @@ func TestNilHTTPClientIsRefused(t *testing.T) {
 	if err := WithHTTPClient(nil)(p); err == nil {
 		t.Fatalf("WithHTTPClient(nil) was accepted")
 	}
-	if p.client != http.DefaultClient {
+	if p.client == nil {
 		t.Fatalf("a refused nil client replaced the one already set")
 	}
 }
 
 func TestUnparseableErrorBodyIsCut(t *testing.T) {
 	e := readAPIError(&lib.HTTPError{Status: 502, Body: []byte(strings.Repeat("é", 2000))})
-	if n := len([]rune(e.Message)); n != maxErrorMessage+1 {
-		t.Fatalf("message has %d runes, want %d", n, maxErrorMessage+1)
+	if n := len([]rune(e.Message)); n != 512+1 {
+		t.Fatalf("message has %d runes, want %d", n, 512+1)
+	}
+}
+
+func TestStreamMustOpenWithMessageStart(t *testing.T) {
+	block := `{"type":"content_block_start","index":0,"content_block":{"type":"text"}}`
+	for name, body := range map[string]string{
+		"block first":   sse("content_block_start", block, "message_stop", fixStopFrame),
+		"unknown first": sse("brand_new", `{"type":"brand_new"}`, "message_start", fixStart),
+		"stop first":    sse("message_stop", fixStopFrame),
+	} {
+		got := collect(t, testProvider(t, sseServer(body)), hello())
+		conform.CheckGrammar(t, got)
+		ev, ok := got[len(got)-1].(api.EventErr)
+		if len(got) != 1 || !ok || ev.Code != api.CodeNetwork || !strings.Contains(ev.Err.Error(), "not message_start") {
+			t.Errorf("%s: got %v, want one network error naming message_start", name, conform.DescribeAll(got))
+		}
+	}
+	got := collect(t, testProvider(t, sseServer(sse("ping", fixPing, "message_start", fixStart, "message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":3}}`, "message_stop", fixStopFrame))), hello())
+	conform.CheckGrammar(t, got)
+	if _, ok := got[len(got)-1].(api.EventOk); !ok {
+		t.Errorf("a ping before message_start ended in %v, want ok", conform.DescribeAll(got))
+	}
+}
+
+func TestStopReasonIsAnAPIError(t *testing.T) {
+	got := collect(t, testProvider(t, sseServer(sse("message_start", fixStart, "message_delta", `{"type":"message_delta","delta":{"stop_reason":"max_tokens"},"usage":{"output_tokens":3}}`, "message_stop", fixStopFrame))), hello())
+	ev, ok := got[len(got)-1].(api.EventErr)
+	if !ok || ev.Code != api.CodeCapped {
+		t.Fatalf("got %v, want a capped turn", conform.DescribeAll(got))
+	}
+	var apiErr *APIError
+	if !errors.As(ev.Err, &apiErr) || apiErr.Status != 0 || apiErr.Code != "max_tokens" || apiErr.Provider != "claude" {
+		t.Fatalf("error %#v, want an *APIError with the stop_reason as its Code and no status", ev.Err)
+	}
+	if want := "claude: max_tokens: the turn ended on this stop_reason"; apiErr.Error() != want {
+		t.Fatalf("error %q, want %q", apiErr.Error(), want)
 	}
 }

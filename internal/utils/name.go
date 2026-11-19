@@ -14,7 +14,12 @@
 
 package utils
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+
+	"github.com/zeebo/xxh3"
+)
 
 func SanitizeName(name string) string {
 	var b strings.Builder
@@ -32,5 +37,17 @@ func SanitizeName(name string) string {
 			pending = true
 		}
 	}
-	return b.String()
+	s := b.String()
+	if s == "" {
+		return "x" + nameHash(name)
+	}
+	if len(s) > 31 {
+		return strings.TrimRight(s[:24], "_") + "_" + nameHash(s[24:])
+	}
+	return s
+}
+
+func nameHash(s string) string {
+	h := strconv.FormatUint(xxh3.HashString(s)&0xffffff, 16)
+	return strings.Repeat("0", 6-len(h)) + h
 }

@@ -15,71 +15,26 @@
 package claude
 
 import (
-	"fmt"
+	"encoding/json"
 	"net/http"
-	"strconv"
 	"strings"
-	"time"
 
 	"neui.dev/api"
+	"neui.dev/provider/lib"
 )
 
 // APIError is a failure Anthropic reported about the request itself, as opposed
-// to one the connection produced. It covers both places the API puts them: the
-// body of a non 200 response, and an error frame on a stream that already
-// returned 200. Status is zero for the second, which carries neither a status
-// code nor a request id.
+// to one the connection produced. It covers the three places the API puts
+// them: the body of a non 200 response, an error frame on a stream that already
+// returned 200, and a stop_reason that ended the turn without a reply to keep.
+// Status is zero for the last two, which carry neither a status code nor a
+// request id.
 //
-// It arrives as the Err of an api.EventErr; read it with errors.As. Branch on
-// the event's Code, and use these fields for logs and support requests.
-type APIError struct {
-	// Status is the HTTP status, zero for an in-stream error.
-	Status int
-	// Type is the API's error type, such as "overloaded_error" or
-	// "invalid_request_error".
-	Type string
-	// Message is the API's explanation; for a body that was not the
-	// documented JSON it is the trimmed raw body, cut to 512 characters. A
-	// response that leaves it empty gets "unparseable <status> response". It
-	// can be empty for an in-stream error.
-	Message string
-	// ErrorCode is the error's details.error_code, such as
-	// "enforced_spend_limit_reached"; empty when the error carries none.
-	ErrorCode string
-	// RequestID is Anthropic's request id, to quote to their support; empty
-	// for an in-stream error.
-	RequestID string
-	// RetryAfter is the Retry-After header's wait, zero when the header is
-	// absent or not a whole number of seconds.
-	RetryAfter time.Duration
-}
-
-// Error returns "claude: <status> <type>: <message> (request <id>)", leaving
-// out an empty status, type or request id and writing "no message" for an
-// empty message.
-func (e *APIError) Error() string {
-	var b []byte
-	b = append(b, "claude: "...)
-	if e.Status != 0 {
-		b = strconv.AppendInt(b, int64(e.Status), 10)
-		b = append(b, ' ')
-	}
-	if e.Type != "" {
-		b = append(b, e.Type...)
-		b = append(b, ": "...)
-	}
-	if e.Message != "" {
-		b = append(b, e.Message...)
-	} else {
-		b = append(b, "no message"...)
-	}
-	if e.RequestID != "" {
-		b = append(b, " (request "...)
-		b = append(b, e.RequestID...)
-		b = append(b, ')')
-	}
-	return string(b)
-}
+// Type is the API's error type, such as "overloaded_error". Code is the
+// error's details.error_code, such as "enforced_spend_limit_reached", or the
+// stop_reason as the API sent it. RequestID is Anthropic's request id, to
+// quote to their support.
+type APIError = lib.APIError
 
 // statusCode maps a non 200 response. The status is the discriminator, not the
 // type string: the docs say 400 doubles as the catch all for unlisted 4xx and
@@ -152,7 +107,7 @@ func contextOverflow(message string) bool {
 func spendLimited(e *APIError) bool {
 	switch e.Status {
 	case http.StatusTooManyRequests:
-		return e.ErrorCode == "enforced_spend_limit_reached"
+		return e.Code == "enforced_spend_limit_reached"
 	case http.StatusBadRequest:
 		return strings.HasPrefix(e.Message, "You have reached your specified API usage limits") ||
 			strings.HasPrefix(e.Message, "You have reached your specified workspace API usage limits")
@@ -181,58 +136,25 @@ func inbandCode(kind string) api.ErrCode {
 	return api.CodeUnknown
 }
 
-// measuredTooLarge marks a refusal by size as one no retry can fix. The marker
-// states a precondition: the adapter had already measured this body against
-// Model.RequestBytes and sent it because it fit, so the declared limit
-// over-promises for this endpoint and a smaller request is not what was wrong.
-// A caller reading it ends the turn rather than shedding and retrying.
-//
-// A model that declares no limit was never measured — request skips the check at
-// zero — so there is nothing the marker could be true about, and claiming it
-// would spend the one remedy that does work on an error that forbids it. Such a
-// refusal goes back as the API's own, under CodeTooLarge, which is still what
-// the refusal was about.
-func measuredTooLarge(model string, sent int, declared int, err error) error {
-	if declared <= 0 {
-		return err
+// readAPIError decodes a refused request, tolerating a body that is not JSON: a
+// 413 is returned by the edge before the request reaches the API and need not
+// use the documented envelope at all. The whole error is returned rather than
+// the interface, because the message is what separates a conversation over the
+// window from every other 400. See contextOverflow.
+func readAPIError(h *lib.HTTPError) *APIError {
+	e := &APIError{Provider: providerName, Status: h.Status, RequestID: h.Header.Get("request-id"), RetryAfter: lib.RetryAfter(h.Header)}
+	var env errorEnvelope
+	if err := json.Unmarshal(h.Body, &env); err != nil || env.Error == nil {
+		e.Message = lib.ErrorMessage(h.Body)
+		return e
 	}
-	return fmt.Errorf("%w: sent %d bytes, measured against the %d declared for %s: %w", api.ErrMeasuredTooLarge, sent, declared, model, err)
-}
-
-// retryAfter reads the header, which is a whole number of seconds and not a
-// timestamp. The anthropic-ratelimit-*-reset headers next to it are RFC 3339
-// instants; confusing the two produces a retry decades out.
-func retryAfter(h http.Header) time.Duration {
-	v := h.Get("Retry-After")
-	if v == "" {
-		return 0
+	e.Type = env.Error.Type
+	e.Message = env.Error.Message
+	if env.Error.Details != nil {
+		e.Code = env.Error.Details.ErrorCode
 	}
-	secs, err := strconv.Atoi(v)
-	if err != nil || secs < 0 {
-		return 0
-	}
-	return time.Duration(secs) * time.Second
-}
-
-func newAPIError(status int, h http.Header, env *errorEnvelope) *APIError {
-	e := &APIError{Status: status, RetryAfter: retryAfter(h)}
-	if h != nil {
-		e.RequestID = h.Get("request-id")
-	}
-	if env != nil {
-		if env.Error != nil {
-			e.Type = env.Error.Type
-			e.Message = env.Error.Message
-			if env.Error.Details != nil {
-				e.ErrorCode = env.Error.Details.ErrorCode
-			}
-		}
-		if env.RequestID != "" {
-			e.RequestID = env.RequestID
-		}
-	}
-	if e.Message == "" {
-		e.Message = fmt.Sprintf("unparseable %d response", status)
+	if env.RequestID != "" {
+		e.RequestID = env.RequestID
 	}
 	return e
 }

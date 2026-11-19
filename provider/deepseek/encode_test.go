@@ -47,17 +47,16 @@ func encodeJSON(t *testing.T, p *Provider, req api.Request) string {
 	return string(raw)
 }
 
-func encodeError(t *testing.T, p *Provider, req api.Request) *RequestError {
+func encodeError(t *testing.T, p *Provider, req api.Request) error {
 	t.Helper()
 	_, err := p.encode(req)
 	if err == nil {
 		t.Fatal("expected the turn to be refused")
 	}
-	reqErr, ok := err.(*RequestError)
-	if !ok {
-		t.Fatalf("err is %T, want *RequestError", err)
+	if !strings.HasPrefix(err.Error(), "deepseek: ") {
+		t.Fatalf("error %q does not name the provider", err)
 	}
-	return reqErr
+	return err
 }
 
 func text(s string) api.Contents {
@@ -390,18 +389,48 @@ func TestEncodeRejectsDiscardedArgumentsWithNoFailedResult(t *testing.T) {
 	}
 }
 
-// A call with no name names no tool, so there is nothing for the model to make
-// sense of and nothing for the caller to dispatch. Sending "name":"" would ask
-// DeepSeek to decide what that meant.
-func TestEncodeRejectsNamelessToolCall(t *testing.T) {
-	err := encodeError(t, mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), api.Request{
-		Messages: []api.Message{{
-			Role:    api.RoleAssistant,
-			Content: api.Contents{api.ContentToolUse{ID: "call_a", Input: json.RawMessage(`{}`)}},
-		}},
-	})
-	if !strings.Contains(err.Error(), "call_a") || !strings.Contains(err.Error(), "no name") {
-		t.Fatalf("error %q names neither the call nor what is wrong with it", err)
+func TestStoredContentTheServerRefusesIsANote(t *testing.T) {
+	p := mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k"))
+	for name, c := range map[string]struct {
+		msg  api.Message
+		want string
+	}{
+		"call with no name": {
+			api.Message{Role: api.RoleAssistant, Content: api.Contents{api.ContentToolUse{ID: "call_a", Input: json.RawMessage(`{}`)}}},
+			`{"role":"assistant","content":"[content omitted]"}`,
+		},
+		"foreign reasoning": {
+			api.Message{Role: api.RoleAssistant, Content: api.Contents{
+				api.ContentReasoning{Meta: json.RawMessage(`"sig"`), Thoughts: map[int]string{0: "sealed"}},
+				api.ContentReasoning{Summary: map[int]string{0: "a summary"}},
+				api.ContentText{Text: "answer"},
+			}},
+			`{"role":"assistant","content":"[reasoning omitted]\n\n[reasoning omitted]\n\nanswer"}`,
+		},
+		"result with no id": {
+			api.Message{Role: api.RoleUser, Content: api.Contents{api.ContentToolResult{Content: api.UserContents{api.ContentText{Text: "72F"}}}}},
+			`{"role":"user","content":"[content omitted]"}`,
+		},
+	} {
+		raw := encodeJSON(t, p, api.Request{Messages: []api.Message{{Role: api.RoleUser, Content: text("hi")}, c.msg}})
+		if !strings.Contains(raw, c.want) {
+			t.Errorf("%s: body\n%s\nwant to contain\n%s", name, raw, c.want)
+		}
+	}
+	raw := encodeJSON(t, p, api.Request{Messages: []api.Message{
+		{Role: api.RoleUser, Content: text("hi")},
+		{Role: api.RoleAssistant, Content: api.Contents{api.ContentToolUse{ID: "call_a", Input: json.RawMessage(`{}`)}}},
+		{Role: api.RoleUser, Content: api.Contents{api.ContentToolResult{ID: "call_a", Content: api.UserContents{api.ContentText{Text: "72F"}}}}},
+	}})
+	if strings.Contains(raw, `"role":"tool"`) || !strings.HasSuffix(raw, `{"role":"user","content":"[content omitted]"}],"stream":true,"stream_options":{"include_usage":true},"thinking":{"type":"enabled"}}`) {
+		t.Errorf("the result answering a call that went out as a note was sent:\n%s", raw)
+	}
+}
+
+func TestEncodeRefusesARequestWithNoMessages(t *testing.T) {
+	err := encodeError(t, mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), api.Request{})
+	if !strings.Contains(err.Error(), "no messages") {
+		t.Fatalf("error %q", err)
 	}
 }
 
@@ -650,36 +679,22 @@ func TestEncodeForcedToolChoiceInThinkingMode(t *testing.T) {
 	}
 }
 
-// The server enforces these too, with a 400 that does not say which tool was
-// wrong.
 func TestEncodeToolValidation(t *testing.T) {
 	base := api.Request{
 		Messages: []api.Message{{Role: api.RoleUser, Content: text("hi")}},
 	}
-	t.Run("name characters", func(t *testing.T) {
+	t.Run("no name", func(t *testing.T) {
 		req := base
-		req.Tools = []api.Tool{{Name: "get weather"}}
-		if err := encodeError(t, mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), req); !strings.Contains(err.Error(), "get weather") {
+		req.Tools = []api.Tool{{}}
+		if err := encodeError(t, mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), req); !strings.Contains(err.Error(), "no name") {
 			t.Fatalf("error %q", err)
 		}
 	})
-	t.Run("name length", func(t *testing.T) {
+	t.Run("names are not checked", func(t *testing.T) {
 		req := base
-		req.Tools = []api.Tool{{Name: strings.Repeat("a", maxToolNameLen+1)}}
-		if err := encodeError(t, mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), req); !strings.Contains(err.Error(), "128") {
-			t.Fatalf("error %q", err)
-		}
-	})
-	t.Run("name at the limit", func(t *testing.T) {
-		req := base
-		req.Tools = []api.Tool{{Name: strings.Repeat("a", maxToolNameLen)}}
-		encodeBody(t, mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), req)
-	})
-	t.Run("duplicate name", func(t *testing.T) {
-		req := base
-		req.Tools = []api.Tool{{Name: "get_weather"}, {Name: "get_weather"}}
-		if err := encodeError(t, mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), req); !strings.Contains(err.Error(), "twice") {
-			t.Fatalf("error %q", err)
+		req.Tools = []api.Tool{{Name: "get weather"}, {Name: strings.Repeat("a", 200)}, {Name: "twice"}, {Name: "twice"}}
+		if got := len(encodeBody(t, mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), req).Tools); got != 4 {
+			t.Fatalf("%d tools declared, want all 4 as written", got)
 		}
 	})
 	t.Run("no count limit", func(t *testing.T) {
@@ -724,7 +739,7 @@ func TestEncodeEffortAndSampling(t *testing.T) {
 		{"flash unset with top_p", "deepseek-flash", []Option{WithTopP(0.97)}, []string{`"thinking":{"type":"enabled"}`, `"top_p":0.97`}, []string{"temperature", "reasoning_effort"}},
 		{"flash max with top_p", "deepseek-flash", []Option{WithEffort(EffortMax), WithTopP(0.97)}, []string{`"reasoning_effort":"max"`, `"top_p":0.97`}, []string{"temperature"}},
 		{"a legacy flash id with top_p", "deepseek-v4-flash", []Option{WithTopP(0.97)}, []string{`"top_p":0.97`}, nil},
-		{"stop and user id", "deepseek-v4-pro", []Option{WithStop("STOP"), WithUserID("tenant-7")}, []string{`"stop":["STOP"]`, `"user_id":"tenant-7"`}, nil},
+		{"stop and user id", "deepseek-v4-pro", []Option{WithStopSequences("STOP"), WithUserID("tenant-7")}, []string{`"stop":["STOP"]`, `"user_id":"tenant-7"`}, nil},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -747,7 +762,7 @@ func TestEncodeEffortAndSampling(t *testing.T) {
 
 func TestEncodeFlashImages(t *testing.T) {
 	flash := mustNew(t, Conf{Model: Flash}, WithAPIKey("k"))
-	for _, mime := range []string{"image/jpeg", "image/png", "image/gif", "image/webp", " IMAGE/PNG "} {
+	for _, mime := range []string{"image/jpeg", "image/png", "image/gif", "image/webp", " IMAGE/PNG ", "image/jpg"} {
 		t.Run(mime, func(t *testing.T) {
 			raw := encodeJSON(t, flash, api.Request{Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{
 				api.ContentText{Text: "what is it"},

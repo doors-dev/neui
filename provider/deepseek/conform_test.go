@@ -39,7 +39,7 @@ func conformAdapter() conform.Adapter {
 	thinking := conform.Params.Thinking
 	off := func(p conform.Params) bool { return !p.Thinking() }
 	return conform.Adapter{
-		Name:   Name,
+		Name:   providerName,
 		Models: []api.Model{Flash, V4Pro},
 		New: func(base string, m api.Model, p conform.Params) (api.Provider, error) {
 			key := p.Key

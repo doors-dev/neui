@@ -32,8 +32,8 @@ import (
 )
 
 const (
-	goldenRequestsHash = "78834b18c1e17875da619d35c0790f9b2ea86bbefdfc65c8c092029e33612ea1"
-	goldenStreamsHash  = "4fa0c7c9a5f8a000a9167fd12e2df978b01fb7bb4a974f832b6a7eda8c5225d9"
+	goldenRequestsHash = "daaaf5c2f5735bea113579bff5bc138bb1b7121bc4a2b93b2a8c57b79d91c013"
+	goldenStreamsHash  = "24c7f63bca6436e9866a9c135497aa751e28801a57328dcb34b0ee41c41e0f2f"
 )
 
 func goldenBytes(r *rand.Rand, n int) []byte {
@@ -132,7 +132,7 @@ func goldenOptions(r *rand.Rand) []Option {
 		opts = append(opts, WithTopP(0.9))
 	}
 	if r.IntN(3) == 0 {
-		opts = append(opts, WithStop("END", "\n\n"))
+		opts = append(opts, WithStopSequences("END", "\n\n"))
 	}
 	if r.IntN(3) == 0 {
 		opts = append(opts, WithMaxTokens(4096))
@@ -187,15 +187,8 @@ func goldenEvent(e api.Event) string {
 		return fmt.Sprintf("ok %s", e.Code)
 	case api.EventErr:
 		var a *APIError
-		var s *StreamError
-		var f *FinishError
-		switch {
-		case errors.As(e.Err, &a):
+		if errors.As(e.Err, &a) {
 			return fmt.Sprintf("err %s %T %+v %q", e.Code, e.Err, *a, e.Err.Error())
-		case errors.As(e.Err, &s):
-			return fmt.Sprintf("err %s %T %+v %q", e.Code, e.Err, *s, e.Err.Error())
-		case errors.As(e.Err, &f):
-			return fmt.Sprintf("err %s %T %+v %q", e.Code, e.Err, *f, e.Err.Error())
 		}
 		return fmt.Sprintf("err %s %T %q", e.Code, e.Err, e.Err.Error())
 	default:

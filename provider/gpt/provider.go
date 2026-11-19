@@ -12,15 +12,37 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package gpt is the api.Provider for OpenAI's Responses API.
+//
+// Build one with New and pass it to neui.WithProvider as the app-wide
+// provider, or to neui.OptionProvider to set one session's provider, which
+// takes precedence over WithProvider if any:
+//
+//	p, err := gpt.New(gpt.Conf{Model: gpt.GPT56Luna},
+//		gpt.WithEffort(gpt.EffortHigh))
+//
+// The key comes from OPENAI_API_KEY unless WithAPIKey sets it. A provider
+// serves one model with one set of options; build two for two settings. For a
+// model declared here New refuses a setting the API refuses on every request;
+// for any other model it checks no combination and every option is sent as
+// configured.
+//
+// WithBaseURL points it at a gateway or proxy that speaks the Responses API.
+// Responses are not stored on the service unless WithStore turns that on.
+// Caching is automatic; WithPromptCacheKey and WithPromptCacheOptions steer it.
+//
+// Failures reach the thread as api.EventErr with an api.ErrCode, and a failure
+// the API reported carries an *APIError, read with errors.As.
 package gpt
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 
 	"neui.dev/api"
@@ -28,9 +50,12 @@ import (
 )
 
 const (
+	providerName   = "gpt"
 	defaultBaseURL = "https://api.openai.com/v1"
 	apiKeyEnv      = "OPENAI_API_KEY"
 )
+
+var errTooLarge = errors.New("gpt: request too large")
 
 // ReplayMode says which earlier reasoning items are sent back on later turns;
 // set it with WithReasoningReplay. The default, ReplayToolTurns, suits every
@@ -90,6 +115,19 @@ func defaultSettings() settings {
 	}
 }
 
+// Provider is an api.Provider for one OpenAI model. It is safe for concurrent
+// use by any number of sessions.
+type Provider struct {
+	apiKey      string
+	baseURL     string
+	client      *http.Client
+	org         string
+	project     string
+	model       api.Model // the one model this adapter streams with, spelled as Conf wrote it
+	set         settings
+	keyExplicit bool
+}
+
 // Option configures a Provider in New. Every option has a working default.
 type Option func(*Provider) error
 
@@ -101,15 +139,15 @@ type Conf struct {
 }
 
 // New builds a Provider. A nil option is skipped; an option with an invalid
-// value, or one the declared model does not take, makes New return its error,
-// as does an empty Conf.Model.Name. So do WithTemperature or WithTopP on a
-// known reasoning model, one whose Name is exactly that of a model declared in
-// this package, unless the reasoning effort is EffortNone. Any other id is
-// unknown: New checks no combination for it and every option is sent as
-// configured, so what the model refuses fails the turn.
-// Without WithAPIKey, New reads the key from OPENAI_API_KEY once. If that is
-// empty, it logs a warning and requests carry no Authorization header, which
-// api.openai.com refuses with CodeAccess.
+// value makes New return its error, as does an empty Conf.Model.Name. On a
+// model declared in this package, one whose Name is exactly that of a declared
+// model, New also returns an error for a configuration the API refuses on
+// every request: a WithMaxTokens over the model's output ceiling, an effort
+// the model does not take, and WithTemperature or WithTopP unless the effort
+// is EffortNone. Any other id is unknown: New checks no combination for it and
+// every option is sent as configured, so what the model refuses fails the
+// turn. Without WithAPIKey, New reads the key from OPENAI_API_KEY once and
+// does not check it; a missing or wrong key ends the turn with api.CodeAccess.
 func New(conf Conf, opts ...Option) (*Provider, error) {
 	p := &Provider{
 		baseURL: defaultBaseURL,
@@ -128,14 +166,19 @@ func New(conf Conf, opts ...Option) (*Provider, error) {
 	if p.model.Name == "" {
 		return nil, errors.New("gpt: no model, set Conf.Model")
 	}
-	if classify(p.model.Name) == reasoningModel && (p.set.temperature != nil || p.set.topP != nil) && p.set.effort != string(EffortNone) {
-		return nil, fmt.Errorf("gpt: %s is a reasoning model and takes temperature and top_p only with reasoning effort none", p.model.Name)
+	if m, ok := declared[p.model.Name]; ok {
+		if p.set.maxTokens > m.maxTokens {
+			return nil, fmt.Errorf("gpt: max tokens %d is over the %d output tokens %s takes", p.set.maxTokens, m.maxTokens, p.model.Name)
+		}
+		if p.set.effort != "" && slices.Contains(m.refusedEffort, Effort(p.set.effort)) {
+			return nil, fmt.Errorf("gpt: %s does not take reasoning effort %q", p.model.Name, p.set.effort)
+		}
+		if (p.set.temperature != nil || p.set.topP != nil) && p.set.effort != string(EffortNone) {
+			return nil, fmt.Errorf("gpt: %s is a reasoning model and takes temperature and top_p only with reasoning effort none", p.model.Name)
+		}
 	}
 	if !p.keyExplicit {
 		p.apiKey = os.Getenv(apiKeyEnv)
-		if p.apiKey == "" {
-			slog.Warn("gpt: no API key: set " + apiKeyEnv + " or pass WithAPIKey")
-		}
 	}
 	return p, nil
 }
@@ -219,8 +262,9 @@ const maxOutputTokensFloor = 16
 // WithMaxTokens caps the response, reasoning included, so on a reasoning model
 // a small cap can leave no room for the answer. Zero, the default, sends no cap.
 // A negative value and values from 1 to 15, below the API minimum, are
-// rejected, and so is a value over 128,000 when Conf.Model is one of the
-// models declared in this package, which take no more.
+// rejected. New refuses a value over 128,000 when Conf.Model is one of the
+// models declared in this package, which take no more. A turn that hits the
+// cap ends with api.CodeCapped.
 func WithMaxTokens(n int) Option {
 	return func(p *Provider) error {
 		if n < 0 {
@@ -228,12 +272,6 @@ func WithMaxTokens(n int) Option {
 		}
 		if n > 0 && n < maxOutputTokensFloor {
 			return fmt.Errorf("gpt: WithMaxTokens is %d or more, the schema minimum, or zero for no cap", maxOutputTokensFloor)
-		}
-		switch p.model.Name {
-		case GPT56Sol.Name, GPT56Luna.Name, GPT6Astra.Name, GPT6Sol.Name, GPT6Luna.Name, GPT61Sol.Name, GPT61Terra.Name:
-			if n > maxOutputTokensCeiling {
-				return fmt.Errorf("gpt: WithMaxTokens is %d, over the %d output tokens %s takes", n, maxOutputTokensCeiling, p.model.Name)
-			}
 		}
 		p.set.maxTokens = n
 		return nil
@@ -244,8 +282,8 @@ func WithMaxTokens(n int) Option {
 // known reasoning model (see New) unless the reasoning effort is EffortNone.
 func WithTemperature(v float64) Option {
 	return func(p *Provider) error {
-		if v < 0 || v > 2 {
-			return errors.New("gpt: temperature is 0 to 2")
+		if !(v >= 0 && v <= 2) {
+			return fmt.Errorf("gpt: temperature %v is outside the range of 0 to 2", v)
 		}
 		p.set.temperature = &v
 		return nil
@@ -256,15 +294,15 @@ func WithTemperature(v float64) Option {
 // it on a known reasoning model unless the reasoning effort is EffortNone.
 func WithTopP(v float64) Option {
 	return func(p *Provider) error {
-		if v < 0 || v > 1 {
-			return errors.New("gpt: top_p is 0 to 1")
+		if !(v >= 0 && v <= 1) {
+			return fmt.Errorf("gpt: top_p %v is outside the range of 0 to 1", v)
 		}
 		p.set.topP = &v
 		return nil
 	}
 }
 
-// Effort is a reasoning.effort value for WithReasoningEffort. Any string
+// Effort is a reasoning.effort value for WithEffort. Any string
 // passes through, so a value newer than these constants works too.
 type Effort string
 
@@ -279,19 +317,14 @@ const (
 	EffortMax     Effort = "max"
 )
 
-// WithReasoningEffort sets reasoning.effort. Accepted values differ per model.
-// When Conf.Model is one of the models declared in this package, the values
-// its docs leave out are rejected: EffortMinimal on all of them, and EffortNone
-// on gpt-6-astra and gpt-6.1-sol. For any other model nothing is checked, and
-// an unsupported value fails the turn with a 400.
-func WithReasoningEffort(effort Effort) Option {
+// WithEffort sets reasoning.effort; empty leaves the model default. Accepted
+// values differ per model. When Conf.Model is one of the models declared in
+// this package, New refuses the values its docs leave out: EffortMinimal on
+// all of them, and EffortNone on gpt-6-astra and gpt-6.1-sol. For any other
+// model nothing is checked, and an unsupported value fails the turn with
+// api.CodeInvalid.
+func WithEffort(effort Effort) Option {
 	return func(p *Provider) error {
-		switch m := p.model.Name; m {
-		case GPT56Sol.Name, GPT56Luna.Name, GPT6Astra.Name, GPT6Sol.Name, GPT6Luna.Name, GPT61Sol.Name, GPT61Terra.Name:
-			if effort == EffortMinimal || effort == EffortNone && (m == GPT6Astra.Name || m == GPT61Sol.Name) {
-				return fmt.Errorf("gpt: %s does not take reasoning effort %q", p.model.Name, effort)
-			}
-		}
 		p.set.effort = string(effort)
 		return nil
 	}
@@ -525,4 +558,67 @@ func WithObfuscation(on bool) Option {
 		p.set.obfuscation = on
 		return nil
 	}
+}
+
+var _ api.Provider = (*Provider)(nil)
+
+// Name returns "gpt".
+func (p *Provider) Name() string {
+	return providerName
+}
+
+// Model reports the model this adapter is configured with, as Conf wrote it.
+func (p *Provider) Model() api.Model {
+	return p.model
+}
+
+// Stream sends one turn and streams its events as api.Provider describes;
+// read until the channel closes or cancel ctx. A request that cannot be built,
+// such as one with a tool that has no name, ends at once with CodeInvalid, and
+// one larger than a nonzero Model.RequestBytes with CodeTooLarge. A failure the service
+// reports arrives as an EventErr whose Err is or wraps an *APIError.
+func (p *Provider) Stream(ctx context.Context, req api.Request) <-chan api.Event {
+	httpReq, sent, err := p.request(ctx, req)
+	if errors.Is(err, errTooLarge) {
+		return lib.Drain(api.EventErr{Code: api.CodeTooLarge, Err: err})
+	}
+	if err != nil {
+		return lib.Drain(api.EventErr{Code: api.CodeInvalid, Err: err})
+	}
+	return lib.Stream(ctx, p.client, httpReq, newConverter(p.model.Name, sent, p.model.RequestBytes), p.set.transport)
+}
+
+// request encodes the turn. http.NewRequestWithContext cannot fail on what is
+// passed to it here — the method is a constant and the URL is the configured
+// base with a fixed path — so a failure is a base URL that was never valid,
+// which is a mistake at construction rather than an outcome of this turn.
+func (p *Provider) request(ctx context.Context, req api.Request) (*http.Request, int, error) {
+	body, err := p.encode(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	payload, err := lib.MarshalBody(body)
+	if err != nil {
+		return nil, 0, fmt.Errorf("gpt: encoding the request: %w", err)
+	}
+	sent := len(payload.Bytes())
+	if p.model.RequestBytes > 0 && sent > p.model.RequestBytes {
+		return nil, sent, fmt.Errorf("%w: the request is %d bytes, over the %d the model %s takes", errTooLarge, sent, p.model.RequestBytes, p.model.Name)
+	}
+	httpReq, err := payload.Request(ctx, p.baseURL+"/responses")
+	if err != nil {
+		panic(err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "text/event-stream")
+	if p.apiKey != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
+	}
+	if p.org != "" {
+		httpReq.Header.Set("OpenAI-Organization", p.org)
+	}
+	if p.project != "" {
+		httpReq.Header.Set("OpenAI-Project", p.project)
+	}
+	return httpReq, sent, nil
 }

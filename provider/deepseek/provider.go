@@ -30,11 +30,8 @@
 // results; every other model gets a short note in place of each image, and
 // every model gets one in place of a document. Caching is automatic and needs no options:
 // keep the tools, system prompt and history stable between turns to hit it.
-// Failures reach the thread as api.EventErr with an api.ErrCode. Its Err is an
-// *APIError for a non 200 response, a *RequestError for a request this adapter
-// refused to encode, a *FinishError for a finish_reason that ended the turn
-// without a reply, and a *StreamError for an error frame in the stream; read
-// them with errors.As.
+// Failures reach the thread as api.EventErr with an api.ErrCode, and a failure
+// DeepSeek reported carries an *APIError, read with errors.As.
 package deepseek
 
 import (
@@ -50,20 +47,15 @@ import (
 	"neui.dev/provider/lib"
 )
 
-// Name is what Provider.Name returns.
-const Name = "deepseek"
-
 const (
+	providerName   = "deepseek"
 	defaultBaseURL = "https://api.deepseek.com"
 	completionPath = "/chat/completions"
 	// maxOutputTokens is the documented ceiling for both v4 models, against a
 	// 1M context. A request above it is rejected, so New refuses the value on
 	// those models rather than letting the turn fail at the server.
 	maxOutputTokens = 393_216
-	// maxToolNameLen is a documented request limit. Checking it here turns an
-	// opaque 400 into a sentence naming the tool.
-	maxToolNameLen = 128
-	maxUserIDBytes = 512
+	maxUserIDBytes  = 512
 )
 
 // Effort is DeepSeek's reasoning_effort: EffortNone turns thinking off, and
@@ -92,6 +84,7 @@ const (
 // is safe for concurrent use and holds no per turn state.
 type Provider struct {
 	key         string
+	keyExplicit bool
 	base        string
 	model       api.Model
 	family      family
@@ -116,9 +109,10 @@ type Conf struct {
 	Model api.Model `json:"model"`
 }
 
-// New builds a Provider for conf.Model. The key defaults to DEEPSEEK_API_KEY.
-// New returns the first option error, and an error for an empty Model.Name or
-// a missing key. The model rules follow the exact id: deepseek-flash and its
+// New builds a Provider for conf.Model. The key defaults to DEEPSEEK_API_KEY
+// and is not checked; a missing or wrong key ends the turn with
+// api.CodeAccess. A nil option is skipped. New returns the
+// first option error, and an error for an empty Model.Name. The model rules follow the exact id: deepseek-flash and its
 // legacy ids deepseek-v4-flash and deepseek-v4-flash-vision-exp take images
 // and honor top_p with thinking on; deepseek-v4-pro takes no images and honors
 // top_p with thinking off. On those models New also returns an error for an
@@ -130,7 +124,6 @@ type Conf struct {
 // minutes before answering; WithTransport bounds a dead connection instead.
 func New(conf Conf, opts ...Option) (*Provider, error) {
 	p := &Provider{
-		key:    os.Getenv("DEEPSEEK_API_KEY"),
 		base:   defaultBaseURL,
 		model:  conf.Model,
 		client: &http.Client{},
@@ -146,8 +139,8 @@ func New(conf Conf, opts ...Option) (*Provider, error) {
 	if p.model.Name == "" {
 		return nil, errors.New("deepseek: no model, set Conf.Model")
 	}
-	if p.key == "" {
-		return nil, errNoKey
+	if !p.keyExplicit {
+		p.key = os.Getenv("DEEPSEEK_API_KEY")
 	}
 	switch p.model.Name {
 	case Flash.Name, "deepseek-v4-flash", "deepseek-v4-flash-vision-exp":
@@ -178,11 +171,13 @@ func New(conf Conf, opts ...Option) (*Provider, error) {
 	return p, nil
 }
 
-// WithAPIKey sets the key, overriding DEEPSEEK_API_KEY. New refuses an empty
-// key; the server rejects a wrong one with api.CodeAccess.
+// WithAPIKey sets the key, overriding DEEPSEEK_API_KEY. An empty key sends no
+// Authorization header, for a gateway that authenticates some other way; the
+// server rejects a wrong one with api.CodeAccess.
 func WithAPIKey(key string) Option {
 	return func(p *Provider) error {
 		p.key = key
+		p.keyExplicit = true
 		return nil
 	}
 }
@@ -227,7 +222,7 @@ func WithHTTPClient(client *http.Client) Option {
 // reasoning_effort; unset sends thinking enabled and leaves the level to the
 // server. With thinking on, DeepSeek refuses a forced tool choice, so on a
 // declared model a request whose ToolChoice is api.ToolChoiceAny or names a
-// tool fails with a *RequestError unless the effort is EffortNone; any other
+// tool fails with api.CodeInvalid unless the effort is EffortNone; any other
 // model is sent the choice as it is.
 func WithEffort(e Effort) Option {
 	return func(p *Provider) error {
@@ -265,11 +260,13 @@ func WithTopP(t float64) Option {
 	}
 }
 
-// WithStop sets stop sequences, replacing any set before. DeepSeek takes up
-// to sixteen; more are not checked here and are left to the server.
-func WithStop(stop ...string) Option {
+// WithStopSequences sets stop, replacing any set before. DeepSeek takes up to
+// sixteen sequences; more are not checked here and are left to the server. A
+// turn that ends on one ends as an ordinary completion, api.CodeTurn, and
+// nothing reports which sequence was hit.
+func WithStopSequences(seqs ...string) Option {
 	return func(p *Provider) error {
-		p.stop = stop
+		p.stop = seqs
 		return nil
 	}
 }
@@ -320,7 +317,7 @@ var _ api.Provider = (*Provider)(nil)
 
 // Name returns "deepseek".
 func (p *Provider) Name() string {
-	return Name
+	return providerName
 }
 
 // Model returns the model from Conf. It is fixed for the provider's lifetime.
@@ -329,13 +326,11 @@ func (p *Provider) Model() api.Model {
 }
 
 // Stream runs one turn on its own goroutine and returns its events. A turn that
-// finishes ends in exactly one EventOk or EventErr, then the channel closes. A
-// cancelled ctx closes it with neither, and so does a connection that stops
-// before any finish_reason arrived; one that stops after it ends as that
-// finish_reason does. A request this wire cannot carry, or one over
-// Model.RequestBytes, ends at once in EventErr with api.CodeInvalid or
-// api.CodeTooLarge. The thread calls it; hosts normally do
-// not.
+// finishes ends in exactly one EventOk or EventErr, then the channel closes; a
+// cancelled ctx or a connection that just stops closes it with neither. A
+// request this wire cannot carry, or one over Model.RequestBytes, ends at once
+// in EventErr with api.CodeInvalid or api.CodeTooLarge. The thread calls it;
+// hosts normally do not.
 func (p *Provider) Stream(ctx context.Context, req api.Request) <-chan api.Event {
 	httpReq, sent, err := p.request(ctx, req)
 	if err != nil {
@@ -367,7 +362,9 @@ func (p *Provider) request(ctx context.Context, req api.Request) (*http.Request,
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "text/event-stream")
-	httpReq.Header.Set("Authorization", "Bearer "+p.key)
+	if p.key != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+p.key)
+	}
 	return httpReq, sent, nil
 }
 

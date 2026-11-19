@@ -34,54 +34,23 @@ import (
 // describe renders one event as a line. The grammar is the contract and only a
 // sequence assertion tests it, so the tests compare these lines in order rather
 // than checking that some event of some kind showed up.
-func describe(e api.Event) string {
-	switch e := e.(type) {
-	case api.EventStart:
-		return fmt.Sprintf("start id=%s model=%s", e.ID, e.Model)
-	case api.EventText:
-		return fmt.Sprintf("text[%d] %q", e.Index, e.Text)
-	case api.EventTool:
-		return fmt.Sprintf("tool[%d] id=%s name=%s args=%q", e.Index, e.ID, e.Name, e.Args)
-	case api.EventThinking:
-		return fmt.Sprintf("thinking[%d] part=%d %q", e.Index, e.Part, e.Text)
-	case api.EventSummary:
-		return fmt.Sprintf("summary[%d] part=%d %q", e.Index, e.Part, e.Text)
-	case api.EventMeta:
-		return fmt.Sprintf("meta[%d] %s", e.Index, string(e.Data))
-	case api.EventOpaque:
-		return fmt.Sprintf("opaque[%d] kind=%s data=%s delta=%q", e.Index, e.Kind, string(e.Data), e.Delta)
-	case api.EventClose:
-		return fmt.Sprintf("close[%d]", e.Index)
-	case api.EventUsage:
-		return fmt.Sprintf("usage in=%d out=%d reasoning=%d read=%d write=%d",
-			e.Input, e.Output, e.Reasoning, e.CacheRead, e.CacheWrite)
-	case api.EventOk:
-		return fmt.Sprintf("ok %s", e.Code)
-	case api.EventErr:
-		return fmt.Sprintf("err %s", e.Code)
-	default:
-		return fmt.Sprintf("?%T", e)
+func collect(t *testing.T, p *Provider, req api.Request) []api.Event {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	var got []api.Event
+	for e := range p.Stream(ctx, req) {
+		got = append(got, e)
 	}
-}
-
-func collect(ch <-chan api.Event) []api.Event {
-	var out []api.Event
-	for e := range ch {
-		out = append(out, e)
-	}
-	return out
-}
-
-func describeAll(events []api.Event) []string {
-	out := make([]string, len(events))
-	for i, e := range events {
-		out[i] = describe(e)
-	}
-	return out
+	return got
 }
 
 func drain(ch <-chan api.Event) []string {
-	return describeAll(collect(ch))
+	var out []string
+	for e := range ch {
+		out = append(out, conform.Describe(e))
+	}
+	return out
 }
 
 func equalLines(t *testing.T, got, want []string) {
@@ -91,7 +60,7 @@ func equalLines(t *testing.T, got, want []string) {
 			len(got), len(want), strings.Join(got, "\n      "), strings.Join(want, "\n      "))
 	}
 	for i := range got {
-		if got[i] != want[i] {
+		if got[i] != want[i] && !(strings.HasPrefix(want[i], "err ") && strings.HasPrefix(got[i], want[i]+" ")) {
 			t.Fatalf("event %d:\n got: %s\nwant: %s\nfull:\n%s", i, got[i], want[i], strings.Join(got, "\n"))
 		}
 	}
@@ -170,11 +139,11 @@ func TestStreamSequences(t *testing.T) {
 				frame("response.output_item.done", `{"type":"response.output_item.done","output_index":0,"item":{"id":"msg_1","type":"message","status":"completed","role":"assistant","content":[{"type":"output_text","text":"Hello there","annotations":[]}]}}`) +
 				frame("response.completed", usageFrame),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
-				`text[0] "Hello"`,
-				`text[0] " there"`,
-				"close[0]",
-				"usage in=300 out=162 reasoning=1024 read=1500 write=200",
+				"start resp_1 gpt-5.6-sol",
+				`text 0 "Hello"`,
+				`text 0 " there"`,
+				"close 0",
+				"usage in=300 out=162 rsn=1024 cr=1500 cw=200",
 				"ok turn",
 			},
 		},
@@ -191,9 +160,9 @@ func TestStreamSequences(t *testing.T) {
 				frame("response.output_text.done", `{"type":"response.output_text.done","output_index":0,"content_index":0,"text":"ok"}`) +
 				frame("response.completed", `{"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.6-sol","status":"completed","usage":null}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
-				`text[0] "ok"`,
-				"close[0]",
+				"start resp_1 gpt-5.6-sol",
+				`text 0 "ok"`,
+				"close 0",
 				"ok turn",
 			},
 		},
@@ -207,11 +176,11 @@ func TestStreamSequences(t *testing.T) {
 				frame("response.output_item.done", `{"type":"response.output_item.done","output_index":0,"item":{"id":"fc_1","type":"function_call","status":"completed","call_id":"call_abc","name":"get_weather","arguments":"{\"city\":\"Paris\"}"}}`) +
 				frame("response.completed", `{"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.6-sol","status":"completed","usage":null}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
-				`tool[0] id=call_abc name=get_weather args=""`,
-				`tool[0] id= name= args="{\"city\":"`,
-				`tool[0] id= name= args="\"Paris\"}"`,
-				"close[0]",
+				"start resp_1 gpt-5.6-sol",
+				`tool 0 "call_abc" "get_weather" ""`,
+				`tool 0 "" "" "{\"city\":"`,
+				`tool 0 "" "" "\"Paris\"}"`,
+				"close 0",
 				"ok turn",
 			},
 		},
@@ -227,14 +196,14 @@ func TestStreamSequences(t *testing.T) {
 				frame("response.function_call_arguments.done", `{"type":"response.function_call_arguments.done","output_index":1,"arguments":"{\"b\":2}"}`) +
 				frame("response.completed", `{"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.6-sol","status":"completed","usage":null}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
-				`tool[0] id=call_a name=alpha args=""`,
-				`tool[1] id=call_b name=beta args=""`,
-				`tool[0] id= name= args="{\"a\":1}"`,
-				`tool[1] id= name= args="{\"b\":"`,
-				"close[0]",
-				`tool[1] id= name= args="2}"`,
-				"close[1]",
+				"start resp_1 gpt-5.6-sol",
+				`tool 0 "call_a" "alpha" ""`,
+				`tool 1 "call_b" "beta" ""`,
+				`tool 0 "" "" "{\"a\":1}"`,
+				`tool 1 "" "" "{\"b\":"`,
+				"close 0",
+				`tool 1 "" "" "2}"`,
+				"close 1",
 				"ok turn",
 			},
 		},
@@ -250,10 +219,10 @@ func TestStreamSequences(t *testing.T) {
 				frame("response.output_item.done", `{"type":"response.output_item.done","output_index":0,"item":{"id":"fc_1","type":"function_call","status":"completed","call_id":"call_z","name":"now","arguments":"{}"}}`) +
 				frame("response.completed", `{"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.6-sol","status":"completed","usage":null}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
-				`tool[0] id=call_z name=now args=""`,
-				`tool[0] id= name= args="{}"`,
-				"close[0]",
+				"start resp_1 gpt-5.6-sol",
+				`tool 0 "call_z" "now" ""`,
+				`tool 0 "" "" "{}"`,
+				"close 0",
 				"ok turn",
 			},
 		},
@@ -269,10 +238,10 @@ func TestStreamSequences(t *testing.T) {
 				frame("response.function_call_arguments.done", `{"type":"response.function_call_arguments.done","output_index":0,"arguments":""}`) +
 				frame("response.completed", `{"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.6-sol","status":"completed","usage":null}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
-				`tool[0] id=call_z name=now args=""`,
-				`tool[0] id= name= args="{}"`,
-				"close[0]",
+				"start resp_1 gpt-5.6-sol",
+				`tool 0 "call_z" "now" ""`,
+				`tool 0 "" "" "{}"`,
+				"close 0",
 				"ok turn",
 			},
 		},
@@ -290,9 +259,9 @@ func TestStreamSequences(t *testing.T) {
 				frame("response.output_text.done", `{"type":"response.output_text.done","output_index":1,"content_index":0,"text":"Paris."}`) +
 				frame("response.completed", `{"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.6-sol","status":"completed","usage":null}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
-				`text[0] "Paris."`,
-				"close[0]",
+				"start resp_1 gpt-5.6-sol",
+				`text 0 "Paris."`,
+				"close 0",
 				"ok turn",
 			},
 		},
@@ -305,7 +274,7 @@ func TestStreamSequences(t *testing.T) {
 				frame("response.function_call_arguments.done", `{"type":"response.function_call_arguments.done","output_index":0,"arguments":""}`) +
 				frame("response.completed", `{"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.6-sol","status":"completed","usage":null}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
+				"start resp_1 gpt-5.6-sol",
 				"err network",
 			},
 		},
@@ -317,9 +286,9 @@ func TestStreamSequences(t *testing.T) {
 				frame("response.output_item.done", `{"type":"response.output_item.done","output_index":0,"item":{"id":"fc_1","type":"function_call","status":"incomplete","call_id":"call_cut","name":"search","arguments":"{\"query\": \"the hist"}}`) +
 				frame("response.incomplete", `{"type":"response.incomplete","response":{"id":"resp_1","model":"gpt-5.6-sol","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"usage":null}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
-				`tool[0] id=call_cut name=search args=""`,
-				`tool[0] id= name= args="{\"query\": \"the hist"`,
+				"start resp_1 gpt-5.6-sol",
+				`tool 0 "call_cut" "search" ""`,
+				`tool 0 "" "" "{\"query\": \"the hist"`,
 				"err capped",
 			},
 		},
@@ -331,10 +300,10 @@ func TestStreamSequences(t *testing.T) {
 				frame("response.output_item.done", `{"type":"response.output_item.done","output_index":0,"item":{"id":"rs_1","type":"reasoning","summary":[{"type":"summary_text","text":"Checking."}]}}`) +
 				frame("response.completed", `{"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.6-sol","status":"completed","usage":null}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
-				`summary[0] part=0 "Checking."`,
-				`meta[0] {"id":"rs_1","type":"reasoning","summary":[{"type":"summary_text","text":"Checking."}]}`,
-				"close[0]",
+				"start resp_1 gpt-5.6-sol",
+				`summary 0 part=0 "Checking."`,
+				`meta 0 {"id":"rs_1","type":"reasoning","summary":[{"type":"summary_text","text":"Checking."}]}`,
+				"close 0",
 				"ok turn",
 			},
 		},
@@ -352,15 +321,15 @@ func TestStreamSequences(t *testing.T) {
 				frame("response.output_text.done", `{"type":"response.output_text.done","output_index":1,"content_index":0,"text":"Paris."}`) +
 				frame("response.completed", `{"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.6-sol","status":"completed","usage":null}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
-				`summary[0] part=0 "Checking "`,
-				`summary[0] part=0 "the map."`,
+				"start resp_1 gpt-5.6-sol",
+				`summary 0 part=0 "Checking "`,
+				`summary 0 part=0 "the map."`,
 				// The meta is one event carrying the whole item, which is what
 				// goes back on a later turn, id included.
-				`meta[0] {"id":"rs_1","type":"reasoning","summary":[{"type":"summary_text","text":"Checking the map."}],"encrypted_content":"gAAAAABsealed"}`,
-				"close[0]",
-				`text[1] "Paris."`,
-				"close[1]",
+				`meta 0 {"id":"rs_1","type":"reasoning","summary":[{"type":"summary_text","text":"Checking the map."}],"encrypted_content":"gAAAAABsealed"}`,
+				"close 0",
+				`text 1 "Paris."`,
+				"close 1",
 				"ok turn",
 			},
 		},
@@ -379,13 +348,13 @@ func TestStreamSequences(t *testing.T) {
 				frame("response.output_item.done", `{"type":"response.output_item.done","output_index":0,"item":{"id":"rs_1","type":"reasoning","summary":[{"type":"summary_text","text":"Checking the map."},{"type":"summary_text","text":"Then the ledger."}],"encrypted_content":"gAAAAABsealed"}}`) +
 				frame("response.completed", `{"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.6-sol","status":"completed","usage":null}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
-				`summary[0] part=1 "Then the "`,
-				`summary[0] part=0 "Checking "`,
-				`summary[0] part=1 "ledger."`,
-				`summary[0] part=0 "the map."`,
-				`meta[0] {"id":"rs_1","type":"reasoning","summary":[{"type":"summary_text","text":"Checking the map."},{"type":"summary_text","text":"Then the ledger."}],"encrypted_content":"gAAAAABsealed"}`,
-				"close[0]",
+				"start resp_1 gpt-5.6-sol",
+				`summary 0 part=1 "Then the "`,
+				`summary 0 part=0 "Checking "`,
+				`summary 0 part=1 "ledger."`,
+				`summary 0 part=0 "the map."`,
+				`meta 0 {"id":"rs_1","type":"reasoning","summary":[{"type":"summary_text","text":"Checking the map."},{"type":"summary_text","text":"Then the ledger."}],"encrypted_content":"gAAAAABsealed"}`,
+				"close 0",
 				"ok turn",
 			},
 		},
@@ -402,12 +371,12 @@ func TestStreamSequences(t *testing.T) {
 				frame("response.output_item.done", `{"type":"response.output_item.done","output_index":0,"item":{"id":"rs_1","type":"reasoning","summary":[{"type":"summary_text","text":"Doing the division."}],"encrypted_content":"gAAAAABsealed"}}`) +
 				frame("response.completed", `{"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.6-sol","status":"completed","usage":null}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
-				`thinking[0] part=0 "1071 = 2 x 462 + 147"`,
-				`summary[0] part=0 "Doing the division."`,
-				`thinking[0] part=1 "GCD is 21."`,
-				`meta[0] {"id":"rs_1","type":"reasoning","summary":[{"type":"summary_text","text":"Doing the division."}],"encrypted_content":"gAAAAABsealed"}`,
-				"close[0]",
+				"start resp_1 gpt-5.6-sol",
+				`thinking 0 part=0 "1071 = 2 x 462 + 147"`,
+				`summary 0 part=0 "Doing the division."`,
+				`thinking 0 part=1 "GCD is 21."`,
+				`meta 0 {"id":"rs_1","type":"reasoning","summary":[{"type":"summary_text","text":"Doing the division."}],"encrypted_content":"gAAAAABsealed"}`,
+				"close 0",
 				"ok turn",
 			},
 		},
@@ -418,10 +387,10 @@ func TestStreamSequences(t *testing.T) {
 				frame("response.output_item.done", `{"type":"response.output_item.done","output_index":0,"item":{"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"gAAAAABsealed"}}`) +
 				frame("response.completed", `{"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.6-sol","status":"completed","usage":null}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
-				`thinking[0] part=0 ""`,
-				`meta[0] {"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"gAAAAABsealed"}`,
-				"close[0]",
+				"start resp_1 gpt-5.6-sol",
+				`thinking 0 part=0 ""`,
+				`meta 0 {"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"gAAAAABsealed"}`,
+				"close 0",
 				"ok turn",
 			},
 		},
@@ -435,9 +404,9 @@ func TestStreamSequences(t *testing.T) {
 				frame("response.output_text.done", `{"type":"response.output_text.done","output_index":1,"content_index":0,"text":"Paris."}`) +
 				frame("response.completed", `{"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.6-sol","status":"completed","usage":null}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
-				`text[0] "Paris."`,
-				"close[0]",
+				"start resp_1 gpt-5.6-sol",
+				`text 0 "Paris."`,
+				"close 0",
 				"ok turn",
 			},
 		},
@@ -456,12 +425,12 @@ func TestStreamSequences(t *testing.T) {
 				frame("response.output_text.done", `{"type":"response.output_text.done","output_index":1,"content_index":0,"text":"done"}`) +
 				frame("response.completed", `{"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.6-sol","status":"completed","usage":null}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
-				`opaque[0] kind=web_search_call data={"id":"ws_1","type":"web_search_call","status":"in_progress"} delta=""`,
-				`opaque[0] kind=web_search_call data={"id":"ws_1","type":"web_search_call","status":"completed","action":{"type":"search","query":"weather"}} delta=""`,
-				"close[0]",
-				`text[1] "done"`,
-				"close[1]",
+				"start resp_1 gpt-5.6-sol",
+				`opaque 0 "web_search_call" {"id":"ws_1","type":"web_search_call","status":"in_progress"} ""`,
+				`opaque 0 "web_search_call" {"id":"ws_1","type":"web_search_call","status":"completed","action":{"type":"search","query":"weather"}} ""`,
+				"close 0",
+				`text 1 "done"`,
+				"close 1",
 				"ok turn",
 			},
 		},
@@ -478,12 +447,12 @@ func TestStreamSequences(t *testing.T) {
 				frame("response.output_item.done", `{"type":"response.output_item.done","output_index":0,"item":{"id":"ci_1","type":"code_interpreter_call","status":"completed","code":"print(1)","outputs":[{"type":"logs","logs":"1\n"}]}}`) +
 				frame("response.completed", `{"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.6-sol","status":"completed","usage":null}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
-				`opaque[0] kind=code_interpreter_call data={"id":"ci_1","type":"code_interpreter_call","status":"in_progress","code":null} delta=""`,
-				`opaque[0] kind= data= delta="print("`,
-				`opaque[0] kind= data= delta="1)"`,
-				`opaque[0] kind=code_interpreter_call data={"id":"ci_1","type":"code_interpreter_call","status":"completed","code":"print(1)","outputs":[{"type":"logs","logs":"1\n"}]} delta=""`,
-				"close[0]",
+				"start resp_1 gpt-5.6-sol",
+				`opaque 0 "code_interpreter_call" {"id":"ci_1","type":"code_interpreter_call","status":"in_progress","code":null} ""`,
+				`opaque 0 "" - "print("`,
+				`opaque 0 "" - "1)"`,
+				`opaque 0 "code_interpreter_call" {"id":"ci_1","type":"code_interpreter_call","status":"completed","code":"print(1)","outputs":[{"type":"logs","logs":"1\n"}]} ""`,
+				"close 0",
 				"ok turn",
 			},
 		},
@@ -500,15 +469,15 @@ func TestStreamSequences(t *testing.T) {
 				frame("response.output_item.done", `{"type":"response.output_item.done","output_index":1,"item":{"id":"ctc_1","type":"custom_tool_call","call_id":"call_c","name":"patch","input":"diff"}}`) +
 				frame("response.completed", `{"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.6-sol","status":"completed","usage":null}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
-				`opaque[0] kind=mcp_call data={"id":"mcp_1","type":"mcp_call","server_label":"docs","name":"search","arguments":""} delta=""`,
-				`opaque[0] kind= data= delta="{\"q\":1}"`,
-				`opaque[0] kind=mcp_call data={"id":"mcp_1","type":"mcp_call","server_label":"docs","name":"search","arguments":"{\"q\":1}","output":"ok"} delta=""`,
-				"close[0]",
-				`opaque[1] kind=custom_tool_call data={"id":"ctc_1","type":"custom_tool_call","call_id":"call_c","name":"patch","input":""} delta=""`,
-				`opaque[1] kind= data= delta="diff"`,
-				`opaque[1] kind=custom_tool_call data={"id":"ctc_1","type":"custom_tool_call","call_id":"call_c","name":"patch","input":"diff"} delta=""`,
-				"close[1]",
+				"start resp_1 gpt-5.6-sol",
+				`opaque 0 "mcp_call" {"id":"mcp_1","type":"mcp_call","server_label":"docs","name":"search","arguments":""} ""`,
+				`opaque 0 "" - "{\"q\":1}"`,
+				`opaque 0 "mcp_call" {"id":"mcp_1","type":"mcp_call","server_label":"docs","name":"search","arguments":"{\"q\":1}","output":"ok"} ""`,
+				"close 0",
+				`opaque 1 "custom_tool_call" {"id":"ctc_1","type":"custom_tool_call","call_id":"call_c","name":"patch","input":""} ""`,
+				`opaque 1 "" - "diff"`,
+				`opaque 1 "custom_tool_call" {"id":"ctc_1","type":"custom_tool_call","call_id":"call_c","name":"patch","input":"diff"} ""`,
+				"close 1",
 				"ok turn",
 			},
 		},
@@ -526,11 +495,11 @@ func TestStreamSequences(t *testing.T) {
 				frame("response.output_item.done", `{"type":"response.output_item.done","output_index":1,"item":{"id":"rs_1","type":"reasoning","status":"incomplete","summary":[{"type":"summary_text","text":"Checking "}],"encrypted_content":"gAAAAABsealed"}}`) +
 				frame("response.incomplete", `{"type":"response.incomplete","response":{"id":"resp_1","model":"gpt-5.6-sol","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"usage":null}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
-				`opaque[0] kind=web_search_call data={"id":"ws_1","type":"web_search_call","status":"in_progress"} delta=""`,
-				`opaque[0] kind=web_search_call data={"id":"ws_1","type":"web_search_call","status":"incomplete"} delta=""`,
-				`summary[1] part=0 "Checking "`,
-				`meta[1] {"id":"rs_1","type":"reasoning","status":"incomplete","summary":[{"type":"summary_text","text":"Checking "}],"encrypted_content":"gAAAAABsealed"}`,
+				"start resp_1 gpt-5.6-sol",
+				`opaque 0 "web_search_call" {"id":"ws_1","type":"web_search_call","status":"in_progress"} ""`,
+				`opaque 0 "web_search_call" {"id":"ws_1","type":"web_search_call","status":"incomplete"} ""`,
+				`summary 1 part=0 "Checking "`,
+				`meta 1 {"id":"rs_1","type":"reasoning","status":"incomplete","summary":[{"type":"summary_text","text":"Checking "}],"encrypted_content":"gAAAAABsealed"}`,
 				"err capped",
 			},
 		},
@@ -541,7 +510,7 @@ func TestStreamSequences(t *testing.T) {
 			sse: frame("response.created", createdFrame) +
 				frame("response.incomplete", `{"type":"response.incomplete","response":{"id":"resp_1","model":"gpt-5.6-sol","status":"incomplete","incomplete_details":{"reason":"max_tokens"},"usage":null}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
+				"start resp_1 gpt-5.6-sol",
 				"err capped",
 			},
 		},
@@ -554,7 +523,7 @@ func TestStreamSequences(t *testing.T) {
 			sse: frame("response.created", createdFrame) +
 				frame("response.incomplete", `{"type":"response.incomplete","response":{"id":"resp_1","model":"gpt-5.6-sol","status":"incomplete","incomplete_details":{"reason":"safety_review_pending"},"usage":null}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
+				"start resp_1 gpt-5.6-sol",
 				"err unknown",
 			},
 		},
@@ -567,7 +536,7 @@ func TestStreamSequences(t *testing.T) {
 			sse: frame("response.created", createdFrame) +
 				frame("response.incomplete", `{"type":"response.incomplete","response":{"id":"resp_1","model":"gpt-5.6-sol","status":"incomplete","usage":null}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
+				"start resp_1 gpt-5.6-sol",
 				"err unknown",
 			},
 		},
@@ -583,9 +552,9 @@ func TestStreamSequences(t *testing.T) {
 				frame("response.refusal.done", `{"type":"response.refusal.done","output_index":0,"content_index":0,"refusal":"I cannot help with that."}`) +
 				frame("response.completed", `{"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.6-sol","status":"completed","usage":null}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
-				`text[0] "I cannot help with that."`,
-				"close[0]",
+				"start resp_1 gpt-5.6-sol",
+				`text 0 "I cannot help with that."`,
+				"close 0",
 				"err refused",
 			},
 		},
@@ -600,11 +569,11 @@ func TestStreamSequences(t *testing.T) {
 				frame("response.output_text.done", `{"type":"response.output_text.done","output_index":0,"content_index":0,"text":"Let me look."}`) +
 				frame("response.completed", `{"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.6-sol","status":"completed","usage":null}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
-				`text[0] ""`,
-				`meta[0] {"model":"gpt-5.6-sol","phase":"commentary"}`,
-				`text[0] "Let me look."`,
-				"close[0]",
+				"start resp_1 gpt-5.6-sol",
+				`text 0 ""`,
+				`meta 0 {"model":"gpt-5.6-sol","phase":"commentary"}`,
+				`text 0 "Let me look."`,
+				"close 0",
 				"ok turn",
 			},
 		},
@@ -618,15 +587,15 @@ func TestStreamSequences(t *testing.T) {
 				frame("response.output_text.done", `{"type":"response.output_text.done","output_index":0,"content_index":1,"text":"b"}`) +
 				frame("response.completed", `{"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.6-sol","status":"completed","usage":null}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
-				`text[0] ""`,
-				`meta[0] {"model":"gpt-5.6-sol","phase":"commentary"}`,
-				`text[0] "a"`,
-				"close[0]",
-				`text[1] ""`,
-				`meta[1] {"model":"gpt-5.6-sol","phase":"commentary"}`,
-				`text[1] "b"`,
-				"close[1]",
+				"start resp_1 gpt-5.6-sol",
+				`text 0 ""`,
+				`meta 0 {"model":"gpt-5.6-sol","phase":"commentary"}`,
+				`text 0 "a"`,
+				"close 0",
+				`text 1 ""`,
+				`meta 1 {"model":"gpt-5.6-sol","phase":"commentary"}`,
+				`text 1 "b"`,
+				"close 1",
 				"ok turn",
 			},
 		},
@@ -638,7 +607,7 @@ func TestStreamSequences(t *testing.T) {
 			sse: frame("response.created", createdFrame) +
 				frame("response.incomplete", `{"type":"response.incomplete","response":{"id":"resp_1","model":"gpt-5.6-sol","status":"incomplete","incomplete_details":{"reason":"content_filter"},"usage":null}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
+				"start resp_1 gpt-5.6-sol",
 				"err refused",
 			},
 		},
@@ -649,8 +618,8 @@ func TestStreamSequences(t *testing.T) {
 				frame("response.output_text.delta", `{"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"partial"}`) +
 				frame("error", `{"type":"error","sequence_number":9,"error":{"type":"server_error","code":"server_error","message":"An error occurred while processing your request.","param":null}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
-				`text[0] "partial"`,
+				"start resp_1 gpt-5.6-sol",
+				`text 0 "partial"`,
 				"err network",
 			},
 		},
@@ -659,7 +628,7 @@ func TestStreamSequences(t *testing.T) {
 			sse: frame("response.created", createdFrame) +
 				frame("error", `{"type":"error","code":"rate_limit_exceeded","message":"slow down","param":null,"sequence_number":1}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
+				"start resp_1 gpt-5.6-sol",
 				"err busy",
 			},
 		},
@@ -668,7 +637,7 @@ func TestStreamSequences(t *testing.T) {
 			sse: frame("response.created", createdFrame) +
 				frame("error", `{"type":"error","sequence_number":9,"error":{"message":"The model is overloaded.","type":"service_unavailable_error","param":null,"code":"server_is_overloaded"}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
+				"start resp_1 gpt-5.6-sol",
 				"err busy",
 			},
 		},
@@ -677,7 +646,7 @@ func TestStreamSequences(t *testing.T) {
 			sse: frame("response.created", createdFrame) +
 				frame("error", `{"type":"error","sequence_number":9,"error":{"message":"Spend limit reached.","type":null,"param":null,"code":"project_spend_limit_exceeded"}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
+				"start resp_1 gpt-5.6-sol",
 				"err access",
 			},
 		},
@@ -686,7 +655,7 @@ func TestStreamSequences(t *testing.T) {
 			sse: frame("response.created", createdFrame) +
 				frame("error", `{"type":"error","sequence_number":9,"error":{"message":"The server had an error while processing your request","type":"server_error","param":null,"code":null}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
+				"start resp_1 gpt-5.6-sol",
 				"err network",
 			},
 		},
@@ -695,7 +664,7 @@ func TestStreamSequences(t *testing.T) {
 			sse: frame("response.created", createdFrame) +
 				frame("response.failed", `{"type":"response.failed","sequence_number":5,"response":{"id":"resp_1","model":"gpt-5.6-sol","status":"failed","error":{"code":"invalid_prompt","message":"the prompt was rejected"},"usage":null}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
+				"start resp_1 gpt-5.6-sol",
 				"err invalid",
 			},
 		},
@@ -704,7 +673,7 @@ func TestStreamSequences(t *testing.T) {
 			sse: frame("response.created", createdFrame) +
 				frame("response.failed", `{"type":"response.failed","sequence_number":5,"response":{"id":"resp_1","model":"gpt-5.6-sol","status":"failed","error":{"type":"server_error","message":"the server had an error","code":null},"usage":null}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
+				"start resp_1 gpt-5.6-sol",
 				"err network",
 			},
 		},
@@ -717,7 +686,7 @@ func TestStreamSequences(t *testing.T) {
 			sse: frame("response.created", createdFrame) +
 				frame("response.failed", `{"type":"response.failed","sequence_number":5,"response":{"id":"resp_1","model":"gpt-5.6-sol","status":"failed","error":{"code":"context_length_exceeded","message":"the input exceeds the context window"},"usage":null}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
+				"start resp_1 gpt-5.6-sol",
 				"err context_length",
 			},
 		},
@@ -729,7 +698,7 @@ func TestStreamSequences(t *testing.T) {
 			sse: frame("response.created", createdFrame) +
 				frame("response.failed", `{"type":"response.failed","sequence_number":5,"response":{"id":"resp_1","model":"gpt-5.6-sol","status":"failed","usage":null}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
+				"start resp_1 gpt-5.6-sol",
 				"err unknown",
 			},
 		},
@@ -740,8 +709,8 @@ func TestStreamSequences(t *testing.T) {
 			sse: frame("response.created", createdFrame) +
 				frame("response.failed", `{"type":"response.failed","sequence_number":5,"response":{"id":"resp_1","model":"gpt-5.6-sol","status":"failed","error":{"code":"server_error","message":"the server had an error"},"usage":{"input_tokens":40,"output_tokens":9,"input_tokens_details":{"cached_tokens":10},"output_tokens_details":{"reasoning_tokens":4}}}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
-				"usage in=30 out=5 reasoning=4 read=10 write=0",
+				"start resp_1 gpt-5.6-sol",
+				"usage in=30 out=5 rsn=4 cr=10 cw=0",
 				"err network",
 			},
 		},
@@ -754,7 +723,7 @@ func TestStreamSequences(t *testing.T) {
 			sse: frame("response.created", createdFrame) +
 				frame("response.in_progress", `{"type":"response.in_progress","response":{"id":"resp_1","model":"gpt-5.6-sol","status":"cancelled","usage":null}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
+				"start resp_1 gpt-5.6-sol",
 				"err unknown",
 			},
 		},
@@ -768,9 +737,9 @@ func TestStreamSequences(t *testing.T) {
 				frame("response.output_text.delta", `{"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"half a sen"}`) +
 				frame("response.completed", `{"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.6-sol","status":"cancelled","usage":{"input_tokens":10,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":3,"output_tokens_details":{"reasoning_tokens":0}}}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
-				`text[0] "half a sen"`,
-				"usage in=10 out=3 reasoning=0 read=0 write=0",
+				"start resp_1 gpt-5.6-sol",
+				`text 0 "half a sen"`,
+				"usage in=10 out=3 rsn=0 cr=0 cw=0",
 				"err unknown",
 			},
 		},
@@ -782,8 +751,8 @@ func TestStreamSequences(t *testing.T) {
 			// No terminal event, and no close on the block that was still
 			// filling. Both absences are the report.
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
-				`text[0] "half a sen"`,
+				"start resp_1 gpt-5.6-sol",
+				`text 0 "half a sen"`,
 			},
 		},
 		{
@@ -791,7 +760,7 @@ func TestStreamSequences(t *testing.T) {
 			sse: frame("response.created", createdFrame) +
 				"event: response.output_text.delta\ndata: {not json\n\n",
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
+				"start resp_1 gpt-5.6-sol",
 				"err network",
 			},
 		},
@@ -808,10 +777,10 @@ func TestStreamSequences(t *testing.T) {
 				frame("response.completed", usageFrame) +
 				"data: [DONE]\n\n",
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
-				`text[0] "hello"`,
-				"close[0]",
-				"usage in=300 out=162 reasoning=1024 read=1500 write=200",
+				"start resp_1 gpt-5.6-sol",
+				`text 0 "hello"`,
+				"close 0",
+				"usage in=300 out=162 rsn=1024 cr=1500 cw=200",
 				"ok turn",
 			},
 		},
@@ -820,8 +789,8 @@ func TestStreamSequences(t *testing.T) {
 			sse: frame("response.created", createdFrame) +
 				frame("response.completed", usageFrame),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
-				"usage in=300 out=162 reasoning=1024 read=1500 write=200",
+				"start resp_1 gpt-5.6-sol",
+				"usage in=300 out=162 rsn=1024 cr=1500 cw=200",
 				"ok turn",
 			},
 		},
@@ -832,9 +801,9 @@ func TestStreamSequences(t *testing.T) {
 				frame("response.queued", `{"type":"response.queued","response":{"id":"resp_1","model":"gpt-5.6-sol","status":"queued","usage":{"input_tokens":10,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0}}}}`) +
 				frame("response.completed", `{"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.6-sol","status":"completed","usage":{"input_tokens":10,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":4,"output_tokens_details":{"reasoning_tokens":0}}}}`),
 			want: []string{
-				"start id=resp_1 model=gpt-5.6-sol",
-				"usage in=10 out=0 reasoning=0 read=0 write=0",
-				"usage in=10 out=4 reasoning=0 read=0 write=0",
+				"start resp_1 gpt-5.6-sol",
+				"usage in=10 out=0 rsn=0 cr=0 cw=0",
+				"usage in=10 out=4 rsn=0 cr=0 cw=0",
 				"ok turn",
 			},
 		},
@@ -844,9 +813,9 @@ func TestStreamSequences(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			srv := sseServer(t, tc.sse)
 			p := testProvider(t, srv.URL)
-			got := collect(p.Stream(context.Background(), textRequest()))
+			got := collect(t, p, textRequest())
 			conform.CheckGrammar(t, got)
-			equalLines(t, describeAll(got), tc.want)
+			equalLines(t, conform.DescribeAll(got), tc.want)
 		})
 	}
 }
@@ -889,7 +858,7 @@ func TestStreamFrameLargerThanScannerLimit(t *testing.T) {
 }
 
 func kindOf(e api.Event) string {
-	return strings.FieldsFunc(describe(e), func(r rune) bool { return r == '[' || r == ' ' })[0]
+	return strings.FieldsFunc(conform.Describe(e), func(r rune) bool { return r == '[' || r == ' ' })[0]
 }
 
 // TestStreamAbruptDisconnect covers a connection dying mid frame, which is
@@ -909,10 +878,10 @@ func TestStreamAbruptDisconnect(t *testing.T) {
 	defer srv.Close()
 
 	p := testProvider(t, srv.URL)
-	got := drain(p.Stream(context.Background(), textRequest()))
+	got := conform.DescribeAll(collect(t, p, textRequest()))
 	equalLines(t, got, []string{
-		"start id=resp_1 model=gpt-5.6-sol",
-		`text[0] "cut"`,
+		"start resp_1 gpt-5.6-sol",
+		`text 0 "cut"`,
 	})
 }
 
@@ -944,14 +913,14 @@ func TestStreamContextCancel(t *testing.T) {
 
 	var got []string
 	for e := range ch {
-		got = append(got, describe(e))
+		got = append(got, conform.Describe(e))
 		if _, ok := e.(api.EventText); ok {
 			cancel()
 		}
 	}
 	equalLines(t, got, []string{
-		"start id=resp_1 model=gpt-5.6-sol",
-		`text[0] "one"`,
+		"start resp_1 gpt-5.6-sol",
+		`text 0 "one"`,
 	})
 	if ctx.Err() == nil {
 		t.Fatal("the channel closed without the context being done")
@@ -978,9 +947,9 @@ func TestStreamIdleTimeout(t *testing.T) {
 	defer close(release)
 
 	p := testProvider(t, srv.URL, WithTransport(lib.Options{Idle: 50 * time.Millisecond}))
-	got := drain(p.Stream(context.Background(), textRequest()))
+	got := conform.DescribeAll(collect(t, p, textRequest()))
 	equalLines(t, got, []string{
-		"start id=resp_1 model=gpt-5.6-sol",
+		"start resp_1 gpt-5.6-sol",
 		"err network",
 	})
 }
@@ -1002,7 +971,7 @@ func TestStreamIdleTimeoutBeforeHeaders(t *testing.T) {
 
 	p := testProvider(t, srv.URL, WithTransport(lib.Options{Idle: 50 * time.Millisecond}))
 	done := make(chan []string, 1)
-	go func() { done <- drain(p.Stream(context.Background(), textRequest())) }()
+	go func() { done <- conform.DescribeAll(collect(t, p, textRequest())) }()
 	select {
 	case got := <-done:
 		equalLines(t, got, []string{"err network"})
@@ -1048,7 +1017,7 @@ func TestStreamKeepalivesDoNotHoldTheTurnOpen(t *testing.T) {
 	select {
 	case got := <-done:
 		equalLines(t, got, []string{
-			"start id=resp_1 model=gpt-5.6-sol",
+			"start resp_1 gpt-5.6-sol",
 			"ok turn",
 		})
 	case <-time.After(5 * time.Second):
@@ -1079,11 +1048,11 @@ func TestStreamEndsAtTerminalFrame(t *testing.T) {
 
 	p := testProvider(t, srv.URL)
 	done := make(chan []string, 1)
-	go func() { done <- drain(p.Stream(context.Background(), textRequest())) }()
+	go func() { done <- conform.DescribeAll(collect(t, p, textRequest())) }()
 	select {
 	case got := <-done:
 		equalLines(t, got, []string{
-			"start id=resp_1 model=gpt-5.6-sol",
+			"start resp_1 gpt-5.6-sol",
 			"ok turn",
 		})
 	case <-time.After(5 * time.Second):
@@ -1257,7 +1226,7 @@ func TestStreamTransportFailure(t *testing.T) {
 	srv.Close()
 
 	p := testProvider(t, url)
-	got := drain(p.Stream(context.Background(), textRequest()))
+	got := conform.DescribeAll(collect(t, p, textRequest()))
 	equalLines(t, got, []string{"err network"})
 }
 
@@ -1297,8 +1266,8 @@ func TestStartCarriesTheConfiguredModel(t *testing.T) {
 	srv := sseServer(t, frame("response.created", createdFrame)+
 		frame("response.completed", `{"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.6-sol","status":"completed","usage":null}}`))
 	p := modelProvider(t, "gpt-5.6", srv.URL)
-	got := drain(p.Stream(context.Background(), textRequest()))
-	if got[0] != "start id=resp_1 model=gpt-5.6" {
+	got := conform.DescribeAll(collect(t, p, textRequest()))
+	if got[0] != "start resp_1 gpt-5.6" {
 		t.Fatalf("%s, want the model the provider is configured with", got[0])
 	}
 }
@@ -1317,7 +1286,7 @@ func TestProviderRefusesBytesMeasuredAsFitting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	events := collect(p.Stream(context.Background(), textRequest()))
+	events := collect(t, p, textRequest())
 	if len(events) != 1 {
 		t.Fatalf("got %d events, want one terminal error: %v", len(events), events)
 	}
@@ -1353,7 +1322,7 @@ func TestUnmeasuredRequestTooLargeIsNotMarked(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	p := testProvider(t, srv.URL)
-	events := collect(p.Stream(context.Background(), textRequest()))
+	events := collect(t, p, textRequest())
 	if len(events) != 1 {
 		t.Fatalf("got %d events, want one terminal error: %v", len(events), events)
 	}
@@ -1413,7 +1382,7 @@ func TestContextOverflowOnTheHTTPPath(t *testing.T) {
 			}))
 			t.Cleanup(srv.Close)
 			p := testProvider(t, srv.URL)
-			events := collect(p.Stream(context.Background(), textRequest()))
+			events := collect(t, p, textRequest())
 			if len(events) != 1 {
 				t.Fatalf("got %d events, want one terminal error: %v", len(events), events)
 			}

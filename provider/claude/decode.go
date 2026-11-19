@@ -20,7 +20,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
 
 	"neui.dev/api"
 	"neui.dev/provider/lib"
@@ -78,6 +77,7 @@ type converter struct {
 	sent       int
 	declared   int
 	summarized bool
+	started    bool
 	head       frameHead
 	ev         sseMessage
 	events     []api.Event
@@ -94,7 +94,8 @@ func newConverter(model string, summarized bool, sent int, declared int) *conver
 // The type is read first and the rest of the frame only for a type this adapter
 // knows, so a new event name produces nothing whatever shape its fields take.
 // ping is the only keepalive this API has, and reading it already held the idle
-// deadline open, which is the whole of its meaning. A frame with no type, or a
+// deadline open, which is the whole of its meaning. A frame with no type, a
+// stream that opens with anything but message_start, a ping or an error, or a
 // known frame that breaks the flow it belongs to, fails the turn: only a reply
 // that arrived whole is kept.
 func (c *converter) Convert(f lib.Frame) ([]api.Event, bool) {
@@ -121,6 +122,12 @@ func (c *converter) Convert(f lib.Frame) ([]api.Event, bool) {
 				Err:  fmt.Errorf("claude: malformed %q frame: %w", kind, err),
 			}), false
 		}
+	}
+	if !c.started && kind != "message_start" && kind != "error" && kind != "ping" {
+		return append(c.events, api.EventErr{
+			Code: api.CodeNetwork,
+			Err:  fmt.Errorf("claude: the stream opened with %q, not message_start", kind),
+		}), false
 	}
 	ev := &c.ev
 	var events []api.Event
@@ -166,9 +173,9 @@ func (c *converter) Convert(f lib.Frame) ([]api.Event, bool) {
 		if kind == "rate_limit_error" && errorCode == "enforced_spend_limit_reached" {
 			code = api.CodeAccess
 		}
-		var err error = &APIError{Type: kind, Message: msg, ErrorCode: errorCode}
+		var err error = &APIError{Provider: providerName, Type: kind, Code: errorCode, Message: msg}
 		if code == api.CodeTooLarge {
-			err = measuredTooLarge(c.model, c.sent, c.declared, err)
+			err = lib.MeasuredTooLarge(c.model, c.sent, c.declared, err)
 		}
 		events, ok = append(c.events, api.EventErr{Code: code, Err: err}), false
 	}
@@ -195,7 +202,7 @@ func (c *converter) End(err error) []api.Event {
 		failure := readAPIError(e)
 		code := statusCode(e.Status)
 		if code == api.CodeTooLarge {
-			return []api.Event{api.EventErr{Code: code, Err: measuredTooLarge(c.model, c.sent, c.declared, failure)}}
+			return []api.Event{api.EventErr{Code: code, Err: lib.MeasuredTooLarge(c.model, c.sent, c.declared, failure)}}
 		}
 		if spendLimited(failure) {
 			code = api.CodeAccess
@@ -223,6 +230,7 @@ func (c *converter) onStart(ev *sseMessage) ([]api.Event, bool) {
 			Err:  errors.New("claude: message_start without a message"),
 		}), false
 	}
+	c.started = true
 	c.events = append(c.events, api.EventStart{ID: ev.Message.ID, Model: c.model})
 	return c.onUsage(ev.Message.Usage), true
 }
@@ -566,7 +574,7 @@ func setIf(dst *int, v *int) {
 // neither enters the conversation. Content that already arrived still arrived.
 //
 // A named value this switch does not know is CodeUnknown with the raw string in
-// Err, never the nearest Ok: a vocabulary that grew has to surface as
+// the error's Code, never the nearest Ok: a vocabulary that grew has to surface as
 // unclassified rather than as a turn that quietly reads as complete.
 func stopEvent(native string) api.Event {
 	var code api.ErrCode
@@ -584,29 +592,5 @@ func stopEvent(native string) api.Event {
 	default:
 		code = api.CodeUnknown
 	}
-	return api.EventErr{Code: code, Err: fmt.Errorf("claude: stop_reason %q", native)}
-}
-
-// maxErrorMessage bounds how much of an unparseable error body is kept. At
-// gateways it is frequently a whole HTML page.
-const maxErrorMessage = 512
-
-// readAPIError decodes a refused request, tolerating a body that is not JSON: a
-// 413 is returned by the edge before the request reaches the API and need not
-// use the documented envelope at all. The whole error is returned rather than
-// the interface, because the message is what separates a conversation over the
-// window from every other 400. See contextOverflow.
-func readAPIError(h *lib.HTTPError) *APIError {
-	var env errorEnvelope
-	if err := json.Unmarshal(h.Body, &env); err == nil && env.Error != nil {
-		return newAPIError(h.Status, h.Header, &env)
-	}
-	e := newAPIError(h.Status, h.Header, nil)
-	if text := strings.TrimSpace(string(h.Body)); text != "" {
-		if r := []rune(text); len(r) > maxErrorMessage {
-			text = string(r[:maxErrorMessage]) + "…"
-		}
-		e.Message = text
-	}
-	return e
+	return api.EventErr{Code: code, Err: &APIError{Provider: providerName, Code: native, Message: "the turn ended on this stop_reason"}}
 }

@@ -45,7 +45,7 @@ func TestStreamText(t *testing.T) {
 		"start chatcmpl-1 deepseek-v4-pro",
 		`text 0 "9.11"`,
 		`text 0 " is larger."`,
-		"usage in=3000 out=350 reasoning=600 read=9000 write=0",
+		"usage in=3000 out=350 rsn=600 cr=9000 cw=0",
 		"ok turn",
 	)
 }
@@ -78,10 +78,10 @@ func TestStreamToolCall(t *testing.T) {
 	conform.CheckUnframed(t, events)
 	wantTrace(t, events,
 		"start chatcmpl-1 deepseek-v4-pro",
-		`tool 0 id="call_0_9c1f" name="get_weather" args=""`,
-		fmt.Sprintf(`tool 0 id="" name="" args=%q`, `{"location":`),
-		fmt.Sprintf(`tool 0 id="" name="" args=%q`, `"Paris"}`),
-		"usage in=3000 out=350 reasoning=600 read=9000 write=0",
+		`tool 0 "call_0_9c1f" "get_weather" ""`,
+		fmt.Sprintf(`tool 0 "" "" %q`, `{"location":`),
+		fmt.Sprintf(`tool 0 "" "" %q`, `"Paris"}`),
+		"usage in=3000 out=350 rsn=600 cr=9000 cw=0",
 		"ok turn",
 	)
 }
@@ -105,9 +105,9 @@ func TestStreamSeveralToolCalls(t *testing.T) {
 	conform.CheckUnframed(t, events)
 	wantTrace(t, events,
 		"start chatcmpl-1 deepseek-v4-pro",
-		fmt.Sprintf(`tool 0 id="call_dup" name="get_weather" args=%q`, `{"city":"Paris"}`),
-		`tool 1 id="chatcmpl-1_call_1" name="get_time" args="{}"`,
-		`tool 2 id="chatcmpl-1_call_2" name="get_news" args="{}"`,
+		fmt.Sprintf(`tool 0 "call_dup" "get_weather" %q`, `{"city":"Paris"}`),
+		`tool 1 "chatcmpl-1_call_1" "get_time" "{}"`,
+		`tool 2 "chatcmpl-1_call_2" "get_news" "{}"`,
 		"ok turn",
 	)
 }
@@ -129,10 +129,10 @@ func TestStreamToolCallFragmentsInterleave(t *testing.T) {
 	conform.CheckUnframed(t, events)
 	wantTrace(t, events,
 		"start chatcmpl-1 deepseek-v4-pro",
-		fmt.Sprintf(`tool 0 id="call_a" name="get_weather" args=%q`, `{"city":`),
-		fmt.Sprintf(`tool 1 id="call_b" name="get_time" args=%q`, `{"zone":`),
-		fmt.Sprintf(`tool 0 id="" name="" args=%q`, `"Paris"}`),
-		fmt.Sprintf(`tool 1 id="" name="" args=%q`, `"CET"}`),
+		fmt.Sprintf(`tool 0 "call_a" "get_weather" %q`, `{"city":`),
+		fmt.Sprintf(`tool 1 "call_b" "get_time" %q`, `{"zone":`),
+		fmt.Sprintf(`tool 0 "" "" %q`, `"Paris"}`),
+		fmt.Sprintf(`tool 1 "" "" %q`, `"CET"}`),
 		"ok turn",
 	)
 }
@@ -198,7 +198,7 @@ func TestStreamReasoning(t *testing.T) {
 		`text 1 "9.11"`,
 		`thinking 0 part=0 " actually, hold on"`,
 		`text 1 " wins"`,
-		"usage in=3000 out=350 reasoning=600 read=9000 write=0",
+		"usage in=3000 out=350 rsn=600 cr=9000 cw=0",
 		"ok turn",
 	)
 }
@@ -221,7 +221,7 @@ func TestStreamReasoningTextAndToolCallEachTakeABlock(t *testing.T) {
 		"start chatcmpl-1 deepseek-v4-pro",
 		`thinking 0 part=0 "which city"`,
 		`text 1 "looking it up"`,
-		`tool 2 id="chatcmpl-1_call_2" name="get_weather" args="{}"`,
+		`tool 2 "chatcmpl-1_call_2" "get_weather" "{}"`,
 		"ok turn",
 	)
 }
@@ -271,8 +271,8 @@ func TestStreamToolCallRepeatingItsIDPasses(t *testing.T) {
 	conform.CheckUnframed(t, events)
 	wantTrace(t, events,
 		"start chatcmpl-1 deepseek-v4-pro",
-		`tool 0 id="call_a" name="ping" args="{"`,
-		`tool 0 id="" name="" args="}"`,
+		`tool 0 "call_a" "ping" "{"`,
+		`tool 0 "" "" "}"`,
 		"ok turn",
 	)
 }
@@ -296,8 +296,8 @@ func TestStreamToolCallIdentityArrivesInPieces(t *testing.T) {
 				`{"tool_calls":[{"index":0,"function":{"name":"get_weather","arguments":"{\"city\":\"Paris\"}"}}]}`,
 			},
 			want: []string{
-				`tool 0 id="call_a" name="" args=""`,
-				fmt.Sprintf(`tool 0 id="" name="get_weather" args=%q`, `{"city":"Paris"}`),
+				`tool 0 "call_a" "" ""`,
+				fmt.Sprintf(`tool 0 "" "get_weather" %q`, `{"city":"Paris"}`),
 			},
 		},
 		{
@@ -307,8 +307,8 @@ func TestStreamToolCallIdentityArrivesInPieces(t *testing.T) {
 				`{"tool_calls":[{"index":0,"function":{"name":"weather","arguments":"{\"city\":\"Paris\"}"}}]}`,
 			},
 			want: []string{
-				`tool 0 id="call_a" name="get_" args=""`,
-				fmt.Sprintf(`tool 0 id="" name="weather" args=%q`, `{"city":"Paris"}`),
+				`tool 0 "call_a" "get_" ""`,
+				fmt.Sprintf(`tool 0 "" "weather" %q`, `{"city":"Paris"}`),
 			},
 		},
 		{
@@ -323,8 +323,8 @@ func TestStreamToolCallIdentityArrivesInPieces(t *testing.T) {
 				`{"tool_calls":[{"index":0,"id":"call_a","type":"function","function":{"name":"get_weather","arguments":"\"Paris\"}"}}]}`,
 			},
 			want: []string{
-				fmt.Sprintf(`tool 0 id="chatcmpl-1_call_0" name="" args=%q`, `{"city":`),
-				fmt.Sprintf(`tool 0 id="call_a" name="get_weather" args=%q`, `"Paris"}`),
+				fmt.Sprintf(`tool 0 "chatcmpl-1_call_0" "" %q`, `{"city":`),
+				fmt.Sprintf(`tool 0 "call_a" "get_weather" %q`, `"Paris"}`),
 			},
 		},
 		{
@@ -336,8 +336,8 @@ func TestStreamToolCallIdentityArrivesInPieces(t *testing.T) {
 				`{"tool_calls":[{"index":0,"function":{"name":"ping"}}]}`,
 			},
 			want: []string{
-				`tool 0 id="call_a" name="" args=""`,
-				`tool 0 id="" name="ping" args=""`,
+				`tool 0 "call_a" "" ""`,
+				`tool 0 "" "ping" ""`,
 			},
 		},
 	}
@@ -415,8 +415,8 @@ func TestStreamToolArgumentsThatNeverParse(t *testing.T) {
 	conform.CheckUnframed(t, events)
 	wantTrace(t, events,
 		"start chatcmpl-1 deepseek-v4-pro",
-		`tool 0 id="call_trunc" name="search" args=""`,
-		fmt.Sprintf(`tool 0 id="" name="" args=%q`, `{"query": "San Franc`),
+		`tool 0 "call_trunc" "search" ""`,
+		fmt.Sprintf(`tool 0 "" "" %q`, `{"query": "San Franc`),
 		"err capped",
 	)
 
@@ -483,7 +483,7 @@ func TestStreamUsageFrameHasNoChoices(t *testing.T) {
 	conform.CheckUnframed(t, events)
 	wantTrace(t, events,
 		"start chatcmpl-1 deepseek-v4-pro",
-		"usage in=3000 out=350 reasoning=600 read=9000 write=0",
+		"usage in=3000 out=350 rsn=600 cr=9000 cw=0",
 		"ok turn",
 	)
 }
@@ -500,7 +500,7 @@ func TestStreamEmptyTurn(t *testing.T) {
 	conform.CheckUnframed(t, events)
 	wantTrace(t, events,
 		"start chatcmpl-1 deepseek-v4-pro",
-		"usage in=10 out=0 reasoning=0 read=0 write=0",
+		"usage in=10 out=0 rsn=0 cr=0 cw=0",
 		"ok turn",
 	)
 }
@@ -617,12 +617,12 @@ func TestFinishReasons(t *testing.T) {
 			if !ok {
 				return
 			}
-			var finishErr *FinishError
+			var finishErr *APIError
 			if !errors.As(e.Err, &finishErr) {
-				t.Fatalf("err is %T, want *FinishError", e.Err)
+				t.Fatalf("err is %T, want *APIError", e.Err)
 			}
-			if finishErr.Reason != tc.native {
-				t.Fatalf("Reason %q, want the wire value %q", finishErr.Reason, tc.native)
+			if finishErr.Code != tc.native || finishErr.Status != 0 {
+				t.Fatalf("Code %q status %d, want the wire value %q and no status", finishErr.Code, finishErr.Status, tc.native)
 			}
 		})
 	}
@@ -714,7 +714,7 @@ func TestStreamFrameLargerThanScannerLimit(t *testing.T) {
 	events := collect(t, p, turn("write"))
 	conform.CheckUnframed(t, events)
 	if len(events) != 3 {
-		t.Fatalf("sequence %v", traces(events))
+		t.Fatalf("sequence %v", conform.DescribeAll(events))
 	}
 	call, ok := events[1].(api.EventTool)
 	if !ok {
@@ -771,36 +771,13 @@ func TestHTTPErrors(t *testing.T) {
 			if apiErr.Status != tc.status {
 				t.Fatalf("status %d, want %d", apiErr.Status, tc.status)
 			}
-			if apiErr.Body != tc.body {
-				t.Fatalf("body %q not kept verbatim", apiErr.Body)
+			if tc.body != "" && apiErr.Message == "" {
+				t.Fatalf("body %q left no message", tc.body)
 			}
 			if apiErr.RetryAfter != 7*time.Second {
 				t.Fatalf("Retry-After %v, want 7s", apiErr.RetryAfter)
 			}
 		})
-	}
-}
-
-func TestRetryAfter(t *testing.T) {
-	tests := []struct {
-		header string
-		want   bool
-	}{
-		{"", false},
-		{"7", true},
-		{"-1", false},
-		{"nonsense", false},
-		{time.Now().Add(time.Minute).UTC().Format(http.TimeFormat), true},
-		{time.Now().Add(-time.Minute).UTC().Format(http.TimeFormat), false},
-	}
-	for _, tc := range tests {
-		h := http.Header{}
-		if tc.header != "" {
-			h.Set("Retry-After", tc.header)
-		}
-		if got := retryAfter(h) > 0; got != tc.want {
-			t.Fatalf("Retry-After %q: got %v, want %v", tc.header, got, tc.want)
-		}
 	}
 }
 
@@ -853,9 +830,9 @@ func TestStreamInBandError(t *testing.T) {
 				`text 0 "partial"`,
 				"err "+string(tc.want),
 			)
-			var streamErr *StreamError
-			if !errors.As(events[2].(api.EventErr).Err, &streamErr) {
-				t.Fatalf("err is %T, want *StreamError", events[2].(api.EventErr).Err)
+			var streamErr *APIError
+			if !errors.As(events[2].(api.EventErr).Err, &streamErr) || streamErr.Status != 0 {
+				t.Fatalf("err is %#v, want an *APIError with no status", events[2].(api.EventErr).Err)
 			}
 		})
 	}
@@ -974,7 +951,7 @@ func TestStreamCancelMidTurn(t *testing.T) {
 	conform.CheckUnframed(t, events)
 	for _, e := range events {
 		if e, ok := e.(api.EventErr); ok {
-			t.Fatalf("a cancelled turn reported %s\nsequence %v", e.Code, traces(events))
+			t.Fatalf("a cancelled turn reported %s\nsequence %v", e.Code, conform.DescribeAll(events))
 		}
 	}
 }
@@ -1004,7 +981,7 @@ func TestStreamCancelWhileParkedOnASend(t *testing.T) {
 	conform.CheckUnframed(t, events)
 	for _, e := range events {
 		if e, ok := e.(api.EventErr); ok {
-			t.Fatalf("a cancelled turn reported %s\nsequence %v", e.Code, traces(events))
+			t.Fatalf("a cancelled turn reported %s\nsequence %v", e.Code, conform.DescribeAll(events))
 		}
 	}
 }
@@ -1030,7 +1007,7 @@ func TestStreamCallerDeadlineIsSilent(t *testing.T) {
 	conform.CheckUnframed(t, events)
 	for _, e := range events {
 		if e, ok := e.(api.EventErr); ok {
-			t.Fatalf("a caller deadline reported %s\nsequence %v", e.Code, traces(events))
+			t.Fatalf("a caller deadline reported %s\nsequence %v", e.Code, conform.DescribeAll(events))
 		}
 	}
 }

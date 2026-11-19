@@ -14,11 +14,7 @@
 
 package claude
 
-import (
-	"encoding/json"
-	"encoding/json/jsontext"
-	"unicode/utf8"
-)
+import "encoding/json"
 
 // request is the body of POST /v1/messages, and the types under it are the rest
 // of that API's wire shapes. Only the fields this adapter reads or writes are
@@ -84,8 +80,8 @@ type cached struct {
 
 type textBlock struct {
 	cached
-	Type string   `json:"type"`
-	Text htmlText `json:"text"`
+	Type string `json:"type"`
+	Text string `json:"text"`
 }
 
 type base64Source struct {
@@ -95,9 +91,9 @@ type base64Source struct {
 }
 
 type textSource struct {
-	Type      string   `json:"type"`
-	MediaType string   `json:"media_type"`
-	Data      htmlText `json:"data"`
+	Type      string `json:"type"`
+	MediaType string `json:"media_type"`
+	Data      string `json:"data"`
 }
 
 type imageBlock struct {
@@ -108,87 +104,31 @@ type imageBlock struct {
 
 type documentBlock struct {
 	cached
-	Type   string   `json:"type"`
-	Source any      `json:"source"`
-	Title  htmlText `json:"title,omitempty"`
+	Type   string `json:"type"`
+	Source any    `json:"source"`
+	Title  string `json:"title,omitempty"`
 }
 
 type toolUseBlock struct {
 	cached
 	Type  string          `json:"type"`
-	ID    htmlText        `json:"id"`
-	Name  htmlText        `json:"name"`
+	ID    string          `json:"id"`
+	Name  string          `json:"name"`
 	Input json.RawMessage `json:"input"`
 }
 
 type toolResultBlock struct {
 	cached
-	Type      string   `json:"type"`
-	ToolUseID htmlText `json:"tool_use_id"`
-	Content   []any    `json:"content"`
-	IsError   bool     `json:"is_error"`
+	Type      string `json:"type"`
+	ToolUseID string `json:"tool_use_id"`
+	Content   []any  `json:"content"`
+	IsError   bool   `json:"is_error"`
 }
 
 type thinkingBlock struct {
 	Type      string `json:"type"`
 	Thinking  string `json:"thinking"`
 	Signature string `json:"signature"`
-}
-
-type htmlText string
-
-func (s htmlText) MarshalJSONTo(enc *jsontext.Encoder) error {
-	return enc.WriteValue(appendHTMLText(enc.AvailableBuffer(), string(s)))
-}
-
-func appendHTMLText(dst []byte, s string) []byte {
-	const hex = "0123456789abcdef"
-	dst = append(dst, '"')
-	start := 0
-	for i := 0; i < len(s); {
-		if b := s[i]; b < utf8.RuneSelf {
-			if b >= ' ' && b != '"' && b != '\\' && b != '<' && b != '>' && b != '&' {
-				i++
-				continue
-			}
-			dst = append(dst, s[start:i]...)
-			switch b {
-			case '"', '\\':
-				dst = append(dst, '\\', b)
-			case '\b':
-				dst = append(dst, '\\', 'b')
-			case '\f':
-				dst = append(dst, '\\', 'f')
-			case '\n':
-				dst = append(dst, '\\', 'n')
-			case '\r':
-				dst = append(dst, '\\', 'r')
-			case '\t':
-				dst = append(dst, '\\', 't')
-			default:
-				dst = append(dst, '\\', 'u', '0', '0', hex[b>>4], hex[b&0xf])
-			}
-			i++
-			start = i
-			continue
-		}
-		r, size := utf8.DecodeRuneInString(s[i:])
-		switch {
-		case r == utf8.RuneError && size == 1:
-			dst = append(dst, s[start:i]...)
-			dst = utf8.AppendRune(dst, utf8.RuneError)
-		case r == 0x2028 || r == 0x2029:
-			dst = append(dst, s[start:i]...)
-			dst = append(dst, '\\', 'u', '2', '0', '2', hex[r&0xf])
-		default:
-			i += size
-			continue
-		}
-		i += size
-		start = i
-	}
-	dst = append(dst, s[start:]...)
-	return append(dst, '"')
 }
 
 // frameHead is read before anything else in a frame, so a frame type this

@@ -291,13 +291,9 @@ func (m *module) buildModule(list []*mcp.Tool) tools.Module {
 	}
 	for _, tool := range list {
 		name := utils.SanitizeName(tool.Name)
-		if name == "" || counts[name] > 1 {
+		if counts[name] > 1 {
 			sum := sha256.Sum256([]byte(tool.Name))
-			if name == "" {
-				name = "t" + hex.EncodeToString(sum[:4])
-			} else {
-				name = name + "_" + hex.EncodeToString(sum[:4])
-			}
+			name = name + "_" + hex.EncodeToString(sum[:4])
 		}
 		inputSchema, err := schema.NewRawSchema(tool.InputSchema)
 		if err != nil {

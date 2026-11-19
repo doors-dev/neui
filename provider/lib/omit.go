@@ -17,6 +17,7 @@ package lib
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 
 	"neui.dev/api"
@@ -60,4 +61,14 @@ func Unknown(provider string, message int, c api.Content) string {
 			"content", typ)
 	}
 	return "[content omitted]"
+}
+
+// ImageMime normalizes the media type of an image for the wire: lower case,
+// surrounding space trimmed. It reports whether the result is one every
+// provider takes, which is the four api.ImageMime values and "image/jpg", the
+// common misspelling of image/jpeg; an adapter sends a note in place of any
+// other image.
+func ImageMime(mime string) (string, bool) {
+	mime = strings.ToLower(strings.TrimSpace(mime))
+	return mime, mime == "image/jpg" || api.ImageMime(mime).IsValid()
 }

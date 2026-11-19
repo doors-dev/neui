@@ -43,7 +43,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -164,9 +163,10 @@ type Conf struct {
 	Model api.Model // the one model this provider streams with
 }
 
-// New builds a provider for one model. The key defaults to ANTHROPIC_API_KEY.
-// A nil option is skipped. New returns the error of the first option that
-// fails, and an error for an empty Model.Name. On a model this package
+// New builds a provider for one model. The key defaults to ANTHROPIC_API_KEY
+// and is not checked; a missing or wrong key ends the turn with
+// api.CodeAccess. A nil option is skipped. New returns the error of the first
+// option that fails, and an error for an empty Model.Name. On a model this package
 // declares it also returns one for a configuration the API would refuse on
 // every request: the thinking settings Thinking lists, an effort the model
 // does not take, or a WithMaxTokens over its output ceiling. On any other
@@ -176,7 +176,7 @@ func New(conf Conf, opts ...Option) (*Provider, error) {
 		model:    conf.Model,
 		baseURL:  defaultBaseURL,
 		version:  defaultVersion,
-		client:   http.DefaultClient,
+		client:   &http.Client{},
 		maxToken: defaultMaxTokens,
 	}
 	for _, opt := range opts {
@@ -219,9 +219,6 @@ func New(conf Conf, opts ...Option) (*Provider, error) {
 	}
 	if !p.keyExplicit {
 		p.key = os.Getenv("ANTHROPIC_API_KEY")
-		if p.key == "" {
-			slog.Warn("claude: no API key: set ANTHROPIC_API_KEY or pass WithAPIKey")
-		}
 	}
 	return p, nil
 }
@@ -244,14 +241,14 @@ func WithAPIKey(key string) Option {
 func WithBaseURL(base string) Option {
 	return func(p *Provider) error {
 		if base == "" {
-			return fmt.Errorf("empty base URL")
+			return errors.New("claude: empty base URL")
 		}
 		u, err := url.Parse(base)
 		if err != nil {
-			return fmt.Errorf("base URL %q: %w", base, err)
+			return fmt.Errorf("claude: base URL %q: %w", base, err)
 		}
 		if u.Scheme == "" || u.Host == "" {
-			return fmt.Errorf("base URL %q needs a scheme and host", base)
+			return fmt.Errorf("claude: base URL %q needs a scheme and host", base)
 		}
 		p.baseURL = strings.TrimRight(base, "/")
 		return nil
@@ -311,12 +308,12 @@ func WithMaxTokens(n int) Option {
 	}
 }
 
-// WithStopSequences adds to stop_sequences. A turn that ends on one ends as an
-// ordinary completion, api.CodeTurn, and nothing reports which sequence was
-// hit.
+// WithStopSequences sets stop_sequences, replacing any set before. A turn
+// that ends on one ends as an ordinary completion, api.CodeTurn, and nothing
+// reports which sequence was hit.
 func WithStopSequences(seqs ...string) Option {
 	return func(p *Provider) error {
-		p.stopSeqs = append(p.stopSeqs, seqs...)
+		p.stopSeqs = seqs
 		return nil
 	}
 }
@@ -406,6 +403,8 @@ func WithTransport(opt lib.Options) Option {
 	}
 }
 
+var _ api.Provider = (*Provider)(nil)
+
 // Name returns "claude".
 func (p *Provider) Name() string {
 	return providerName
@@ -438,9 +437,13 @@ func (p *Provider) Stream(ctx context.Context, req api.Request) <-chan api.Event
 // base with a fixed path — so a failure is a base URL that was never valid,
 // which is a mistake at construction rather than an outcome of this turn.
 func (p *Provider) request(ctx context.Context, req api.Request) (*http.Request, int, error) {
-	body, err := p.encode(req)
+	w, err := p.encode(req)
 	if err != nil {
 		return nil, 0, err
+	}
+	body, err := lib.MarshalBody(w)
+	if err != nil {
+		return nil, 0, fmt.Errorf("claude: encoding request: %w", err)
 	}
 	sent := len(body.Bytes())
 	if p.model.RequestBytes > 0 && sent > p.model.RequestBytes {

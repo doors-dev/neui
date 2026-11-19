@@ -40,7 +40,7 @@ func TestConform(t *testing.T) {
 
 func conformAdapter() conform.Adapter {
 	return conform.Adapter{
-		Name:   "gpt",
+		Name:   providerName,
 		Models: []api.Model{GPT56Sol, GPT56Luna, GPT6Astra, GPT6Sol, GPT6Luna, GPT61Sol, GPT61Terra},
 		New: func(base string, m api.Model, p conform.Params) (api.Provider, error) {
 			key := p.Key
@@ -51,9 +51,9 @@ func conformAdapter() conform.Adapter {
 			switch p.Effort {
 			case "":
 			case conform.EffortOff:
-				opts = append(opts, WithReasoningEffort(EffortNone))
+				opts = append(opts, WithEffort(EffortNone))
 			default:
-				opts = append(opts, WithReasoningEffort(Effort(p.Effort)))
+				opts = append(opts, WithEffort(Effort(p.Effort)))
 			}
 			if p.Temperature != 0 {
 				opts = append(opts, WithTemperature(p.Temperature))

@@ -61,13 +61,17 @@ type inputItem struct {
 	v    any
 }
 
-// encodeRequest builds the body of one turn.
+// encode builds the body of one turn.
 //
 // A known reasoning model is asked for reasoning.encrypted_content unless the caller
 // replaced the include list. Stateless mode populates it on its own now, and the
 // include value is still accepted, still documented and still what older models
 // need. Sending it costs a string.
-func encodeRequest(model string, set settings, req api.Request) (*requestBody, error) {
+func (p *Provider) encode(req api.Request) (*requestBody, error) {
+	if len(req.Messages) == 0 {
+		return nil, errors.New("gpt: request has no messages")
+	}
+	model, set := p.model.Name, p.set
 	b := &requestBody{
 		Model:         model,
 		Stream:        true,
@@ -79,8 +83,10 @@ func encodeRequest(model string, set settings, req api.Request) (*requestBody, e
 	switch {
 	case set.include != nil:
 		b.Include = set.include
-	case classify(model) == reasoningModel:
-		b.Include = []string{"reasoning.encrypted_content"}
+	default:
+		if _, known := declared[model]; known {
+			b.Include = []string{"reasoning.encrypted_content"}
+		}
 	}
 	b.MaxOutputTokens = set.maxTokens
 	if req.System != "" {
@@ -110,11 +116,16 @@ func encodeRequest(model string, set settings, req api.Request) (*requestBody, e
 	if set.cacheMode != "" || set.cacheTTL != "" {
 		b.PromptCacheOpts = &promptCacheConfig{Mode: set.cacheMode, TTL: set.cacheTTL}
 	}
-	in := &inputBuilder{set: set, model: model, results: map[string]api.ToolError{}}
+	in := &inputBuilder{set: set, model: model, results: map[string]api.ToolError{}, nameless: map[string]bool{}}
 	for _, m := range req.Messages {
 		for _, c := range m.Content {
-			if r, ok := c.(api.ContentToolResult); ok {
-				in.results[r.ID] = r.Error
+			switch c := c.(type) {
+			case api.ContentToolResult:
+				in.results[c.ID] = c.Error
+			case api.ContentToolUse:
+				if c.Name == "" {
+					in.nameless[c.ID] = true
+				}
 			}
 		}
 	}
@@ -126,7 +137,7 @@ func encodeRequest(model string, set settings, req api.Request) (*requestBody, e
 		case api.RoleAssistant:
 			err = in.assistant(m, i)
 		default:
-			err = fmt.Errorf("gpt: unknown role %q", m.Role)
+			err = fmt.Errorf("gpt: message %d has role %q", i, m.Role)
 		}
 		if err != nil {
 			return nil, err
@@ -154,11 +165,11 @@ func encodeTools(set settings, tools []api.Tool) ([]toolDef, error) {
 		} else {
 			raw, err := json.Marshal(params)
 			if err != nil {
-				return nil, fmt.Errorf("gpt: tool %s schema: %w", t.Name, err)
+				return nil, fmt.Errorf("gpt: tool %q schema: %w", t.Name, err)
 			}
 			var schema any
 			if err := json.Unmarshal(raw, &schema); err != nil {
-				return nil, fmt.Errorf("gpt: tool %s schema: %w", t.Name, err)
+				return nil, fmt.Errorf("gpt: tool %q schema: %w", t.Name, err)
 			}
 			dropFormats(schema)
 			params = schema
@@ -211,10 +222,11 @@ func encodeToolChoice(c api.ToolChoice) any {
 }
 
 type inputBuilder struct {
-	set     settings
-	model   string
-	results map[string]api.ToolError
-	items   []inputItem
+	set      settings
+	model    string
+	results  map[string]api.ToolError
+	nameless map[string]bool
+	items    []inputItem
 }
 
 func (b *inputBuilder) finish() []any {
@@ -259,7 +271,7 @@ func (b *inputBuilder) user(m api.Message, at int) error {
 				blocks = append(blocks, omitted(c, "an image part with no bytes in it is refused by the service, and the block is stored, so it would be refused again on every later turn of the thread"))
 				continue
 			}
-			if !imageMediaTypes[strings.ToLower(strings.TrimSpace(c.Mime))] {
+			if _, ok := lib.ImageMime(c.Mime); !ok {
 				blocks = append(blocks, omitted(c, fmt.Sprintf("an image of type %q is refused by the service, which takes PNG, JPEG, WEBP and GIF, and the block is stored, so it would be refused again on every later turn of the thread", c.Mime)))
 				continue
 			}
@@ -275,6 +287,10 @@ func (b *inputBuilder) user(m api.Message, at int) error {
 			}
 			blocks = append(blocks, documentBlock(c))
 		case api.ContentToolUse:
+			if c.Name == "" {
+				blocks = append(blocks, omitted(c, "a function_call with no name names no tool and is refused by the service, and the block is stored, so it would be refused again on every later turn of the thread"))
+				continue
+			}
 			flush()
 			call, err := callItem(c, b.results[c.ID])
 			if err != nil {
@@ -282,6 +298,10 @@ func (b *inputBuilder) user(m api.Message, at int) error {
 			}
 			b.items = append(b.items, call)
 		case api.ContentToolResult:
+			if c.ID == "" || b.nameless[c.ID] {
+				blocks = append(blocks, omitted(c, "a function_call_output with no call_id, or one answering a call that went out as a note, answers no call and is refused by the service, and the block is stored, so it would be refused again on every later turn of the thread"))
+				continue
+			}
 			flush()
 			b.items = append(b.items, resultItem(c, at))
 		case api.ContentReasoning:
@@ -305,7 +325,7 @@ func omitted(c api.Content, why string) inputText {
 }
 
 func unknown(c api.Content, at int) inputText {
-	return inputText{Type: "input_text", Text: lib.Unknown("gpt", at, c)}
+	return inputText{Type: "input_text", Text: lib.Unknown(providerName, at, c)}
 }
 
 // assistant turns one assistant message into items, then applies the reasoning
@@ -395,6 +415,10 @@ func (b *inputBuilder) assistant(m api.Message, at int) error {
 			flush()
 			b.items = append(b.items, inputItem{kind: kindReasoning, v: item})
 		case api.ContentToolUse:
+			if c.Name == "" {
+				parts = append(parts, omitted(c, "a function_call with no name names no tool and is refused by the service, and the block is stored, so it would be refused again on every later turn of the thread"))
+				continue
+			}
 			flush()
 			call, err := callItem(c, b.results[c.ID])
 			if err != nil {
@@ -402,6 +426,10 @@ func (b *inputBuilder) assistant(m api.Message, at int) error {
 			}
 			b.items = append(b.items, call)
 		case api.ContentToolResult:
+			if c.ID == "" || b.nameless[c.ID] {
+				parts = append(parts, omitted(c, "a function_call_output with no call_id, or one answering a call that went out as a note, answers no call and is refused by the service, and the block is stored, so it would be refused again on every later turn of the thread"))
+				continue
+			}
 			flush()
 			b.items = append(b.items, resultItem(c, at))
 		case api.ContentImage, api.ContentDocument:
@@ -632,7 +660,7 @@ func resultOutput(c api.ContentToolResult, at int) any {
 				blocks = append(blocks, omitted(rc, "an image part with no bytes in it is refused by the service, and the result is stored, so it would be refused again on every later turn of the thread"))
 				continue
 			}
-			if !imageMediaTypes[strings.ToLower(strings.TrimSpace(rc.Mime))] {
+			if _, ok := lib.ImageMime(rc.Mime); !ok {
 				blocks = append(blocks, omitted(rc, fmt.Sprintf("an image of type %q is refused by the service, which takes PNG, JPEG, WEBP and GIF, and the result is stored, so it would be refused again on every later turn of the thread", rc.Mime)))
 				continue
 			}
@@ -657,19 +685,9 @@ func resultOutput(c api.ContentToolResult, at int) any {
 	return blocks
 }
 
-// imageMediaTypes is what the vision models take. Anything else becomes the
-// note omitted returns, with the media type named, rather than forwarded to be
-// refused there with a message about a data URL.
-var imageMediaTypes = map[string]bool{
-	"image/png":  true,
-	"image/jpeg": true,
-	"image/jpg":  true,
-	"image/webp": true,
-	"image/gif":  true,
-}
-
 func imageBlock(c api.ContentImage) inputImage {
-	return inputImage{Type: "input_image", ImageURL: dataURL(strings.ToLower(strings.TrimSpace(c.Mime)), c.Data), Detail: "high"}
+	mime, _ := lib.ImageMime(c.Mime)
+	return inputImage{Type: "input_image", ImageURL: dataURL(mime, c.Data), Detail: "high"}
 }
 
 // documentExtensions maps the media types worth guessing a filename for. The

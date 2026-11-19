@@ -33,6 +33,7 @@ import (
 	"neui.dev/api"
 	"neui.dev/internal/common"
 	"neui.dev/internal/schema"
+	"neui.dev/internal/utils"
 )
 
 func serve(t *testing.T, srv *mcp.Server) *httptest.Server {
@@ -226,7 +227,7 @@ func TestCollidingAndEmptyNamesHashed(t *testing.T) {
 	for name, desc := range map[string]string{
 		"get_item_" + hash("get.item"): "dot",
 		"get_item_" + hash("get-item"): "dash",
-		"t" + hash("???"):              "empty",
+		utils.SanitizeName("???"):      "empty",
 		"plain":                        "plain",
 	} {
 		tool, ok := module.Get(name)

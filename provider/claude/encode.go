@@ -17,6 +17,7 @@ package claude
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"unicode/utf8"
@@ -25,11 +26,11 @@ import (
 	"neui.dev/provider/lib"
 )
 
-func (p *Provider) encode(req api.Request) (*lib.Body, error) {
+func (p *Provider) encode(req api.Request) (*request, error) {
 	if len(req.Messages) == 0 {
-		return nil, fmt.Errorf("claude: request has no messages")
+		return nil, errors.New("claude: request has no messages")
 	}
-	w := request{
+	w := &request{
 		Model:         p.model.Name,
 		MaxTokens:     p.maxToken,
 		Stream:        true,
@@ -61,7 +62,7 @@ func (p *Provider) encode(req api.Request) (*lib.Body, error) {
 	if w.Messages, err = p.encodeMessages(req.Messages); err != nil {
 		return nil, err
 	}
-	return lib.MarshalBody(w)
+	return w, nil
 }
 
 // encodeToolChoice maps the choice onto this API's, and on a declared model
@@ -105,7 +106,7 @@ func (p *Provider) encodeTools(tools []api.Tool) ([]tool, error) {
 	out := make([]tool, 0, len(tools))
 	for _, t := range tools {
 		if t.Name == "" {
-			return nil, fmt.Errorf("claude: tool has no name")
+			return nil, errors.New("claude: tool has no name")
 		}
 		schema, err := encodeSchema(t.Schema)
 		if err != nil {
@@ -125,31 +126,26 @@ func encodeSchema(schema any) (json.RawMessage, error) {
 	if schema == nil {
 		return json.RawMessage(`{"type":"object","properties":{}}`), nil
 	}
-	raw, err := json.Marshal(schema)
-	if err != nil {
-		return nil, err
-	}
-	if len(raw) == 0 || raw[0] != '{' {
-		return nil, fmt.Errorf("schema is not a JSON object")
-	}
-	return raw, nil
+	return json.Marshal(schema)
 }
 
 func (p *Provider) encodeSystem(system string) ([]textBlock, error) {
 	if system == "" {
 		return nil, nil
 	}
-	out := []textBlock{{Type: "text", Text: htmlText(system)}}
+	out := []textBlock{{Type: "text", Text: system}}
 	if p.marks(CacheSystem) {
 		out[0].CacheControl = p.cacheMark()
 	}
 	return out, nil
 }
 
-// encodeMessages keeps the caller's arrangement. A tool result is a block inside
-// a user message here, so wherever it was written within that message is where
-// it goes, and this API has an is_error field for one that failed rather than a
-// convention to invent. Both of api.ToolError's failures set it: the field says
+// encodeMessages keeps the caller's arrangement but for one move. A tool result
+// is a block inside a user message here, and this API requires the results of a
+// user message to come before anything else in it, so they go first in the
+// order they were written and the other blocks follow in theirs. This API has
+// an is_error field for a result that failed rather than a convention to
+// invent. Both of api.ToolError's failures set it: the field says
 // a call did not produce what was asked of it, and the classification telling
 // the two apart is for whoever routes the result rather than for the model,
 // which reads the text in the result either way.
@@ -160,20 +156,43 @@ func (p *Provider) encodeSystem(system string) ([]textBlock, error) {
 // the one case where the call's own Input holds nothing sendable, so the pairing
 // is what licenses the empty object. See encodeContent.
 //
+// Which calls go out as a note is collected the same way, because the result
+// answering such a call has no call left to answer and becomes a note as well:
+// a call written into a user message, one with no name, and one whose stored
+// arguments are not valid JSON.
+//
 // Which message it was written in is the one thing the arrangement cannot carry:
 // tool_result is a block of the user turn on this API and an assistant message
 // has no room for one, so a result written into an assistant message leaves the
 // note omitted returns. Moving it would be inventing a turn the caller did not
 // write. The role is passed down for that decision.
 //
+// A message with no blocks takes the note emptyMessage in their place: this API
+// refuses an empty content array, and the message is stored, so it would be
+// refused again on every later turn of the thread.
+//
 // A cache marker never goes on a block that has to be replayed verbatim, so the
 // last block that can carry one is tracked separately from the last one overall.
+const emptyMessage = "[empty]"
+
 func (p *Provider) encodeMessages(msgs []api.Message) ([]message, error) {
 	discarded := map[string]bool{}
 	for _, m := range msgs {
 		for _, c := range m.Content {
 			if r, is := c.(api.ContentToolResult); is && r.Error == api.ToolErrJSON {
 				discarded[r.ID] = true
+			}
+		}
+	}
+	noted := map[string]bool{}
+	for _, m := range msgs {
+		for _, c := range m.Content {
+			u, is := c.(api.ContentToolUse)
+			if !is {
+				continue
+			}
+			if m.Role == api.RoleUser || u.Name == "" || !discarded[u.ID] && len(u.Input) > 0 && !bytes.Equal(u.Input, api.DiscardedArguments) && !json.Valid(u.Input) {
+				noted[u.ID] = true
 			}
 		}
 	}
@@ -184,20 +203,33 @@ func (p *Provider) encodeMessages(msgs []api.Message) ([]message, error) {
 			return nil, fmt.Errorf("claude: message %d has role %q", i, m.Role)
 		}
 		blocks := make([]any, 0, len(m.Content))
-		var markable *cached
+		var results []any
+		var markable, resultMark *cached
 		replay := replayThinking(m)
 		for j, c := range m.Content {
-			block, mark, err := p.encodeContent(c, role, replay, discarded, i)
+			block, mark, err := p.encodeContent(c, role, replay, discarded, noted, i)
 			if err != nil {
 				return nil, fmt.Errorf("claude: message %d block %d: %w", i, j, err)
+			}
+			if _, is := block.(*toolResultBlock); is {
+				results = append(results, block)
+				resultMark = mark
+				continue
 			}
 			if mark != nil {
 				markable = mark
 			}
 			blocks = append(blocks, block)
 		}
+		if len(results) > 0 {
+			blocks = append(results, blocks...)
+		}
+		if markable == nil {
+			markable = resultMark
+		}
 		if len(blocks) == 0 {
-			return nil, fmt.Errorf("claude: message %d has no content, and an empty content array is not a message", i)
+			b := &textBlock{Type: "text", Text: emptyMessage}
+			blocks, markable = append(blocks, b), &b.cached
 		}
 		if i == len(msgs)-1 && markable != nil && p.marks(CacheMessages) {
 			markable.CacheControl = p.cacheMark()
@@ -256,8 +288,10 @@ func replayThinking(m api.Message) bool {
 // type this API does not take, a document in an assistant message or one
 // encodeDocument cannot send, thinking the message does not replay, a payload
 // this API did not issue, a payload whose streamed fragments never parsed back
-// into it, and a tool result
-// in an assistant message. A type this version
+// into it, a tool result
+// in an assistant message or with no tool use id, a tool call with no name or
+// whose stored arguments are not JSON, and a tool call, thinking or a payload
+// in a user message. A type this version
 // of the adapter has no case for becomes the note lib.Unknown returns.
 //
 // An empty text block and an attachment this API refuses are notes for the
@@ -283,22 +317,26 @@ func replayThinking(m api.Message) bool {
 // those two would replay as a call that legitimately took none. It is an
 // invariant of whoever dispatched the calls, so a thread that breaks it is a
 // caller's defect and not content this API cannot carry.
-func (p *Provider) encodeContent(c api.Content, role string, replay bool, discarded map[string]bool, at int) (any, *cached, error) {
+func (p *Provider) encodeContent(c api.Content, role string, replay bool, discarded map[string]bool, noted map[string]bool, at int) (any, *cached, error) {
 	switch c := c.(type) {
 	case api.ContentText:
 		if strings.TrimSpace(c.Text) == "" {
 			return omitted(c, "a text block with no non-whitespace content in it is refused by this API, and the block is stored, so it would be refused again on every later turn of the thread")
 		}
-		b := &textBlock{Type: "text", Text: htmlText(c.Text)}
+		b := &textBlock{Type: "text", Text: c.Text}
 		return b, &b.cached, nil
 	case api.ContentImage:
 		if len(c.Data) == 0 {
 			return omitted(c, "an image source with no bytes in it is refused by this API, and the block is stored, so it would be refused again on every later turn of the thread")
 		}
-		if !api.ImageMime(c.Mime).IsValid() {
+		mime, ok := lib.ImageMime(c.Mime)
+		if !ok {
 			return omitted(c, fmt.Sprintf("an image of type %q is refused by this API, which takes image/jpeg, image/png, image/gif and image/webp, and the block is stored, so it would be refused again on every later turn of the thread", c.Mime))
 		}
-		b := &imageBlock{Type: "image", Source: base64Source{Type: "base64", MediaType: c.Mime, Data: c.Data}}
+		if mime == "image/jpg" {
+			mime = string(api.ImageJPEG)
+		}
+		b := &imageBlock{Type: "image", Source: base64Source{Type: "base64", MediaType: mime, Data: c.Data}}
 		return b, &b.cached, nil
 	case api.ContentDocument:
 		if role == string(api.RoleAssistant) {
@@ -309,6 +347,9 @@ func (p *Provider) encodeContent(c api.Content, role string, replay bool, discar
 		}
 		return encodeDocument(c)
 	case api.ContentToolUse:
+		if noted[c.ID] {
+			return omitted(c, "a tool call in a user message, with no name, or whose stored arguments are not valid JSON is refused by this API, and the block is stored, so it would be refused again on every later turn of the thread")
+		}
 		input := c.Input
 		switch {
 		case discarded[c.ID]:
@@ -318,15 +359,14 @@ func (p *Provider) encodeContent(c api.Content, role string, replay bool, discar
 		case len(input) == 0:
 			input = json.RawMessage(`{}`)
 		}
-		input, err := json.Marshal(input)
-		if err != nil {
-			return nil, nil, err
-		}
-		b := &toolUseBlock{Type: "tool_use", ID: htmlText(c.ID), Name: htmlText(c.Name), Input: input}
+		b := &toolUseBlock{Type: "tool_use", ID: c.ID, Name: c.Name, Input: input}
 		return b, &b.cached, nil
 	case api.ContentToolResult:
 		if role == string(api.RoleAssistant) {
 			return omitted(c, "a tool result is a block of the user turn that answers the call, and an assistant message on this API takes none")
+		}
+		if c.ID == "" || noted[c.ID] {
+			return omitted(c, "a tool result with no tool use id, or one answering a call that went out as a note, answers no call and is refused by this API, and the block is stored, so it would be refused again on every later turn of the thread")
 		}
 		b, err := encodeToolResult(c)
 		if err != nil {
@@ -334,11 +374,17 @@ func (p *Provider) encodeContent(c api.Content, role string, replay bool, discar
 		}
 		return b, &b.cached, nil
 	case api.ContentReasoning:
+		if role == string(api.RoleUser) {
+			return omitted(c, "thinking is a block of the assistant turn that produced it, and a user message on this API takes none")
+		}
 		return encodeReasoning(c, replay)
 	case api.ContentOpaque:
+		if role == string(api.RoleUser) {
+			return omitted(c, "a payload this API issued belongs to the assistant turn that produced it, and a user message on this API takes none")
+		}
 		return encodeOpaque(c)
 	}
-	b := &textBlock{Type: "text", Text: htmlText(lib.Unknown(providerName, at, c))}
+	b := &textBlock{Type: "text", Text: lib.Unknown(providerName, at, c)}
 	return b, &b.cached, nil
 }
 
@@ -348,7 +394,7 @@ func (p *Provider) encodeContent(c api.Content, role string, replay bool, discar
 // for the same reason it is placeable: nothing about it has to be replayed
 // unchanged.
 func omitted(c api.Content, why string) (any, *cached, error) {
-	b := &textBlock{Type: "text", Text: htmlText(lib.Omitted(c, why))}
+	b := &textBlock{Type: "text", Text: lib.Omitted(c, why)}
 	return b, &b.cached, nil
 }
 
@@ -363,7 +409,7 @@ func omitted(c api.Content, why string) (any, *cached, error) {
 // text document whose bytes are not UTF-8 would lose them to U+FFFD. There is
 // nowhere on this API for those bytes to go, so it becomes the note as well.
 func encodeDocument(c api.ContentDocument) (any, *cached, error) {
-	b := &documentBlock{Type: "document", Title: htmlText(c.Name)}
+	b := &documentBlock{Type: "document", Title: c.Name}
 	switch c.Mime {
 	case "application/pdf":
 		b.Source = &base64Source{Type: "base64", MediaType: c.Mime, Data: c.Data}
@@ -372,7 +418,7 @@ func encodeDocument(c api.ContentDocument) (any, *cached, error) {
 		if !utf8.Valid(c.Data) {
 			return omitted(c, fmt.Sprintf("a document of type %q is sent as text, its bytes are not UTF-8, and the block is stored, so it would be refused again on every later turn of the thread", c.Mime))
 		}
-		b.Source = &textSource{Type: "text", MediaType: "text/plain", Data: htmlText(c.Data)}
+		b.Source = &textSource{Type: "text", MediaType: "text/plain", Data: string(c.Data)}
 	default:
 		return omitted(c, fmt.Sprintf("document type %q is not taken by this API, which reads PDF and text only, and the block is stored, so it would be refused again on every later turn of the thread", c.Mime))
 	}
@@ -392,14 +438,7 @@ func encodeDocument(c api.ContentDocument) (any, *cached, error) {
 // instead of the note, so content is never the empty array: a tool that
 // returned nothing, which api.NewContentToolResult answers with no blocks, is a
 // result this API is not documented to accept, and it is stored like any other.
-//
-// A result with no tool use id is refused instead, because that is not content
-// this API cannot carry: it is a result matched to no call, and there is nothing
-// for the model to read it against.
 func encodeToolResult(c api.ContentToolResult) (*toolResultBlock, error) {
-	if c.ID == "" {
-		return nil, fmt.Errorf("tool result has no tool use id")
-	}
 	content := make([]any, 0, len(c.Content))
 	for _, rc := range c.Content {
 		var block any
@@ -409,17 +448,21 @@ func encodeToolResult(c api.ContentToolResult) (*toolResultBlock, error) {
 				block, _, _ = omitted(rc, "a text block with no non-whitespace content in it is refused by this API, and the result is stored, so it would be refused again on every later turn of the thread")
 				break
 			}
-			block = &textBlock{Type: "text", Text: htmlText(rc.Text)}
+			block = &textBlock{Type: "text", Text: rc.Text}
 		case api.ContentImage:
 			if len(rc.Data) == 0 {
 				block, _, _ = omitted(rc, "an image source with no bytes in it is refused by this API, and the result is stored, so it would be refused again on every later turn of the thread")
 				break
 			}
-			if !api.ImageMime(rc.Mime).IsValid() {
+			mime, ok := lib.ImageMime(rc.Mime)
+			if !ok {
 				block, _, _ = omitted(rc, fmt.Sprintf("an image of type %q is refused by this API, which takes image/jpeg, image/png, image/gif and image/webp, and the result is stored, so it would be refused again on every later turn of the thread", rc.Mime))
 				break
 			}
-			block = &imageBlock{Type: "image", Source: base64Source{Type: "base64", MediaType: rc.Mime, Data: rc.Data}}
+			if mime == "image/jpg" {
+				mime = string(api.ImageJPEG)
+			}
+			block = &imageBlock{Type: "image", Source: base64Source{Type: "base64", MediaType: mime, Data: rc.Data}}
 		case api.ContentDocument:
 			if len(rc.Data) == 0 {
 				block, _, _ = omitted(rc, "a document source with no bytes in it is refused by this API, and the result is stored, so it would be refused again on every later turn of the thread")
@@ -439,7 +482,7 @@ func encodeToolResult(c api.ContentToolResult) (*toolResultBlock, error) {
 	}
 	return &toolResultBlock{
 		Type:      "tool_result",
-		ToolUseID: htmlText(c.ID),
+		ToolUseID: c.ID,
 		Content:   content,
 		IsError:   c.Error != api.ToolOk,
 	}, nil

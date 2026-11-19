@@ -117,13 +117,12 @@ func (c *converter) Convert(f lib.Frame) ([]api.Event, bool) {
 // over at [DONE] and nothing is read after that, so a turn that ran to the
 // sentinel never reaches here at all.
 //
-// A body that ran out after a finish_reason but before the sentinel fails the
-// turn with api.CodeNetwork: the usage frame and the sentinel never arrived, and
-// only a reply that arrived whole is kept. With no reason yet, the reply really
-// was cut, and the absence of a terminal event is the whole of the report:
-// neither io.EOF nor io.ErrUnexpectedEOF says anything about whether the server
-// meant to stop, and the unexpected one is manufactured by lib's frame reader
-// for a body that stopped mid event rather than reported by the transport. A
+// A body that ran out before the sentinel produces nothing, whether or not a
+// finish_reason had arrived: the reply was cut, and the absence of a terminal
+// event is the whole of the report. Neither io.EOF nor io.ErrUnexpectedEOF says
+// anything about whether the server meant to stop, and the unexpected one is
+// manufactured by lib's frame reader for a body that stopped mid event rather
+// than reported by the transport. A
 // cancelled ctx is silent for the other reason: the caller decided it, so there
 // is nobody left to tell.
 //
@@ -137,26 +136,20 @@ func (c *converter) Convert(f lib.Frame) ([]api.Event, bool) {
 func (c *converter) End(err error) []api.Event {
 	if e, ok := err.(*lib.HTTPError); ok {
 		failure := apiError(e.Status, e.Header, e.Body)
-		if contextOverflow(failure) {
+		if contextOverflow(failure, e.Body) {
 			return []api.Event{api.EventErr{Code: api.CodeContextLength, Err: failure}}
 		}
 		code := statusCode(e.Status)
 		if code == api.CodeTooLarge {
 			return []api.Event{api.EventErr{
 				Code: code,
-				Err:  measuredTooLarge(c.model, c.sent, c.declared, failure),
+				Err:  lib.MeasuredTooLarge(c.model, c.sent, c.declared, failure),
 			}}
 		}
 		return []api.Event{api.EventErr{Code: code, Err: failure}}
 	}
 	switch {
 	case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
-		if c.stopped {
-			return []api.Event{api.EventErr{
-				Code: api.CodeNetwork,
-				Err:  fmt.Errorf("deepseek: the stream ended after finish_reason %q but before [DONE]: %w", c.finish, err),
-			}}
-		}
 		return nil
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		return nil
@@ -306,7 +299,7 @@ func (c *converter) toolCall(t *toolDelta) (api.EventTool, bool, error) {
 func (c *converter) mintID(index int) string {
 	base := c.id
 	if base == "" {
-		base = Name
+		base = providerName
 	}
 	return fmt.Sprintf("%s_call_%d", base, index)
 }
@@ -363,20 +356,22 @@ func (c *converter) done() api.Event {
 // vocabulary that grew has to arrive unclassified, because a turn cut short for
 // a reason this adapter has never seen must not read as one the model finished.
 func finishEvent(v string) api.Event {
+	var code api.ErrCode
 	switch v {
 	case "stop", "tool_calls":
 		return api.EventOk{Code: api.CodeTurn}
 	case "length":
-		return api.EventErr{Code: api.CodeCapped, Err: &FinishError{Reason: v}}
+		code = api.CodeCapped
 	case "content_filter":
-		return api.EventErr{Code: api.CodeRefused, Err: &FinishError{Reason: v}}
+		code = api.CodeRefused
 	case "insufficient_system_resource":
-		return api.EventErr{Code: api.CodeBusy, Err: &FinishError{Reason: v}}
+		code = api.CodeBusy
 	case "aborted":
-		return api.EventErr{Code: api.CodeNetwork, Err: &FinishError{Reason: v}}
+		code = api.CodeNetwork
 	default:
-		return api.EventErr{Code: api.CodeUnknown, Err: &FinishError{Reason: v}}
+		code = api.CodeUnknown
 	}
+	return api.EventErr{Code: code, Err: &APIError{Provider: providerName, Code: v, Message: "the turn ended on this finish_reason"}}
 }
 
 // event splits DeepSeek's counters into the five disjoint ones.

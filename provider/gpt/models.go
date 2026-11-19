@@ -16,9 +16,13 @@ package gpt
 
 import "neui.dev/api"
 
-// The current OpenAI models for Conf.Model, with their published limits
-// (read 2026-11-06): a 1,050,000-token context window, of which at most 922,000
-// tokens are input; 1,500 images and 512 MB per request. The input_file parts
+// The current OpenAI models for Conf.Model, with the limits the models page
+// (https://developers.openai.com/api/docs/models), the vision guide
+// (https://developers.openai.com/api/docs/guides/images-vision) and the
+// Responses reference
+// (https://developers.openai.com/api/reference/resources/responses/methods/create)
+// publish, read 2026-11-06: a 1,050,000-token context window, of which at most
+// 922,000 tokens are input; 1,500 images and 512 MB per request. The input_file parts
 // of one request share a separate 50 MB, which api.Model has no field for.
 // Images are sent at detail "high", which fits an image within 2,500 patches
 // of 32x32 pixels and, on gpt-5.6, 2048 pixels a side; gpt-6-astra allows a
@@ -46,3 +50,18 @@ const (
 	requestBytes           = 512_000_000
 	maxOutputTokensCeiling = 128_000
 )
+
+type rules struct {
+	maxTokens     int
+	refusedEffort []Effort
+}
+
+var declared = map[string]rules{
+	GPT56Sol.Name:   {maxTokens: maxOutputTokensCeiling, refusedEffort: []Effort{EffortMinimal}},
+	GPT56Luna.Name:  {maxTokens: maxOutputTokensCeiling, refusedEffort: []Effort{EffortMinimal}},
+	GPT6Astra.Name:  {maxTokens: maxOutputTokensCeiling, refusedEffort: []Effort{EffortMinimal, EffortNone}},
+	GPT6Sol.Name:    {maxTokens: maxOutputTokensCeiling, refusedEffort: []Effort{EffortMinimal}},
+	GPT6Luna.Name:   {maxTokens: maxOutputTokensCeiling, refusedEffort: []Effort{EffortMinimal}},
+	GPT61Sol.Name:   {maxTokens: maxOutputTokensCeiling, refusedEffort: []Effort{EffortMinimal, EffortNone}},
+	GPT61Terra.Name: {maxTokens: maxOutputTokensCeiling, refusedEffort: []Effort{EffortMinimal}},
+}

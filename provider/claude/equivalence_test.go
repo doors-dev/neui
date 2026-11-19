@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"neui.dev/api"
+	"neui.dev/internal/testkit/conform"
 	"neui.dev/provider/lib"
 )
 
@@ -203,14 +204,14 @@ func corpusRequests() []corpusRequest {
 	add("tool choice any", model, api.Request{Messages: []api.Message{userText("hi")}, ToolChoice: api.ToolChoiceAny, Tools: tools})
 	add("tool choice forced", model, api.Request{Messages: []api.Message{userText("hi")}, ToolChoice: api.ToolChoice("read<&>"), Tools: tools})
 	add("err no messages", model, api.Request{})
-	add("err empty message", model, api.Request{Messages: []api.Message{{Role: api.RoleUser}}})
+	add("note empty message", model, api.Request{Messages: []api.Message{{Role: api.RoleUser}}})
 	add("err role", model, api.Request{Messages: []api.Message{{Role: "system", Content: api.Contents{corpusText("x")}}}})
-	add("err result id", model, api.Request{Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{api.ContentToolResult{Content: api.UserContents{corpusText("x")}}}}}})
+	add("note result id", model, api.Request{Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{api.ContentToolResult{Content: api.UserContents{corpusText("x")}}}}}})
 	add("err discarded", model, api.Request{Messages: []api.Message{userText("go"), {Role: api.RoleAssistant, Content: api.Contents{api.ContentToolUse{ID: "t", Name: "n", Input: api.DiscardedArguments}}}}})
-	add("err schema", model, api.Request{Tools: []api.Tool{{Name: "bad", Schema: []int{1}}}, Messages: []api.Message{userText("hi")}})
+	add("sent schema", model, api.Request{Tools: []api.Tool{{Name: "bad", Schema: []int{1}}}, Messages: []api.Message{userText("hi")}})
 	add("err schema marshal", model, api.Request{Tools: []api.Tool{{Name: "bad", Schema: map[string]any{"f": func() {}}}}, Messages: []api.Message{userText("hi")}})
 	add("err tool name", model, api.Request{Tools: []api.Tool{{Desc: "x"}}, Messages: []api.Message{userText("hi")}})
-	add("err tool input", model, api.Request{Messages: []api.Message{userText("go"), {Role: api.RoleAssistant, Content: api.Contents{api.ContentToolUse{ID: "t", Name: "n", Input: json.RawMessage(`{bad`)}}}}})
+	add("note tool input", model, api.Request{Messages: []api.Message{userText("go"), {Role: api.RoleAssistant, Content: api.Contents{api.ContentToolUse{ID: "t", Name: "n", Input: json.RawMessage(`{bad`)}}}}})
 	add("err forced refused", Conf{Model: Opus55}, api.Request{Messages: []api.Message{userText("hi")}, ToolChoice: api.ToolChoiceAny, Tools: tools})
 	add("err forced extended", Conf{Model: Haiku45}, api.Request{Messages: []api.Message{userText("hi")}, ToolChoice: api.ToolChoiceAny, Tools: tools}, WithThinking(Thinking{Type: ThinkingEnabled, Budget: 2048}))
 	for i := range 40 {
@@ -370,7 +371,7 @@ func corpusBody(t testing.TB, c corpusRequest) string {
 	if err != nil {
 		t.Fatalf("%s: New: %v", c.name, err)
 	}
-	body, err := p.encode(c.req)
+	body, err := encodeBody(p, c.req)
 	if err != nil {
 		return "error: " + err.Error()
 	}
@@ -384,12 +385,14 @@ func corpusEvents(t *testing.T, c corpusStream) string {
 	}
 	var b strings.Builder
 	for _, e := range collect(t, testProvider(t, sseServer(c.body), opts...), hello()) {
-		b.WriteString(render(e))
 		switch e := e.(type) {
 		case api.EventErr:
-			fmt.Fprintf(&b, " %v", e.Err)
+			fmt.Fprintf(&b, "err %s %v", e.Code, e.Err)
 		case api.EventStart:
+			b.WriteString(conform.Describe(e))
 			fmt.Fprintf(&b, " %q", e.Model)
+		default:
+			b.WriteString(conform.Describe(e))
 		}
 		b.WriteByte('\n')
 	}
@@ -398,19 +401,19 @@ func corpusEvents(t *testing.T, c corpusStream) string {
 
 var corpusRequestHashes = map[string]string{
 	"minimal":                     "82f3c65b38021182",
-	"system":                      "35b647f1e32c474e",
-	"full no cache":               "a19761523a742c14",
-	"full all breakpoints":        "dc42220cb7731b20",
-	"full breakpoints ttl":        "d732e8168c37ef90",
-	"system breakpoint":           "0f92545bfc73eed2",
+	"system":                      "ee66b61b8da05c0c",
+	"full no cache":               "aad045f69de0bca1",
+	"full all breakpoints":        "cbec313a2164ac17",
+	"full breakpoints ttl":        "4f3fa71e598f56c2",
+	"system breakpoint":           "fc3cbdc7ebbae5fb",
 	"tools breakpoint":            "21eeb95b6a7fd043",
 	"breakpoints without targets": "82f3c65b38021182",
 	"mark avoids replayed":        "79de692ad69cf7e1",
 	"mark nothing markable":       "22755ee3fe6775ae",
-	"mark tool result":            "83b24d1010659ef1",
+	"mark tool result":            "c7f8fa1bb97d6b01",
 	"mark image":                  "54b22b77dfeb4575",
 	"mark document":               "7b590fa24982e4e7",
-	"mark text document":          "cf92a61d5c5bddba",
+	"mark text document":          "e8a99e2ff32d2fa0",
 	"mark tool use":               "00092d3989bd5804",
 	"mark note":                   "16d6d769a308f978",
 	"mark unknown":                "16d6d769a308f978",
@@ -421,56 +424,56 @@ var corpusRequestHashes = map[string]string{
 	"tool choice any":             "fa99010651b04d07",
 	"tool choice forced":          "3cbaf13ef3370fb6",
 	"err no messages":             "d8bc720b1a784a3f",
-	"err empty message":           "e935881f5b68556b",
+	"note empty message":          "c142382f1d2c3b06",
 	"err role":                    "9e3fb82d508ccd57",
-	"err result id":               "846cdc943c939df8",
+	"note result id":              "1f0216c9b413186a",
 	"err discarded":               "54ea0a6bdb4aaad8",
-	"err schema":                  "9306c852b8dfa039",
+	"sent schema":                 "d75388b359510b85",
 	"err schema marshal":          "c33f18da575c1150",
 	"err tool name":               "a17f8f6ec58b78ad",
-	"err tool input":              "6b34c1e69fc7becc",
+	"note tool input":             "ab01adf5f582abfe",
 	"err forced refused":          "c914f78650b59f43",
 	"err forced extended":         "00ebb4d277102ece",
-	"random 0":                    "9b8b37275f30ed6e",
-	"random 1":                    "c2984182bdda701d",
-	"random 2":                    "dca15863f7a89a15",
-	"random 3":                    "c2984182bdda701d",
-	"random 4":                    "c2984182bdda701d",
-	"random 5":                    "a2ae29f733a7d61c",
-	"random 6":                    "8f40d7d9c9f5e2d7",
-	"random 7":                    "003f5247a5c98d59",
-	"random 8":                    "c2984182bdda701d",
-	"random 9":                    "c2984182bdda701d",
-	"random 10":                   "c2984182bdda701d",
-	"random 11":                   "dca15863f7a89a15",
-	"random 12":                   "c2984182bdda701d",
-	"random 13":                   "12d6ed8eca61168c",
-	"random 14":                   "c2984182bdda701d",
-	"random 15":                   "c2984182bdda701d",
-	"random 16":                   "c2984182bdda701d",
-	"random 17":                   "c01745f5ea767b41",
-	"random 18":                   "8491ad162b7c4865",
-	"random 19":                   "9136f81d7c4427e9",
-	"random 20":                   "dca15863f7a89a15",
-	"random 21":                   "cb629076e005aff6",
-	"random 22":                   "c2984182bdda701d",
-	"random 23":                   "c2984182bdda701d",
-	"random 24":                   "c2984182bdda701d",
-	"random 25":                   "c2984182bdda701d",
-	"random 26":                   "c2984182bdda701d",
-	"random 27":                   "dca15863f7a89a15",
-	"random 28":                   "6db19b48eb83f6f6",
-	"random 29":                   "c2984182bdda701d",
-	"random 30":                   "d20fe3b9f76cdf13",
-	"random 31":                   "0354bc8044d6e7eb",
-	"random 32":                   "c2984182bdda701d",
-	"random 33":                   "dca15863f7a89a15",
-	"random 34":                   "c2984182bdda701d",
-	"random 35":                   "dca15863f7a89a15",
-	"random 36":                   "c2984182bdda701d",
-	"random 37":                   "c2984182bdda701d",
-	"random 38":                   "2cb2b46f1da68a9d",
-	"random 39":                   "c2984182bdda701d",
+	"random 0":                    "9a54b7a865feb851",
+	"random 1":                    "63566b620c9edeff",
+	"random 2":                    "14507205f7a78b55",
+	"random 3":                    "08b1accbb5b73f86",
+	"random 4":                    "f9fbae5fdc46476a",
+	"random 5":                    "be1f97c7da3ac7f9",
+	"random 6":                    "ffec54bf953ce2de",
+	"random 7":                    "f68bd08ae3fc893d",
+	"random 8":                    "f86c566c195cfd59",
+	"random 9":                    "7284d69740b53a87",
+	"random 10":                   "a3a71f32043c3da6",
+	"random 11":                   "858c90bf038a8bde",
+	"random 12":                   "fa8f48fa013d07da",
+	"random 13":                   "f568ed6f189f32bc",
+	"random 14":                   "52f0c131006d3b0c",
+	"random 15":                   "f68c26451fce21c6",
+	"random 16":                   "c75aae660953bbd6",
+	"random 17":                   "59fc995b07180eac",
+	"random 18":                   "291f9d5492fa69c5",
+	"random 19":                   "bdf89cf6cf6dda97",
+	"random 20":                   "2e2f32a4648f4648",
+	"random 21":                   "bca3f9c6077b15a9",
+	"random 22":                   "18da5cb8a0f8db0f",
+	"random 23":                   "4dc1279203ade970",
+	"random 24":                   "bf07fbbce243dd49",
+	"random 25":                   "1a64281e5fb5454b",
+	"random 26":                   "074b072940ae2fe7",
+	"random 27":                   "312a4297e46875ec",
+	"random 28":                   "8bd3cf45d96d0bc2",
+	"random 29":                   "65630d4a5f7288d6",
+	"random 30":                   "dfcaba3a032d3b51",
+	"random 31":                   "670f31626c364e32",
+	"random 32":                   "60864a3c941d4c45",
+	"random 33":                   "ddace69560f2873c",
+	"random 34":                   "2bc0ef6dd257d598",
+	"random 35":                   "3492a3315e96f901",
+	"random 36":                   "e13fb2c3fef4ceec",
+	"random 37":                   "c835396330adaa73",
+	"random 38":                   "a8bb26eada64fb69",
+	"random 39":                   "f9f3870e4312e81a",
 }
 
 var corpusStreamHashes = map[string]string{
@@ -479,10 +482,10 @@ var corpusStreamHashes = map[string]string{
 	"stop \"end_turn\"":                      "f6d1ad774e6568dd",
 	"stop \"stop_sequence\"":                 "f6d1ad774e6568dd",
 	"stop \"pause_turn\"":                    "f6d1ad774e6568dd",
-	"stop \"max_tokens\"":                    "74f3d8e8c14a041c",
-	"stop \"model_context_window_exceeded\"": "f230a2d1cc74cab6",
-	"stop \"refusal\"":                       "9d625c80e76cb06c",
-	"stop \"brand_new\"":                     "acbb459c8efbc18d",
+	"stop \"max_tokens\"":                    "a712905558c0818e",
+	"stop \"model_context_window_exceeded\"": "489e53d7d4a460b2",
+	"stop \"refusal\"":                       "38ca2eefd9d2b6c5",
+	"stop \"brand_new\"":                     "199f68fa06ab3892",
 	"stop \"\"":                              "119c2f5bc49bb859",
 	"stop null":                              "119c2f5bc49bb859",
 	"stop missing":                           "0f719510a7a5c3cc",
@@ -494,35 +497,35 @@ var corpusStreamHashes = map[string]string{
 	"malformed index":                        "a6808b91f58dd01b",
 	"malformed content block":                "fbbbbcf8ede6bad4",
 	"error overloaded":                       "eb89ac96ada4caa3",
-	"error spend":                            "4d2e853205cc8b89",
+	"error spend":                            "843471569b6174d8",
 	"error too large":                        "a06327bf864770e8",
 	"error empty":                            "10eb88c5909f79c4",
 	"error unknown":                          "88abbdcab35f5662",
-	"random 0":                               "c3d63ad768d4f5c8",
+	"random 0":                               "1e4580d28492fa6e",
 	"random 1":                               "cde0bd936ee56b77",
-	"random 2":                               "cdb62ea8ceabde90",
+	"random 2":                               "85d181f94ec58674",
 	"random 3":                               "b0a390673b626542",
 	"random 4":                               "dfc1b31dad1097b8",
 	"random 5":                               "66ee9b841cd7e743",
-	"random 6":                               "a587bf77118729f5",
-	"random 7":                               "b4295d8dee383642",
-	"random 8":                               "64ea0cc04dd53c5e",
+	"random 6":                               "4196af441dc4e9d6",
+	"random 7":                               "d187795db7bd87fb",
+	"random 8":                               "e94c37aa7f9fece6",
 	"random 9":                               "87200344ade18bab",
-	"random 10":                              "b3e2eee23da4f0e0",
+	"random 10":                              "0ac94809e4bc9ab0",
 	"random 11":                              "c18537899c48736e",
 	"random 12":                              "d58bdcec96adf04b",
-	"random 13":                              "a63757b046fabfc2",
+	"random 13":                              "21bd0bbb3711231d",
 	"random 14":                              "f74a5f21c198a367",
 	"random 15":                              "92d82f584875c493",
-	"random 16":                              "03e902ef0c16ea77",
+	"random 16":                              "e638148387706dd5",
 	"random 17":                              "022e446ebb50baa8",
 	"random 18":                              "34833937e7ed2fab",
 	"random 19":                              "08f86cdbd38dc90e",
 	"random 20":                              "31bd400140dae925",
-	"random 21":                              "6661ae0d0f1f24c0",
+	"random 21":                              "5c58bf74103c648b",
 	"random 22":                              "b1330640f7a5efc4",
 	"random 23":                              "0affe2c29737a1d0",
-	"random 24":                              "320dfe3dbf2032cc",
+	"random 24":                              "b888dc783d0a4845",
 	"random 25":                              "f7be542019bd4b1a",
 	"random 26":                              "316b6146653d7008",
 	"random 27":                              "69583bc2d4e0f685",
@@ -555,35 +558,6 @@ func TestEventStreamsMatchTheCorpus(t *testing.T) {
 		}
 		if got := corpusEvents(t, c); corpusHash(got) != want {
 			t.Errorf("%s: events changed:\n%s", c.name, got)
-		}
-	}
-}
-
-func TestHTMLTextIsWhatMarshalWrites(t *testing.T) {
-	r := rand.New(rand.NewPCG(9, 10))
-	cases := append([]string{""}, corpusSpecial...)
-	for b := range 256 {
-		cases = append(cases, string([]byte{byte(b)}), "a"+string([]byte{byte(b), 'z'}))
-	}
-	for range 5000 {
-		cases = append(cases, corpusString(r, r.IntN(40)), string(corpusBytes(r, r.IntN(16))))
-	}
-	for _, s := range cases {
-		want, err := json.Marshal(s)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got := appendHTMLText(nil, s); string(got) != string(want) {
-			t.Fatalf("%q: got %s, want %s", s, got, want)
-		}
-		body, err := lib.MarshalBody(struct {
-			S htmlText `json:"s"`
-		}{htmlText(s)})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got := string(body.Bytes()); got != `{"s":`+string(want)+`}` {
-			t.Fatalf("%q: encoded %s, want %s", s, got, want)
 		}
 	}
 }
@@ -639,7 +613,7 @@ func benchEncode(b *testing.B, images bool) {
 	req := benchThread(images)
 	b.ReportAllocs()
 	for b.Loop() {
-		body, err := p.encode(req)
+		body, err := encodeBody(p, req)
 		if err != nil {
 			b.Fatal(err)
 		}

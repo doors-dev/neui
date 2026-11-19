@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -32,9 +33,9 @@ import (
 
 func encodeBody(t *testing.T, model string, set settings, req api.Request) map[string]any {
 	t.Helper()
-	b, err := encodeRequest(model, set, req)
+	b, err := (&Provider{model: api.Model{Name: model}, set: set}).encode(req)
 	if err != nil {
-		t.Fatalf("encodeRequest: %v", err)
+		t.Fatalf("encode: %v", err)
 	}
 	raw, err := json.Marshal(b)
 	if err != nil {
@@ -946,7 +947,7 @@ func TestEncodeRejections(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := encodeRequest(tc.model, defaultSettings(), tc.req)
+			_, err := (&Provider{model: api.Model{Name: tc.model}, set: defaultSettings()}).encode(tc.req)
 			if err == nil {
 				t.Fatal("want an error, got none")
 			}
@@ -957,19 +958,22 @@ func TestEncodeRejections(t *testing.T) {
 	}
 }
 
-func TestModelClassification(t *testing.T) {
+func TestDeclaredModelsAreMatchedByExactName(t *testing.T) {
 	for _, m := range []api.Model{GPT56Sol, GPT56Luna, GPT6Astra, GPT6Sol, GPT6Luna, GPT61Sol, GPT61Terra} {
-		if got := classify(m.Name); got != reasoningModel {
-			t.Errorf("%q classified as %d, want reasoning", m.Name, got)
+		if _, ok := declared[m.Name]; !ok {
+			t.Errorf("%q is not declared", m.Name)
 		}
+	}
+	if len(declared) != 7 {
+		t.Errorf("%d models declared, want 7", len(declared))
 	}
 	for _, m := range []string{
 		"gpt-5.6", "gpt-5", "gpt-5.1-codex-max", "gpt-5.4-2026-01-01", "o1", "o3-mini", "codex-mini-latest",
 		"gpt-4o", "gpt-4.1", "gpt-3.5-turbo", "chatgpt-4o-latest", "gpt-5-chat-latest",
 		"gpt-6-sol-2026-11-01", "my-model", "", "openai/gpt-6-sol", "GPT-5.6-LUNA",
 	} {
-		if got := classify(m); got != unknownModel {
-			t.Errorf("%q classified as %d, want unknown", m, got)
+		if _, ok := declared[m]; ok {
+			t.Errorf("%q is declared, want unknown", m)
 		}
 	}
 }
@@ -1018,6 +1022,8 @@ func TestProviderOptions(t *testing.T) {
 	t.Run("an invalid option fails New", func(t *testing.T) {
 		for name, o := range map[string]Option{
 			"temperature": WithTemperature(3),
+			"nan":         WithTemperature(math.NaN()),
+			"top_p nan":   WithTopP(math.NaN()),
 			"base url":    WithBaseURL("no-scheme"),
 			"replay":      WithReasoningReplay(ReplayMode(9)),
 		} {
@@ -1033,19 +1039,19 @@ func TestProviderOptions(t *testing.T) {
 			opts  []Option
 		}{
 			"temperature on a reasoning model": {testModel, []Option{WithTemperature(0.2)}},
-			"top_p on a reasoning model":       {testModel, []Option{WithTopP(0.9), WithReasoningEffort(EffortHigh)}},
+			"top_p on a reasoning model":       {testModel, []Option{WithTopP(0.9), WithEffort(EffortHigh)}},
 		} {
 			if p, err := New(Conf{Model: api.Model{Name: tc.model}}, append([]Option{WithAPIKey("k")}, tc.opts...)...); err == nil || p != nil {
 				t.Errorf("%s: New returned %v, %v, want only an error", name, p, err)
 			}
 		}
-		build(t, api.Model{Name: testModel}, WithAPIKey("k"), WithTemperature(0.2), WithReasoningEffort(EffortNone))
+		build(t, api.Model{Name: testModel}, WithAPIKey("k"), WithTemperature(0.2), WithEffort(EffortNone))
 	})
 
 	t.Run("New checks no combination on an unknown model", func(t *testing.T) {
 		for _, name := range []string{"my-model", "gpt-4o", "o3", "gpt-5.6", "openai/gpt-5.6-sol"} {
 			p := build(t, api.Model{Name: name}, WithAPIKey("k"), WithTemperature(0.2), WithTopP(0.9),
-				WithReasoningEffort(EffortHigh), WithReasoningSummary(SummaryAuto), WithReasoningMode(ReasoningPro), WithReasoningContext(ContextAllTurns))
+				WithEffort(EffortHigh), WithReasoningSummary(SummaryAuto), WithReasoningMode(ReasoningPro), WithReasoningContext(ContextAllTurns))
 			if p.set.temperature == nil || p.set.topP == nil || p.set.effort != string(EffortHigh) || p.set.summary != string(SummaryAuto) ||
 				p.set.reasoningMode != string(ReasoningPro) || p.set.reasoningContext != string(ContextAllTurns) {
 				t.Fatalf("%s: settings %+v, want every option kept", name, p.set)
@@ -1097,21 +1103,21 @@ func TestProviderOptions(t *testing.T) {
 		}
 		for m, efforts := range refused {
 			for _, e := range efforts {
-				if _, err := New(Conf{Model: m}, WithAPIKey("k"), WithReasoningEffort(e)); err == nil {
+				if _, err := New(Conf{Model: m}, WithAPIKey("k"), WithEffort(e)); err == nil {
 					t.Errorf("%s took effort %q", m.Name, e)
 				}
 			}
 			for _, e := range []Effort{EffortLow, EffortMedium, EffortHigh, EffortXHigh, EffortMax} {
-				if _, err := New(Conf{Model: m}, WithAPIKey("k"), WithReasoningEffort(e)); err != nil {
+				if _, err := New(Conf{Model: m}, WithAPIKey("k"), WithEffort(e)); err != nil {
 					t.Errorf("%s refused effort %q: %v", m.Name, e, err)
 				}
 			}
 		}
 		for _, m := range []api.Model{GPT6Sol, GPT61Terra} {
-			build(t, m, WithAPIKey("k"), WithReasoningEffort(EffortNone))
+			build(t, m, WithAPIKey("k"), WithEffort(EffortNone))
 		}
-		build(t, api.Model{Name: "gpt-5"}, WithAPIKey("k"), WithReasoningEffort(EffortMinimal))
-		build(t, api.Model{Name: "openai/gpt-6.1-sol"}, WithAPIKey("k"), WithReasoningEffort(EffortNone))
+		build(t, api.Model{Name: "gpt-5"}, WithAPIKey("k"), WithEffort(EffortMinimal))
+		build(t, api.Model{Name: "openai/gpt-6.1-sol"}, WithAPIKey("k"), WithEffort(EffortNone))
 	})
 
 	t.Run("the model reads back as configured, window included", func(t *testing.T) {
@@ -1155,8 +1161,8 @@ func TestRequestWire(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := testProvider(t, srv.URL, WithOrganization("org_1"), WithReasoningEffort("low"), WithReasoningSummary("auto"))
-	drain(p.Stream(context.Background(), textRequest()))
+	p := testProvider(t, srv.URL, WithOrganization("org_1"), WithEffort("low"), WithReasoningSummary("auto"))
+	collect(t, p, textRequest())
 
 	c := <-got
 	if c.path != "/responses" {
@@ -1321,5 +1327,42 @@ func TestToolSchemaDropsFormatsStrictModeRejects(t *testing.T) {
 	want := `{"properties":{"at":{"format":"date-time","type":"string"},"data":{"type":"string"},"format":{"type":"string"}},"type":"object"}`
 	if string(params) != want {
 		t.Fatalf("parameters went out as %s, want %s", params, want)
+	}
+}
+
+func TestDeclaredModelChecksRunInNew(t *testing.T) {
+	for name, opts := range map[string][]Option{
+		"max tokens over the ceiling": {WithMaxTokens(maxOutputTokensCeiling + 1)},
+		"effort the model refuses":    {WithEffort(EffortMinimal)},
+		"sampling before the effort":  {WithTemperature(0.2), WithEffort(EffortHigh)},
+	} {
+		if p, err := New(Conf{Model: GPT56Sol}, append(opts, WithAPIKey("k"))...); err == nil || p != nil || !strings.HasPrefix(err.Error(), "gpt: ") {
+			t.Errorf("%s: New returned %v, %v, want only an error", name, p, err)
+		}
+		if _, err := New(Conf{Model: api.Model{Name: "openai/gpt-5.6-sol"}}, append(opts, WithAPIKey("k"))...); err != nil {
+			t.Errorf("%s: an undeclared model was checked: %v", name, err)
+		}
+	}
+	if p, err := New(Conf{Model: GPT56Sol}, WithEffort(EffortMinimal), WithEffort(EffortHigh), WithMaxTokens(maxOutputTokensCeiling)); err != nil || p.set.effort != "high" {
+		t.Errorf("the last effort is the one checked: %v", err)
+	}
+}
+
+func TestStoredContentTheServiceRefusesIsANote(t *testing.T) {
+	body := encodeBody(t, testModel, defaultSettings(), api.Request{Messages: []api.Message{
+		user(api.ContentText{Text: "hi"}),
+		assistant(api.ContentToolUse{ID: "call_1", Input: json.RawMessage(`{}`)}),
+		user(api.ContentToolResult{ID: "call_1", Content: api.UserContents{api.ContentText{Text: "72F"}}}, api.ContentToolResult{Content: api.UserContents{api.ContentText{Text: "lost"}}}),
+	}})
+	sameJSON(t, body["input"], `[
+		{"role":"user","content":[{"type":"input_text","text":"hi"}]},
+		{"role":"assistant","content":[{"type":"output_text","text":"[content omitted]"}]},
+		{"role":"user","content":[{"type":"input_text","text":"[content omitted]"},{"type":"input_text","text":"[content omitted]"}]}
+	]`)
+}
+
+func TestEncodeRefusesARequestWithNoMessages(t *testing.T) {
+	if _, err := (&Provider{model: api.Model{Name: testModel}, set: defaultSettings()}).encode(api.Request{}); err == nil || !strings.Contains(err.Error(), "gpt: request has no messages") {
+		t.Fatalf("error %v, want a refusal naming the missing messages", err)
 	}
 }

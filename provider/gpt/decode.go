@@ -21,13 +21,10 @@ import (
 	"fmt"
 	"hash/maphash"
 	"io"
-	"net/http"
 
 	"neui.dev/api"
 	"neui.dev/provider/lib"
 )
-
-var errTooLarge = errors.New("gpt: request too large")
 
 // block is what the adapter keeps for one item of the response's output array:
 // the protocol Index it was given, and the little that decides what a later
@@ -221,7 +218,7 @@ func (c *converter) Convert(f lib.Frame) ([]api.Event, bool) {
 		c.readUsage(ev.Response)
 		c.emit(api.EventErr{
 			Code: api.CodeUnknown,
-			Err:  &APIError{Message: "the response was cancelled"},
+			Err:  &APIError{Provider: providerName, Message: "the response was cancelled"},
 		})
 		return c.events, false
 	}
@@ -597,17 +594,17 @@ func (c *converter) endFor(ev *streamEvent) api.Event {
 		}
 		switch reason {
 		case "content_filter":
-			return api.EventErr{Code: api.CodeRefused, Err: &APIError{Code: reason, Message: "the response was filtered"}}
+			return api.EventErr{Code: api.CodeRefused, Err: &APIError{Provider: providerName, Code: reason, Message: "the response was filtered"}}
 		case "max_output_tokens", "max_tokens":
-			return api.EventErr{Code: api.CodeCapped, Err: &APIError{Code: reason, Message: "the output was cut at the token cap"}}
+			return api.EventErr{Code: api.CodeCapped, Err: &APIError{Provider: providerName, Code: reason, Message: "the output was cut at the token cap"}}
 		}
 		return api.EventErr{
 			Code: api.CodeUnknown,
-			Err:  &APIError{Code: reason, Message: fmt.Sprintf("the response was incomplete, reason %q", reason)},
+			Err:  &APIError{Provider: providerName, Code: reason, Message: "the response was incomplete"},
 		}
 	}
 	if c.sawRefusal {
-		return api.EventErr{Code: api.CodeRefused, Err: &APIError{Message: "the model refused to answer"}}
+		return api.EventErr{Code: api.CodeRefused, Err: &APIError{Provider: providerName, Message: "the model refused to answer"}}
 	}
 	return api.EventOk{Code: api.CodeTurn}
 }
@@ -616,7 +613,7 @@ func (c *converter) endFor(ev *streamEvent) api.Event {
 // documented one is flat, the one seen on the wire nests everything under
 // error, and both official SDKs detect only the nested one.
 func (c *converter) inBandError(ev *streamEvent) api.EventErr {
-	e := &APIError{}
+	e := &APIError{Provider: providerName}
 	if ev.Error != nil {
 		e.Type, e.Code, e.Message, e.Param = ev.Error.Type, ev.Error.Code, ev.Error.Message, ev.Error.Param
 	} else {
@@ -631,44 +628,9 @@ func (c *converter) inBandError(ev *streamEvent) api.EventErr {
 // the sentence beside it is how a caller ends up retrying something no retry
 // fixes.
 func (c *converter) responseFailed(ev *streamEvent) api.EventErr {
-	e := &APIError{Message: "the response failed"}
+	e := &APIError{Provider: providerName, Message: "the response failed"}
 	if ev.Response != nil && ev.Response.Error != nil {
 		e.Type, e.Code, e.Message, e.Param = ev.Response.Error.Type, ev.Response.Error.Code, ev.Response.Error.Message, ev.Response.Error.Param
 	}
 	return api.EventErr{Code: inBandCode(e.Code, e.Type), Err: e}
-}
-
-// request encodes the turn. http.NewRequestWithContext cannot fail on what is
-// passed to it here — the method is a constant and the URL is the configured
-// base with a fixed path — so a failure is a base URL that was never valid,
-// which is a mistake at construction rather than an outcome of this turn.
-func (p *Provider) request(ctx context.Context, req api.Request) (*http.Request, int, error) {
-	body, err := encodeRequest(p.model.Name, p.set, req)
-	if err != nil {
-		return nil, 0, err
-	}
-	payload, err := lib.MarshalBody(body)
-	if err != nil {
-		return nil, 0, fmt.Errorf("gpt: encoding the request: %w", err)
-	}
-	sent := len(payload.Bytes())
-	if p.model.RequestBytes > 0 && sent > p.model.RequestBytes {
-		return nil, sent, fmt.Errorf("%w: the request is %d bytes, over the %d the model %s takes", errTooLarge, sent, p.model.RequestBytes, p.model.Name)
-	}
-	httpReq, err := payload.Request(ctx, p.baseURL+"/responses")
-	if err != nil {
-		panic(err)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Accept", "text/event-stream")
-	if p.apiKey != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
-	}
-	if p.org != "" {
-		httpReq.Header.Set("OpenAI-Organization", p.org)
-	}
-	if p.project != "" {
-		httpReq.Header.Set("OpenAI-Project", p.project)
-	}
-	return httpReq, sent, nil
 }

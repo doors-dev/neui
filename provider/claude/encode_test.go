@@ -27,6 +27,7 @@ import (
 	"testing"
 
 	"neui.dev/api"
+	"neui.dev/provider/lib"
 )
 
 func mustNew(t *testing.T, conf Conf, opts ...Option) *Provider {
@@ -49,9 +50,17 @@ func mustRefuse(t *testing.T, conf Conf, want string, opts ...Option) {
 	}
 }
 
+func encodeBody(p *Provider, req api.Request) (*lib.Body, error) {
+	w, err := p.encode(req)
+	if err != nil {
+		return nil, err
+	}
+	return lib.MarshalBody(w)
+}
+
 func mustEncode(t *testing.T, p *Provider, req api.Request) map[string]json.RawMessage {
 	t.Helper()
-	raw, err := p.encode(req)
+	raw, err := encodeBody(p, req)
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
@@ -179,8 +188,11 @@ func TestImageMimeChecked(t *testing.T) {
 			t.Fatalf("mime %q: messages =\n%s\nwant to contain\n%s", mime, got["messages"], want)
 		}
 	}
-	for _, mime := range []string{"image/png", "image/jpeg", "image/gif", "image/webp"} {
-		mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), user(api.ContentImage{Data: []byte{1}, Mime: mime}))
+	for mime, sent := range map[string]string{"image/png": "image/png", "image/jpeg": "image/jpeg", "image/gif": "image/gif", "image/webp": "image/webp", " IMAGE/PNG ": "image/png", "image/jpg": "image/jpeg"} {
+		got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), user(api.ContentImage{Data: []byte{1}, Mime: mime}))
+		if want := `"media_type":"` + sent + `"`; !strings.Contains(string(got["messages"]), want) {
+			t.Fatalf("mime %q: messages = %s, want to contain %s", mime, got["messages"], want)
+		}
 	}
 
 	got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{
@@ -224,25 +236,98 @@ func TestEncodeContentBlocks(t *testing.T) {
 	}
 }
 
-func TestEncodeRefusesWhatItCannotCarry(t *testing.T) {
-	// A result with no id is not content this API cannot carry, it is a result
-	// matched to no call, so it is refused where an unsendable block is noted.
-	mustFail(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{
-		Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{
-			api.ContentToolResult{Content: api.UserContents{
-				api.ContentText{Text: "72F"},
-			}},
-		}}},
-	}, "no tool use id")
-
+func TestEncodeRefusesARequestWithNoMessages(t *testing.T) {
 	mustFail(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{}, "no messages")
+}
 
-	// The one message that has nothing to send is the one the caller wrote with
-	// nothing in it. Every block that cannot be carried leaves a note behind, so
-	// a message that held anything at all still holds something here.
-	mustFail(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{
-		Messages: []api.Message{{Role: api.RoleAssistant}},
-	}, "has no content")
+func TestStoredContentTheAPIRefusesIsANote(t *testing.T) {
+	p := mustNew(t, Conf{Model: api.Model{Name: testModel}})
+	for name, c := range map[string]struct {
+		msg  api.Message
+		want string
+	}{
+		"result with no id": {
+			api.Message{Role: api.RoleUser, Content: api.Contents{api.ContentToolResult{Content: api.UserContents{api.ContentText{Text: "72F"}}}}},
+			`{"role":"user","content":[{"type":"text","text":"[content omitted]"}]}`,
+		},
+		"call with no name": {
+			api.Message{Role: api.RoleAssistant, Content: api.Contents{api.ContentToolUse{ID: "toolu_1", Input: json.RawMessage(`{}`)}}},
+			`{"role":"assistant","content":[{"type":"text","text":"[content omitted]"}]}`,
+		},
+		"call with invalid arguments": {
+			api.Message{Role: api.RoleAssistant, Content: api.Contents{api.ContentToolUse{ID: "toolu_1", Name: "weather", Input: json.RawMessage(`{"city":`)}}},
+			`{"role":"assistant","content":[{"type":"text","text":"[content omitted]"}]}`,
+		},
+		"assistant blocks in a user message": {
+			api.Message{Role: api.RoleUser, Content: api.Contents{
+				api.ContentText{Text: "hi"},
+				api.ContentToolUse{ID: "toolu_1", Name: "weather", Input: json.RawMessage(`{}`)},
+				api.ContentReasoning{Meta: json.RawMessage(`"sig"`)},
+				api.ContentOpaque{Kind: "server_tool_use", Data: json.RawMessage(`{"type":"server_tool_use","id":"srvtoolu_1"}`)},
+			}},
+			`{"role":"user","content":[{"type":"text","text":"hi"},{"type":"text","text":"[content omitted]"},{"type":"text","text":"[reasoning omitted]"},{"type":"text","text":"[content omitted]"}]}`,
+		},
+		"message with no blocks": {
+			api.Message{Role: api.RoleAssistant},
+			`{"role":"assistant","content":[{"type":"text","text":"[empty]"}]}`,
+		},
+	} {
+		got := mustEncode(t, p, api.Request{Messages: []api.Message{userText("hi"), c.msg}})
+		if !strings.Contains(string(got["messages"]), c.want) {
+			t.Errorf("%s: messages =\n%s\nwant to contain\n%s", name, got["messages"], c.want)
+		}
+	}
+	got := mustEncode(t, p, api.Request{Messages: []api.Message{
+		userText("hi"),
+		{Role: api.RoleAssistant, Content: api.Contents{api.ContentToolUse{ID: "toolu_1", Input: json.RawMessage(`{}`)}}},
+		{Role: api.RoleUser, Content: api.Contents{api.ContentToolResult{ID: "toolu_1", Content: api.UserContents{api.ContentText{Text: "72F"}}}}},
+	}})
+	if strings.Contains(string(got["messages"]), "tool_result") || !strings.HasSuffix(string(got["messages"]), `{"role":"user","content":[{"type":"text","text":"[content omitted]"}]}]`) {
+		t.Errorf("the result answering a call that went out as a note was sent:\n%s", got["messages"])
+	}
+}
+
+func TestToolResultsGoFirstInAUserMessage(t *testing.T) {
+	p := mustNew(t, Conf{Model: api.Model{Name: testModel}}, WithCacheBreakpoints(CacheMessages))
+	result := func(id string) api.Content {
+		return api.ContentToolResult{ID: id, Content: api.UserContents{api.ContentText{Text: id}}}
+	}
+	call := func(id string) api.Content {
+		return api.ContentToolUse{ID: id, Name: "weather", Input: json.RawMessage(`{}`)}
+	}
+	got := mustEncode(t, p, api.Request{Messages: []api.Message{
+		userText("hi"),
+		{Role: api.RoleAssistant, Content: api.Contents{call("a"), call("b")}},
+		{Role: api.RoleUser, Content: api.Contents{api.ContentText{Text: "before"}, result("a"), api.ContentText{Text: "between"}, result("b")}},
+	}})
+	want := `{"role":"user","content":[` +
+		`{"type":"tool_result","tool_use_id":"a","content":[{"type":"text","text":"a"}],"is_error":false},` +
+		`{"type":"tool_result","tool_use_id":"b","content":[{"type":"text","text":"b"}],"is_error":false},` +
+		`{"type":"text","text":"before"},` +
+		`{"cache_control":{"type":"ephemeral"},"type":"text","text":"between"}]}`
+	if !strings.Contains(string(got["messages"]), want) {
+		t.Fatalf("messages =\n%s\nwant to contain\n%s", got["messages"], want)
+	}
+	got = mustEncode(t, p, api.Request{Messages: []api.Message{
+		userText("hi"),
+		{Role: api.RoleAssistant, Content: api.Contents{call("a"), call("b")}},
+		{Role: api.RoleUser, Content: api.Contents{result("a"), result("b")}},
+	}})
+	want = `{"type":"tool_result","tool_use_id":"a","content":[{"type":"text","text":"a"}],"is_error":false},` +
+		`{"cache_control":{"type":"ephemeral"},"type":"tool_result","tool_use_id":"b","content":[{"type":"text","text":"b"}],"is_error":false}]}`
+	if !strings.Contains(string(got["messages"]), want) {
+		t.Fatalf("messages =\n%s\nwant to contain\n%s", got["messages"], want)
+	}
+}
+
+func TestTextGoesOutWithoutHTMLEscapes(t *testing.T) {
+	got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{
+		System:   "a<b>&c",
+		Messages: []api.Message{userText("x<y>&z")},
+	})
+	if string(got["system"]) != `[{"type":"text","text":"a<b>&c"}]` || !strings.Contains(string(got["messages"]), `"text":"x<y>&z"`) {
+		t.Fatalf("system = %s, messages = %s, want <, > and & as they are", got["system"], got["messages"])
+	}
 }
 
 // A message whose every block was another provider's still goes out, as the note
@@ -816,10 +901,13 @@ func TestToolSchemaDefaults(t *testing.T) {
 	if want := `"input_schema":{"type":"object","properties":{}}`; !strings.Contains(string(got["tools"]), want) {
 		t.Fatalf("tools = %s, want to contain %s", got["tools"], want)
 	}
-	mustFail(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{
-		Tools:    []api.Tool{{Name: "bad", Schema: []int{1}}},
+	got = mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{
+		Tools:    []api.Tool{{Name: "array", Schema: map[string]any{"type": "array"}}},
 		Messages: []api.Message{userText("hi")},
-	}, "not a JSON object")
+	})
+	if want := `"input_schema":{"type":"array"}`; !strings.Contains(string(got["tools"]), want) {
+		t.Fatalf("tools = %s, want the schema sent as it is: %s", got["tools"], want)
+	}
 }
 
 func TestRequestOverModelRequestBytes(t *testing.T) {
@@ -829,7 +917,7 @@ func TestRequestOverModelRequestBytes(t *testing.T) {
 	t.Cleanup(srv.Close)
 	over := mustNew(t, Conf{Model: api.Model{Name: testModel, RequestBytes: 4096}}, WithAPIKey("k"), WithBaseURL(srv.URL))
 	req := api.Request{Messages: []api.Message{userText(strings.Repeat("x", 8192))}}
-	body, err := over.encode(req)
+	body, err := encodeBody(over, req)
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
@@ -1002,7 +1090,11 @@ func TestDeclaredModels(t *testing.T) {
 func TestNewRefusesInvalidSettings(t *testing.T) {
 	model := Conf{Model: api.Model{Name: testModel}}
 	mustRefuse(t, Conf{}, "no name")
-	mustRefuse(t, model, "base URL", WithBaseURL(""))
+	mustRefuse(t, model, "claude: empty base URL", WithBaseURL(""))
+	mustRefuse(t, model, "claude: base URL", WithBaseURL("no-scheme"))
+	if got := mustNew(t, model, WithStopSequences("a", "b"), WithStopSequences("c")).stopSeqs; len(got) != 1 || got[0] != "c" {
+		t.Errorf("stop sequences %q, want the last call's alone", got)
+	}
 	mustRefuse(t, model, "needs a client", WithHTTPClient(nil))
 	mustRefuse(t, model, "negative", WithMaxTokens(-1))
 	mustRefuse(t, model, "needs a version", WithVersion(""))
@@ -1197,8 +1289,10 @@ func TestAPIKeySource(t *testing.T) {
 	if counts[slog.LevelWarn] != 0 {
 		t.Fatalf("an explicit key warned %d times", counts[slog.LevelWarn])
 	}
-	mustNew(t, Conf{Model: api.Model{Name: testModel}})
-	if counts[slog.LevelWarn] != 1 {
-		t.Fatalf("no key at all warned %d times, want 1", counts[slog.LevelWarn])
+	if p := mustNew(t, Conf{Model: api.Model{Name: testModel}}); p.key != "" {
+		t.Fatalf("key %q, want none", p.key)
+	}
+	if len(counts) != 0 {
+		t.Fatalf("a missing key logged %v, want nothing", map[slog.Level]int(counts))
 	}
 }

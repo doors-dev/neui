@@ -33,7 +33,7 @@ import (
 
 const (
 	goldenRequestsHash = "ba9d6066b2961c5541fd49a2364d10581e3e23f6466765cc6419ed291c2a448c"
-	goldenStreamsHash  = "4e11a9ab4f80bbc6b2643b1d7c7c92c276bd54d65e207a484862ed16912944f1"
+	goldenStreamsHash  = "8c6e348a2ffda6bf34134e708569f7d8cfabca0bc964ded44e66a393372adb66"
 )
 
 func goldenBytes(r *rand.Rand, n int) []byte {
@@ -130,7 +130,7 @@ func goldenRequest(r *rand.Rand) api.Request {
 func goldenOptions(r *rand.Rand) []Option {
 	all := [][]Option{
 		{WithMaxTokens(1000)},
-		{WithReasoningEffort(goldenPick(r, EffortNone, EffortMinimal, EffortLow, EffortMedium, EffortHigh, EffortXHigh, EffortMax))},
+		{WithEffort(goldenPick(r, EffortNone, EffortMinimal, EffortLow, EffortMedium, EffortHigh, EffortXHigh, EffortMax))},
 		{WithReasoningSummary(goldenPick(r, SummaryAuto, SummaryConcise, SummaryDetailed))},
 		{WithReasoningMode(goldenPick(r, ReasoningStandard, ReasoningPro))},
 		{WithReasoningContext(goldenPick(r, ContextAuto, ContextCurrentTurn, ContextAllTurns))},

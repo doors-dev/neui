@@ -191,55 +191,14 @@ func fold(t *testing.T, events []api.Event) api.Contents {
 
 // trace renders an event as one comparable line, so a test asserts the whole
 // sequence rather than that some event of some kind turned up.
-func trace(e api.Event) string {
-	switch e := e.(type) {
-	case api.EventStart:
-		return fmt.Sprintf("start %s %s", e.ID, e.Model)
-	case api.EventText:
-		return fmt.Sprintf("text %d %q", e.Index, e.Text)
-	case api.EventThinking:
-		return fmt.Sprintf("thinking %d part=%d %q", e.Index, e.Part, e.Text)
-	case api.EventSummary:
-		// DeepSeek returns the thinking itself and summarizes nothing, so this
-		// only shows up here if that ever changes.
-		return fmt.Sprintf("summary %d part=%d %q", e.Index, e.Part, e.Text)
-	case api.EventMeta:
-		// DeepSeek stores nothing in Meta, so this is the same kind of witness.
-		return fmt.Sprintf("meta %d %s", e.Index, e.Data)
-	case api.EventTool:
-		return fmt.Sprintf("tool %d id=%q name=%q args=%q", e.Index, e.ID, e.Name, e.Args)
-	case api.EventOpaque:
-		return fmt.Sprintf("opaque %d %s", e.Index, e.Kind)
-	case api.EventClose:
-		return fmt.Sprintf("close %d", e.Index)
-	case api.EventUsage:
-		return fmt.Sprintf("usage in=%d out=%d reasoning=%d read=%d write=%d",
-			e.Input, e.Output, e.Reasoning, e.CacheRead, e.CacheWrite)
-	case api.EventOk:
-		return fmt.Sprintf("ok %s", e.Code)
-	case api.EventErr:
-		return fmt.Sprintf("err %s", e.Code)
-	default:
-		return fmt.Sprintf("unknown %T", e)
-	}
-}
-
-func traces(events []api.Event) []string {
-	out := make([]string, len(events))
-	for i, e := range events {
-		out[i] = trace(e)
-	}
-	return out
-}
-
 func wantTrace(t *testing.T, events []api.Event, want ...string) {
 	t.Helper()
-	got := traces(events)
+	got := conform.DescribeAll(events)
 	if len(got) != len(want) {
 		t.Fatalf("event sequence:\n got %v\nwant %v", got, want)
 	}
 	for i := range got {
-		if got[i] != want[i] {
+		if got[i] != want[i] && !(strings.HasPrefix(want[i], "err ") && strings.HasPrefix(got[i], want[i]+" ")) {
 			t.Fatalf("event %d: got %q, want %q\n got %v\nwant %v", i, got[i], want[i], got, want)
 		}
 	}
@@ -366,25 +325,17 @@ func TestContextOverflow(t *testing.T) {
 }
 
 // A turn whose finish reason arrived and whose socket then died before [DONE]
-// lost its usage frame and its sentinel. Only a reply that arrived whole is
-// kept, so it fails as a network failure whatever the reason said.
-func TestStreamDisconnectAfterTheFinishReasonFails(t *testing.T) {
-	for _, tc := range []struct {
-		finish string
-		want   string
-	}{
-		{"stop", "err network"},
-		{"tool_calls", "err network"},
-		{"length", "err network"},
-		{"content_filter", "err network"},
-	} {
-		t.Run(tc.finish, func(t *testing.T) {
+// lost its usage frame and its sentinel. The connection died, so the channel
+// closes with no terminal event whatever the reason said.
+func TestStreamDisconnectAfterTheFinishReasonIsSilent(t *testing.T) {
+	for _, finish := range []string{"stop", "tool_calls", "length", "content_filter"} {
+		t.Run(finish, func(t *testing.T) {
 			p := serve(t, func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "text/event-stream")
 				w.WriteHeader(http.StatusOK)
 				io.WriteString(w, chunkFrame(openingFrame, ""))
 				io.WriteString(w, chunkFrame(`{"content":"done"}`, ""))
-				io.WriteString(w, chunkFrame(`{}`, tc.finish))
+				io.WriteString(w, chunkFrame(`{}`, finish))
 				flush(w)
 				drop(w)
 			})
@@ -393,7 +344,6 @@ func TestStreamDisconnectAfterTheFinishReasonFails(t *testing.T) {
 			wantTrace(t, events,
 				"start chatcmpl-1 deepseek-v4-pro",
 				`text 0 "done"`,
-				tc.want,
 			)
 		})
 	}
@@ -438,7 +388,6 @@ func TestNewRefuses(t *testing.T) {
 		want string
 	}{
 		{"no model", Conf{}, []Option{key}, "no model"},
-		{"no key", pro, []Option{WithAPIKey("")}, "no API key"},
 		{"unknown effort", pro, []Option{key, WithEffort("medium")}, `effort "medium"`},
 		{"temperature with thinking on by default", pro, []Option{key, WithTemperature(0.2)}, "EffortNone"},
 		{"temperature with an effort", flash, []Option{key, WithEffort(EffortHigh), WithTemperature(0.2)}, "EffortNone"},
@@ -495,12 +444,30 @@ func TestNilHTTPClientIsRefused(t *testing.T) {
 }
 
 func TestUnparseableErrorBodyIsCut(t *testing.T) {
-	body := strings.Repeat("é", 2000)
-	e := apiError(502, nil, []byte(body))
-	if e.Body != body {
-		t.Fatal("the raw body was not kept")
+	e := apiError(502, nil, []byte(strings.Repeat("é", 2000)))
+	if n := len([]rune(e.Message)); n != 512+1 {
+		t.Fatalf("message has %d runes, want %d", n, 512+1)
 	}
-	if n := len([]rune(e.Error())); n > maxErrorMessage+100 {
-		t.Fatalf("Error has %d runes", n)
+}
+
+func TestAPIKeySource(t *testing.T) {
+	t.Setenv("DEEPSEEK_API_KEY", "env-key")
+	if p := mustNew(t, Conf{Model: V4Pro}); p.key != "env-key" {
+		t.Fatalf("key %q, want the environment's", p.key)
+	}
+	if p := mustNew(t, Conf{Model: V4Pro}, WithAPIKey("")); p.key != "" {
+		t.Fatalf("key %q, want the explicit empty one", p.key)
+	}
+	t.Setenv("DEEPSEEK_API_KEY", "")
+	p := mustNew(t, Conf{Model: V4Pro})
+	if p.key != "" {
+		t.Fatalf("key %q, want none", p.key)
+	}
+	httpReq, _, err := p.request(context.Background(), turn("hi"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, sent := httpReq.Header["Authorization"]; sent {
+		t.Fatalf("Authorization %q sent with no key", got)
 	}
 }

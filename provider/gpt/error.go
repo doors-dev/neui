@@ -16,7 +16,6 @@ package gpt
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -26,63 +25,29 @@ import (
 
 // APIError describes a failed turn: an HTTP status before the stream
 // started, an error or failed frame inside it, or a response the service
-// ended as incomplete, filtered, refused or cancelled. It is the Err of an
-// api.EventErr, or wrapped in it after a 413 measured against
-// Model.RequestBytes; branch on EventErr.Code and get the details with
-// errors.As, for logs and bug reports.
-type APIError struct {
-	Status    int    // HTTP status; 0 when the failure arrived inside the stream
-	NoRetry   bool   // the response said x-should-retry: false; HTTP failures only
-	Type      string // the service's error type, such as "invalid_request_error"
-	Code      string // the service's error code, or the incomplete_details reason
-	Param     string // the request parameter the error is about, if any
-	Message   string // the service's message; a non-JSON body trimmed to 512 runes; or this adapter's description when the service gave none
-	RequestID string // the x-request-id header, which OpenAI support asks for; HTTP failures only
-}
-
-// Error formats the HTTP status or "stream error", then the code (or the type
-// when there is no code), message, param and request id, each only when set.
-func (e *APIError) Error() string {
-	var sb strings.Builder
-	sb.WriteString("gpt: ")
-	if e.Status != 0 {
-		fmt.Fprintf(&sb, "http %d", e.Status)
-	} else {
-		sb.WriteString("stream error")
-	}
-	if e.Code != "" {
-		fmt.Fprintf(&sb, " %s", e.Code)
-	} else if e.Type != "" {
-		fmt.Fprintf(&sb, " %s", e.Type)
-	}
-	if e.Message != "" {
-		fmt.Fprintf(&sb, ": %s", e.Message)
-	}
-	if e.Param != "" {
-		fmt.Fprintf(&sb, " (param %s)", e.Param)
-	}
-	if e.RequestID != "" {
-		fmt.Fprintf(&sb, " [request %s]", e.RequestID)
-	}
-	return sb.String()
-}
-
-// maxErrorMessage bounds how much of an unparseable error body is kept. On 5xx
-// and at gateways it is frequently HTML or nothing at all.
-const maxErrorMessage = 512
+// ended as incomplete, filtered, refused or cancelled. Status is zero for a
+// failure that arrived inside the stream.
+//
+// Type, Code and Param are the service's own, and Code is the
+// incomplete_details reason for a response that ended incomplete. Message is
+// this adapter's description when the service gave none. RequestID is the
+// x-request-id header, which OpenAI support asks for, RetryAfter the
+// Retry-After header's wait, and NoRetry says the response carried
+// x-should-retry: false; all three are set for HTTP failures only.
+type APIError = lib.APIError
 
 // httpError turns a refused request into the one EventErr that ends the turn.
 // The body is parsed tolerantly: a decode failure must not become the reported
 // failure, because the status is the part that classifies.
 //
-// An unparseable body is cut by rune rather than by byte: a gateway's HTML or a
-// localized proxy message is not ASCII, and cutting one mid rune reports
-// mojibake.
+// An unparseable body is cut by lib.ErrorMessage.
 func httpError(h *lib.HTTPError, model string, sent int, declared int) api.EventErr {
 	e := &APIError{
-		Status:    h.Status,
-		NoRetry:   strings.EqualFold(h.Header.Get("x-should-retry"), "false"),
-		RequestID: h.Header.Get("x-request-id"),
+		Provider:   providerName,
+		Status:     h.Status,
+		NoRetry:    strings.EqualFold(h.Header.Get("x-should-retry"), "false"),
+		RequestID:  h.Header.Get("x-request-id"),
+		RetryAfter: lib.RetryAfter(h.Header),
 	}
 	raw := h.Body
 	var wrapper struct {
@@ -94,17 +59,11 @@ func httpError(h *lib.HTTPError, model string, sent int, declared int) api.Event
 		e.Param = wrapper.Error.Param
 		e.Message = wrapper.Error.Message
 	} else {
-		e.Message = strings.TrimSpace(string(raw))
-		if r := []rune(e.Message); len(r) > maxErrorMessage {
-			e.Message = string(r[:maxErrorMessage]) + "…"
-		}
+		e.Message = lib.ErrorMessage(raw)
 	}
 	code := statusCode(e)
-	if code == api.CodeTooLarge && declared > 0 {
-		return api.EventErr{
-			Code: code,
-			Err:  fmt.Errorf("%w: sent %d bytes, measured against the %d declared for %s: %w", api.ErrMeasuredTooLarge, sent, declared, model, e),
-		}
+	if code == api.CodeTooLarge {
+		return api.EventErr{Code: code, Err: lib.MeasuredTooLarge(model, sent, declared, e)}
 	}
 	return api.EventErr{Code: code, Err: e}
 }

@@ -30,7 +30,7 @@ import (
 )
 
 func main() {
-	provider, err := deepseek.New(deepseek.Conf{Model: deepseek.Flash}) // reads DEEPSEEK_API_KEY
+	provider, err := deepseek.New(deepseek.Conf{Model: deepseek.Flash}) // reads DEEPSEEK_API_KEY; a missing key fails the first turn
 	if err != nil {
 		log.Fatal(err)
 	}

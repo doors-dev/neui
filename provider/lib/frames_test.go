@@ -114,7 +114,7 @@ func claudeCorpus() []corpusCase {
 		sseFrame("error", `{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}`)
 	return []corpusCase{
 		{name: "claude/rich", body: rich, want: "7556f02463a7de45775c6ee4929759215ea85df202797b2e05a6e06416a24fa9"},
-		{name: "claude/capped", body: capped, want: "c7b0c9e2a86392a1b8e34087bc891fbb42a566d62f0b6f02d1bd023dc9794521"},
+		{name: "claude/capped", body: capped, want: "081481db4a4cec434aa1c9cda413c915070627863068940e2e22bb28a6a111b9"},
 		{name: "claude/overloaded", body: overloaded, want: "b40830a64c39306adb05c6c353ec1779e5602a646df1c11e1f76b882cab7f435"},
 	}
 }
@@ -164,8 +164,8 @@ func gptCorpus() []corpusCase {
 		sseFrame("error", `{"type":"error","sequence_number":1,"code":"server_error","message":"The server had an error <retry>","param":null}`)
 	return []corpusCase{
 		{name: "gpt/rich", body: rich, want: "2b41fd6f6f50e565746b39a1138be96829e72b6fd77743d055617a58ea90245b"},
-		{name: "gpt/incomplete", body: incomplete, want: "9ee4c59167f0e951ccae9750370c83df524c2e97a39f38b272a90519dac2f150"},
-		{name: "gpt/error", body: failed, want: "141300441a84d7513e6b73a81dc2fbbdddba21450625dbd75a3483667a12b9b3"},
+		{name: "gpt/incomplete", body: incomplete, want: "62bdd789bda3e14a73c9d5c3e58f0539a48580323a39847f24d2c83d4ab05899"},
+		{name: "gpt/error", body: failed, want: "3c6ce18e7a3a02c0e5f1d00c9fe52e7f06516a07e16e270dd6e83e819902d2ef"},
 	}
 }
 
@@ -193,7 +193,7 @@ func deepseekCorpus() []corpusCase {
 		"data: [DONE]\n\n"
 	return []corpusCase{
 		{name: "deepseek/rich", body: rich, want: "99a0bd33cfe610214c77fd703c37424ccf9cf395bc304457cf1f676b17ce0553"},
-		{name: "deepseek/capped", body: capped, want: "1ba26a71013fa45e616741f0d8038f05709c073617d9b7c1f0be77c0b819e4d7"},
+		{name: "deepseek/capped", body: capped, want: "4e76fa5a63950b63253aa8923092acc8d83ea06dc6545aa62b10d3c6a9594d26"},
 	}
 }
 
