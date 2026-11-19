@@ -51,6 +51,7 @@ func stubThread(t *testing.T, id api.ThreadID, p api.Provider, config api.Thread
 	linkCtx, linkCancel := context.WithCancelCause(ctx)
 	linkCancel(nil)
 	th := &thread{id: id, ch: make(chan Command)}
+	pg := page.NewPage(ctx)
 	th.link = &link{
 		thread:     th,
 		backend:    backend,
@@ -60,7 +61,8 @@ func stubThread(t *testing.T, id api.ThreadID, p api.Provider, config api.Thread
 		linkCtx:    linkCtx,
 		linkCancel: linkCancel,
 		ch:         make(chan Message),
-		pageModule: page.NewPage(ctx).Module(),
+		page:       pg,
+		pageModule: pg.Module(),
 		linkTasks:  &linkTasks{thread: th},
 	}
 	r := replay.NewReplay(ctx, id, messages, backend.Config(), p.Model())
@@ -289,6 +291,7 @@ func TestAskFromBeforeReloadReachesTheNewPage(t *testing.T) {
 		linkCtx:    old.linkCtx,
 		linkCancel: old.linkCancel,
 		ch:         make(chan Message),
+		page:       old.page,
 		pageModule: old.pageModule,
 		linkTasks:  old.linkTasks,
 	}

@@ -640,7 +640,7 @@ func TestOversizedInputIsRefusedWhereItIsSubmitted(t *testing.T) {
 		}
 	})
 
-	t.Run("rewind during a round", func(t *testing.T) {
+	t.Run("rewind during a round stops it", func(t *testing.T) {
 		c, s := open(t, testkit.Say("ok"), testkit.Hang(api.EventStart{ID: "hang", Model: "fake"}))
 		c.Send("one")
 		c.Wait()
@@ -651,13 +651,12 @@ func TestOversizedInputIsRefusedWhereItIsSubmitted(t *testing.T) {
 		if !errors.Is(err, api.ErrInputTooLarge) {
 			t.Fatalf("a rewind carrying a %d-byte input under a %d limit answered %v, want ErrInputTooLarge", len(oversized.Text), limit, err)
 		}
-		if round := c.State().Round; round == nil || round.ID != streaming {
-			t.Fatalf("a refused rewind left round %+v, want the round %v it was already running", round, streaming)
+		if round := c.State().Round; round != nil {
+			t.Fatalf("a refused rewind left round %+v running, want the round %v stopped", round, streaming)
 		}
-		if n := len(rounds(t, c, s)); n != 2 {
-			t.Fatalf("the refused rewind left %d rounds, want the 2 it was asked to cut back through", n)
+		if stored := rounds(t, c, s); len(stored) != 2 || stored[1].State != api.RoundAbort {
+			t.Fatalf("the refused rewind left %d rounds, want the 2 with round %v aborted", len(stored), streaming)
 		}
-		c.Stop()
 		expectTrace(t, c.Wait(), "RoundStart", "RoundEnd(abort,final)")
 	})
 

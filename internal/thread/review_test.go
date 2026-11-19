@@ -171,7 +171,7 @@ func TestCompactBeforeTheThreadIsStoredIsWrongState(t *testing.T) {
 	}
 }
 
-func TestEmptyRewindWithNothingPendingKeepsTheChat(t *testing.T) {
+func TestEmptyRewindWithNothingPendingStopsTheRound(t *testing.T) {
 	th, messages, r := stubThread(t, "rewind-empty", testkit.NewProvider(api.Model{Name: "stub"}), api.ThreadConfig{})
 	first, _, err := r.RoundInit(api.Input{Text: "one"})
 	if err != nil {
@@ -186,11 +186,14 @@ func TestEmptyRewindWithNothingPendingKeepsTheChat(t *testing.T) {
 	if err := op.Receive(); err != api.ErrWrongState {
 		t.Fatalf("an empty rewind with nothing pending answered %v, want ErrWrongState", err)
 	}
-	if th.link == nil || th.state != any(state) || state.ctx.Err() != nil {
-		t.Fatalf("the refused rewind disturbed the running round: link %v, state %T, ctx %v", th.link != nil, th.state, state.ctx.Err())
+	if th.link == nil {
+		t.Fatal("the refused rewind dropped the link")
+	}
+	if _, ok := th.state.(threadWait); !ok || state.ctx.Err() == nil {
+		t.Fatalf("the refused rewind left the thread in %T with the round ctx %v, want the round stopped", th.state, state.ctx.Err())
 	}
 	stored, err := messages.RoundAfter(context.Background(), "rewind-empty", api.NoRoundID, 100)
-	if err != nil || len(stored) != 2 {
-		t.Fatalf("the refused rewind left %d rounds (%v), want 2", len(stored), err)
+	if err != nil || len(stored) != 2 || stored[1].State != api.RoundAbort {
+		t.Fatalf("the refused rewind left %d rounds (%v), want 2 with the running one aborted", len(stored), err)
 	}
 }
