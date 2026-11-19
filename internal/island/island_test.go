@@ -304,15 +304,35 @@ func TestIslandSpecSchemaKeepsDefinitionsAtTheEnd(t *testing.T) {
 }
 
 func TestIslandSpecComesInPages(t *testing.T) {
+	wide := func(cur gox.Cursor) error {
+		return cur.Comp(neui.Island{
+			Name:        "board",
+			Desc:        "a board",
+			Placeholder: func(cur gox.Cursor) error { return cur.Text("idle") },
+			Template: func(slot gox.Comp) gox.Elem {
+				return func(cur gox.Cursor) error { return cur.Comp(slot) }
+			},
+			Library: func(l neui.Library) error {
+				for n := range 12 {
+					if err := l.Tool(fmt.Sprint("mark", n), strings.Repeat("marks a number ", 20), func(_ context.Context, in struct{ N int }) (int, error) {
+						return in.N, nil
+					}); err != nil {
+						return err
+					}
+				}
+				return nil
+			},
+		})
+	}
 	full := testkit.NewProvider(api.Model{},
 		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
 		testkit.Say("done"),
 	)
-	c := stack.Page(t, stack.Host{Provider: full, Page: fullBoard()})
+	c := stack.Page(t, stack.Host{Provider: full, Page: wide})
 	c.Send("open the board")
 	c.Wait()
 	_, _, whole := specText(t, testkit.Results(full.Request(t, 1))[0])
-	model := api.Model{Name: "fake", Context: 31_250}
+	model := api.Model{Name: "fake", Context: 6_250}
 	limit := replay.RoundItemBudget(common.ConfigDefaults(api.ThreadConfig{}), model) / 2
 	pages := 0
 	first := ""
@@ -336,7 +356,7 @@ func TestIslandSpecComesInPages(t *testing.T) {
 			return turns[0]
 		}),
 	)
-	c = stack.Page(t, stack.Host{Provider: p, Page: fullBoard()})
+	c = stack.Page(t, stack.Host{Provider: p, Page: wide})
 	c.Send("open the board")
 	c.Wait()
 	if pages < 3 {
@@ -387,7 +407,7 @@ func TestIslandSpecItemOverPageRefused(t *testing.T) {
 	c := stack.Page(t, stack.Host{Provider: p, Page: board(make(chan int, 1), nil)})
 	c.Send("open the board")
 	c.Wait()
-	refused(t, testkit.Results(p.Request(t, 1))[0], "what to build takes")
+	refused(t, testkit.Results(p.Request(t, 1))[0], "logs and files takes")
 	refused(t, testkit.Results(p.Request(t, 1))[0], "a page holds")
 	refused(t, testkit.Results(p.Request(t, 1))[0], "larger than a page can hold")
 }
@@ -694,7 +714,7 @@ func TestIslandSpecListsScriptTools(t *testing.T) {
 	c.Send("read the board")
 	c.Wait()
 	_, _, spec := specText(t, testkit.Results(p.Request(t, 1))[0])
-	if !strings.Contains(spec, "time__*") || strings.Contains(spec, "page__*") || strings.Contains(spec, "js__*") {
+	if !strings.Contains(spec, "\nYour tools\nThe script has time__*.\n") || strings.Contains(spec, "page__*") || strings.Contains(spec, "js__*") {
 		t.Fatalf("the spec lists the script's tools as:\n%s", spec)
 	}
 }
@@ -941,49 +961,81 @@ func TestIslandRelinkEndsAppWithTheValuesSinceItsLastDraw(t *testing.T) {
 	}
 }
 
-func TestIslandGuideLivesInTheSpec(t *testing.T) {
+func TestIslandGuideIsReadWithIslandGuide(t *testing.T) {
+	p := testkit.NewProvider(api.Model{},
+		testkit.Call("page__island_guide", map[string]any{}),
+		testkit.Call("js__run", map[string]any{"code": `try { return page__island_guide({}) } catch (e) { return e.message }`, "comment": "reads the guide"}),
+		testkit.Say("done"),
+	)
+	page := func(cur gox.Cursor) error { return cur.Any(board(make(chan int, 1), nil)) }
+	c := stack.Page(t, stack.Host{Provider: p, Page: page, Options: []common.Option{common.OptionModule(js.Module), common.OptionModule(timemod.Module)}})
+	c.Send("open the board")
+	c.Wait()
+	system := p.Request(t, 0).System
+	if !strings.Contains(system, "\n\nIslands\n\nAn island is a space where you run your own app for the user, ") || !strings.Contains(system, "Before your first app, read island_guide: it teaches how to write one. Before starting an app in an island, read its spec with island_spec: it lists the views, ") {
+		t.Fatalf("the page module does not introduce islands and send the agent to island_guide and island_spec:\n%s", system)
+	}
+	headings := []string{"How an app runs", "The screen", "Views and controls", "App functions and your tools", "The typical loop", "Reading the reference"}
+	for _, text := range append([]string{"What to build", "ui.draw", "ui.root", "island_append"}, headings...) {
+		if strings.Contains(system, text) {
+			t.Fatalf("the page module's system text carries the guide's %q:\n%s", text, system)
+		}
+	}
+	r := testkit.Results(p.Request(t, 1))[0]
+	if r.Error != api.ToolOk || len(r.Content) != 1 {
+		t.Fatalf("island_guide answered %#v, want one text", r)
+	}
+	guide := r.Content[0].(api.ContentText).Text
+	if !strings.HasPrefix(guide, "What to build\nBuild what the request needs, ") || !strings.HasSuffix(guide, "assigning over an inherited property such as err.name throws.\n") {
+		t.Fatalf("island_guide does not answer with the guide alone, from what to build to reading the reference:\n%s", guide)
+	}
+	last := 0
+	for _, heading := range headings {
+		at := strings.Index(guide, "\n\n"+heading+"\n")
+		if at < last {
+			t.Fatalf("the guide has no %q section after the one before it:\n%s", heading, guide)
+		}
+		last = at
+	}
+	for _, text := range []string{"revision ", "Logs and files", "board.island", "time__*", "the script has", "below"} {
+		if strings.Contains(guide, text) {
+			t.Fatalf("the guide carries %q, which belongs to an island's spec:\n%s", text, guide)
+		}
+	}
+	var script struct{ Result string }
+	testkit.Decode(t, testkit.Results(p.Request(t, 2))[0], &script)
+	if script.Result != "island tools are not accessible from a script" {
+		t.Fatalf("a script's island_guide answered %q, want it refused", script.Result)
+	}
+	t.Logf("system text: %d bytes; island_guide: %d bytes", len(system), len(guide))
+}
+
+func TestIslandSpecLeavesTheGuideToIslandGuide(t *testing.T) {
 	p := testkit.NewProvider(api.Model{},
 		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
 		testkit.Say("done"),
 	)
-	c := stack.Page(t, stack.Host{Provider: p, Page: board(make(chan int, 1), nil)})
+	page := func(cur gox.Cursor) error { return cur.Any(board(make(chan int, 1), nil)) }
+	c := stack.Page(t, stack.Host{Provider: p, Page: page, Options: []common.Option{common.OptionModule(js.Module), common.OptionModule(timemod.Module)}})
 	c.Send("open the board")
 	c.Wait()
-	system := p.Request(t, 0).System
-	if !strings.Contains(system, "\n\nIslands\n\nAn island is a space where you run your own app for the user, ") || !strings.Contains(system, "read its spec with island_spec: it teaches how to write the app") {
-		t.Fatalf("the page module does not introduce islands and send the agent to island_spec:\n%s", system)
-	}
-	for _, text := range []string{"How an app runs", "The screen", "Views and controls", "App functions and your tools", "The typical loop", "ui.draw", "ui.root", "island_append"} {
-		if strings.Contains(system, text) {
-			t.Fatalf("the page module's system text still carries the guide's %q:\n%s", text, system)
-		}
-	}
 	_, _, spec := specText(t, testkit.Results(p.Request(t, 1))[0])
-	if !strings.HasPrefix(spec, "What to build\nBuild what the request needs, ") {
-		t.Fatalf("the spec does not open with the guide:\n%s", spec)
+	own, catalog, ok := strings.Cut(spec, "\n\nControls: c = ui.<name>(params); c.update(patch)\n")
+	if !ok || !strings.HasPrefix(catalog, "ui.press  a button that answers with value(21)\n\nLayouts: ui.<name>(params, ...children)\n") || !strings.HasSuffix(catalog, "\nApp functions: app.<name>(input) -> result\napp.mark  marks a number\n") {
+		t.Fatalf("the spec does not end with the island's catalog:\n%s", spec)
 	}
-	last := 0
-	for _, heading := range []string{"How an app runs", "The screen", "Views and controls", "App functions and your tools", "Logs and files", "The typical loop", "Reading the reference"} {
-		at := strings.Index(spec, "\n\n"+heading+"\n")
-		if at < last {
-			t.Fatalf("the spec has no %q section after the one before it:\n%s", heading, spec)
-		}
-		last = at
+	if want := "Read island_guide first if you have not in this conversation.\n\nYour tools\nThe script has time__*.\n\nLogs and files\nconsole.log, info, warn and error append to the workspace file board.island.log, which is emptied when an app starts. Views and controls keep their files, such as uploads, under the workspace dir board.island, also emptied when an app starts: copy the files you want to keep elsewhere in the workspace."; own != want {
+		t.Fatalf("before its catalog the spec reads:\n%s\nwant:\n%s", own, want)
 	}
-	guide, rest, ok := strings.Cut(spec, "\nReading the reference\nThe catalog below lists ")
-	if !ok || !strings.Contains(guide, "\nLogs and files\nconsole.log, info, warn and error append to the workspace file board.island.log, ") {
-		t.Fatalf("the spec does not name its logs and files before how to read the reference:\n%s", spec)
-	}
-	if _, library, _ := strings.Cut(rest, "\n"); !strings.HasPrefix(library, "\nControls: c = ui.<name>(params); c.update(patch)\n") {
-		t.Fatalf("the spec does not follow how to read the reference with the library:\n%s", spec)
-	}
-	for _, text := range []string{"Controls are what the user acts on", "Views show something", "Layouts arrange content", "ui.draw(ms) gives null"} {
-		if strings.Contains(rest, text) {
-			t.Fatalf("the reference still carries %q, which the guide says:\n%s", text, spec)
+	for _, heading := range []string{"What to build", "How an app runs", "The screen", "Views and controls", "App functions and your tools", "The typical loop", "Reading the reference"} {
+		if strings.Contains("\n"+spec, "\n"+heading+"\n") {
+			t.Fatalf("the spec still carries the guide's %q section:\n%s", heading, spec)
 		}
 	}
-	if strings.Contains(spec, "Your tools") || strings.Contains(spec, "Limits") {
-		t.Fatalf("the spec still carries a your tools section or a limits line:\n%s", spec)
+	for _, text := range []string{"ui.draw", "ui.root", "island_append", "Controls are what the user acts on", "Views show something", "Layouts arrange content", "Limits"} {
+		if strings.Contains(spec, text) {
+			t.Fatalf("the spec still carries %q, which the guide says:\n%s", text, spec)
+		}
 	}
-	t.Logf("page module system text: %d bytes; island_spec of the board: %d bytes", len(system), len(spec))
+	t.Logf("island_spec of the board: %d bytes", len(spec))
 }

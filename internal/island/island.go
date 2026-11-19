@@ -82,12 +82,15 @@ type island struct {
 	entered     atomic.Int32
 }
 
+func Guide() string {
+	return guideWhatToBuild + guideHowAnAppRuns + guideScreen + guideViewsAndControls + guideAppFunctionsAndTools + guideTypicalLoop + guideReference
+}
+
 func (i *island) Spec(ctx context.Context, space string) (string, []int, []string) {
 	var modules []string
 	for module := range scriptModules(common.GetController(ctx)) {
 		modules = append(modules, module+"__*")
 	}
-	tools := strings.Join(modules, ", ")
 	b := strings.Builder{}
 	var ends []int
 	var items []string
@@ -96,14 +99,11 @@ func (i *island) Spec(ctx context.Context, space string) (string, []int, []strin
 		ends = append(ends, b.Len())
 		items = append(items, item)
 	}
-	write("what to build", specWhatToBuild)
-	write("how an app runs", specHowAnAppRuns)
-	write("the screen", specScreen)
-	write("views and controls", specViewsAndControls)
-	write("app functions and your tools", fmt.Sprintf(specAppFunctionsAndTools, tools))
+	write("the island_guide note", specReadGuide)
+	if len(modules) > 0 {
+		write("your tools", fmt.Sprintf(specTools, strings.Join(modules, ", ")))
+	}
 	write("logs and files", fmt.Sprintf(specLogsAndFiles, logFile(space), islandDir(space)))
-	write("the typical loop", specTypicalLoop)
-	write("reading the reference", specReference)
 	spec, libEnds, libItems := i.lib.Spec()
 	start := b.Len()
 	b.WriteString(spec)

@@ -240,6 +240,15 @@ func (p *page) Module() Module {
 	if err != nil {
 		panic(err)
 	}
+	_, err = m.Add(islandGuideName, islandGuideDesc, func(ctx context.Context, _ struct{}) (string, error) {
+		if tools.FromJS(ctx) {
+			return "", errIslandFromJS
+		}
+		return island.Guide(), nil
+	})
+	if err != nil {
+		panic(err)
+	}
 	_, err = m.Add(islandSpecName, islandSpecDesc, func(ctx context.Context, arg islandSpecArg) (string, error) {
 		if tools.FromJS(ctx) {
 			return "", errIslandFromJS

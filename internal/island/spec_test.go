@@ -26,41 +26,69 @@ import (
 	"neui.dev/internal/testkit"
 )
 
-func TestSpecIsGuideThenReference(t *testing.T) {
-	i, _ := newTestIsland(t)
-	ctrl := testkit.NewController(t, testkit.Setup{Modules: []common.Module{timemod.Module(context.Background())}})
-	spec, ends, items := i.Spec(ctrl.Ctx(), "board")
-	want := []string{"what to build", "how an app runs", "the screen", "views and controls", "app functions and your tools", "logs and files", "the typical loop", "reading the reference"}
-	if !slices.Equal(items, want) || len(ends) != len(want) || ends[len(ends)-1] != len(spec) {
-		t.Fatalf("items %v ending at %v of %d bytes, want %v:\n%s", items, ends, len(spec), want, spec)
+func TestGuideIsItsSectionsInOrder(t *testing.T) {
+	guide := Guide()
+	texts := []string{guideWhatToBuild, guideHowAnAppRuns, guideScreen, guideViewsAndControls, guideAppFunctionsAndTools, guideTypicalLoop, guideReference}
+	titles := []string{"What to build", "How an app runs", "The screen", "Views and controls", "App functions and your tools", "The typical loop", "Reading the reference"}
+	if guide != strings.Join(texts, "") {
+		t.Fatalf("the guide is not its sections in order:\n%s", guide)
 	}
-	texts := []string{
-		specWhatToBuild,
-		specHowAnAppRuns,
-		specScreen,
-		specViewsAndControls,
-		fmt.Sprintf(specAppFunctionsAndTools, "time__*"),
-		fmt.Sprintf(specLogsAndFiles, logFile("board"), islandDir("board")),
-		specTypicalLoop,
-		specReference,
-	}
-	titles := []string{"What to build", "How an app runs", "The screen", "Views and controls", "App functions and your tools", "Logs and files", "The typical loop", "Reading the reference"}
-	prev := 0
-	for n, end := range ends {
-		item := spec[prev:end]
+	for n, text := range texts {
 		head := "\n" + titles[n] + "\n"
 		if n == 0 {
 			head = titles[n] + "\n"
 		}
-		if item != texts[n] || !strings.HasPrefix(item, head) || !strings.HasSuffix(item, "\n") || strings.HasSuffix(item, "\n\n") {
+		if !strings.HasPrefix(text, head) || !strings.HasSuffix(text, "\n") || strings.HasSuffix(text, "\n\n") {
+			t.Fatalf("the %s section reads:\n%s", titles[n], text)
+		}
+	}
+	for _, text := range []string{"below", "%", "Logs and files", "the script has", "Your tools", "Limits"} {
+		if strings.Contains(guide, text) {
+			t.Fatalf("the guide carries %q, which only an island's spec can say:\n%s", text, guide)
+		}
+	}
+	for _, text := range []string{
+		"the real views, controls, layouts and app functions are those the island's spec lists.",
+		"app.<name>(input) calls an app function the island's spec lists and returns its result.",
+		"except the tools of the page and js modules. To act on the page, the script calls app functions.",
+		"The catalog in the island's spec lists each view, control, layout and app function; island_spec_schema gives the schemas of the ones you name.",
+	} {
+		if !strings.Contains(guide, text) {
+			t.Fatalf("the guide does not say %q:\n%s", text, guide)
+		}
+	}
+}
+
+func TestSpecIsTheIslandsOwnPart(t *testing.T) {
+	i, _ := newTestIsland(t)
+	ctrl := testkit.NewController(t, testkit.Setup{Modules: []common.Module{timemod.Module(context.Background())}})
+	spec, ends, items := i.Spec(ctrl.Ctx(), "board")
+	want := []string{"the island_guide note", "your tools", "logs and files"}
+	if !slices.Equal(items, want) || len(ends) != len(want) || ends[len(ends)-1] != len(spec) {
+		t.Fatalf("items %v ending at %v of %d bytes, want %v:\n%s", items, ends, len(spec), want, spec)
+	}
+	texts := []string{
+		"Read island_guide first if you have not in this conversation.\n",
+		"\nYour tools\nThe script has time__*.\n",
+		fmt.Sprintf(specLogsAndFiles, logFile("board"), islandDir("board")),
+	}
+	prev := 0
+	for n, end := range ends {
+		if item := spec[prev:end]; item != texts[n] || !strings.HasSuffix(item, "\n") || strings.HasSuffix(item, "\n\n") {
 			t.Fatalf("the %s item reads:\n%s", items[n], item)
 		}
 		prev = end
 	}
-	if !strings.Contains(spec, "the script has time__*.") || strings.Contains(spec, "Your tools") {
-		t.Fatalf("the spec does not name the script's tool modules in its app functions and tools section:\n%s", spec)
+	if !strings.HasPrefix(texts[2], "\nLogs and files\nconsole.log, info, warn and error append to the workspace file board.island.log, ") || !strings.Contains(texts[2], "under the workspace dir board.island, ") {
+		t.Fatalf("the logs and files item does not name the island's paths:\n%s", texts[2])
 	}
-	if strings.Contains(spec, "Limits") {
-		t.Fatalf("the spec still carries a limits line:\n%s", spec)
+	for _, text := range []string{guideWhatToBuild, guideHowAnAppRuns, guideScreen, guideViewsAndControls, guideAppFunctionsAndTools, guideTypicalLoop, guideReference} {
+		if strings.Contains(spec, text) {
+			t.Fatalf("the spec still carries a section of the guide:\n%s", spec)
+		}
+	}
+	bare := testkit.NewController(t, testkit.Setup{})
+	if spec, _, items := i.Spec(bare.Ctx(), "board"); !slices.Equal(items, []string{"the island_guide note", "logs and files"}) || strings.Contains(spec, "The script has") {
+		t.Fatalf("with no module tools for the script, the spec has items %v:\n%s", items, spec)
 	}
 }

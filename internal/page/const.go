@@ -42,8 +42,10 @@ const toolNotFoundMessage = "no such tool in the space: sync its path to see the
 const spaceNotFoundMessage = "no such space: it was removed or renamed since you saw its path; call tree to see the current spaces"
 const rightsMessage = "the input's rights do not allow this call: sync reports each input's rights, use a call they permit"
 const inputNotFoundMessage = "no such input in the space: sync its path to see the current inputs"
+const islandGuideName = "island_guide"
+const islandGuideDesc = `Read the guide to writing an island's app. It is the same for every island: read it once, and again only if it is no longer in the conversation. Not accessible from scripts.`
 const islandSpecName = "island_spec"
-const islandSpecDesc = `Read an island's spec: how to write its app, a catalog of the views, controls, layouts and app functions the app can use, the tools its script has, and where its logs and files go; island_spec_schema gives the schemas of the items you use. It seldom changes: reuse what you read until island_begin refuses its revision. Not accessible from scripts.`
+const islandSpecDesc = `Read an island's spec: a catalog of the views, controls, layouts and app functions its app can use, the tools its script has, and where its logs and files go; island_spec_schema gives the schemas of the items you use. It seldom changes: reuse what you read until island_begin refuses its revision. Not accessible from scripts.`
 const islandNotFoundMessage = "this space is not an island: call tree to see which spaces are islands"
 const islandSpecPageMessage = "no such page of the spec"
 const islandSpecItemMessage = "one item of the spec is larger than a page can hold, so the spec cannot be read and no app can start in this island"
@@ -75,7 +77,7 @@ Don't open one when a script alone does the job and you have the js module; for 
 
 An island's app functions are also tools of its app child space: for a single change, call one directly instead of starting an app, or call them from a js script when you have that module and the task needs no UI.
 
-Before starting an app in an island, read its spec with island_spec: it teaches how to write the app and lists the views, controls, layouts, app functions and tools the app can use; use only what it lists, and read the schemas of the items you use with island_spec_schema.`
+Before your first app, read island_guide: it teaches how to write one. Before starting an app in an island, read its spec with island_spec: it lists the views, controls, layouts, app functions and tools the app can use; use only what it lists, and read the schemas of the items you use with island_spec_schema.`
 
 var errRefusedDuplicate = errors.New(refusedDuplicateMessage)
 var errRefusedTooLarge = errors.New(refusedTooLargeMessage)
