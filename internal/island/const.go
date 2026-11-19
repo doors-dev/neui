@@ -179,7 +179,7 @@ To change the list while work() waits in a draw:
 
 const specReference = `
 Reading the reference
-Schemas are JSON Schema; a {"$ref":"#/definitions/X"} refers to X under Definitions at the end. A field with "function" takes the source of a one-argument JavaScript function as a string, such as "(q) => app.find({ q })" or String(fn): arg is what it receives and returns what it must return. The view or control calls it on its own, at any time, apart from the script. It is evaluated in its own scope and has only its argument, app.* and console, so write script data and helpers into the source, such as "(v) => " + JSON.stringify(taken) + ".includes(v) ? 'taken' : ''". It must be synchronous, and built-ins are frozen: assigning over an inherited property such as err.name throws.
+The catalog below lists each view, control, layout and app function; island_spec_schema gives the schemas of the ones you name. Schemas are JSON Schema; a {"$ref":"#/definitions/X"} refers to X under Definitions at the end of that result. A field with "function" takes the source of a one-argument JavaScript function as a string, such as "(q) => app.find({ q })" or String(fn): arg is what it receives and returns what it must return. The view or control calls it on its own, at any time, apart from the script. It is evaluated in its own scope and has only its argument, app.* and console, so write script data and helpers into the source, such as "(v) => " + JSON.stringify(taken) + ".includes(v) ? 'taken' : ''". It must be synchronous, and built-ins are frozen: assigning over an inherited property such as err.name throws.
 `
 
 var errUnmounted = errors.New(unmountedMessage)

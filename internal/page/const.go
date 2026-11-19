@@ -43,10 +43,13 @@ const spaceNotFoundMessage = "no such space: it was removed or renamed since you
 const rightsMessage = "the input's rights do not allow this call: sync reports each input's rights, use a call they permit"
 const inputNotFoundMessage = "no such input in the space: sync its path to see the current inputs"
 const islandSpecName = "island_spec"
-const islandSpecDesc = `Read an island's spec: how to write its app, the views, controls, layouts, app functions and tools the app can use, and where its logs and files go. It seldom changes: reuse what you read until island_begin refuses its revision. Not accessible from scripts.`
+const islandSpecDesc = `Read an island's spec: how to write its app, a catalog of the views, controls, layouts and app functions the app can use, the tools its script has, and where its logs and files go; island_spec_schema gives the schemas of the items you use. It seldom changes: reuse what you read until island_begin refuses its revision. Not accessible from scripts.`
 const islandNotFoundMessage = "this space is not an island: call tree to see which spaces are islands"
 const islandSpecPageMessage = "no such page of the spec"
 const islandSpecItemMessage = "one item of the spec is larger than a page can hold, so the spec cannot be read and no app can start in this island"
+const islandSpecSchemaName = "island_spec_schema"
+const islandSpecSchemaDesc = `Read the schemas of items from an island's spec catalog: params, patch and output of views and controls, params of layouts, input and result of app functions, with the definitions they refer to. Read the ones your app uses before writing it. Islands often share items: one with the same name and description as in another island's catalog is most likely the same, so reuse the schema you already read. Not accessible from scripts.`
+const islandSchemaSizeMessage = "the schemas of these items are larger than a result can hold: ask for fewer items at a time"
 const islandBeginName = "island_begin"
 const islandBeginDesc = `Begin a new app in an island with the first part of its script. An app already running there is replaced: its task ends, its queued parts and the values it notified since its last ui.draw() are dropped, and its screen stays until the new app's first ui.draw(). Returns once the part is queued, before it runs. Not accessible from scripts.`
 const islandAppendName = "island_append"
@@ -72,7 +75,7 @@ Don't open one when a script alone does the job and you have the js module; for 
 
 An island's app functions are also tools of its app child space: for a single change, call one directly instead of starting an app, or call them from a js script when you have that module and the task needs no UI.
 
-Before starting an app in an island, read its spec with island_spec: it teaches how to write the app and lists the views, controls, layouts, app functions and tools the app can use; use only what it lists.`
+Before starting an app in an island, read its spec with island_spec: it teaches how to write the app and lists the views, controls, layouts, app functions and tools the app can use; use only what it lists, and read the schemas of the items you use with island_spec_schema.`
 
 var errRefusedDuplicate = errors.New(refusedDuplicateMessage)
 var errRefusedTooLarge = errors.New(refusedTooLargeMessage)
@@ -85,5 +88,6 @@ var errRights = errors.New(rightsMessage)
 var errIslandNotFound = errors.New(islandNotFoundMessage)
 var errIslandSpecPage = errors.New(islandSpecPageMessage)
 var errIslandSpecItem = errors.New(islandSpecItemMessage)
+var errIslandSchemaSize = errors.New(islandSchemaSizeMessage)
 var errFileOrCode = errors.New(fileOrCodeMessage)
 var errIslandFromJS = errors.New(islandFromJSMessage)

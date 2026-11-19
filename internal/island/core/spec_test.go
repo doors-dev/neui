@@ -16,6 +16,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -47,12 +48,22 @@ func TestBuildWritesSharedDefinitionOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	spec, ends, items := l.Spec()
-	head, defs, ok := strings.Cut(spec, "\nDefinitions\n")
-	if !ok || strings.Count(head, `"$ref":"#/definitions/CoreSpecRow"`) != 3 || strings.Contains(head, `"definitions"`) || defs != "  CoreSpecRow "+`{"properties":{"name":{"type":"string"}},"type":"object"}`+"\n" {
-		t.Fatalf("spec:\n%s", spec)
+	if spec != "\nViews: v = ui.<name>(params); v.update(patch)\nui.card\nui.list\n\nApp functions: app.<name>(input) -> result\napp.find\n" || len(ends) != 3 || ends[2] != len(spec) || !slices.Equal(items, []string{"ui.card", "ui.list", "app.find"}) {
+		t.Fatalf("catalog ends %v of %d bytes, items %v:\n%s", ends, len(spec), items, spec)
 	}
-	if len(ends) != 5 || !strings.HasPrefix(spec, "\nViews: v = ui.<name>(params); v.update(patch)\nui.card\n") || !strings.HasPrefix(spec[ends[0]:], "ui.list\n") || !strings.HasPrefix(spec[ends[1]:], "\nApp functions: ") || spec[ends[2]:ends[3]] != "\nDefinitions\n" || ends[4] != len(spec) || !slices.Equal(items, []string{"ui.card", "ui.list", "app.find", "Definitions", "CoreSpecRow"}) {
-		t.Fatalf("ends %v of %d bytes, items %v:\n%s", ends, len(spec), items, spec)
+	schema, err := Schema(l, []string{"ui.card", "ui.list", "app.find"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	head, defs, ok := strings.Cut(schema, "\nDefinitions\n")
+	if !ok || !strings.HasPrefix(head, "ui.card\n") || strings.Count(head, `"$ref":"#/definitions/CoreSpecRow"`) != 3 || strings.Contains(head, `"definitions"`) || defs != "  CoreSpecRow "+`{"properties":{"name":{"type":"string"}},"type":"object"}`+"\n" {
+		t.Fatalf("schema:\n%s", schema)
+	}
+	if one, _ := Schema(l, []string{"ui.card"}); strings.Contains(one, "ui.list") || !strings.Contains(one, "  CoreSpecRow ") {
+		t.Fatalf("one item's schema:\n%s", one)
+	}
+	if _, err := Schema(l, []string{"ui.nope"}); !errors.Is(err, errUnknownItem) {
+		t.Fatalf("unknown item: %v", err)
 	}
 }
 
@@ -73,11 +84,14 @@ func TestBuildRenamesDefinitionClash(t *testing.T) {
 	if err := l.Build(); err != nil {
 		t.Fatal(err)
 	}
-	spec, _, items := l.Spec()
-	head, defs, _ := strings.Cut(spec, "\nDefinitions\n")
+	schema, err := Schema(l, []string{"ui.a", "ui.b"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	head, defs, _ := strings.Cut(schema, "\nDefinitions\n")
 	a, b, _ := strings.Cut(head, "ui.b\n")
-	renamed := slices.IndexFunc(items, func(item string) bool { return strings.HasPrefix(item, "CoreSpecClashType_") })
-	if renamed < 0 || !strings.Contains(a, `"#/definitions/CoreSpecClash"`) || !strings.Contains(b, `"#/definitions/`+items[renamed]+`"`) || !strings.Contains(defs, "  CoreSpecClash ") || !strings.Contains(defs, "  "+items[renamed]+" ") {
-		t.Fatalf("items %v:\n%s", items, spec)
+	renamed := definitionRef.FindStringSubmatch(b)
+	if renamed == nil || !strings.HasPrefix(renamed[1], "CoreSpecClashType_") || !strings.Contains(a, `"#/definitions/CoreSpecClash"`) || !strings.Contains(defs, "  CoreSpecClash ") || !strings.Contains(defs, "  "+renamed[1]+" ") {
+		t.Fatalf("schema:\n%s", schema)
 	}
 }

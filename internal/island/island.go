@@ -25,6 +25,7 @@ import (
 
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
+	"github.com/zeebo/xxh3"
 	"modernc.org/libquickjs"
 	"modernc.org/quickjs"
 	"neui.dev/api"
@@ -110,6 +111,15 @@ func (i *island) Spec(ctx context.Context, space string) (string, []int, []strin
 		ends = append(ends, start+end)
 	}
 	return b.String(), ends, append(items, libItems...)
+}
+
+func (i *island) Revision(ctx context.Context, space string) string {
+	spec, _, _ := i.Spec(ctx, space)
+	return fmt.Sprintf("%016x", xxh3.HashString(spec+core.Schemas(i.lib)))
+}
+
+func (i *island) Schema(items []string) (string, error) {
+	return core.Schema(i.lib, items)
 }
 
 func (i *island) Enter() {

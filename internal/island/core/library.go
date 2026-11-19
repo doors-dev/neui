@@ -57,6 +57,9 @@ type library struct {
 	spec    string
 	ends    []int
 	items   []string
+	schemas map[string]string
+	defs    map[string][]byte
+	full    string
 }
 
 // Tools returns the app functions of l as tools.

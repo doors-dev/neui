@@ -65,14 +65,19 @@ type specSchema struct {
 	defs  map[string]json.RawMessage
 }
 
+var definitionRef = regexp.MustCompile(`"#/definitions/([^"]+)"`)
+
 func (l Library) Build() error {
 	b := strings.Builder{}
 	var ends []int
 	var items []string
+	schemas := map[string]string{}
 	defs := map[string][]byte{}
 	owners := map[string]string{}
 	write := func(item string, desc string, specs []specSchema) error {
 		writeItem(&b, item, desc)
+		sb := strings.Builder{}
+		writeItem(&sb, item, "")
 		for _, s := range specs {
 			renames := map[string]string{}
 			rename := func(raw []byte) []byte {
@@ -93,7 +98,7 @@ func (l Library) Build() error {
 					}
 				}
 			}
-			writeSchema(&b, s.label, rename(s.raw))
+			writeSchema(&sb, s.label, rename(s.raw))
 			for name, raw := range s.defs {
 				if to, ok := renames[name]; ok {
 					name = to
@@ -112,6 +117,7 @@ func (l Library) Build() error {
 		}
 		ends = append(ends, b.Len())
 		items = append(items, item)
+		schemas[item] = sb.String()
 		return nil
 	}
 	names := slices.Sorted(maps.Keys(l.widgets))
@@ -163,22 +169,71 @@ func (l Library) Build() error {
 			}
 		}
 	}
-	if len(defs) > 0 {
-		b.WriteString("\nDefinitions\n")
-		ends = append(ends, b.Len())
-		items = append(items, "Definitions")
-		for _, name := range slices.Sorted(maps.Keys(defs)) {
-			writeSchema(&b, name, defs[name])
-			ends = append(ends, b.Len())
-			items = append(items, name)
-		}
+	full := strings.Builder{}
+	for _, item := range items {
+		full.WriteString(schemas[item])
+	}
+	for _, name := range slices.Sorted(maps.Keys(defs)) {
+		writeSchema(&full, name, defs[name])
 	}
 	l.spec = b.String()
 	l.ends = ends
 	l.items = items
+	l.schemas = schemas
+	l.defs = defs
+	l.full = full.String()
 	return nil
 }
 
 func (l Library) Spec() (string, []int, []string) {
 	return l.spec, l.ends, l.items
+}
+
+// Schemas returns every item's schemas and every definition of l, for a
+// revision that covers what Schema can return.
+func Schemas(l Library) string {
+	return l.full
+}
+
+// Schema returns the schemas of the named items, then the definitions they
+// refer to, directly or through other definitions.
+func Schema(l Library, items []string) (string, error) {
+	b := strings.Builder{}
+	picked := map[string]bool{}
+	refs := map[string]bool{}
+	var queue []string
+	follow := func(text string) {
+		for _, m := range definitionRef.FindAllStringSubmatch(text, -1) {
+			if !refs[m[1]] {
+				refs[m[1]] = true
+				queue = append(queue, m[1])
+			}
+		}
+	}
+	for _, item := range items {
+		text, ok := l.schemas[item]
+		if !ok {
+			return "", fmt.Errorf("%q: %w", item, errUnknownItem)
+		}
+		if picked[item] {
+			continue
+		}
+		picked[item] = true
+		b.WriteString(text)
+		follow(text)
+	}
+	for len(queue) > 0 {
+		name := queue[0]
+		queue = queue[1:]
+		follow(string(l.defs[name]))
+	}
+	if len(refs) > 0 {
+		b.WriteString("\nDefinitions\n")
+		for _, name := range slices.Sorted(maps.Keys(refs)) {
+			if raw, ok := l.defs[name]; ok {
+				writeSchema(&b, name, raw)
+			}
+		}
+	}
+	return b.String(), nil
 }

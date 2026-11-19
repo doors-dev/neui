@@ -32,6 +32,12 @@ type islandSpecArg struct {
 	Page uint   `json:"page,omitempty" description:"the page to read, from 1, when the spec comes in pages; absent reads page 1"`
 }
 
+type islandSpecSchemaArg struct {
+	Path     string   `json:"path" required:"true" description:"space path: child names from the root joined with dots; \"\" is the page root"`
+	Revision string   `json:"revision" required:"true" description:"the revision from the first line of island_spec"`
+	Items    []string `json:"items" required:"true" minItems:"1" description:"names from the spec's catalog, such as ui.form or app.orders"`
+}
+
 type syncArg struct {
 	Path string `json:"path" description:"space path: child names from the root joined with dots; \"\" is the page root"`
 }

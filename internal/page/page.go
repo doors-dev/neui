@@ -23,7 +23,6 @@ import (
 	"sync"
 
 	"github.com/doors-dev/doors"
-	"github.com/zeebo/xxh3"
 	"neui.dev/api"
 	"neui.dev/internal/common"
 	"neui.dev/internal/island"
@@ -250,11 +249,11 @@ func (p *page) Module() Module {
 			return "", err
 		}
 		spec, ends, items := island.Spec(ctx, path)
-		revision := xxh3.HashString(spec)
+		revision := island.Revision(ctx, path)
 		ctrl := common.GetController(ctx)
 		limit := replay.RoundItemBudget(ctrl.Config(), ctrl.Model()) / 2
 		want := max(arg.Page, 1)
-		whole := fmt.Sprintf("revision %016x\n\n", revision)
+		whole := fmt.Sprintf("revision %s\n\n", revision)
 		if len(whole)+len(spec) <= limit {
 			if want > 1 {
 				return "", fmt.Errorf("page %d, the spec has 1 in all: %w", want, errIslandSpecPage)
@@ -263,9 +262,9 @@ func (p *page) Module() Module {
 		}
 		head := func(i int, n int) string {
 			if i < n {
-				return fmt.Sprintf("revision %016x\npage %d of %d: call island_spec with page %d for the rest\n\n", revision, i, n, i+1)
+				return fmt.Sprintf("revision %s\npage %d of %d: call island_spec with page %d for the rest\n\n", revision, i, n, i+1)
 			}
-			return fmt.Sprintf("revision %016x\npage %d of %d\n\n", revision, i, n)
+			return fmt.Sprintf("revision %s\npage %d of %d\n\n", revision, i, n)
 		}
 		room := limit - len(head(len(ends)-1, len(ends)))
 		cuts := []int{0}
@@ -289,6 +288,30 @@ func (p *page) Module() Module {
 	if err != nil {
 		panic(err)
 	}
+	_, err = m.Add(islandSpecSchemaName, islandSpecSchemaDesc, func(ctx context.Context, arg islandSpecSchemaArg) (string, error) {
+		if tools.FromJS(ctx) {
+			return "", errIslandFromJS
+		}
+		island, path, err := p.Island(ctx, arg.Path)
+		if err != nil {
+			return "", err
+		}
+		if island.Revision(ctx, path) != arg.Revision {
+			return "", errIslandRevision
+		}
+		schema, err := island.Schema(arg.Items)
+		if err != nil {
+			return "", err
+		}
+		ctrl := common.GetController(ctx)
+		if limit := replay.RoundItemBudget(ctrl.Config(), ctrl.Model()) / 2; len(schema) > limit {
+			return "", fmt.Errorf("%d bytes, a result holds %d: %w", len(schema), limit, errIslandSchemaSize)
+		}
+		return schema, nil
+	})
+	if err != nil {
+		panic(err)
+	}
 	_, err = m.Add(islandBeginName, islandBeginDesc, func(ctx context.Context, arg islandBeginArg) (islandRunResult, error) {
 		if tools.FromJS(ctx) {
 			return islandRunResult{}, errIslandFromJS
@@ -300,7 +323,7 @@ func (p *page) Module() Module {
 		if err != nil {
 			return islandRunResult{}, err
 		}
-		if spec, _, _ := island.Spec(ctx, path); fmt.Sprintf("%016x", xxh3.HashString(spec)) != arg.Revision {
+		if island.Revision(ctx, path) != arg.Revision {
 			return islandRunResult{}, errIslandRevision
 		}
 		var task, script uint

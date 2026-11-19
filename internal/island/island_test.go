@@ -266,28 +266,41 @@ func TestIslandSpecListsLibrary(t *testing.T) {
 	refused(t, results[1], "page 2, the spec has 1 in all")
 }
 
-func TestIslandSpecKeepsDefinitionsAtTheEnd(t *testing.T) {
+func TestIslandSpecSchemaKeepsDefinitionsAtTheEnd(t *testing.T) {
+	var catalog string
 	p := testkit.NewProvider(api.Model{},
 		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
+		testkit.Then(func(r api.Request) testkit.Turn {
+			revision, _, spec := specText(t, testkit.Results(r)[0])
+			catalog = spec
+			return testkit.Call("page__island_spec_schema", map[string]any{"path": "board", "revision": revision, "items": []string{"ui.form", "ui.table", "ui.markdown"}})
+		}),
+		testkit.Call("page__island_spec_schema", map[string]any{"path": "board", "revision": "0000000000000000", "items": []string{"ui.form"}}),
 		testkit.Say("done"),
 	)
 	c := stack.Page(t, stack.Host{Provider: p, Page: fullBoard()})
 	c.Send("open the board")
 	c.Wait()
-	_, _, spec := specText(t, testkit.Results(p.Request(t, 1))[0])
-	head, defs, ok := strings.Cut(spec, "\nDefinitions\n")
-	if !ok || strings.Contains(head, `"definitions"`) {
-		t.Fatalf("the spec has definitions outside its Definitions section:\n%s", spec)
+	if strings.Contains(catalog, "\n  params ") || !strings.Contains(catalog, "\nui.form  ") {
+		t.Fatalf("the catalog carries schemas or misses ui.form:\n%s", catalog)
 	}
-	_, body, _ := strings.Cut(spec, "\nReading the reference\n")
-	_, body, _ = strings.Cut(body, "\n")
-	for _, ref := range strings.Split(body, `"$ref":"#/definitions/`)[1:] {
+	r := testkit.Results(p.Request(t, 2))[0]
+	if r.Error != api.ToolOk || len(r.Content) != 1 {
+		t.Fatalf("island_spec_schema answered %#v", r)
+	}
+	schema := r.Content[0].(api.ContentText).Text
+	head, defs, ok := strings.Cut(schema, "\nDefinitions\n")
+	if !ok || strings.Contains(head, `"definitions"`) || !strings.HasPrefix(head, "ui.form\n") || !strings.Contains(head, "\nui.markdown\n") {
+		t.Fatalf("the schema has definitions outside its Definitions section or misses an item:\n%s", schema)
+	}
+	for _, ref := range strings.Split(schema, `"$ref":"#/definitions/`)[1:] {
 		name, _, _ := strings.Cut(ref, `"`)
 		if !strings.Contains("\n"+defs, "\n  "+name+" ") {
-			t.Fatalf("%s is not under Definitions:\n%s", name, spec)
+			t.Fatalf("%s is not under Definitions:\n%s", name, schema)
 		}
 	}
-	t.Logf("island_spec of nekit.IslandRegisterAll: %d bytes", len(spec))
+	refused(t, testkit.Results(p.Request(t, 3))[0], "read island_spec again")
+	t.Logf("catalog %d bytes, schema of ui.form, ui.table and ui.markdown %d bytes", len(catalog), len(schema))
 }
 
 func TestIslandSpecComesInPages(t *testing.T) {
@@ -957,7 +970,7 @@ func TestIslandGuideLivesInTheSpec(t *testing.T) {
 		}
 		last = at
 	}
-	guide, rest, ok := strings.Cut(spec, "\nReading the reference\nSchemas are JSON Schema; ")
+	guide, rest, ok := strings.Cut(spec, "\nReading the reference\nThe catalog below lists ")
 	if !ok || !strings.Contains(guide, "\nLogs and files\nconsole.log, info, warn and error append to the workspace file board.island.log, ") {
 		t.Fatalf("the spec does not name its logs and files before how to read the reference:\n%s", spec)
 	}
