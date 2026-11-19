@@ -862,6 +862,35 @@ func TestRequestShapeOnTheWire(t *testing.T) {
 	}
 }
 
+func TestAdaptiveThinkingDropsMismatchedBlocks(t *testing.T) {
+	var got struct {
+		Thinking struct {
+			BlockBinding struct {
+				PrefixMismatchBehavior string `json:"prefix_mismatch_behavior"`
+			} `json:"block_binding"`
+		} `json:"thinking"`
+	}
+	var headers http.Header
+	p := testProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		headers = r.Header.Clone()
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		io.WriteString(w, sse("message_start", fixStart, "message_delta",
+			`{"type":"message_delta","delta":{"stop_reason":"end_turn"}}`, "message_stop", fixStopFrame))
+	}, WithThinking(Thinking{Type: ThinkingAdaptive}), WithBeta("fine-grained-tool-streaming-2025-05-14"))
+
+	collect(t, p, hello())
+
+	if got.Thinking.BlockBinding.PrefixMismatchBehavior != "drop_block" {
+		t.Fatalf("prefix_mismatch_behavior %q, want drop_block", got.Thinking.BlockBinding.PrefixMismatchBehavior)
+	}
+	if headers.Get("anthropic-beta") != "fine-grained-tool-streaming-2025-05-14,"+bindingBeta {
+		t.Fatalf("anthropic-beta %q, want the caller's flags then %s", headers.Get("anthropic-beta"), bindingBeta)
+	}
+}
+
 // heldStream serves a turn that starts and then stays open, the way a queued
 // request or a running server side tool does, so what ends the turn is the
 // caller's context and never the server running out of frames.

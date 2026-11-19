@@ -107,6 +107,10 @@ const (
 // Haiku 5.5 and Sonnet 5; disabled on Fable 5.1, Opus 5.5 and Sonnet 5.5, and
 // on Haiku 5.5 at EffortXHigh or EffortMax; adaptive on Haiku 4.5. A model not
 // declared here is not checked.
+//
+// With adaptive thinking, each request also asks the API to drop a replayed
+// thinking block whose earlier conversation no longer matches, instead of
+// failing, under the thinking-binding-controls-2026-08-01 beta.
 type Thinking struct {
 	Type    ThinkingType    // adaptive, enabled or disabled; empty sends nothing
 	Budget  int             // budget_tokens, extended thinking only
@@ -317,6 +321,8 @@ func WithStopSequences(seqs ...string) Option {
 	}
 }
 
+const bindingBeta = "thinking-binding-controls-2026-08-01"
+
 // WithThinking sets the thinking configuration; the zero value sends none and
 // leaves the model default. On a declared model New refuses the settings
 // Thinking lists. It is part of the cached prompt, so switching
@@ -450,8 +456,12 @@ func (p *Provider) request(ctx context.Context, req api.Request) (*http.Request,
 	if p.key != "" {
 		httpReq.Header.Set("x-api-key", p.key)
 	}
-	if len(p.betas) > 0 {
-		httpReq.Header.Set("anthropic-beta", strings.Join(p.betas, ","))
+	betas := p.betas
+	if p.thinking.Type == ThinkingAdaptive && !slices.Contains(betas, bindingBeta) {
+		betas = append(slices.Clone(betas), bindingBeta)
+	}
+	if len(betas) > 0 {
+		httpReq.Header.Set("anthropic-beta", strings.Join(betas, ","))
 	}
 	return httpReq, sent, nil
 }

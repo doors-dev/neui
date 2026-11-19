@@ -152,8 +152,8 @@ func TestRoundInitNameInstruction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RoundInit on a named thread: %v", err)
 	}
-	if text, ok := lastBlock(t, messages).(api.ContentText); !ok || text.Text != "and now" {
-		t.Fatalf("named thread with input: want the user text last, got %#v", lastBlock(t, messages))
+	if text, ok := lastBlock(t, messages).(api.ContentText); !ok || text.Text != nameInstruction {
+		t.Fatalf("thread with no answered round yet: want the naming instruction last whatever the name, got %#v", lastBlock(t, messages))
 	}
 }
 

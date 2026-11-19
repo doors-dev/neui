@@ -193,6 +193,7 @@ func (s *messages) appendRound(r api.Round) {
 		userContent = append(userContent, capText(res, budget))
 	}
 	s.resultStash = nil
+	opening := s.first == api.NoRoundID && !s.compaction.IsValid() && r.Input.Len() != 0
 	if s.first == api.NoRoundID {
 		s.first = r.ID
 		if s.compaction.IsValid() {
@@ -218,6 +219,9 @@ func (s *messages) appendRound(r api.Round) {
 	}
 	limit := memoryLimit(s.config, s.model, s.factor)
 	user := omitOversizedMedia(userContent, s.model, limit)
+	if opening {
+		user = append(user, api.ContentText{Text: nameInstruction})
+	}
 	weight := weigh(user...) + weigh(response...)
 	s.rounds = append(s.rounds, round{
 		id:     r.ID,

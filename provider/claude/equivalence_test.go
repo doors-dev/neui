@@ -416,7 +416,7 @@ var corpusRequestHashes = map[string]string{
 	"mark unknown":                "16d6d769a308f978",
 	"empty tool result":           "81cd9ff7fa8f78f0",
 	"options":                     "9890a38facb897ea",
-	"effort":                      "459d7813f0f1c4a7",
+	"effort":                      "77d90fcfe5424138",
 	"disabled thinking":           "3edb0654d8816a52",
 	"tool choice any":             "fa99010651b04d07",
 	"tool choice forced":          "3cbaf13ef3370fb6",

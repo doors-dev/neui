@@ -285,7 +285,7 @@ func (r Replay) RoundInit(input api.Input) (api.Round, []api.Message, error) {
 	if err != nil {
 		return api.Round{}, nil, err
 	}
-	if r.thread.Name == "" && input.Len() != 0 {
+	if r.messages.first == api.NoRoundID && !r.messages.compaction.IsValid() && input.Len() != 0 {
 		last := &messages[len(messages)-1]
 		last.Content = append(last.Content, api.ContentText{Text: nameInstruction})
 	}

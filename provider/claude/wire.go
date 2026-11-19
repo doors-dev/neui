@@ -51,9 +51,14 @@ type toolChoice struct {
 }
 
 type thinkingWire struct {
-	Type    string `json:"type"`
-	Budget  int    `json:"budget_tokens,omitempty"`
-	Display string `json:"display,omitempty"`
+	Type         string        `json:"type"`
+	Budget       int           `json:"budget_tokens,omitempty"`
+	Display      string        `json:"display,omitempty"`
+	BlockBinding *blockBinding `json:"block_binding,omitempty"`
+}
+
+type blockBinding struct {
+	PrefixMismatchBehavior string `json:"prefix_mismatch_behavior"`
 }
 
 type outputConfig struct {

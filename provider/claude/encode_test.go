@@ -97,7 +97,7 @@ func TestEncodeRequestShape(t *testing.T) {
 		"tool_choice":   `{"type":"any"}`,
 		"system":        `[{"type":"text","text":"be brief"}]`,
 		"messages":      `[{"role":"user","content":[{"type":"text","text":"hi"}]}]`,
-		"thinking":      `{"type":"adaptive","display":"summarized"}`,
+		"thinking":      `{"type":"adaptive","display":"summarized","block_binding":{"prefix_mismatch_behavior":"drop_block"}}`,
 		"output_config": `{"effort":"medium"}`,
 		"tools":         `[{"name":"get_weather","description":"current weather","input_schema":{"properties":{},"type":"object"}}]`,
 	} {

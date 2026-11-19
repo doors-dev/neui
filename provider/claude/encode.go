@@ -41,6 +41,9 @@ func (p *Provider) encode(req api.Request) (*lib.Body, error) {
 			Budget:  p.thinking.Budget,
 			Display: string(p.thinking.Display),
 		}
+		if p.thinking.Type == ThinkingAdaptive {
+			w.Thinking.BlockBinding = &blockBinding{PrefixMismatchBehavior: "drop_block"}
+		}
 	}
 	if p.effort != "" {
 		w.OutputConfig = &outputConfig{Effort: p.effort}
