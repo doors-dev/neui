@@ -369,7 +369,7 @@ To enable it, set aside a place for it on your page with an island:
 // app.gox
 ~neui.Island{
 	Name:        "report",
-	Desc:        "report panel on the dashboard",
+	Desc:        "Reports on the shop's sales: its apps read orders, customers and products, rank customers by what they paid, chart sales and set product stock.",
 	Placeholder: <p>Ask the assistant for a report.</p>,
 	Template: func(slot gox.Comp) gox.Elem {
 		return <div class="card">~(slot)</div>
@@ -377,6 +377,8 @@ To enable it, set aside a place for it on your page with an island:
 	Library: library,
 }
 ```
+
+The agent decides whether an island fits a task from its description, so say what its apps can work with and do, not where the island sits.
 
 You can have many islands across your app, each serving a specific need with its own set of building blocks, or one Swiss Army knife.
 

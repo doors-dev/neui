@@ -25,7 +25,7 @@ import (
 elem workbenchPanel() {
 	~neui.Island{
 		Name: "workbench",
-		Desc: "General-purpose island, on every page: build here any app the user asks for that the pages don't offer, such as side-by-side comparisons, bulk edits or small calculators. It shows as a panel over the page only while an app runs; the user can hide it and bring it back. Its app space has every change you can make in the store, by id, from any page; its scripts call them, and read shop data, as app functions.",
+		Desc: "Apps over the shop's data. Their scripts read orders, customers and products, and by id can create orders, customers and products, change an order's items and quantities, status, shipping address and due date, send payment reminders, refund or cancel orders, and update customers, products and stock. Build here what the user needs beyond the app UI, such as reviewing and changing many records, comparisons or calculators. It shows as a panel over the page only while an app runs; the user can hide it and bring it back. Its app space has the same changes as tools you can call directly.",
 		Placeholder: <></>,
 		Template: func(slot gox.Comp) gox.Elem {
 			return workbenchFrame(slot)

@@ -30,7 +30,7 @@ const relinkedMessage = "the chat moved to a new page, by a reload or in another
 const screenSpaceName = "screen"
 const screenSpaceDesc = "what the island shows now: the app while one runs, otherwise its placeholder or end screen"
 const appSpaceName = "app"
-const appSpaceDesc = "The app functions this island's scripts call as app.*, as regular tools: call them with page__tool, directly or from a js script."
+const appSpaceDesc = "The app functions this island's scripts call as app.*, as regular tools: call them with page__tool, directly or from a js script. No need to read this space when you plan to start an app in the island: its spec includes them."
 const noAppStatus = "no app is running in this island: begin one with island_begin"
 const idleNote = "the screen has no control, so the part waits in this ui.draw() until you send the next part with island_interrupt or end the app with island_end"
 const scriptErrorNote = "the part stopped at this error and any parts queued behind it were dropped, listed in dropped; the app runs on: send what should still run with island_append"
@@ -46,6 +46,8 @@ const scriptRejectedMessage = "the part was refused: nothing ran, and nothing wa
 
 const specWhatToBuild = `What to build
 Build what the request needs, plus what the app needs to work and be easy to use. An app usually serves this one task and is then closed: skip undo, history, extra screens and write-backs nobody asked for.
+
+Let the user act where they see the data: give each row of a list or table its own actions, such as opening a form for that row or a quick change, and show the result in the same place right after. A view with a separate form beside it that repeats the same records makes the user match them up.
 `
 
 const specHowAnAppRuns = `
