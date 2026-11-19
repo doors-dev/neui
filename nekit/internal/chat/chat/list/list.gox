@@ -217,13 +217,13 @@ func (l List) seed(ctx context.Context, active *api.Round, anchor api.RoundID) (
 	return doors.Once(s), nil
 }
 
-func (l List) ToolsDone() {
+func (l List) ToolsDone(ctx context.Context) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.lastSection.tools == nil {
 		return
 	}
-	l.lastSection.tools.Done()
+	l.lastSection.tools.Done(ctx)
 }
 
 func (l List) IndexedEvent(e api.IndexedEvent) {
@@ -248,7 +248,7 @@ func (l List) RoundDone(ctx context.Context, state api.RoundState) {
 		return
 	}
 	if live.IsErr() {
-		live.Tools().Done()
+		live.Tools().Done(ctx)
 		live.Tools().Reload(ctx)
 		l.lastSection.tools = nil
 		return

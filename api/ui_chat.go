@@ -76,8 +76,9 @@ type InstanceChat struct {
 // your own.
 type Chat interface {
 	// Update applies one event to the view. Events arrive one at a time, in
-	// order, inside a Doors batch on ctx, so the view updates the page
-	// directly from it.
+	// order. ctx is not batched: open a Doors batch where several page updates
+	// of one event must land together. An event that changes nothing on the
+	// page should issue no updates.
 	Update(ctx context.Context, e ChatEvent)
 	gox.Comp
 }

@@ -26,8 +26,8 @@ import (
 	"github.com/doors-dev/gox"
 )
 
-func TestMainRendersInitialPartial(t *testing.T) {
-	m := New("still typing the first para", time.Hour, nil)
+func TestMainRendersInitialBlocks(t *testing.T) {
+	m := New("the first para\n\nstill typing the second", time.Hour, nil)
 	app := doors.NewApp(func(ctx context.Context, r doors.Request) gox.Elem {
 		return m.Main()
 	})
@@ -39,7 +39,10 @@ func TestMainRendersInitialPartial(t *testing.T) {
 	}
 	defer res.Body.Close()
 	body, _ := io.ReadAll(res.Body)
-	if !strings.Contains(string(body), "still typing the first para") {
-		t.Fatalf("initial partial not rendered: %q", body)
+	if !strings.Contains(string(body), "the first para") {
+		t.Fatalf("initial block not rendered: %q", body)
+	}
+	if strings.Contains(string(body), "still typing the second") {
+		t.Fatalf("unfinished paragraph rendered before the loop: %q", body)
 	}
 }

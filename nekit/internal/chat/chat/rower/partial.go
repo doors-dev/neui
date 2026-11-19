@@ -66,6 +66,12 @@ func (t partialStreamer) Main() gox.Elem {
 	})
 }
 
-func (t partialStreamer) Append(p partialText) {
+func (t partialStreamer) Append(p partialText) []replacement {
 	t.Marksman.Append(p.text)
+	return nil
+}
+
+func (t partialStreamer) Close() []replacement {
+	t.Marksman.Close()
+	return nil
 }

@@ -17,7 +17,6 @@ package marksman
 import (
 	"bytes"
 	"context"
-	"errors"
 	"sync"
 	"time"
 
@@ -30,9 +29,9 @@ import (
 
 func New(initial string, interval time.Duration, fs api.FS) Marksman {
 	m := &marksman{
-		initialBuffer: new(bytes.Buffer),
-		interval:      interval,
-		fs:            fs,
+		buffer:   new(bytes.Buffer),
+		fs:       fs,
+		interval: interval,
 	}
 	m.parser = parser.New(m.block)
 	m.parser.Write(initial)
@@ -42,16 +41,30 @@ func New(initial string, interval time.Duration, fs api.FS) Marksman {
 type Marksman = *marksman
 
 type marksman struct {
-	mu            sync.Mutex
-	ctx           context.Context
-	closed        bool
-	fs            api.FS
-	initialBuffer *bytes.Buffer
-	parser        parser.Parser
-	cursor        *doors.Door
-	interval      time.Duration
-	partialPushed bool
-	timer         *time.Timer
+	mu         sync.Mutex
+	closed     bool
+	fs         api.FS
+	buffer     *bytes.Buffer
+	interval   time.Duration
+	parser     parser.Parser
+	cursor     *doors.Door
+	signal     *chan struct{}
+	dirty      bool
+	lastUpdate time.Time
+}
+
+func (m Marksman) Close() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.closed {
+		return
+	}
+	m.closed = true
+	m.parser.Close()
+	if m.signal != nil {
+		close(*m.signal)
+		m.signal = nil
+	}
 }
 
 func (m *marksman) Append(chunk string) {
@@ -63,120 +76,127 @@ func (m *marksman) Append(chunk string) {
 	if m.closed {
 		return
 	}
-	m.partialPushed = false
 	m.parser.Write(chunk)
-	if m.timer == nil && m.rendered() {
-		m.armTimer()
+	m.dirty = true
+	if m.signal != nil {
+		close(*m.signal)
+		m.signal = nil
 	}
-}
-
-func (m Marksman) Close() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.closed {
-		return
-	}
-	m.stopTimer()
-	m.closed = true
-	m.parser.Close()
-	if m.cursor != nil {
-		m.cursor.Static(m.ctx, nil)
-		m.cursor = nil
-	}
-
-}
-
-func (m *marksman) stopTimer() {
-	if m.timer == nil {
-		return
-	}
-	m.timer.Stop()
-	m.timer = nil
-}
-
-func (m *marksman) armTimer() {
-	var timer *time.Timer
-	timer = time.AfterFunc(m.interval, func() {
-		m.mu.Lock()
-		defer m.mu.Unlock()
-		if m.ctx.Err() != nil {
-			return
-		}
-		if m.timer != timer {
-			return
-		}
-		m.timer = nil
-		if m.partialPushed {
-			return
-		}
-		partial, has := m.parser.Partial()
-		if !has {
-			return
-		}
-		m.partialPushed = true
-		m.cursor.Inner(m.ctx, gox.Elem(func(cur gox.Cursor) error {
-			return cur.Bytes(partial)
-		}))
-	})
-	m.timer = timer
 }
 
 func (m *marksman) block(b []byte) {
-	if !m.rendered() {
-		m.initialBuffer.Write(b)
+	m.buffer.Write(b)
+}
+
+func (m *marksman) loop(ctx context.Context) {
+	m.lastUpdate = time.Now()
+	for ctx.Err() == nil {
+		m.mu.Lock()
+		buf := m.readBuffer()
+		if len(buf) == 0 {
+			if m.closed {
+				m.mu.Unlock()
+				m.cursor.Static(ctx, nil)
+				return
+			}
+			ch := make(chan struct{})
+			m.signal = &ch
+			dirty := m.dirty
+			m.mu.Unlock()
+			var timer <-chan time.Time
+			if dirty {
+				next := m.lastUpdate.Add(m.interval)
+				dur := max(time.Until(next), 0)
+				timer = time.After(dur)
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-timer:
+				m.update(ctx)
+			case <-ch:
+			}
+			continue
+		}
+		m.mu.Unlock()
+		m.append(ctx, buf)
+	}
+}
+
+func (m *marksman) update(ctx context.Context) {
+	m.mu.Lock()
+	if m.buffer.Len() != 0 {
+		m.mu.Unlock()
 		return
 	}
-	m.stopTimer()
+	m.dirty = false
+	partial, has := m.parser.Partial()
+	if !has {
+		m.mu.Unlock()
+		return
+	}
+	m.mu.Unlock()
+	done := m.cursor.Inner(ctx, gox.Elem(func(cur gox.Cursor) error {
+		return cur.Bytes(partial)
+	}))
+	for ok := true; ok; {
+		select {
+		case <-ctx.Done():
+			return
+		case _, ok = <-done:
+		}
+	}
+	m.lastUpdate = time.Now()
+}
+
+func (m *marksman) append(ctx context.Context, buf []byte) {
 	newCursor := new(doors.Door)
 	prevCursor := m.cursor
 	m.cursor = newCursor
-	prevCursor.Static(m.ctx, gox.Elem(func(cur gox.Cursor) error {
+	done := prevCursor.Static(ctx, gox.Elem(func(cur gox.Cursor) error {
 		if err := cur.Any(follow.Mark()); err != nil {
 			return err
 		}
-		if err := chunk(m.fs, b)(cur); err != nil {
+		if err := cur.Comp(chunk(m.fs, buf)); err != nil {
 			return err
 		}
 		return cur.Comp(newCursor)
 	}))
-
+	for ok := true; ok; {
+		select {
+		case <-ctx.Done():
+			return
+		case _, ok = <-done:
+		}
+	}
+	m.lastUpdate = time.Now()
 }
 
 func (m Marksman) Main() gox.Elem {
 	return gox.Elem(func(cur gox.Cursor) error {
 		m.mu.Lock()
 		defer m.mu.Unlock()
-		if m.rendered() {
-			return errors.New("marker can be only rendered once, create new one")
-		}
-		initial := m.readInitalBuffer()
-		if len(initial) != 0 {
-			if err := chunk(m.fs, initial)(cur); err != nil {
+		if buf := m.readBuffer(); len(buf) != 0 {
+			if err := cur.Comp(chunk(m.fs, buf)); err != nil {
 				return err
 			}
 		}
 		if m.closed {
 			return nil
 		}
-		m.ctx = doors.DetachedContext(cur.Context())
 		m.cursor = new(doors.Door)
-		if partial, has := m.parser.Partial(); has {
-			m.partialPushed = true
-			m.cursor.Inner(cur.Context(), gox.Elem(func(cur gox.Cursor) error {
-				return cur.Bytes(partial)
-			}))
+		if err := cur.Comp(doors.Go(m.loop)); err != nil {
+			return err
 		}
 		return cur.Comp(m.cursor)
 	})
-
 }
 
-func (m *marksman) rendered() bool {
-	return m.initialBuffer == nil
-}
-
-func (m *marksman) readInitalBuffer() []byte {
-	initial := m.initialBuffer.Bytes()
-	m.initialBuffer = nil
-	return initial
+func (m *marksman) readBuffer() []byte {
+	if m.buffer.Len() == 0 {
+		return nil
+	}
+	content := m.buffer.Bytes()
+	m.buffer = &bytes.Buffer{}
+	return content
 }

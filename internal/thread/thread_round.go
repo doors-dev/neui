@@ -29,12 +29,25 @@ type threadRound struct {
 	round    api.Round
 	ctx      context.Context
 	cancel   context.CancelCauseFunc
+	messages []api.Message
+	guard    <-chan error
 	ch       <-chan api.Event
 	response response.Builder
 }
 
 func (s *threadRound) tick() bool {
 	select {
+	case _, ok := <-s.guard:
+		if ok {
+			return true
+		}
+		s.guard = nil
+		s.ch = s.thread.link.backend.Provider().Stream(s.ctx, api.Request{
+			System:   s.thread.link.system(),
+			Messages: s.messages,
+			Tools:    s.thread.link.tools(),
+		})
+		s.messages = nil
 	case e, contunue := <-s.ch:
 		if !contunue {
 			s.finalize()
@@ -88,6 +101,9 @@ func (s *threadRound) on(cmd any) {
 		}
 		s.thread.pending = false
 		s.thread.link = s.thread.link.inherit(cmd.page, cmd.meta)
+		if s.guard != nil {
+			s.guard = s.thread.link.backpressure()
+		}
 		cmd.Ok(s.thread.link.link())
 	case commandUnlink:
 		if s.thread.link != cmd.link {

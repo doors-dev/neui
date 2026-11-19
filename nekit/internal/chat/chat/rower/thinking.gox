@@ -15,7 +15,6 @@
 package rower
 
 import (
-	"context"
 	"errors"
 	"sync"
 	
@@ -110,70 +109,73 @@ elem (t *thinking) thoughtsBlock() {
 	</details>
 }
 
-func (t *thinking) Append(e api.IndexedEvent) {
+func (t *thinking) Append(e api.IndexedEvent) []replacement {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.closed {
-		return
+		return nil
 	}
 	switch e := e.(type) {
 	case api.EventThinking:
 		if e.Text == "" {
-			return
+			return nil
 		}
 		if t.thoughtsStreamer == nil {
 			t.thoughtsStreamer = newPartialRower(map[int]string{
 				e.Part: e.Text,
 			})
 			if t.rendered {
-				t.thoughtsDoor.Static(context.Background(), t.thoughtsBlock())
+				door := t.thoughtsDoor
 				t.thoughtsDoor = nil
+				return []replacement{{door, t.thoughtsBlock()}}
 			}
 		} else {
-			t.thoughtsStreamer.Append(partialText{e.Part, e.Text})
+			return t.thoughtsStreamer.Append(partialText{e.Part, e.Text})
 		}
 	case api.EventSummary:
 		if e.Text == "" {
-			return
+			return nil
 		}
 		if t.summaryStreamer == nil {
 			t.summaryStreamer = newPartialRower(map[int]string{
 				e.Part: e.Text,
 			})
 			if t.rendered {
-				t.summaryDoor.Static(context.Background(), t.summaryBlock())
+				door := t.summaryDoor
 				t.summaryDoor = nil
+				return []replacement{{door, t.summaryBlock()}}
 			}
 		} else {
-			t.summaryStreamer.Append(partialText{e.Part, e.Text})
+			return t.summaryStreamer.Append(partialText{e.Part, e.Text})
 		}
 	case api.EventClose:
-		t.close()
+		return t.close()
 	}
+	return nil
 }
 
-func (t *thinking) Close() {
+func (t *thinking) Close() []replacement {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.close()
+	return t.close()
 }
 
-func (t *thinking) close() {
+func (t *thinking) close() []replacement {
 	if t.closed {
-		return
+		return nil
 	}
 	t.closed = true
-	t.slot.Static(context.Background(), thinkingDone())
-	t.summarySlot.Static(context.Background(), summaryDone())
+	replacements := []replacement{{t.slot, thinkingDone()}, {t.summarySlot, summaryDone()}}
 	if t.summaryStreamer != nil {
-		t.summaryStreamer.Close()
+		replacements = append(replacements, t.summaryStreamer.Close()...)
 	}
 	if t.thoughtsStreamer != nil {
-		t.thoughtsStreamer.Close()
+		replacements = append(replacements, t.thoughtsStreamer.Close()...)
 	}
 	if t.summaryDoor != nil {
-		t.summaryDoor.Static(context.Background(), nil)
+		replacements = append(replacements, replacement{t.summaryDoor, nil})
 	}
+	return replacements
 }
 
 func emptyMap(m map[int]string) bool {

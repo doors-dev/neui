@@ -74,6 +74,7 @@ type link struct {
 	pageModule  page.Module
 	once        sync.Once
 	meta        any
+	guard       <-chan error
 	*linkTasks
 }
 
@@ -226,4 +227,18 @@ func (l *link) send(m Message) {
 		m.Ack()
 	case l.ch <- m:
 	}
+}
+
+func (l *link) backpressure() <-chan error {
+	prev := l.guard
+	l.guard = nil
+	if ctx := l.page.Context(); doors.HasInstance(ctx) {
+		l.guard = doors.Call(ctx, doors.ActionTime{})
+	}
+	if prev == nil {
+		closed := make(chan error)
+		close(closed)
+		return closed
+	}
+	return prev
 }

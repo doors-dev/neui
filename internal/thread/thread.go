@@ -471,17 +471,13 @@ func (t *thread) switchStateRound() (api.Round, error) {
 
 func (t *thread) switchStateRoundReplay(round api.Round, replay []api.Message) {
 	ctx, cancel := context.WithCancelCause(t.link.ctx)
-	ch := t.link.backend.Provider().Stream(ctx, api.Request{
-		System:   t.link.system(),
-		Messages: replay,
-		Tools:    t.link.tools(),
-	})
 	t.state = &threadRound{
 		thread:   t,
 		round:    round,
 		ctx:      ctx,
 		cancel:   cancel,
-		ch:       ch,
+		messages: replay,
+		guard:    t.link.backpressure(),
 		response: response.NewBulder(),
 	}
 }

@@ -117,9 +117,7 @@ func (c *chat) on(chat api.Chat, ctx context.Context, m thread.Message) {
 		doors.OnSettle(ctx, func(ctx context.Context) {
 			m.Ack()
 		}, func(ctx context.Context) {
-			doors.OnBatch(ctx, func(context.Context) {}, func(ctx context.Context) {
-				c.door.Reload(ctx)
-			})
+			c.door.Reload(ctx)
 		})
 	case thread.MessageInit:
 		panic("init can't get here")
@@ -130,9 +128,7 @@ func (c *chat) on(chat api.Chat, ctx context.Context, m thread.Message) {
 		doors.OnSettle(ctx, func(ctx context.Context) {
 			m.Ack()
 		}, func(ctx context.Context) {
-			doors.OnBatch(ctx, func(context.Context) {}, func(ctx context.Context) {
-				chat.Update(ctx, m.Event)
-			})
+			chat.Update(ctx, m.Event)
 		})
 	}
 }

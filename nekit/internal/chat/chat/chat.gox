@@ -165,6 +165,28 @@ type chat struct {
 }
 
 func (c *chat) Update(ctx context.Context, e api.ChatEvent) {
+	if e, ok := e.(api.ChatEventIndexed); ok {
+		c.list.IndexedEvent(e.Event)
+		block := ""
+		switch e.Event.(type) {
+		case api.EventText:
+			block = "text"
+		case api.EventThinking, api.EventSummary:
+			block = "thinking"
+			if c.params.Off(params.Thinking) {
+				block = "text"
+			}
+		case api.EventTool:
+			block = "tools"
+		}
+		if block != "" {
+			c.badge.Mutate(ctx, func(b Badge) Badge {
+				b.Block = block
+				return b
+			})
+		}
+		return
+	}
 	doors.OnBatch(ctx, func(context.Context) {}, func(ctx context.Context) {
 		if api.Final(e) {
 			c.composer.UpdateActive(ctx, false)
@@ -222,28 +244,8 @@ func (c *chat) Update(ctx context.Context, e api.ChatEvent) {
 				b.Asking = false
 				return b
 			})
-		case api.ChatEventIndexed:
-			c.list.IndexedEvent(e.Event)
-			block := ""
-			switch e.Event.(type) {
-			case api.EventText:
-				block = "text"
-			case api.EventThinking, api.EventSummary:
-				block = "thinking"
-				if c.params.Off(params.Thinking) {
-					block = "text"
-				}
-			case api.EventTool:
-				block = "tools"
-			}
-			if block != "" {
-				c.badge.Mutate(ctx, func(b Badge) Badge {
-					b.Block = block
-					return b
-				})
-			}
 		case api.ChatEventToolResults:
-			c.list.ToolsDone()
+			c.list.ToolsDone(ctx)
 		case api.ChatEventCriticalError:
 			c.dead.Update(ctx, closedKindOf(e.Err))
 			c.pops.Hide(ctx, "files")

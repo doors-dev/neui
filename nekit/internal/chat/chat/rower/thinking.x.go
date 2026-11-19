@@ -18,7 +18,6 @@
 package rower
 
 import (
-	"context"
 	"errors"
 	"sync"
 	
@@ -55,11 +54,11 @@ type thinking struct {
 
 const summary = "reasoning"
 
-//line thinking.gox:55
+//line thinking.gox:54
 func (t *thinking) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line thinking.gox:57
+//line thinking.gox:56
 		t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.rendered {
@@ -76,9 +75,9 @@ func (t *thinking) Main() gox.Elem {
 		thoughts = thoughtsLabel()
 	}
 
-//line thinking.gox:73
+//line thinking.gox:72
 		__e = __c.Any(block{"Reasoning", t.slot, thoughts}); if __e != nil { return }
-//line thinking.gox:74
+//line thinking.gox:73
 		__e = __c.Any(func() any {
 		if t.summaryStreamer != nil {
 			return t.summaryBlock()
@@ -90,52 +89,52 @@ func (t *thinking) Main() gox.Elem {
 		return t.summaryDoor
 	}()); if __e != nil { return }
 	return })
-//line thinking.gox:84
+//line thinking.gox:83
 }
 
-//line thinking.gox:86
+//line thinking.gox:85
 func (t *thinking) thoughtsPlaceholder() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line thinking.gox:87
+//line thinking.gox:86
 		__e = (t.thoughtsDoor).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line thinking.gox:87
+//line thinking.gox:86
 				__e = __c.Set("class", "nechat-col nechat-think"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line thinking.gox:87
+//line thinking.gox:86
 				__e = __c.Any(summary); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
-//line thinking.gox:88
+//line thinking.gox:87
 }
 
-//line thinking.gox:90
+//line thinking.gox:89
 func thoughtsLabel() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line thinking.gox:91
+//line thinking.gox:90
 			__e = __c.Set("class", "nechat-col nechat-think"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line thinking.gox:91
+//line thinking.gox:90
 			__e = __c.Any(summary); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line thinking.gox:92
+//line thinking.gox:91
 }
 
-//line thinking.gox:94
+//line thinking.gox:93
 func (t *thinking) summaryBlock() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line thinking.gox:95
+//line thinking.gox:94
 		__e = __c.Any(block{
 		"Summary",
 		t.summarySlot,
@@ -143,117 +142,120 @@ func (t *thinking) summaryBlock() gox.Elem {
 			ctx := __c.Context(); _ = ctx
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line thinking.gox:98
+//line thinking.gox:97
 				__e = __c.Set("class", "nechat-col nechat-summary"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line thinking.gox:99
+//line thinking.gox:98
 				__e = __c.Any(t.summaryStreamer); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line thinking.gox:100
+//line thinking.gox:99
 		return }),
 	}); if __e != nil { return }
 	return })
-//line thinking.gox:102
+//line thinking.gox:101
 }
 
-//line thinking.gox:104
+//line thinking.gox:103
 func (t *thinking) thoughtsBlock() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("details"); if __e != nil { return }
 		{
-//line thinking.gox:105
+//line thinking.gox:104
 			__e = __c.Set("class", "nechat-col nechat-think"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Init("summary"); if __e != nil { return }
 			{
-//line thinking.gox:106
+//line thinking.gox:105
 				__e = __c.Set("class", "nechat-think-head"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line thinking.gox:106
+//line thinking.gox:105
 				__e = __c.Any(summary); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line thinking.gox:107
+//line thinking.gox:106
 				__e = __c.Set("class", "nechat-think-body"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line thinking.gox:108
+//line thinking.gox:107
 				__e = __c.Any(t.thoughtsStreamer); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line thinking.gox:111
+//line thinking.gox:110
 }
 
-func (t *thinking) Append(e api.IndexedEvent) {
+func (t *thinking) Append(e api.IndexedEvent) []replacement {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.closed {
-		return
+		return nil
 	}
 	switch e := e.(type) {
 	case api.EventThinking:
 		if e.Text == "" {
-			return
+			return nil
 		}
 		if t.thoughtsStreamer == nil {
 			t.thoughtsStreamer = newPartialRower(map[int]string{
 				e.Part: e.Text,
 			})
 			if t.rendered {
-				t.thoughtsDoor.Static(context.Background(), t.thoughtsBlock())
+				door := t.thoughtsDoor
 				t.thoughtsDoor = nil
+				return []replacement{{door, t.thoughtsBlock()}}
 			}
 		} else {
-			t.thoughtsStreamer.Append(partialText{e.Part, e.Text})
+			return t.thoughtsStreamer.Append(partialText{e.Part, e.Text})
 		}
 	case api.EventSummary:
 		if e.Text == "" {
-			return
+			return nil
 		}
 		if t.summaryStreamer == nil {
 			t.summaryStreamer = newPartialRower(map[int]string{
 				e.Part: e.Text,
 			})
 			if t.rendered {
-				t.summaryDoor.Static(context.Background(), t.summaryBlock())
+				door := t.summaryDoor
 				t.summaryDoor = nil
+				return []replacement{{door, t.summaryBlock()}}
 			}
 		} else {
-			t.summaryStreamer.Append(partialText{e.Part, e.Text})
+			return t.summaryStreamer.Append(partialText{e.Part, e.Text})
 		}
 	case api.EventClose:
-		t.close()
+		return t.close()
 	}
+	return nil
 }
 
-func (t *thinking) Close() {
+func (t *thinking) Close() []replacement {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.close()
+	return t.close()
 }
 
-func (t *thinking) close() {
+func (t *thinking) close() []replacement {
 	if t.closed {
-		return
+		return nil
 	}
 	t.closed = true
-	t.slot.Static(context.Background(), thinkingDone())
-	t.summarySlot.Static(context.Background(), summaryDone())
+	replacements := []replacement{{t.slot, thinkingDone()}, {t.summarySlot, summaryDone()}}
 	if t.summaryStreamer != nil {
-		t.summaryStreamer.Close()
+		replacements = append(replacements, t.summaryStreamer.Close()...)
 	}
 	if t.thoughtsStreamer != nil {
-		t.thoughtsStreamer.Close()
+		replacements = append(replacements, t.thoughtsStreamer.Close()...)
 	}
 	if t.summaryDoor != nil {
-		t.summaryDoor.Static(context.Background(), nil)
+		replacements = append(replacements, replacement{t.summaryDoor, nil})
 	}
+	return replacements
 }
 
 func emptyMap(m map[int]string) bool {

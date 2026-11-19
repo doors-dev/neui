@@ -61,7 +61,7 @@ func NewTools(state api.Indexed[api.Content], done bool) Tools {
 	t.icon.Outer(context.Background(), toolsRunning())
 	if done {
 		t.Close(context.Background())
-		t.Done()
+		t.Done(context.Background())
 	}
 	return t
 }
@@ -110,14 +110,14 @@ func (t Tools) Merge(ctx context.Context, n Tools) {
 	t.frame.Reload(ctx)
 }
 
-func (t Tools) Done() {
+func (t Tools) Done(ctx context.Context) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.state == toolsNone || t.state == toolsResolved {
 		return
 	}
 	t.state = toolsResolved
-	t.icon.Outer(context.Background(), toolsDone())
+	t.icon.Outer(ctx, toolsDone())
 }
 
 func (t Tools) Close(ctx context.Context) {

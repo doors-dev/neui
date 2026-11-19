@@ -15,7 +15,6 @@
 package rower
 
 import (
-	"context"
 	"sync"
 
 	"github.com/doors-dev/doors"
@@ -25,8 +24,13 @@ import (
 
 type streamer[C any] interface {
 	gox.Comp
-	Append(C)
-	Close()
+	Append(C) []replacement
+	Close() []replacement
+}
+
+type replacement struct {
+	door    *doors.Door
+	content any
 }
 
 func newInitialRow[C any]() *row[C] {
@@ -50,42 +54,43 @@ type row[C any] struct {
 	seed    *doors.Door
 }
 
-func (r *row[C]) Append(c C) {
+func (r *row[C]) Append(c C) []replacement {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.closed {
-		return
+		return nil
 	}
-	r.content.Append(c)
+	return r.content.Append(c)
 }
 
-func (r *row[C]) Close() {
+func (r *row[C]) Close() []replacement {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.closed {
-		return
+		return nil
 	}
 	r.closed = true
-	r.content.Close()
+	return r.content.Close()
 }
 
-func (r *row[C]) Freeze(ctx context.Context) {
+func (r *row[C]) Freeze() []replacement {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.frozen {
-		return
+		return nil
 	}
 	r.frozen = true
-	if r.after != nil {
-		r.after.Static(ctx, nil)
+	if r.after == nil {
+		return nil
 	}
+	return []replacement{{r.after, nil}}
 }
 
-func (r *row[C]) After(ctx context.Context, c *row[C], mark bool) {
+func (r *row[C]) After(c *row[C], mark bool) []replacement {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.frozen {
-		return
+		return nil
 	}
 	oldDoor := r.after
 	if oldDoor == nil {
@@ -94,7 +99,7 @@ func (r *row[C]) After(ctx context.Context, c *row[C], mark bool) {
 	}
 	newDoor := new(doors.Door)
 	r.after = newDoor
-	oldDoor.Static(ctx, gox.Elem(func(cur gox.Cursor) error {
+	return []replacement{{oldDoor, gox.Elem(func(cur gox.Cursor) error {
 		if err := cur.Comp(newDoor); err != nil {
 			return err
 		}
@@ -104,7 +109,7 @@ func (r *row[C]) After(ctx context.Context, c *row[C], mark bool) {
 			}
 		}
 		return cur.Comp(c)
-	}))
+	})}}
 }
 
 func (r *row[C]) Main() gox.Elem {

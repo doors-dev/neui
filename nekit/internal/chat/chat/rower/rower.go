@@ -15,7 +15,6 @@
 package rower
 
 import (
-	"context"
 	"errors"
 	"maps"
 	"slices"
@@ -51,13 +50,13 @@ type rower[C Indexed] struct {
 	rows     map[int]*row[C]
 }
 
-func (r *rower[C]) Append(c C) {
+func (r *rower[C]) Append(c C) []replacement {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.closed {
-		return
+		return nil
 	}
-	r.on(context.Background(), c)
+	return r.on(c)
 }
 
 func (rw *rower[C]) IsEmpty() bool {
@@ -71,28 +70,29 @@ func (rw *rower[C]) IsEmpty() bool {
 	return true
 }
 
-func (rw *rower[C]) Close() {
+func (rw *rower[C]) Close() []replacement {
 	rw.mu.Lock()
 	defer rw.mu.Unlock()
 	if rw.closed {
-		return
+		return nil
 	}
 	rw.closed = true
+	var replacements []replacement
 	for _, r := range rw.rows {
-		r.Close()
-		r.Freeze(context.Background())
+		replacements = append(replacements, r.Close()...)
+		replacements = append(replacements, r.Freeze()...)
 	}
+	return replacements
 }
 
-func (rw *rower[C]) on(ctx context.Context, c C) {
+func (rw *rower[C]) on(c C) []replacement {
 	if r, ok := rw.rows[c.At()]; ok {
-		r.Append(c)
-		return
+		return r.Append(c)
 	}
 	nums := rw.nums()
 	content := rw.factory(c)
 	if content == nil {
-		return
+		return nil
 	}
 	row := newRow(content)
 	rw.rows[c.At()] = row
@@ -103,7 +103,7 @@ func (rw *rower[C]) on(ctx context.Context, c C) {
 		}
 		after = num
 	}
-	rw.rows[after].After(ctx, row, rw.rendered)
+	return rw.rows[after].After(row, rw.rendered)
 }
 
 func (rw *rower[C]) nums() []int {
