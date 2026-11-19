@@ -15,7 +15,7 @@
 package table
 
 // Desc describes the table control to the agent, for Library.Control.
-const Desc = "For records the user acts on, many rows, or rows loaded on demand; a short table only to read belongs in markdown. A row's action buttons and clickable first cell give you its id, to change that record or open its form; then update the table to show the result. Set either query or rows. Inside ui.row, it takes the width the other items leave."
+const Desc = "For many rows, rows loaded on demand, or rows the user picks; a short table to read belongs in markdown. With many records, a common pattern is a table whose row actions act on a row or open a form for it; one form holding every record gets too long to use. Set either query or rows. Inside ui.row, it takes the width the other items leave."
 
 const getPageName = "get_page"
 const getPageDesc = "Read the table as the user sees it."

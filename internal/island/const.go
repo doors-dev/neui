@@ -60,7 +60,7 @@ console.log, info, warn and error append to the workspace file %s, which is empt
 const guideWhatToBuild = `What to build
 Build what the request needs, plus what the app needs to work and be easy to use. An app usually serves this one task and is then closed: skip undo, history, extra screens and write-backs nobody asked for.
 
-Let the user act where they see the data. With several records, however few: when the user picks which to touch, give each row of a list or table its own actions, such as a quick change or opening that row's form, and show the result in the row right after; when the user must handle each one, such as approvals or triage, show one record at a time with its form, skip and back, and the progress, such as 3 of 12. Never one form with a field per record, even when it is less to write, or a form beside a list of the same records: the user has to match them up.
+Let the user act where they see the data: give each row of a list or table its own actions, such as opening a form for that row or a quick change, and show the result in the same place right after. A view with a separate form beside it that repeats the same records makes the user match them up.
 `
 
 const guideHowAnAppRuns = `
@@ -110,7 +110,7 @@ A view shows something; a control is what the user acts on. Both are stateful co
 
 For a dialog, such as a confirmation or a question for one step, keep the screen's content in a variable, set ui.root to the dialog and draw, then set ui.root back to that content: it returns as the user left it.
 
-    var main = ui.column({}, heading, list)
+    var main = ui.column({}, list, editor)
     ui.root.set(main)
     ...
     ui.root.set(ui.column({}, ui.message({ text: "Delete order 7?" }), ui.row({}, yes, no)))
@@ -137,7 +137,7 @@ Example, with made-up names:
 
     // island_begin
     var status = ui.message({ text: "Pick an order to edit it" })
-    var orders = ui.orderList({ orders: app.orders({}), rowAction: "Edit" })
+    var orders = ui.orderList({ orders: app.orders({}) })
     var done = ui.button({ text: "Done" })
     var body = ui.slot(), editor, saved = 0
     ui.root.set(ui.column({}, status, body, done))
@@ -159,13 +159,12 @@ Example, with made-up names:
             continue
           }
           saved++
-          orders.update({ orders: app.orders({}) }) // the row shows it
           if (action.output.refund > 0) {
             ui.notify({ order: action.output.id, refund: action.output.refund })
             return // the part ends here
           }
           status.update({ text: "Saved order " + action.output.id })
-          body.set(orders)
+          body.set(orders) // the list as the user left it
         }
       }
     }
