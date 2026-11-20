@@ -17,8 +17,6 @@ package mcp
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -220,15 +218,11 @@ func TestCollidingAndEmptyNamesHashed(t *testing.T) {
 		{Name: "???", Description: "empty"},
 		{Name: "plain", Description: "plain"},
 	})
-	hash := func(s string) string {
-		sum := sha256.Sum256([]byte(s))
-		return hex.EncodeToString(sum[:4])
-	}
 	for name, desc := range map[string]string{
-		"get_item_" + hash("get.item"): "dot",
-		"get_item_" + hash("get-item"): "dash",
-		utils.SanitizeName("???"):      "empty",
-		"plain":                        "plain",
+		"get_item_" + utils.NameHash("get.item"): "dot",
+		"get_item_" + utils.NameHash("get-item"): "dash",
+		utils.SanitizeName("???"):                "empty",
+		"plain":                                  "plain",
 	} {
 		tool, ok := module.Get(name)
 		if !ok {

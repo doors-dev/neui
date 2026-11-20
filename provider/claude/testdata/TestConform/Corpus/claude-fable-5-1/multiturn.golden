@@ -25,6 +25,9 @@
       "role": "user",
       "content": [
         {
+          "cache_control": {
+            "type": "ephemeral"
+          },
           "type": "text",
           "text": "how are you?"
         }

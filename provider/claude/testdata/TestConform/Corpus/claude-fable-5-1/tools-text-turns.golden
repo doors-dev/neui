@@ -24,6 +24,9 @@
       "input_schema": {
         "type": "object",
         "properties": {}
+      },
+      "cache_control": {
+        "type": "ephemeral"
       }
     }
   ],
@@ -54,6 +57,9 @@
       "role": "user",
       "content": [
         {
+          "cache_control": {
+            "type": "ephemeral"
+          },
           "type": "text",
           "text": "look up cat"
         }

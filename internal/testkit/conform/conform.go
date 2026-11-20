@@ -588,7 +588,9 @@ func checkLimits(t *testing.T, a Adapter, _ *schemas, _ *server, l limitsFile) {
 		check("Context", m.Context, doc.Context)
 		check("ImagePixels", m.ImagePixels, doc.ImagePixels)
 		check("ImagesPerRequest", m.ImagesPerRequest, doc.ImagesPerRequest)
-		check("RequestBytes", m.RequestBytes, doc.RequestBytes)
+		if m.RequestBytes <= 0 || m.RequestBytes > doc.RequestBytes {
+			t.Errorf("%s RequestBytes = %d, the docs (as of %s, %s) say at most %d", m.Name, m.RequestBytes, l.AsOf, l.Sources["requestBytes"], doc.RequestBytes)
+		}
 		enc := base64.StdEncoding.EncodedLen
 		switch doc.ImageEncoding {
 		case "":

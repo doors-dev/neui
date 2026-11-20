@@ -43,8 +43,7 @@ func main() {
 	case os.Getenv("ANTHROPIC_API_KEY") != "":
 		provider, err = claude.New(claude.Conf{Model: claude.Haiku55},
 			claude.WithThinking(claude.Thinking{Type: claude.ThinkingAdaptive, Display: claude.DisplaySummarized}),
-			claude.WithEffort(claude.EffortMedium),
-			claude.WithCacheBreakpoints(claude.CacheTools, claude.CacheMessages))
+			claude.WithEffort(claude.EffortMedium))
 	default:
 		log.Fatal("set DEEPSEEK_API_KEY, OPENAI_API_KEY or ANTHROPIC_API_KEY")
 	}

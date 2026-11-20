@@ -11,6 +11,9 @@
           "text": "summarize"
         },
         {
+          "cache_control": {
+            "type": "ephemeral"
+          },
           "type": "document",
           "source": {
             "type": "text",

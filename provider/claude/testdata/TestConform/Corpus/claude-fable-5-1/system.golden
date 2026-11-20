@@ -4,6 +4,9 @@
   "stream": true,
   "system": [
     {
+      "cache_control": {
+        "type": "ephemeral"
+      },
       "type": "text",
       "text": "Answer in one word."
     }
@@ -13,6 +16,9 @@
       "role": "user",
       "content": [
         {
+          "cache_control": {
+            "type": "ephemeral"
+          },
           "type": "text",
           "text": "hi"
         }

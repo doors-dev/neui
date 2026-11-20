@@ -19,8 +19,11 @@
 // takes precedence over WithProvider if any:
 //
 //	p, err := claude.New(claude.Conf{Model: claude.Opus55},
-//		claude.WithMaxTokens(32000),
-//		claude.WithCacheBreakpoints(claude.CacheTools, claude.CacheMessages))
+//		claude.WithMaxTokens(32000))
+//
+// Prompt caching is on by default: each request marks the end of the system
+// prompt, which covers the tools before it, and the end of the last message.
+// WithCacheTTL sets how long entries live; WithoutCache turns caching off.
 //
 // The key comes from ANTHROPIC_API_KEY unless WithAPIKey sets it. A provider
 // serves one model with one set of options; build two for two settings. New
@@ -124,16 +127,6 @@ func (t Thinking) summarized() bool {
 	return t.Display == DisplaySummarized
 }
 
-// Breakpoint names a place a cache_control marker goes. The three follow the
-// order the API invalidates the cache in: tools, then system, then messages.
-type Breakpoint string
-
-const (
-	CacheTools    Breakpoint = "tools"    // after the last tool definition
-	CacheSystem   Breakpoint = "system"   // after the last system block
-	CacheMessages Breakpoint = "messages" // after the last block of the last message
-)
-
 // Provider is one configured Anthropic endpoint. It is safe for concurrent use
 // and holds no per turn state.
 type Provider struct {
@@ -148,7 +141,7 @@ type Provider struct {
 	stopSeqs    []string
 	thinking    Thinking
 	effort      string
-	breakpoints []Breakpoint
+	noCache     bool
 	cacheTTL    string
 	transport   lib.Options
 }
@@ -359,13 +352,11 @@ func WithEffort(effort Effort) Option {
 	}
 }
 
-// WithCacheBreakpoints turns on prompt caching at the given places. Caching is
-// off without it. CacheMessages caches everything up to the latest message,
-// which is what a growing thread wants; any combination stays within the
-// API's limit of four markers.
-func WithCacheBreakpoints(points ...Breakpoint) Option {
+// WithoutCache sends no cache_control markers, for a gateway that refuses
+// them.
+func WithoutCache() Option {
 	return func(p *Provider) error {
-		p.breakpoints = append(p.breakpoints, points...)
+		p.noCache = true
 		return nil
 	}
 }
@@ -381,8 +372,8 @@ const (
 )
 
 // WithCacheTTL sets the ttl of the cache_control markers, for example
-// CacheTTL1H. Empty leaves the five minute default. It has no effect without
-// WithCacheBreakpoints.
+// CacheTTL1H. Empty leaves the five minute default. A 1h entry costs twice the
+// input price to write instead of 1.25 times.
 func WithCacheTTL(ttl CacheTTL) Option {
 	return func(p *Provider) error {
 		p.cacheTTL = string(ttl)

@@ -20,6 +20,9 @@
           "title": "a.pdf"
         },
         {
+          "cache_control": {
+            "type": "ephemeral"
+          },
           "type": "document",
           "source": {
             "type": "text",

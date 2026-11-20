@@ -62,6 +62,13 @@ func (p *Provider) encode(req api.Request) (*request, error) {
 	if w.Messages, err = p.encodeMessages(req.Messages); err != nil {
 		return nil, err
 	}
+	switch {
+	case p.noCache:
+	case len(w.System) > 0:
+		w.System[len(w.System)-1].CacheControl = p.cacheMark()
+	case len(w.Tools) > 0:
+		w.Tools[len(w.Tools)-1].CacheControl = p.cacheMark()
+	}
 	return w, nil
 }
 
@@ -114,9 +121,6 @@ func (p *Provider) encodeTools(tools []api.Tool) ([]tool, error) {
 		}
 		out = append(out, tool{Name: t.Name, Description: t.Desc, InputSchema: schema})
 	}
-	if p.marks(CacheTools) {
-		out[len(out)-1].CacheControl = p.cacheMark()
-	}
 	return out, nil
 }
 
@@ -133,11 +137,7 @@ func (p *Provider) encodeSystem(system string) ([]textBlock, error) {
 	if system == "" {
 		return nil, nil
 	}
-	out := []textBlock{{Type: "text", Text: system}}
-	if p.marks(CacheSystem) {
-		out[0].CacheControl = p.cacheMark()
-	}
-	return out, nil
+	return []textBlock{{Type: "text", Text: system}}, nil
 }
 
 // encodeMessages keeps the caller's arrangement but for one move. A tool result
@@ -231,7 +231,7 @@ func (p *Provider) encodeMessages(msgs []api.Message) ([]message, error) {
 			b := &textBlock{Type: "text", Text: emptyMessage}
 			blocks, markable = append(blocks, b), &b.cached
 		}
-		if i == len(msgs)-1 && markable != nil && p.marks(CacheMessages) {
+		if i == len(msgs)-1 && markable != nil && !p.noCache {
 			markable.CacheControl = p.cacheMark()
 		}
 		out = append(out, message{Role: role, Content: blocks})
@@ -609,15 +609,6 @@ func spliceField(raw json.RawMessage, key string, value json.RawMessage) (json.R
 		return append(out, raw[dec.InputOffset():]...), nil
 	}
 	return raw, nil
-}
-
-func (p *Provider) marks(b Breakpoint) bool {
-	for _, have := range p.breakpoints {
-		if have == b {
-			return true
-		}
-	}
-	return false
 }
 
 func (p *Provider) cacheMark() *cacheControl {

@@ -39,15 +39,18 @@ func SanitizeName(name string) string {
 	}
 	s := b.String()
 	if s == "" {
-		return "x" + nameHash(name)
+		return "x" + NameHash(name)
+	}
+	if s[0] >= '0' && s[0] <= '9' {
+		s = "x" + s
 	}
 	if len(s) > 31 {
-		return strings.TrimRight(s[:24], "_") + "_" + nameHash(s[24:])
+		return strings.TrimRight(s[:24], "_") + "_" + NameHash(s[24:])
 	}
 	return s
 }
 
-func nameHash(s string) string {
+func NameHash(s string) string {
 	h := strconv.FormatUint(xxh3.HashString(s)&0xffffff, 16)
 	return strings.Repeat("0", 6-len(h)) + h
 }

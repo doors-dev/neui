@@ -11,6 +11,9 @@
           "text": "hi"
         },
         {
+          "cache_control": {
+            "type": "ephemeral"
+          },
           "type": "text",
           "text": "[content omitted]"
         }

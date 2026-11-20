@@ -17,8 +17,6 @@ package mcp
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"sync"
@@ -292,8 +290,7 @@ func (m *module) buildModule(list []*mcp.Tool) tools.Module {
 	for _, tool := range list {
 		name := utils.SanitizeName(tool.Name)
 		if counts[name] > 1 {
-			sum := sha256.Sum256([]byte(tool.Name))
-			name = name + "_" + hex.EncodeToString(sum[:4])
+			name = utils.SanitizeName(name + "_" + utils.NameHash(tool.Name))
 		}
 		inputSchema, err := schema.NewRawSchema(tool.InputSchema)
 		if err != nil {

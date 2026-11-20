@@ -35,6 +35,9 @@
           }
         },
         {
+          "cache_control": {
+            "type": "ephemeral"
+          },
           "type": "image",
           "source": {
             "type": "base64",

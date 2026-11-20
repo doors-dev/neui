@@ -264,3 +264,18 @@ func TestScriptModuleKeepsSchemas(t *testing.T) {
 		t.Fatalf("a bare value gave %v, %v", got, err)
 	}
 }
+
+func TestModuleNameStartsWithALetter(t *testing.T) {
+	for name, want := range map[string]string{"3d": "x3d", "files": "files", "9 lives": "x9_lives"} {
+		if got := NewModule(name, "").Name(); got != want {
+			t.Errorf("NewModule(%q) is named %q, want %q", name, got, want)
+		}
+		if got := NewScriptModule(name, "").Name(); got != want {
+			t.Errorf("NewScriptModule(%q) is named %q, want %q", name, got, want)
+		}
+	}
+	long := NewModule("1"+strings.Repeat("a", 40), "").Name()
+	if len(long) > 31 || long[0] != 'x' {
+		t.Errorf("a long name starting with a digit became %q, want at most 31 characters starting with x", long)
+	}
+}

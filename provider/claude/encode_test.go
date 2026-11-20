@@ -32,11 +32,18 @@ import (
 
 func mustNew(t *testing.T, conf Conf, opts ...Option) *Provider {
 	t.Helper()
-	p, err := New(conf, opts...)
+	p, err := New(conf, append([]Option{WithoutCache()}, opts...)...)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
 	return p
+}
+
+func withCache() Option {
+	return func(p *Provider) error {
+		p.noCache = false
+		return nil
+	}
 }
 
 func mustRefuse(t *testing.T, conf Conf, want string, opts ...Option) {
@@ -288,7 +295,7 @@ func TestStoredContentTheAPIRefusesIsANote(t *testing.T) {
 }
 
 func TestToolResultsGoFirstInAUserMessage(t *testing.T) {
-	p := mustNew(t, Conf{Model: api.Model{Name: testModel}}, WithCacheBreakpoints(CacheMessages))
+	p := mustNew(t, Conf{Model: api.Model{Name: testModel}}, withCache())
 	result := func(id string) api.Content {
 		return api.ContentToolResult{ID: id, Content: api.UserContents{api.ContentText{Text: id}}}
 	}
@@ -837,32 +844,46 @@ func TestSpliceFieldKeepsEveryOtherByte(t *testing.T) {
 	}
 }
 
-func TestCacheBreakpoints(t *testing.T) {
-	p := mustNew(t, Conf{Model: api.Model{Name: testModel}}, WithCacheBreakpoints(CacheTools, CacheSystem, CacheMessages), WithCacheTTL("1h"))
-	got := mustEncode(t, p, api.Request{
+func TestCacheMarkers(t *testing.T) {
+	req := api.Request{
 		Tools:    []api.Tool{{Name: "a"}, {Name: "b"}},
 		System:   "one\ntwo",
 		Messages: []api.Message{userText("first"), userText("second")},
-	})
-
-	mark := `"cache_control":{"type":"ephemeral","ttl":"1h"}`
-	tools := string(got["tools"])
-	if n := strings.Count(tools, mark); n != 1 {
-		t.Fatalf("tools carry %d markers, want 1: %s", n, tools)
 	}
-	if strings.Index(tools, mark) < strings.Index(tools, `"name":"b"`) {
-		t.Fatalf("the marker landed on the first tool, not the last: %s", tools)
+	p, err := New(Conf{Model: api.Model{Name: testModel}}, WithCacheTTL(CacheTTL1H))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := mustEncode(t, p, req)
+	mark := `"cache_control":{"type":"ephemeral","ttl":"1h"}`
+	if tools := string(got["tools"]); strings.Contains(tools, "cache_control") {
+		t.Fatalf("tools carry a marker beside the system one: %s", tools)
 	}
 	system := string(got["system"])
 	if want := `{"cache_control":{"type":"ephemeral","ttl":"1h"},"type":"text","text":"one\ntwo"}`; !strings.Contains(system, want) {
 		t.Fatalf("system = %s, want to contain %s", system, want)
 	}
 	messages := string(got["messages"])
-	if strings.Count(messages, mark) != 1 || !strings.Contains(messages, `"text":"second"`) {
-		t.Fatalf("messages = %s", messages)
+	if strings.Count(messages, mark) != 1 || strings.Index(messages, mark) < strings.Index(messages, `"text":"first"`) {
+		t.Fatalf("messages = %s, want one marker on the last message", messages)
 	}
-	if strings.Index(messages, mark) < strings.Index(messages, `"text":"first"`) {
-		t.Fatalf("the marker landed on the first message: %s", messages)
+
+	req.System = ""
+	got = mustEncode(t, p, req)
+	tools := string(got["tools"])
+	if strings.Count(tools, mark) != 1 || strings.Index(tools, mark) < strings.Index(tools, `"name":"b"`) {
+		t.Fatalf("tools = %s, want one marker on the last tool", tools)
+	}
+
+	p, err = New(Conf{Model: api.Model{Name: testModel}}, WithoutCache())
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.System = "one"
+	for name, raw := range mustEncode(t, p, req) {
+		if strings.Contains(string(raw), "cache_control") {
+			t.Fatalf("%s carries a marker with caching off: %s", name, raw)
+		}
 	}
 }
 
@@ -870,7 +891,7 @@ func TestCacheBreakpoints(t *testing.T) {
 // been modified, so it goes on the last block that this adapter authored.
 func TestCacheMarkerAvoidsReplayedBlocks(t *testing.T) {
 	sealed := json.RawMessage(`{"type":"web_search_tool_result","tool_use_id":"srvtoolu_1","content":[]}`)
-	p := mustNew(t, Conf{Model: api.Model{Name: testModel}}, WithCacheBreakpoints(CacheMessages))
+	p := mustNew(t, Conf{Model: api.Model{Name: testModel}}, withCache())
 	got := mustEncode(t, p, api.Request{
 		Messages: []api.Message{
 			userText("go"),
@@ -1081,8 +1102,8 @@ func TestDeclaredModels(t *testing.T) {
 		t.Errorf("%s: %+v, want the 200k window, the standard tier and 100 images", Haiku45.Name, Haiku45)
 	}
 	for _, m := range []api.Model{Fable51, Opus55, Sonnet55, Haiku55, Sonnet5, Haiku45} {
-		if m.RequestBytes != 128_000_000 || m.ImageBytes != 10_000_000*3/4 {
-			t.Errorf("%s: request %d, image %d bytes, want 128 MB and the raw size of 10 MB base64", m.Name, m.RequestBytes, m.ImageBytes)
+		if m.RequestBytes != 32_000_000 || m.ImageBytes != 10_000_000*3/4 {
+			t.Errorf("%s: request %d, image %d bytes, want 32 MB and the raw size of 10 MB base64", m.Name, m.RequestBytes, m.ImageBytes)
 		}
 	}
 }

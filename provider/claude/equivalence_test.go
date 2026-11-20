@@ -178,26 +178,26 @@ func corpusRequests() []corpusRequest {
 	full := []api.Message{user, assistantFull, results, assistantNotes, foreign, unsigned, userText("last <one> & done")}
 	var out []corpusRequest
 	add := func(name string, conf Conf, req api.Request, opts ...Option) {
-		out = append(out, corpusRequest{name: name, conf: conf, opts: append([]Option{WithAPIKey("k")}, opts...), req: req})
+		out = append(out, corpusRequest{name: name, conf: conf, opts: append([]Option{WithAPIKey("k"), WithoutCache()}, opts...), req: req})
 	}
 	add("minimal", model, api.Request{Messages: []api.Message{userText("hi")}})
 	add("system", model, api.Request{System: "Be <brief> & kind.", Messages: []api.Message{userText("hi")}})
 	add("full no cache", model, api.Request{System: "sys <x>", Tools: tools, Messages: full})
-	add("full all breakpoints", model, api.Request{System: "sys <x>", Tools: tools, Messages: full}, WithCacheBreakpoints(CacheTools, CacheSystem, CacheMessages))
-	add("full breakpoints ttl", model, api.Request{System: "sys", Tools: tools, Messages: full}, WithCacheBreakpoints(CacheMessages, CacheTools), WithCacheTTL(CacheTTL1H))
-	add("system breakpoint", model, api.Request{System: "sys <&>", Messages: []api.Message{userText("hi")}}, WithCacheBreakpoints(CacheSystem), WithCacheTTL(CacheTTL5M))
-	add("tools breakpoint", model, api.Request{Tools: tools[:1], Messages: []api.Message{userText("hi")}}, WithCacheBreakpoints(CacheTools))
-	add("breakpoints without targets", model, api.Request{Messages: []api.Message{userText("hi")}}, WithCacheBreakpoints(CacheTools, CacheSystem))
-	add("mark avoids replayed", model, api.Request{Messages: []api.Message{userText("go"), endsReplayed}}, WithCacheBreakpoints(CacheMessages))
-	add("mark nothing markable", model, api.Request{Messages: []api.Message{userText("go"), onlyReplayed}}, WithCacheBreakpoints(CacheMessages))
-	add("mark tool result", model, api.Request{Messages: []api.Message{userText("go"), assistantFull, results}}, WithCacheBreakpoints(CacheMessages))
-	add("mark image", model, api.Request{Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{api.ContentImage{Data: png, Mime: "image/png"}}}}}, WithCacheBreakpoints(CacheMessages))
-	add("mark document", model, api.Request{Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{api.ContentDocument{Data: pdf, Mime: "application/pdf", Name: "t"}}}}}, WithCacheBreakpoints(CacheMessages))
-	add("mark text document", model, api.Request{Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{api.ContentDocument{Data: []byte("x<y"), Mime: "text/plain"}}}}}, WithCacheBreakpoints(CacheMessages))
-	add("mark tool use", model, api.Request{Messages: []api.Message{userText("go"), {Role: api.RoleAssistant, Content: api.Contents{api.ContentToolUse{ID: "t", Name: "n", Input: json.RawMessage(`{}`)}}}}}, WithCacheBreakpoints(CacheMessages))
-	add("mark note", model, api.Request{Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{corpusText("")}}}}, WithCacheBreakpoints(CacheMessages))
-	add("mark unknown", model, api.Request{Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{nil}}}}, WithCacheBreakpoints(CacheMessages))
-	add("empty tool result", model, api.Request{Messages: []api.Message{userText("go"), {Role: api.RoleAssistant, Content: api.Contents{api.ContentToolUse{ID: "t", Name: "n"}}}, {Role: api.RoleUser, Content: api.Contents{api.ContentToolResult{ID: "t"}}}}}, WithCacheBreakpoints(CacheMessages))
+	add("full all breakpoints", model, api.Request{System: "sys <x>", Tools: tools, Messages: full}, withCache())
+	add("full breakpoints ttl", model, api.Request{System: "sys", Tools: tools, Messages: full}, withCache(), WithCacheTTL(CacheTTL1H))
+	add("system breakpoint", model, api.Request{System: "sys <&>", Messages: []api.Message{userText("hi")}}, withCache(), WithCacheTTL(CacheTTL5M))
+	add("tools breakpoint", model, api.Request{Tools: tools[:1], Messages: []api.Message{userText("hi")}}, withCache())
+	add("breakpoints without targets", model, api.Request{Messages: []api.Message{userText("hi")}}, withCache())
+	add("mark avoids replayed", model, api.Request{Messages: []api.Message{userText("go"), endsReplayed}}, withCache())
+	add("mark nothing markable", model, api.Request{Messages: []api.Message{userText("go"), onlyReplayed}}, withCache())
+	add("mark tool result", model, api.Request{Messages: []api.Message{userText("go"), assistantFull, results}}, withCache())
+	add("mark image", model, api.Request{Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{api.ContentImage{Data: png, Mime: "image/png"}}}}}, withCache())
+	add("mark document", model, api.Request{Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{api.ContentDocument{Data: pdf, Mime: "application/pdf", Name: "t"}}}}}, withCache())
+	add("mark text document", model, api.Request{Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{api.ContentDocument{Data: []byte("x<y"), Mime: "text/plain"}}}}}, withCache())
+	add("mark tool use", model, api.Request{Messages: []api.Message{userText("go"), {Role: api.RoleAssistant, Content: api.Contents{api.ContentToolUse{ID: "t", Name: "n", Input: json.RawMessage(`{}`)}}}}}, withCache())
+	add("mark note", model, api.Request{Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{corpusText("")}}}}, withCache())
+	add("mark unknown", model, api.Request{Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{nil}}}}, withCache())
+	add("empty tool result", model, api.Request{Messages: []api.Message{userText("go"), {Role: api.RoleAssistant, Content: api.Contents{api.ContentToolUse{ID: "t", Name: "n"}}}, {Role: api.RoleUser, Content: api.Contents{api.ContentToolResult{ID: "t"}}}}}, withCache())
 	add("options", Conf{Model: Haiku45}, api.Request{Messages: []api.Message{userText("hi")}}, WithMaxTokens(32000), WithStopSequences("<stop>", "&&"), WithThinking(Thinking{Type: ThinkingEnabled, Budget: 2048, Display: DisplaySummarized}))
 	add("effort", Conf{Model: Opus55}, api.Request{Messages: []api.Message{userText("hi")}, ToolChoice: api.ToolChoiceAuto, Tools: tools[:2]}, WithEffort(EffortXHigh), WithThinking(Thinking{Type: ThinkingAdaptive, Display: DisplayOmitted}))
 	add("disabled thinking", Conf{Model: Haiku55}, api.Request{Messages: []api.Message{userText("hi")}, ToolChoice: api.ToolChoiceNone, Tools: tools[:1]}, WithThinking(Thinking{Type: ThinkingDisabled}), WithEffort(EffortLow))
@@ -243,7 +243,7 @@ func corpusRequests() []corpusRequest {
 		}
 		var opts []Option
 		if r.IntN(2) == 0 {
-			opts = append(opts, WithCacheBreakpoints(CacheMessages, CacheSystem))
+			opts = append(opts, withCache())
 		}
 		add(fmt.Sprintf("random %d", i), model, api.Request{System: corpusString(r, r.IntN(80)), Messages: msgs}, opts...)
 	}
@@ -403,11 +403,11 @@ var corpusRequestHashes = map[string]string{
 	"minimal":                     "82f3c65b38021182",
 	"system":                      "ee66b61b8da05c0c",
 	"full no cache":               "aad045f69de0bca1",
-	"full all breakpoints":        "cbec313a2164ac17",
-	"full breakpoints ttl":        "4f3fa71e598f56c2",
-	"system breakpoint":           "fc3cbdc7ebbae5fb",
-	"tools breakpoint":            "21eeb95b6a7fd043",
-	"breakpoints without targets": "82f3c65b38021182",
+	"full all breakpoints":        "ada96025ace03be2",
+	"full breakpoints ttl":        "6b888549d5fc726f",
+	"system breakpoint":           "611e7db7515814ff",
+	"tools breakpoint":            "8ad65316dc56b071",
+	"breakpoints without targets": "c4cdfef4bf7e8fed",
 	"mark avoids replayed":        "79de692ad69cf7e1",
 	"mark nothing markable":       "22755ee3fe6775ae",
 	"mark tool result":            "c7f8fa1bb97d6b01",
@@ -606,7 +606,7 @@ func benchThread(images bool) api.Request {
 }
 
 func benchEncode(b *testing.B, images bool) {
-	p, err := New(Conf{Model: api.Model{Name: testModel}}, WithAPIKey("k"), WithCacheBreakpoints(CacheTools, CacheSystem, CacheMessages))
+	p, err := New(Conf{Model: api.Model{Name: testModel}}, WithAPIKey("k"), withCache())
 	if err != nil {
 		b.Fatal(err)
 	}

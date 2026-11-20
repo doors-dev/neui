@@ -29,6 +29,9 @@
       "role": "user",
       "content": [
         {
+          "cache_control": {
+            "type": "ephemeral"
+          },
           "type": "text",
           "text": "again"
         }

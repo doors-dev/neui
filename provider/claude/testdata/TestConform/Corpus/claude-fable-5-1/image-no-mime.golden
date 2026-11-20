@@ -11,6 +11,9 @@
           "text": "describe"
         },
         {
+          "cache_control": {
+            "type": "ephemeral"
+          },
           "type": "text",
           "text": "[image omitted]"
         }

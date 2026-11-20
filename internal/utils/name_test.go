@@ -26,7 +26,8 @@ func TestSanitizeName(t *testing.T) {
 		"  Read--File!! ":       "Read_File",
 		"a__b":                  "a_b",
 		strings.Repeat("a", 31): strings.Repeat("a", 31),
-		"0day":                  "0day",
+		"0day":                  "x0day",
+		"9 lives":               "x9_lives",
 	} {
 		if got := SanitizeName(in); got != want {
 			t.Errorf("SanitizeName(%q) = %q, want %q", in, got, want)
