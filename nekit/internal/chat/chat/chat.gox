@@ -206,7 +206,7 @@ func (c *chat) Update(ctx context.Context, e api.ChatEvent) {
 			c.name.Update(ctx, e.Name)
 		case api.ChatEventRoundEnd:
 			c.composer.RoundDone(ctx, e.State, e.Usage, e.CanCompact)
-			c.list.RoundDone(ctx, e.State)
+			c.list.RoundDone(ctx, e.State, e.Error)
 		case api.ChatEventRoundStart:
 			c.composer.RoundStart(ctx, e.Usage, e.CanCompact)
 			c.badge.Mutate(ctx, func(b Badge) Badge {

@@ -180,7 +180,7 @@ func (s *threadTools) finalize() {
 		if s.thread.compaction.isActive() {
 			held := s.round
 			held.Results = maps.Clone(s.results)
-			s.thread.switchStateCompact(held, api.EventUsage{}, held.Response)
+			s.thread.switchStateCompact(held, "", api.EventUsage{}, held.Response)
 			return
 		}
 	}

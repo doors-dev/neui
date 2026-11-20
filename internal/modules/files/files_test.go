@@ -369,6 +369,21 @@ func TestMediaCapsRefuseWithErrTooLarge(t *testing.T) {
 	}
 }
 
+func TestMediaBudgetRefusesADocumentOverIt(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{Config: api.ThreadConfig{ThreadMemoryLimit: 100, ReplayMediaShare: 0.2}})
+	fs := c.FS()
+	write(t, fs, "doc.pdf", "%PDF-1.4 over ten bytes")
+	write(t, fs, "small.pdf", "%PDF-1.4")
+	ctx := c.Ctx()
+	_, err := readDocumentTool(ctx, PathArg{Path: "doc.pdf"})
+	if !errors.Is(err, api.ErrTooLarge) || !strings.Contains(err.Error(), "more than a turn's tool results can hold") {
+		t.Fatalf("a document over the media budget: want api.ErrTooLarge saying a turn cannot hold it, got %v", err)
+	}
+	if _, err := readDocumentTool(ctx, PathArg{Path: "small.pdf"}); err != nil {
+		t.Fatalf("a document under the media budget: %v", err)
+	}
+}
+
 func TestUnzipRejectsEscape(t *testing.T) {
 	c := testkit.NewController(t, testkit.Setup{})
 	var buf bytes.Buffer

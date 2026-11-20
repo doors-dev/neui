@@ -16,17 +16,17 @@ package replay
 
 import (
 	"errors"
+	"math"
 	"slices"
 
 	"neui.dev/api"
 )
 
-func newMessages(compaction api.Compaction, config api.ThreadConfig, model api.Model, factor float32) *messages {
+func newMessages(compaction api.Compaction, config api.ThreadConfig, model api.Model) *messages {
 	return &messages{
 		compaction: compaction,
 		config:     config,
 		model:      model,
-		factor:     factor,
 		first:      api.NoRoundID,
 	}
 }
@@ -38,18 +38,19 @@ type round struct {
 	usage  api.EventUsage
 	weight int64
 	images int
+	media  int64
 }
 
 type messages struct {
 	compaction  api.Compaction
 	first       api.RoundID
 	rounds      []round
+	cursor      int
 	weight      int64
 	resultStash []api.ContentToolResult
 	recordStash []api.Record
 	config      api.ThreadConfig
 	model       api.Model
-	factor      float32
 }
 
 func (s *messages) lastRound() (api.RoundID, error) {
@@ -71,95 +72,81 @@ func (s *messages) pendingContent(input api.Input) []api.Content {
 	}
 	input.Text = trimText(api.ContentText{Text: input.Text}, budget).Text
 	content = append(content, input.Content()...)
-	return omitOversizedMedia(content, s.model, memoryLimit(s.config, s.model, s.factor))
+	return omitOversizedMedia(content, s.model)
 }
 
 func (s *messages) replay(input api.Input) ([]api.Message, error) {
 	if input.Len() == 0 && len(s.resultStash) == 0 && len(s.recordStash) == 0 {
 		return nil, errors.New("all turnes are finished")
 	}
-	limit := memoryLimit(s.config, s.model, s.factor)
-	content := s.pendingContent(input)
-	pendingBytes := weigh(content...)
-	shed := false
-	switch {
-	case limit <= 0 || s.weight+pendingBytes <= limit:
-	case pendingBytes > limit:
-		shed = true
-	default:
-		target := evictionTarget(limit)
-		total := s.weight + pendingBytes
-		users := make([][]api.Content, len(s.rounds))
-		weights := make([]int64, len(s.rounds))
-		for i := range s.rounds {
-			if total <= target {
-				break
-			}
-			user := omitAllMedia(s.rounds[i].user, evictedMedia)
-			weight := weigh(user...) + weigh(s.rounds[i].agent...)
-			if weight >= s.rounds[i].weight {
-				continue
-			}
-			total -= s.rounds[i].weight - weight
-			users[i] = user
-			weights[i] = weight
-		}
-		if total > limit {
-			shed = true
-			break
-		}
-		for i, user := range users {
-			if user == nil {
-				continue
-			}
-			s.weight -= s.rounds[i].weight - weights[i]
-			s.rounds[i].user = user
-			s.rounds[i].weight = weights[i]
-			s.rounds[i].images = countImages(user...)
-		}
-	}
-	if !shed && s.model.ImagesPerRequest > 0 && countImages(content...) > s.model.ImagesPerRequest {
-		shed = true
-	}
-	if shed {
-		s.shedStash(evictedMedia)
-		content = s.pendingContent(input)
-	}
-	if s.model.ImagesPerRequest > 0 {
-		pendingImages := countImages(content...)
-		images := pendingImages
-		for _, r := range s.rounds {
-			images += r.images
-		}
-		if images > s.model.ImagesPerRequest && pendingImages <= s.model.ImagesPerRequest {
-			target := evictionTarget(s.model.ImagesPerRequest)
-			users := make([][]api.Content, len(s.rounds))
-			weights := make([]int64, len(s.rounds))
-			for i := range s.rounds {
-				if images <= target {
-					break
-				}
-				users[i] = omitAllMedia(s.rounds[i].user, evictedMedia)
-				weights[i] = weigh(users[i]...) + weigh(s.rounds[i].agent...)
-				images -= s.rounds[i].images
-			}
-			if images <= s.model.ImagesPerRequest {
-				for i, user := range users {
-					if user == nil {
-						continue
-					}
-					s.weight -= s.rounds[i].weight - weights[i]
-					s.rounds[i].user = user
-					s.rounds[i].weight = weights[i]
-					s.rounds[i].images = countImages(user...)
-				}
-			}
-		}
-	}
+	content := s.cut(s.pendingContent(input))
 	return append(s.messages(0), api.Message{
 		Role:    api.RoleUser,
 		Content: content,
 	}), nil
+}
+
+func (s *messages) weightAfterCut(pending []api.Content) int64 {
+	weight, media := s.weight+weigh(pending...), mediaBytes(pending...)
+	for _, r := range s.rounds[s.cursor:] {
+		media += r.media
+	}
+	if memory := s.config.ThreadMemoryLimit; memory > 0 && media > memory*4/5 {
+		weight -= media - memory/2
+	}
+	return weight
+}
+
+func (s *messages) cut(pending []api.Content) []api.Content {
+	limit := s.model.ImagesPerRequest
+	memory := s.config.ThreadMemoryLimit
+	images, media := countImages(pending...), mediaBytes(pending...)
+	totalImages, totalMedia := images, media
+	for _, r := range s.rounds[s.cursor:] {
+		totalImages += r.images
+		totalMedia += r.media
+	}
+	over := func(imagesAt int, mediaAt int64) bool {
+		return limit > 0 && totalImages > imagesAt || memory > 0 && totalMedia > mediaAt
+	}
+	if over(limit, memory*4/5) {
+		for ; s.cursor < len(s.rounds) && over(limit*3/5, memory/2); s.cursor++ {
+			r := &s.rounds[s.cursor]
+			user := omitMedia(r.user, math.MaxInt, seenMedia)
+			weight := weigh(user...) + weigh(r.agent...)
+			s.weight += weight - r.weight
+			totalImages -= r.images
+			totalMedia -= r.media
+			r.user, r.weight, r.images, r.media = user, weight, 0, 0
+		}
+	}
+	if limit <= 0 || images <= limit {
+		return pending
+	}
+	var charges []int
+	for _, block := range pending {
+		switch b := block.(type) {
+		case api.ContentImage:
+			charges = append(charges, 1)
+		case api.ContentDocument:
+			charges = append(charges, pdfPages(b))
+		case api.ContentToolResult:
+			for _, nested := range b.Content {
+				switch n := nested.(type) {
+				case api.ContentImage:
+					charges = append(charges, 1)
+				case api.ContentDocument:
+					charges = append(charges, pdfPages(n))
+				}
+			}
+		}
+	}
+	n, kept := len(charges), 0
+	for n > 0 && kept+charges[n-1] <= limit {
+		n--
+		kept += charges[n]
+	}
+	return omitMedia(pending, n, unseenMedia)
 }
 
 func (s *messages) messages(limit int) []api.Message {
@@ -181,10 +168,11 @@ func (s *messages) messages(limit int) []api.Message {
 }
 
 func (s *messages) appendRound(r api.Round) {
-	if r.State == api.RoundRefuse {
-		s.refuseResults()
-	}
 	if r.State != api.RoundOk {
+		s.cut(s.pendingContent(r.Input))
+		if refuses(r.State, r.Error) {
+			s.refuseResults()
+		}
 		return
 	}
 	budget := RoundItemBudget(s.config, s.model)
@@ -217,8 +205,7 @@ func (s *messages) appendRound(r api.Round) {
 			s.resultStash = append(s.resultStash, call.LostResult())
 		}
 	}
-	limit := memoryLimit(s.config, s.model, s.factor)
-	user := omitOversizedMedia(userContent, s.model, limit)
+	user := s.cut(omitOversizedMedia(userContent, s.model))
 	if opening {
 		user = append(user, api.ContentText{Text: nameInstruction})
 	}
@@ -230,6 +217,7 @@ func (s *messages) appendRound(r api.Round) {
 		usage:  r.Usage,
 		weight: weight,
 		images: countImages(user...),
+		media:  mediaBytes(user...),
 	})
 	s.weight += weight
 }
@@ -246,27 +234,6 @@ func (c Compaction) Half() int {
 
 func (s *messages) isStashed() bool {
 	return len(s.resultStash) != 0 || len(s.recordStash) != 0
-}
-
-func (s *messages) applyCompaction(c Compaction, record api.Compaction) {
-	target := s.rounds[c.index]
-	body := slices.IndexFunc(target.user, func(c api.Content) bool {
-		_, ok := c.(api.ContentToolResult)
-		return !ok
-	})
-	if body == -1 {
-		body = len(target.user)
-	}
-	target.user = slices.Concat([]api.Content{noteContent("summary", record.Text)}, target.user[body:])
-	target.weight = weigh(target.user...) + weigh(target.agent...)
-	target.images = countImages(target.user...)
-	s.rounds = slices.Concat([]round{target}, s.rounds[c.index+1:])
-	s.weight = 0
-	for _, r := range s.rounds {
-		s.weight += r.weight
-	}
-	s.first = record.Target
-	s.compaction = record
 }
 
 func (s *messages) prepeareCompaction(force bool, chunk int) (Compaction, []api.Message) {
@@ -362,14 +329,12 @@ func (s *messages) unstashRecords() []api.Record {
 	return records
 }
 
+func refuses(state api.RoundState, err string) bool {
+	return state == api.RoundRefuse || state == api.RoundError && (err == string(api.CodeInvalid) || err == string(api.CodeTooLarge))
+}
+
 func (s *messages) refuseResults() {
 	for i, res := range s.resultStash {
 		s.resultStash[i] = res.Refused()
-	}
-}
-
-func (s *messages) shedStash(reason string) {
-	for i, res := range s.resultStash {
-		s.resultStash[i] = omitAllMedia([]api.Content{res}, reason)[0].(api.ContentToolResult)
 	}
 }

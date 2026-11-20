@@ -36,31 +36,6 @@ import (
 	"neui.dev/api"
 )
 
-func memoryLimit(config api.ThreadConfig, model api.Model, factor float32) int64 {
-	limit := config.ThreadMemoryLimit
-	if limit > 0 && model.RequestBytes > 0 {
-		unencodedRequestBytes := int64(model.RequestBytes) * 3 / 4
-		afterHeadroom := unencodedRequestBytes - api.ReplayHeadroom
-		modelLimit := max(afterHeadroom, 1)
-		limit = min(limit, modelLimit)
-	}
-	if limit > 0 && factor < 1 {
-		tightened := float32(limit) * factor
-		limit = max(int64(tightened), 1)
-	}
-	return limit
-}
-
-const (
-	evictionKeptParts   = 3
-	evictionBudgetParts = 5
-)
-
-func evictionTarget[T int | int64](budget T) T {
-	kept := budget * evictionKeptParts
-	return kept / evictionBudgetParts
-}
-
 const (
 	bytesPerToken  = 4
 	unknownContext = 200_000
@@ -75,14 +50,29 @@ func RoundItemBudget(config api.ThreadConfig, model api.Model) int {
 	return int(contextBytes * config.ReplayItemShare)
 }
 
-func OmittedNote(size int) string {
-	human := fmt.Sprintf("%d bytes", size)
-	if size >= 1<<20 {
-		human = fmt.Sprintf("%.1f MB", float64(size)/(1<<20))
-	} else if size >= 1<<10 {
-		human = fmt.Sprintf("%.1f KB", float64(size)/(1<<10))
+func RoundMediaBudget(config api.ThreadConfig) int64 {
+	if config.ThreadMemoryLimit <= 0 {
+		return 0
 	}
-	return fmt.Sprintf("Result omitted: it was %s, more than a turn's tool results can hold. Ask for less, or process it in a script.", human)
+	return int64(float32(config.ThreadMemoryLimit) * config.ReplayMediaShare / 2)
+}
+
+func OmittedNote(size int) string {
+	return fmt.Sprintf("Result omitted: it was %s, more than a turn's tool results can hold. Ask for less, or process it in a script.", HumanSize(size))
+}
+
+func OmittedMediaNote(size int) string {
+	return fmt.Sprintf("Media omitted: this result's images and documents came to %s, more than this turn's tool results had room for. Call it again next turn, or ask for fewer or smaller ones.", HumanSize(size))
+}
+
+func HumanSize(size int) string {
+	if size >= 1<<20 {
+		return fmt.Sprintf("%.1f MB", float64(size)/(1<<20))
+	}
+	if size >= 1<<10 {
+		return fmt.Sprintf("%.1f KB", float64(size)/(1<<10))
+	}
+	return fmt.Sprintf("%d bytes", size)
 }
 
 func capText(c api.ContentToolResult, cap int) api.ContentToolResult {
@@ -252,6 +242,28 @@ func weigh(content ...api.Content) int64 {
 	return weight
 }
 
+func mediaBytes(content ...api.Content) int64 {
+	size := int64(0)
+	for _, block := range content {
+		switch b := block.(type) {
+		case api.ContentImage:
+			size += int64(len(b.Data))
+		case api.ContentDocument:
+			size += int64(len(b.Data))
+		case api.ContentToolResult:
+			for _, nested := range b.Content {
+				switch n := nested.(type) {
+				case api.ContentImage:
+					size += int64(len(n.Data))
+				case api.ContentDocument:
+					size += int64(len(n.Data))
+				}
+			}
+		}
+	}
+	return size
+}
+
 func countImages(content ...api.Content) int {
 	images := 0
 	for _, block := range content {
@@ -295,47 +307,46 @@ func pdfPages(c api.ContentDocument) (pages int) {
 	return 0
 }
 
-const evictedMedia = "removed to fit this request; do not describe its contents from memory — read it again with a tool, or ask the user to attach it again"
+const seenMedia = "[media removed: request limit. You have already seen this, and what you concluded from it still stands. It made room for newer images and documents. Re-reading pushes out others and re-sends everything, so don't re-read them all.]"
 
-const rejectedMedia = "the provider rejected the request carrying it; do not describe its contents from memory — read it again with a tool, or ask the user to attach it again"
+const unseenMedia = "[media removed: request limit. You have not seen this: it did not fit in the request. If you need it, get it again once, by itself. If it is dropped again, go on without it and say so. Re-reading pushes out others and re-sends everything, so don't re-read them all.]"
 
-func omitAllMedia(content []api.Content, reason string) []api.Content {
-	changed := false
+func omitMedia(content []api.Content, n int, placeholder string) []api.Content {
+	if n <= 0 {
+		return content
+	}
 	out := make([]api.Content, 0, len(content))
 	for _, block := range content {
 		switch b := block.(type) {
-		case api.ContentImage:
-			changed = true
-			out = append(out, noImage(b, reason))
-		case api.ContentDocument:
-			changed = true
-			out = append(out, noDocument(b, reason))
+		case api.ContentImage, api.ContentDocument:
+			if n > 0 {
+				n--
+				out = append(out, api.ContentText{Text: placeholder})
+				continue
+			}
+			out = append(out, block)
 		case api.ContentToolResult:
 			inner := make(api.UserContents, 0, len(b.Content))
 			for _, nested := range b.Content {
-				switch n := nested.(type) {
-				case api.ContentImage:
-					changed = true
-					inner = append(inner, noImage(n, reason))
-				case api.ContentDocument:
-					changed = true
-					inner = append(inner, noDocument(n, reason))
-				default:
-					inner = append(inner, nested)
+				switch nested.(type) {
+				case api.ContentImage, api.ContentDocument:
+					if n > 0 {
+						n--
+						inner = append(inner, api.ContentText{Text: placeholder})
+						continue
+					}
 				}
+				inner = append(inner, nested)
 			}
 			out = append(out, api.ContentToolResult{ID: b.ID, Content: inner, Error: b.Error})
 		default:
 			out = append(out, block)
 		}
 	}
-	if !changed {
-		return content
-	}
 	return out
 }
 
-func omitOversizedMedia(content []api.Content, m api.Model, documentCap int64) []api.Content {
+func omitOversizedMedia(content []api.Content, m api.Model) []api.Content {
 	changed := false
 	out := make([]api.Content, 0, len(content))
 	for _, block := range content {
@@ -347,34 +358,17 @@ func omitOversizedMedia(content []api.Content, m api.Model, documentCap int64) [
 				continue
 			}
 			out = append(out, block)
-		case api.ContentDocument:
-			if documentCap > 0 && int64(len(b.Data)) > documentCap {
-				changed = true
-				out = append(out, noDocument(b, fmt.Sprintf("%d bytes is over the %d this model reads in one request", len(b.Data), documentCap)))
-				continue
-			}
-			out = append(out, block)
 		case api.ContentToolResult:
 			inner := make(api.UserContents, 0, len(b.Content))
 			for _, nested := range b.Content {
-				switch n := nested.(type) {
-				case api.ContentImage:
+				if n, ok := nested.(api.ContentImage); ok {
 					if reason := imageReason(n, m); reason != "" {
 						changed = true
 						inner = append(inner, noImage(n, reason))
 						continue
 					}
-					inner = append(inner, nested)
-				case api.ContentDocument:
-					if documentCap > 0 && int64(len(n.Data)) > documentCap {
-						changed = true
-						inner = append(inner, noDocument(n, fmt.Sprintf("%d bytes is over the %d this model reads in one request", len(n.Data), documentCap)))
-						continue
-					}
-					inner = append(inner, nested)
-				default:
-					inner = append(inner, nested)
 				}
+				inner = append(inner, nested)
 			}
 			out = append(out, api.ContentToolResult{ID: b.ID, Content: inner, Error: b.Error})
 		default:
@@ -406,8 +400,4 @@ func imageReason(c api.ContentImage, m api.Model) string {
 
 func noImage(c api.ContentImage, reason string) api.ContentText {
 	return api.ContentText{Text: fmt.Sprintf("<noimage mime=%q bytes=%d reason=%q/>", c.Mime, len(c.Data), reason)}
-}
-
-func noDocument(c api.ContentDocument, reason string) api.ContentText {
-	return api.ContentText{Text: fmt.Sprintf("<nodocument name=%q mime=%q bytes=%d reason=%q/>", c.Name, c.Mime, len(c.Data), reason)}
 }

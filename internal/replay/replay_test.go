@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"reflect"
 	"slices"
 	"strings"
@@ -154,114 +155,6 @@ func TestRoundInitNameInstruction(t *testing.T) {
 	}
 	if text, ok := lastBlock(t, messages).(api.ContentText); !ok || text.Text != nameInstruction {
 		t.Fatalf("thread with no answered round yet: want the naming instruction last whatever the name, got %#v", lastBlock(t, messages))
-	}
-}
-
-func TestByteBudgetEvictsOldestToTarget(t *testing.T) {
-	const limit, image = 100_000, 10 << 10
-	const target = limit * 3 / 5
-	r := NewReplay(context.Background(), "a", local.NewMessageStorage(), api.ThreadConfig{ThreadMemoryLimit: limit}, api.Model{})
-	mustCreate(t, r)
-	for i := range 10 {
-		text := ""
-		if i == 0 {
-			text = "start"
-		}
-		toolRound(t, r, fmt.Sprintf("call %d", i), text, api.ContentImage{Data: make([]byte, image), Mime: "image/png"})
-	}
-	if _, _, err := r.RoundInit(api.Input{}); err != nil {
-		t.Fatalf("RoundInit over the limit: %v", err)
-	}
-
-	rounds := r.messages.rounds
-	first := len(rounds)
-	for i, round := range rounds {
-		if countImages(round.user...) != 0 {
-			first = i
-			break
-		}
-	}
-	if first < 2 || first == len(rounds) {
-		t.Fatalf("the oldest %d of %d rounds kept their image: eviction is not oldest-first", first, len(rounds))
-	}
-	for i := first; i < len(rounds); i++ {
-		if countImages(rounds[i].user...) == 0 {
-			t.Fatalf("round %d lost its image while round %d kept one: eviction is not oldest-first", i, first)
-		}
-	}
-	total := r.messages.weight
-	for _, res := range r.messages.resultStash {
-		total += weigh(res)
-	}
-	if total > target {
-		t.Fatalf("eviction left %d bytes, over the %d target", total, target)
-	}
-	if freed := image - rounds[first-1].weight; total+freed <= target {
-		t.Fatalf("eviction left %d bytes when %d was already at or under the %d target: it went past it", total, total+freed, target)
-	}
-	result, ok := rounds[first-1].user[0].(api.ContentToolResult)
-	if !ok {
-		t.Fatalf("evicted round %d: want the tool result that carried the image, got %#v", first-1, rounds[first-1].user[0])
-	}
-	note, ok := result.Content[0].(api.ContentText)
-	if !ok {
-		t.Fatalf("evicted round %d: want a note in place of the image, got %#v", first-1, result.Content[0])
-	}
-	if !strings.Contains(note.Text, "do not describe its contents from memory") || !strings.Contains(note.Text, "attach it again") {
-		t.Fatalf("the note left in place of the image does not say what happened: %q", note.Text)
-	}
-}
-
-func TestTightenShrinksTheByteBudgetOnce(t *testing.T) {
-	const limit, image = 100_000, 30 << 10
-	tightened := int64(float32(limit) * 0.8)
-	r := NewReplay(context.Background(), "a", local.NewMessageStorage(), api.ThreadConfig{ThreadMemoryLimit: limit}, api.Model{})
-	mustCreate(t, r)
-	for i := range 3 {
-		text := ""
-		if i == 0 {
-			text = "start"
-		}
-		toolRound(t, r, fmt.Sprintf("call %d", i), text, api.ContentImage{Data: make([]byte, image), Mime: "image/png"})
-	}
-	total := r.messages.weight
-	for _, res := range r.messages.resultStash {
-		total += weigh(res)
-	}
-	if total <= tightened || total > limit {
-		t.Fatalf("the thread weighs %d bytes: it has to sit over the tightened %d and under the plain %d for this test to say anything", total, tightened, limit)
-	}
-	if got := r.NeedCompaction(); got != CompactionNone {
-		t.Fatalf("%d bytes under the %d limit: got %v, no compaction is due yet", total, limit, got)
-	}
-	if !r.Tighten() {
-		t.Fatalf("Tighten on a thread still at the full budget: want true")
-	}
-	if got := r.NeedCompaction(); got != CompactionBytes {
-		t.Fatalf("%d bytes over the tightened %d: got %v, the derived limit did not shrink", total, tightened, got)
-	}
-	if r.Tighten() {
-		t.Fatalf("Tighten a second time: want false, there is nothing left to give up")
-	}
-	if got := r.NeedCompaction(); got != CompactionBytes {
-		t.Fatalf("the tightened limit did not stick through a second Tighten: got %v", got)
-	}
-	images := 0
-	for _, round := range r.messages.rounds {
-		images += countImages(round.user...)
-	}
-	if images == 0 {
-		t.Fatalf("no image reached the rounds: eviction has nothing to shed")
-	}
-	if _, _, err := r.RoundInit(api.Input{}); err != nil {
-		t.Fatalf("RoundInit under the tightened limit: %v", err)
-	}
-	left := 0
-	for _, round := range r.messages.rounds {
-		left += countImages(round.user...)
-	}
-	if left >= images {
-		t.Fatalf("eviction kept %d of %d images: it does not see the tightened limit", left, images)
 	}
 }
 
@@ -432,109 +325,6 @@ func TestPDFPageChargeIsClamped(t *testing.T) {
 	}
 	if got > maxPDFPages {
 		t.Fatalf("a %d byte PDF declaring 100000000 pages charges %d images: the declared count is taken verbatim", len(doc.Data), got)
-	}
-}
-
-func TestImageEvictionKeepsMediaItCannotShed(t *testing.T) {
-	model := api.Model{ImagesPerRequest: 100}
-	r := NewReplay(context.Background(), "a", local.NewMessageStorage(), api.ThreadConfig{}, model)
-	mustCreate(t, r)
-	toolRound(t, r, "shot 1", "start", api.ContentImage{Data: make([]byte, 64), Mime: "image/png"})
-	toolRound(t, r, "shot 2", "", api.ContentImage{Data: make([]byte, 64), Mime: "image/png"})
-	toolRound(t, r, "pdf", "", api.ContentDocument{Data: pdfDoc(200), Mime: string(api.DocumentPDF), Name: "report.pdf"})
-	before := 0
-	for _, round := range r.messages.rounds {
-		before += countImages(round.user...)
-	}
-	if before != 2 {
-		t.Fatalf("%d images reached the folded rounds, want the 2 screenshots", before)
-	}
-	if charge := countImages(r.messages.resultStash[0]); charge <= model.ImagesPerRequest {
-		t.Fatalf("the incoming document charges %d images: it has to sit over the %d the model takes for this test to say anything", charge, model.ImagesPerRequest)
-	}
-	_, messages, err := r.RoundInit(api.Input{})
-	if err != nil {
-		t.Fatalf("RoundInit over the image budget: %v", err)
-	}
-	after := 0
-	for _, round := range r.messages.rounds {
-		after += countImages(round.user...)
-	}
-	if after != before {
-		t.Fatalf("eviction destroyed %d of %d images while the incoming document alone is over the %d the model takes: nothing history gives up can help", before-after, before, model.ImagesPerRequest)
-	}
-	if got := countImages(messages[len(messages)-1].Content...); got > model.ImagesPerRequest {
-		t.Fatalf("the assembled request charges %d images, over the %d the model takes: the stash that is over it on its own was not shed", got, model.ImagesPerRequest)
-	}
-	if text := stashText(t, r); !strings.Contains(text, "removed to fit") {
-		t.Fatalf("the shed stash reads %q, want the note saying the media was removed to fit", text)
-	}
-}
-
-func TestNarrowRequestLimitKeepsTheByteRemedies(t *testing.T) {
-	const blob = 2 << 20
-	config := api.ThreadConfig{CompactionTrigger: 2, CompactionPreserve: 0.25, ReplayItemShare: 0.1, ThreadMemoryLimit: 18 << 20}
-	model := api.Model{Context: 100_000, RequestBytes: 1 << 20}
-	r := NewReplay(context.Background(), "a", local.NewMessageStorage(), config, model)
-	mustCreate(t, r)
-	toolRound(t, r, "first", "start", api.ContentText{Text: "ok"})
-	toolRound(t, r, "doc", "", api.ContentDocument{Data: make([]byte, blob), Mime: "text/plain", Name: "big.txt"})
-	if got := r.NeedCompaction(); got != CompactionBytes {
-		t.Fatalf("a thread holding a %d byte document on a model that takes %d bytes in a request: got %v, the derived limit read as no budget at all", blob, model.RequestBytes, got)
-	}
-	if !r.Tighten() {
-		t.Fatalf("Tighten on a thread still at the full budget: want true")
-	}
-	if got := r.NeedCompaction(); got != CompactionBytes {
-		t.Fatalf("the tightened budget stopped asking for a compaction: got %v", got)
-	}
-	_, messages, err := r.RoundInit(api.Input{})
-	if err != nil {
-		t.Fatalf("RoundInit: %v", err)
-	}
-	content := messages[len(messages)-1].Content
-	result, ok := content[0].(api.ContentToolResult)
-	if !ok {
-		t.Fatalf("want the tool result carrying the document, got %#v", content[0])
-	}
-	note, ok := result.Content[0].(api.ContentText)
-	if !ok || !strings.Contains(note.Text, "nodocument") {
-		t.Fatalf("a %d byte document went out to a model that takes %d bytes: the document cap is off, %#v", blob, model.RequestBytes, result.Content[0])
-	}
-}
-
-func TestEvictionNeverGrowsTheThread(t *testing.T) {
-	const limit = 30_000
-	r := NewReplay(context.Background(), "a", local.NewMessageStorage(), api.ThreadConfig{ThreadMemoryLimit: limit, ReplayItemShare: 0.1}, api.Model{})
-	mustCreate(t, r)
-	for i := range 10 {
-		text := ""
-		if i == 0 {
-			text = "start"
-		}
-		toolRound(t, r, fmt.Sprintf("call %d", i), text,
-			api.ContentText{Text: strings.Repeat("x", 8<<10)},
-			api.ContentImage{Data: make([]byte, 64), Mime: "image/png"})
-	}
-	before, images := r.messages.weight, 0
-	for _, round := range r.messages.rounds {
-		images += countImages(round.user...)
-	}
-	if before <= limit || images == 0 {
-		t.Fatalf("the thread weighs %d bytes with %d images: it has to sit over the %d limit with media to shed", before, images, limit)
-	}
-	if _, _, err := r.RoundInit(api.Input{}); err != nil {
-		t.Fatalf("RoundInit over the limit: %v", err)
-	}
-	if r.messages.weight > before {
-		t.Fatalf("eviction grew the thread from %d to %d bytes: the note is heavier than the media it replaced", before, r.messages.weight)
-	}
-	left := 0
-	for _, round := range r.messages.rounds {
-		left += countImages(round.user...)
-	}
-	if left != images {
-		t.Fatalf("eviction destroyed %d of %d images without making the thread lighter", images-left, images)
 	}
 }
 
@@ -841,126 +631,6 @@ func stashText(t *testing.T, r Replay) string {
 	return b.String()
 }
 
-func TestOversizedStashShedsItselfAndKeepsHistoryMedia(t *testing.T) {
-	const limit, small, huge = 100_000, 10 << 10, 300 << 10
-	s := local.NewMessageStorage()
-	mediaRounds(t, s, 4, api.ContentImage{Data: make([]byte, small), Mime: "image/png"})
-	last := NewReplay(context.Background(), "a", s, unboundedConfig, api.Model{})
-	if err := last.Load(); err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	toolRound(t, last, "huge", "", api.ContentImage{Data: make([]byte, huge), Mime: "image/png"})
-
-	r := underBudget(t, s, limit)
-	before := historyImages(r)
-	if before == 0 {
-		t.Fatalf("no image reached the folded rounds: there is no history media to protect")
-	}
-	if charge := weigh(r.messages.resultStash[0]); charge <= limit {
-		t.Fatalf("the incoming result weighs %d bytes: it has to sit over the %d limit on its own for this test to say anything", charge, limit)
-	}
-	_, messages, err := r.RoundInit(api.Input{})
-	if err != nil {
-		t.Fatalf("RoundInit over the limit: %v", err)
-	}
-	if after := historyImages(r); after != before {
-		t.Fatalf("eviction destroyed %d of %d history images while the incoming result alone is over the limit: nothing history gives up can help", before-after, before)
-	}
-	if got := countImages(messages[len(messages)-1].Content...); got != 0 {
-		t.Fatalf("the assembled request still carries %d images: the oversized stash was not shed", got)
-	}
-	if text := stashText(t, r); !strings.Contains(text, "removed to fit") {
-		t.Fatalf("the shed stash reads %q, want the note saying the media was removed to fit", text)
-	}
-}
-
-func TestHistoryEvictionAppliesWhatTheDryRunMeasured(t *testing.T) {
-	const limit, image = 100_000, 10 << 10
-	const target = limit * 3 / 5
-	s := local.NewMessageStorage()
-	mediaRounds(t, s, 10, api.ContentImage{Data: make([]byte, image), Mime: "image/png"})
-
-	r := underBudget(t, s, limit)
-	before := historyImages(r)
-	charge := weigh(r.messages.resultStash[0])
-	if r.messages.weight+charge <= limit {
-		t.Fatalf("the thread weighs %d bytes: it has to sit over the %d limit for eviction to run", r.messages.weight+charge, limit)
-	}
-	if _, _, err := r.RoundInit(api.Input{}); err != nil {
-		t.Fatalf("RoundInit over the limit: %v", err)
-	}
-	after := historyImages(r)
-	if after == before {
-		t.Fatalf("eviction shed none of the %d history images while shedding them gets the thread under the %d limit", before, limit)
-	}
-	if after == 0 {
-		t.Fatalf("eviction shed every one of the %d history images: it did not stop where the dry run reached the %d target", before, target)
-	}
-	rounds := r.messages.rounds
-	first := len(rounds)
-	for i, round := range rounds {
-		if countImages(round.user...) != 0 {
-			first = i
-			break
-		}
-	}
-	for i := first; i < len(rounds); i++ {
-		if countImages(rounds[i].user...) == 0 {
-			t.Fatalf("round %d lost its image while round %d kept one: the applied eviction is not oldest-first", i, first)
-		}
-	}
-	if total := r.messages.weight + weigh(r.messages.resultStash[0]); total > target {
-		t.Fatalf("eviction left %d bytes, over the %d target the dry run reached", total, target)
-	}
-	if got := countImages(r.messages.resultStash[0]); got != 1 {
-		t.Fatalf("the stash carries %d images, want the 1 it came with: history eviction got under the limit without it", got)
-	}
-}
-
-func TestEvictionThatCannotReachTheLimitShedsTheStashInstead(t *testing.T) {
-	const limit, image, text = 100_000, 10 << 10, 40_000
-	s := local.NewMessageStorage()
-	mediaRounds(t, s, 4,
-		api.ContentText{Text: strings.Repeat("x", text)},
-		api.ContentImage{Data: make([]byte, image), Mime: "image/png"})
-
-	r := underBudget(t, s, limit)
-	before, weight := historyImages(r), r.messages.weight
-	charge := weigh(r.messages.resultStash[0])
-	if charge > limit {
-		t.Fatalf("the incoming result weighs %d bytes: it has to sit under the %d limit for the dry run to be what decides", charge, limit)
-	}
-	if weight+charge <= limit {
-		t.Fatalf("the thread weighs %d bytes: it has to sit over the %d limit for eviction to run", weight+charge, limit)
-	}
-	floor := int64(0)
-	for _, round := range r.messages.rounds {
-		floor += weigh(omitAllMedia(round.user, evictedMedia)...) + weigh(round.agent...)
-	}
-	if floor+charge <= limit {
-		t.Fatalf("history gives up enough to reach the %d limit (%d bytes left): this test only says something when it cannot", limit, floor+charge)
-	}
-	if _, _, err := r.RoundInit(api.Input{}); err != nil {
-		t.Fatalf("RoundInit over the limit: %v", err)
-	}
-	if after := historyImages(r); after != before {
-		t.Fatalf("eviction destroyed %d of %d history images without getting the request under the %d limit", before-after, before, limit)
-	}
-	if r.messages.weight != weight {
-		t.Fatalf("history weighs %d bytes after eviction, was %d: it was rewritten for nothing", r.messages.weight, weight)
-	}
-	if got := countImages(r.messages.resultStash[0]); got != 0 {
-		t.Fatalf("the stash still carries %d images: it is what had to be shed", got)
-	}
-	stashed := stashText(t, r)
-	if !strings.Contains(stashed, "removed to fit") {
-		t.Fatalf("the shed stash reads %q, want the note saying the media was removed to fit", stashed)
-	}
-	if !strings.Contains(stashed, strings.Repeat("x", text)) {
-		t.Fatalf("the shed stash kept %d bytes of text, want the %d it carried: shedding the media must keep the text", len(stashed), text)
-	}
-}
-
 func TestNeedCompactionReportsItsCause(t *testing.T) {
 	config := api.ThreadConfig{CompactionTrigger: 0.5, CompactionPreserve: 0.25, ThreadMemoryLimit: -1}
 	tokens := NewReplay(context.Background(), "a", local.NewMessageStorage(), config, api.Model{Context: 1000})
@@ -978,48 +648,15 @@ func TestNeedCompactionReportsItsCause(t *testing.T) {
 		t.Fatalf("a thread of %d bytes under a %d limit and no token window: got %v, want %v", spacious.messages.weight, 10<<20, got, CompactionNone)
 	}
 	tight := underBudget(t, s, 50_000)
-	if got := tight.NeedCompaction(); got != CompactionBytes {
-		t.Fatalf("a thread of %d bytes over a 50000 limit: got %v, want %v", tight.messages.weight, got, CompactionBytes)
+	if got := tight.NeedCompaction(); got != CompactionNone {
+		t.Fatalf("a thread whose media alone are over a 50000 limit: got %v, want %v: media are cut, not compacted", got, CompactionNone)
 	}
-}
 
-func TestOversizedDocumentIsNotedWithoutSheddingTheRound(t *testing.T) {
-	const limit, doc = 100_000, 200_000
-	r := NewReplay(context.Background(), "a", local.NewMessageStorage(), api.ThreadConfig{ThreadMemoryLimit: limit}, api.Model{})
-	mustCreate(t, r)
-	if _, _, err := r.RoundInit(api.Input{Text: "start"}); err != nil {
-		t.Fatalf("RoundInit: %v", err)
-	}
-	if _, err := r.RoundOk(api.EventUsage{Input: 10}, api.Indexed[api.Content]{
-		0: api.ContentToolUse{ID: "doc", Name: "attach", Input: json.RawMessage(`{}`)},
-		1: api.ContentToolUse{ID: "shot", Name: "attach", Input: json.RawMessage(`{}`)},
-	}); err != nil {
-		t.Fatalf("RoundOk: %v", err)
-	}
-	if err := r.RoundResult(map[string]api.ContentToolResult{
-		"doc":  {ID: "doc", Content: api.UserContents{api.ContentDocument{Data: make([]byte, doc), Mime: "text/plain", Name: "big.txt"}}},
-		"shot": {ID: "shot", Content: api.UserContents{api.ContentImage{Data: make([]byte, 82), Mime: "image/png"}}},
-	}); err != nil {
-		t.Fatalf("RoundResult: %v", err)
-	}
-	_, messages, err := r.RoundInit(api.Input{})
-	if err != nil {
-		t.Fatalf("RoundInit: %v", err)
-	}
-	content := messages[len(messages)-1].Content
-	if got := weigh(content...); got > limit {
-		t.Fatalf("the assembled request weighs %d bytes, over the %d limit", got, limit)
-	}
-	if got := countImages(content...); got != 1 {
-		t.Fatalf("the assembled request carries %d images, want the 1 the round produced: a document the request never carries cost the screenshot beside it", got)
-	}
-	result, ok := content[0].(api.ContentToolResult)
-	if !ok || result.ID != "doc" {
-		t.Fatalf("want the tool result carrying the document first, got %#v", content[0])
-	}
-	note, ok := result.Content[0].(api.ContentText)
-	if !ok || !strings.Contains(note.Text, "over the 100000 this model reads in one request") {
-		t.Fatalf("the note left in place of the document reads %#v, want the size the model refuses", result.Content[0])
+	texts := local.NewMessageStorage()
+	mediaRounds(t, texts, 3, api.ContentText{Text: strings.Repeat("x", 20_000)})
+	wordy := underBudget(t, texts, 50_000)
+	if got := wordy.NeedCompaction(); got != CompactionBytes {
+		t.Fatalf("a thread of %d text bytes over a 50000 limit: got %v, want %v", wordy.messages.weight, got, CompactionBytes)
 	}
 }
 
@@ -1349,51 +986,6 @@ func TestByteOverflowOutranksTokenOverflow(t *testing.T) {
 	}
 }
 
-func TestRejectedRoundShedsTheStashMediaAndKeepsItsText(t *testing.T) {
-	const said = "the tool said this"
-	rejected := NewReplay(context.Background(), "a", local.NewMessageStorage(), unboundedConfig, api.Model{})
-	mustCreate(t, rejected)
-	toolRound(t, rejected, "shot", "start", api.ContentText{Text: said}, api.ContentImage{Data: make([]byte, 1024), Mime: "image/png"})
-	if got := countImages(rejected.messages.resultStash[0]); got != 1 {
-		t.Fatalf("the stash carries %d images, want the 1 the tool produced", got)
-	}
-	if _, _, err := rejected.RoundInit(api.Input{}); err != nil {
-		t.Fatalf("RoundInit: %v", err)
-	}
-	if err := rejected.RoundReject(api.CodeInvalid, api.EventUsage{}, nil); err != nil {
-		t.Fatalf("RoundReject: %v", err)
-	}
-	if got := countImages(rejected.messages.resultStash[0]); got != 0 {
-		t.Fatalf("the stash still carries %d images after the request was refused as written: every later round re-sends them", got)
-	}
-	stashed := stashText(t, rejected)
-	if !strings.Contains(stashed, said) {
-		t.Fatalf("the rejected stash reads %q: shedding the media must keep the text", stashed)
-	}
-	if !strings.Contains(stashed, "provider rejected") {
-		t.Fatalf("the note left in place of the media reads %q: it has to say the provider rejected it", stashed)
-	}
-	if strings.Contains(stashed, "removed to fit") {
-		t.Fatalf("the rejection note reads as the eviction note: %q", stashed)
-	}
-	if !rejected.IsRetriable() {
-		t.Fatalf("a rejected round is not retriable: the user cannot send it again")
-	}
-
-	kept := NewReplay(context.Background(), "a", local.NewMessageStorage(), unboundedConfig, api.Model{})
-	mustCreate(t, kept)
-	toolRound(t, kept, "shot", "start", api.ContentText{Text: said}, api.ContentImage{Data: make([]byte, 1024), Mime: "image/png"})
-	if _, _, err := kept.RoundInit(api.Input{}); err != nil {
-		t.Fatalf("RoundInit: %v", err)
-	}
-	if err := kept.RoundError(errors.New("network"), api.EventUsage{}, nil); err != nil {
-		t.Fatalf("RoundError: %v", err)
-	}
-	if got := countImages(kept.messages.resultStash[0]); got != 1 {
-		t.Fatalf("a transient failure shed %d images from the stash: a connection blip must not cost the tool output", 1-got)
-	}
-}
-
 func TestCompactionInstructionHasMarker(t *testing.T) {
 	s := local.NewMessageStorage()
 	r := NewReplay(context.Background(), "a", s, compactionConfig, api.Model{})
@@ -1431,18 +1023,6 @@ func TestImageBytesCountsRawBytes(t *testing.T) {
 	}
 }
 
-func TestRequestBytesBudgetUndoesBase64(t *testing.T) {
-	const declared = 64 << 20
-	config := api.ThreadConfig{ThreadMemoryLimit: 1 << 40}
-	want := int64(declared)*3/4 - api.ReplayHeadroom
-	if got := memoryLimit(config, api.Model{RequestBytes: declared}, 1); got != want {
-		t.Fatalf("budget for a %d byte wire limit: got %d, want three quarters less headroom, %d", declared, got, want)
-	}
-	if got := memoryLimit(config, api.Model{}, 1); got != config.ThreadMemoryLimit {
-		t.Fatalf("budget with RequestBytes unknown: got %d, want ThreadMemoryLimit %d", got, config.ThreadMemoryLimit)
-	}
-}
-
 func pdfThread(t *testing.T, s api.MessageStorage) {
 	t.Helper()
 	r := NewReplay(context.Background(), "a", s, unboundedConfig, api.Model{})
@@ -1451,11 +1031,11 @@ func pdfThread(t *testing.T, s api.MessageStorage) {
 	toolRound(t, r, "pdf 3", "", api.ContentDocument{Data: pdfDoc(3), Mime: string(api.DocumentPDF), Name: "b.pdf"}, api.ContentImage{Data: make([]byte, 64), Mime: "image/png"})
 	toolRound(t, r, "pdf 5", "", api.ContentDocument{Data: pdfDoc(5), Mime: string(api.DocumentPDF), Name: "c.pdf"})
 	toolRound(t, r, "broken", "", api.ContentDocument{Data: []byte("%PDF-1.4 truncated"), Mime: string(api.DocumentPDF), Name: "d.pdf"})
-	okRound(t, r, "fold", 10)
+	toolRound(t, r, "shot", "", api.ContentImage{Data: make([]byte, 64), Mime: "image/png"})
 }
 
 func TestStoredPDFPagesAreCountedOnce(t *testing.T) {
-	model := api.Model{ImagesPerRequest: 8}
+	model := api.Model{ImagesPerRequest: 11}
 	reference := local.NewMessageStorage()
 	pdfThread(t, reference)
 	cached := local.NewMessageStorage()
@@ -1492,42 +1072,42 @@ func TestStoredPDFPagesAreCountedOnce(t *testing.T) {
 	if got := historyImages(r); got != 1 {
 		t.Fatalf("the cleared PDFs still charge %d images, so clearing them says nothing about re-parsing", got)
 	}
-	_, wantMessages, err := want.RoundInit(api.Input{Text: "next"})
+	_, wantMessages, err := want.RoundInit(api.Input{})
 	if err != nil {
 		t.Fatalf("RoundInit: %v", err)
 	}
-	_, gotMessages, err := r.RoundInit(api.Input{Text: "next"})
+	_, gotMessages, err := r.RoundInit(api.Input{})
 	if err != nil {
 		t.Fatalf("RoundInit: %v", err)
 	}
 	if len(gotMessages) != len(wantMessages) {
 		t.Fatalf("got %d messages, want %d", len(gotMessages), len(wantMessages))
 	}
-	evicted := 0
+	cut := 0
 	for i := range wantMessages {
 		for j := range wantMessages[i].Content {
-			w, _ := json.Marshal(omitAllMedia([]api.Content{wantMessages[i].Content[j]}, "x"))
-			g, _ := json.Marshal(omitAllMedia([]api.Content{gotMessages[i].Content[j]}, "x"))
+			w, _ := json.Marshal(omitMedia([]api.Content{wantMessages[i].Content[j]}, math.MaxInt, "x"))
+			g, _ := json.Marshal(omitMedia([]api.Content{gotMessages[i].Content[j]}, math.MaxInt, "x"))
 			if string(w) != string(g) {
 				t.Fatalf("message %d block %d: got %s, want %s", i, j, g, w)
 			}
-			if strings.Contains(string(w), "removed to fit") {
-				evicted++
+			if strings.Contains(string(w), seenMedia) {
+				cut++
 			}
 		}
 	}
-	if evicted == 0 {
-		t.Fatalf("nothing was evicted, so the 11 images over the 8 the model takes were not what the replay measured")
+	if cut == 0 {
+		t.Fatalf("nothing was cut, so the 12 images over the 11 the model takes were not what the replay measured")
 	}
 	for i, round := range want.messages.rounds {
 		if got := countImages(round.user...); round.images != got {
-			t.Fatalf("after eviction round %d keeps %d images, but its content charges %d", i, round.images, got)
+			t.Fatalf("after the cut round %d keeps %d images, but its content charges %d", i, round.images, got)
 		}
 	}
 }
 
 func BenchmarkReplayOverStoredPDFs(b *testing.B) {
-	s := newMessages(api.Compaction{}, unboundedConfig, api.Model{ImagesPerRequest: 1 << 20}, 1)
+	s := newMessages(api.Compaction{}, unboundedConfig, api.Model{ImagesPerRequest: 1 << 20})
 	doc := api.ContentDocument{Data: pdfDoc(50), Mime: string(api.DocumentPDF), Name: "report.pdf"}
 	for i := range 21 {
 		id := fmt.Sprintf("call %d", i)
@@ -1606,4 +1186,443 @@ func TestEmptyRewindNeedsSomethingPending(t *testing.T) {
 			t.Fatalf("an empty rewind over a record of an earlier round: %v", err)
 		}
 	})
+}
+
+func shots(name string, n int) []api.UserContent {
+	blocks := make([]api.UserContent, n)
+	for i := range blocks {
+		blocks[i] = api.ContentImage{Data: []byte(fmt.Sprintf("%s/%d", name, i)), Mime: "image/png"}
+	}
+	return blocks
+}
+
+func requestImages(messages []api.Message) int {
+	images := 0
+	for _, m := range messages {
+		images += countImages(m.Content...)
+	}
+	return images
+}
+
+func resultTexts(content []api.Content) []string {
+	var texts []string
+	for _, block := range content {
+		res, ok := block.(api.ContentToolResult)
+		if !ok {
+			continue
+		}
+		for _, nested := range res.Content {
+			if text, ok := nested.(api.ContentText); ok {
+				texts = append(texts, text.Text)
+			}
+		}
+	}
+	return texts
+}
+
+func sameReplay(t *testing.T, got Replay, want Replay) {
+	t.Helper()
+	if got.messages.cursor != want.messages.cursor {
+		t.Fatalf("the cursor is at %d, want %d", got.messages.cursor, want.messages.cursor)
+	}
+	if got.messages.weight != want.messages.weight {
+		t.Fatalf("the thread weighs %d bytes, want %d", got.messages.weight, want.messages.weight)
+	}
+	g, _ := json.Marshal(got.messages.messages(0))
+	w, _ := json.Marshal(want.messages.messages(0))
+	if !bytes.Equal(g, w) {
+		t.Fatalf("the rounds replay as\n%s\nwant\n%s", g, w)
+	}
+	g, _ = json.Marshal(got.messages.resultStash)
+	w, _ = json.Marshal(want.messages.resultStash)
+	if !bytes.Equal(g, w) {
+		t.Fatalf("the stash holds\n%s\nwant\n%s", g, w)
+	}
+}
+
+func matchesLoad(t *testing.T, s api.MessageStorage, r Replay) {
+	t.Helper()
+	loaded := NewReplay(context.Background(), "a", s, r.config, r.model)
+	if err := loaded.Load(); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	sameReplay(t, loaded, r)
+	r.updateSeq(loaded.seq())
+}
+
+func TestImageCountCutStepsToSixtyPercent(t *testing.T) {
+	model := api.Model{ImagesPerRequest: 10}
+	r := NewReplay(context.Background(), "a", local.NewMessageStorage(), unboundedConfig, model)
+	mustCreate(t, r)
+	toolRound(t, r, "c0", "start", shots("c0", 2)...)
+	for i := 1; i <= 5; i++ {
+		toolRound(t, r, fmt.Sprintf("c%d", i), "", shots(fmt.Sprintf("c%d", i), 2)...)
+	}
+	if r.messages.cursor != 0 || historyImages(r) != 10 {
+		t.Fatalf("requests at the cap cut to %d, %d images left: nothing over the cap was sent", r.messages.cursor, historyImages(r))
+	}
+	_, messages, err := r.RoundInit(api.Input{})
+	if err != nil {
+		t.Fatalf("RoundInit: %v", err)
+	}
+	if got := requestImages(messages); got != 6 {
+		t.Fatalf("the request over the cap carries %d images, want 6: the cut stops at 60%% of the 10", got)
+	}
+	if r.messages.cursor != 4 {
+		t.Fatalf("the cursor is at %d, want 4: the oldest rounds go first", r.messages.cursor)
+	}
+	for i, round := range r.messages.rounds {
+		texts := resultTexts(round.user)
+		switch {
+		case i == 0:
+		case i < 4:
+			if round.images != 0 || len(texts) != 2 || texts[0] != seenMedia || texts[1] != seenMedia {
+				t.Fatalf("round %d before the cursor keeps %d images and reads %q, want each image as the already-seen placeholder", i, round.images, texts)
+			}
+		default:
+			if round.images != 2 || len(texts) != 0 {
+				t.Fatalf("round %d after the cursor keeps %d images and %q, want its 2 images", i, round.images, texts)
+			}
+		}
+	}
+	if _, err := r.RoundOk(api.EventUsage{Input: 10}, api.Indexed[api.Content]{0: api.ContentToolUse{ID: "c6", Name: "attach", Input: json.RawMessage(`{}`)}}); err != nil {
+		t.Fatalf("RoundOk: %v", err)
+	}
+	if err := r.RoundResult(map[string]api.ContentToolResult{"c6": {ID: "c6", Content: shots("c6", 2)}}); err != nil {
+		t.Fatalf("RoundResult: %v", err)
+	}
+	_, messages, err = r.RoundInit(api.Input{})
+	if err != nil {
+		t.Fatalf("RoundInit: %v", err)
+	}
+	if got := requestImages(messages); got != 8 || r.messages.cursor != 4 {
+		t.Fatalf("the next request carries %d images with the cursor at %d, want 8 and 4: under the cap nothing moves", got, r.messages.cursor)
+	}
+}
+
+func TestPendingContentOverTheCapCutsItsOldestItems(t *testing.T) {
+	model := api.Model{ImagesPerRequest: 4}
+	s := local.NewMessageStorage()
+	r := NewReplay(context.Background(), "a", s, unboundedConfig, model)
+	mustCreate(t, r)
+	toolRound(t, r, "one", "start", shots("one", 1)...)
+	toolRound(t, r, "six", "", shots("six", 6)...)
+	_, messages, err := r.RoundInit(api.Input{})
+	if err != nil {
+		t.Fatalf("RoundInit: %v", err)
+	}
+	if got := requestImages(messages); got != 4 {
+		t.Fatalf("the request carries %d images, want the 4 the model takes", got)
+	}
+	if texts := resultTexts(r.messages.rounds[1].user); len(texts) != 1 || texts[0] != seenMedia {
+		t.Fatalf("the answered round reads %q, want its image as the already-seen placeholder", texts)
+	}
+	result := messages[len(messages)-1].Content[0].(api.ContentToolResult)
+	for i, block := range result.Content {
+		if i < 2 {
+			if text, ok := block.(api.ContentText); !ok || text.Text != unseenMedia {
+				t.Fatalf("pending item %d is %#v, want the not-seen placeholder: the oldest go first", i, block)
+			}
+			continue
+		}
+		if image, ok := block.(api.ContentImage); !ok || string(image.Data) != fmt.Sprintf("six/%d", i) {
+			t.Fatalf("pending item %d is %#v, want image six/%d: the newest stay", i, block, i)
+		}
+	}
+	if _, err := r.RoundOk(api.EventUsage{Input: 10}, api.Indexed[api.Content]{0: api.ContentText{Text: "seen four"}}); err != nil {
+		t.Fatalf("RoundOk: %v", err)
+	}
+	if texts := resultTexts(r.messages.rounds[2].user); len(texts) != 2 || texts[0] != unseenMedia || texts[1] != unseenMedia || r.messages.rounds[2].images != 4 {
+		t.Fatalf("the appended round reads %q with %d images, want the 2 not-seen placeholders and 4 images as sent", texts, r.messages.rounds[2].images)
+	}
+	matchesLoad(t, s, r)
+}
+
+func TestLoadRebuildsTheImageCut(t *testing.T) {
+	model := api.Model{ImagesPerRequest: 6}
+	s := local.NewMessageStorage()
+	r := NewReplay(context.Background(), "a", s, unboundedConfig, model)
+	mustCreate(t, r)
+	toolRound(t, r, "c0", "start", shots("c0", 2)...)
+	toolRound(t, r, "c1", "", shots("c1", 2)...)
+	toolRound(t, r, "c2", "", shots("c2", 4)...)
+	if _, _, err := r.RoundInit(api.Input{}); err != nil {
+		t.Fatalf("RoundInit: %v", err)
+	}
+	if err := r.RoundError(errors.New(string(api.CodeInvalid)), api.EventUsage{}, nil); err != nil {
+		t.Fatalf("RoundError: %v", err)
+	}
+	if r.messages.cursor == 0 {
+		t.Fatalf("the rejected request moved no cursor")
+	}
+	matchesLoad(t, s, r)
+	toolRound(t, r, "c3", "again", shots("c3", 8)...)
+	if _, _, err := r.RoundInit(api.Input{}); err != nil {
+		t.Fatalf("RoundInit: %v", err)
+	}
+	cursor := r.messages.cursor
+	if err := r.RoundError(errors.New("network"), api.EventUsage{}, nil); err != nil {
+		t.Fatalf("RoundError: %v", err)
+	}
+	if cursor == 0 {
+		t.Fatalf("the request over the cap moved no cursor")
+	}
+	matchesLoad(t, s, r)
+	toolRound(t, r, "c4", "go on", shots("c4", 1)...)
+	loaded := NewReplay(context.Background(), "a", s, unboundedConfig, model)
+	if err := loaded.Load(); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	sameReplay(t, loaded, r)
+	want, err := r.messages.replay(api.Input{})
+	if err != nil {
+		t.Fatalf("replay: %v", err)
+	}
+	got, err := loaded.messages.replay(api.Input{})
+	if err != nil {
+		t.Fatalf("replay: %v", err)
+	}
+	g, _ := json.Marshal(got)
+	w, _ := json.Marshal(want)
+	if !bytes.Equal(g, w) {
+		t.Fatalf("the reloaded request is\n%s\nwant the session's\n%s", g, w)
+	}
+	if r.messages.cursor == cursor {
+		t.Fatalf("the last request moved no cursor, so the test says nothing about a step after a reload")
+	}
+}
+
+func TestRewindRebuildsTheImageCut(t *testing.T) {
+	model := api.Model{ImagesPerRequest: 6}
+	s := local.NewMessageStorage()
+	r := NewReplay(context.Background(), "a", s, unboundedConfig, model)
+	mustCreate(t, r)
+	toolRound(t, r, "c0", "start", shots("c0", 2)...)
+	for i := 1; i <= 5; i++ {
+		toolRound(t, r, fmt.Sprintf("c%d", i), "", shots(fmt.Sprintf("c%d", i), 2)...)
+	}
+	if r.messages.cursor == 0 {
+		t.Fatalf("no cut happened before the rewind")
+	}
+	end := r.messages.rounds[3].id
+	if _, _, _, err := r.Rewind(end, api.Input{Text: "instead"}); err != nil {
+		t.Fatalf("Rewind: %v", err)
+	}
+	matchesLoad(t, s, r)
+	if historyImages(r) != 4 || r.messages.cursor != 0 {
+		t.Fatalf("after the rewind %d images are kept with the cursor at %d, want the 4 the kept rounds carry, uncut", historyImages(r), r.messages.cursor)
+	}
+}
+
+func TestCompactionRequestStaysUnderTheImageCap(t *testing.T) {
+	model := api.Model{ImagesPerRequest: 6}
+	s := local.NewMessageStorage()
+	r := NewReplay(context.Background(), "a", s, api.ThreadConfig{ThreadMemoryLimit: -1, ReplayItemShare: 0.25, CompactionPreserve: 0.25}, model)
+	mustCreate(t, r)
+	for i := range 10 {
+		name := fmt.Sprintf("c%d", i)
+		text := ""
+		if i == 0 {
+			text = "start"
+		}
+		if _, _, err := r.RoundInit(api.Input{Text: text}); err != nil {
+			t.Fatalf("RoundInit: %v", err)
+		}
+		if _, err := r.RoundOk(api.EventUsage{Input: (i + 1) * 100}, api.Indexed[api.Content]{0: api.ContentToolUse{ID: name, Name: "attach", Input: json.RawMessage(`{}`)}}); err != nil {
+			t.Fatalf("RoundOk: %v", err)
+		}
+		if err := r.RoundResult(map[string]api.ContentToolResult{name: {ID: name, Content: shots(name, 2)}}); err != nil {
+			t.Fatalf("RoundResult: %v", err)
+		}
+	}
+	c, messages, err := r.PrepareCompaction(false, 0)
+	if err != nil || len(messages) == 0 {
+		t.Fatalf("PrepareCompaction: %v, %d messages", err, len(messages))
+	}
+	if got := requestImages(messages); got > model.ImagesPerRequest || got == 0 {
+		t.Fatalf("the compaction request carries %d images, want some and at most the %d the model takes", got, model.ImagesPerRequest)
+	}
+	if err := r.ApplyCompaction(c, api.Indexed[api.Content]{0: api.ContentText{Text: "the summary"}}, api.EventUsage{Output: 50}); err != nil {
+		t.Fatalf("ApplyCompaction: %v", err)
+	}
+	matchesLoad(t, s, r)
+}
+
+func TestRejectedRoundRefusesItsResultsAcrossAReload(t *testing.T) {
+	const said = "the tool said this"
+	for _, c := range []struct {
+		reason  string
+		refused bool
+	}{
+		{string(api.CodeInvalid), true},
+		{string(api.CodeTooLarge), true},
+		{string(api.CodeNetwork), false},
+	} {
+		t.Run(c.reason, func(t *testing.T) {
+			s := local.NewMessageStorage()
+			r := NewReplay(context.Background(), "a", s, unboundedConfig, api.Model{})
+			mustCreate(t, r)
+			toolRound(t, r, "shot", "start", api.ContentText{Text: said}, api.ContentImage{Data: make([]byte, 1024), Mime: "image/png"})
+			if _, _, err := r.RoundInit(api.Input{}); err != nil {
+				t.Fatalf("RoundInit: %v", err)
+			}
+			if err := r.RoundError(errors.New(c.reason), api.EventUsage{}, nil); err != nil {
+				t.Fatalf("RoundError: %v", err)
+			}
+			refused := api.ContentToolResult{ID: "shot"}.Refused().Content[0].(api.ContentText).Text
+			if got := stashText(t, r) == refused; got != c.refused {
+				t.Fatalf("after a %s round the stash reads %q, refused %v, want %v", c.reason, stashText(t, r), got, c.refused)
+			}
+			if r.IsRetriable() == c.refused {
+				t.Fatalf("a %s round is retriable %v, want %v", c.reason, r.IsRetriable(), !c.refused)
+			}
+			matchesLoad(t, s, r)
+			loaded := NewReplay(context.Background(), "a", s, unboundedConfig, api.Model{})
+			if err := loaded.Load(); err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if loaded.IsRetriable() == c.refused {
+				t.Fatalf("a reloaded %s round is retriable %v, want %v", c.reason, loaded.IsRetriable(), !c.refused)
+			}
+			r.updateSeq(loaded.seq())
+			if _, _, _, err := r.Retry(); (err != nil) != c.refused {
+				t.Fatalf("Retry of a %s round answered %v", c.reason, err)
+			}
+			if !c.refused {
+				matchesLoad(t, s, r)
+				if err := r.RoundError(errors.New(c.reason), api.EventUsage{}, nil); err != nil {
+					t.Fatalf("RoundError: %v", err)
+				}
+			}
+			if _, _, err := r.RoundInit(api.Input{Text: "next"}); err != nil {
+				t.Fatalf("RoundInit: %v", err)
+			}
+			if _, err := r.RoundOk(api.EventUsage{}, api.Indexed[api.Content]{0: api.ContentText{Text: "ok"}}); err != nil {
+				t.Fatalf("RoundOk: %v", err)
+			}
+			matchesLoad(t, s, r)
+		})
+	}
+}
+
+func TestRetryReplaysWhatALoadReplays(t *testing.T) {
+	s := local.NewMessageStorage()
+	r := NewReplay(context.Background(), "a", s, unboundedConfig, api.Model{ImagesPerRequest: 2})
+	mustCreate(t, r)
+	toolRound(t, r, "c0", "start", shots("c0", 2)...)
+	toolRound(t, r, "shot", "", api.ContentImage{Data: make([]byte, 1024), Mime: "image/png"})
+	if _, _, err := r.RoundInit(api.Input{}); err != nil {
+		t.Fatalf("RoundInit: %v", err)
+	}
+	if err := r.RoundError(errors.New(string(api.CodeNetwork)), api.EventUsage{}, nil); err != nil {
+		t.Fatalf("RoundError: %v", err)
+	}
+	if _, _, _, err := r.Retry(); err != nil {
+		t.Fatalf("Retry: %v", err)
+	}
+	matchesLoad(t, s, r)
+	if got := countImages(r.messages.resultStash[0]); got != 1 {
+		t.Fatalf("the retried round's stash carries %d images, want the 1 the stored rounds give it", got)
+	}
+}
+
+func TestMediaOverEightyPercentIsCutToHalf(t *testing.T) {
+	const limit, image = 100_000, 30_000
+	s := local.NewMessageStorage()
+	r := NewReplay(context.Background(), "a", s, budgetConfig(limit), api.Model{})
+	mustCreate(t, r)
+	for i, name := range []string{"c0", "c1", "c2"} {
+		text := ""
+		if i == 0 {
+			text = "start"
+		}
+		toolRound(t, r, name, text, api.ContentImage{Data: make([]byte, image), Mime: "image/png"})
+	}
+	if got := r.NeedCompaction(); got != CompactionNone {
+		t.Fatalf("90000 media bytes of a %d byte limit: got %v, want %v: the next request cuts media, compaction is for text", limit, got, CompactionNone)
+	}
+	_, messages, err := r.RoundInit(api.Input{})
+	if err != nil {
+		t.Fatalf("RoundInit: %v", err)
+	}
+	if got := requestImages(messages); got != 1 {
+		t.Fatalf("the request carries %d images, want 1: 90000 media bytes are over 80%% of %d, so the oldest are cut until at most 50%% is left", got, limit)
+	}
+	seen := 0
+	for _, m := range messages {
+		for _, text := range resultTexts(m.Content) {
+			if text == seenMedia {
+				seen++
+			}
+		}
+	}
+	if seen != 2 {
+		t.Fatalf("%d cut images carry the seen placeholder, want 2", seen)
+	}
+	matchesLoad(t, s, r)
+}
+
+func TestTextNeverCutsMedia(t *testing.T) {
+	const limit, image = 100_000, 30_000
+	r := NewReplay(context.Background(), "a", local.NewMessageStorage(), budgetConfig(limit), api.Model{})
+	mustCreate(t, r)
+	toolRound(t, r, "c0", "start", api.ContentImage{Data: make([]byte, image), Mime: "image/png"})
+	toolRound(t, r, "c1", "", api.ContentText{Text: strings.Repeat("x", 80_000)})
+	if got := r.NeedCompaction(); got != CompactionBytes {
+		t.Fatalf("a thread over its %d byte limit through text: got %v, want %v", limit, got, CompactionBytes)
+	}
+	_, messages, err := r.RoundInit(api.Input{})
+	if err != nil {
+		t.Fatalf("RoundInit: %v", err)
+	}
+	if got := requestImages(messages); got != 1 {
+		t.Fatalf("the request carries %d images, want 1: media under 80%% of the limit are not cut, whatever the text weighs", got)
+	}
+
+	const roomy, requestBytes = 10 << 20, 2 << 20
+	small := NewReplay(context.Background(), "a", local.NewMessageStorage(), budgetConfig(roomy), api.Model{RequestBytes: requestBytes})
+	mustCreate(t, small)
+	toolRound(t, small, "c0", "start", api.ContentDocument{Data: make([]byte, requestBytes/2), Mime: "text/plain", Name: "half.txt"})
+	toolRound(t, small, "c1", "", api.ContentText{Text: "done"})
+	if got := small.NeedCompaction(); got != CompactionNone {
+		t.Fatalf("a thread of %d bytes under its %d byte limit, on a model taking %d byte requests: got %v, want %v", small.messages.weight, roomy, requestBytes, got, CompactionNone)
+	}
+}
+
+func TestCompactionReloadsTheImageCut(t *testing.T) {
+	model := api.Model{ImagesPerRequest: 6}
+	s := local.NewMessageStorage()
+	r := NewReplay(context.Background(), "a", s, api.ThreadConfig{ThreadMemoryLimit: -1, ReplayItemShare: 0.25, CompactionPreserve: 0.9}, model)
+	mustCreate(t, r)
+	for i := range 10 {
+		name := fmt.Sprintf("c%d", i)
+		text := ""
+		if i == 0 {
+			text = "start"
+		}
+		if _, _, err := r.RoundInit(api.Input{Text: text}); err != nil {
+			t.Fatalf("RoundInit: %v", err)
+		}
+		if _, err := r.RoundOk(api.EventUsage{Input: (i + 1) * 100}, api.Indexed[api.Content]{0: api.ContentToolUse{ID: name, Name: "attach", Input: json.RawMessage(`{}`)}}); err != nil {
+			t.Fatalf("RoundOk: %v", err)
+		}
+		if err := r.RoundResult(map[string]api.ContentToolResult{name: {ID: name, Content: shots(name, 2)}}); err != nil {
+			t.Fatalf("RoundResult: %v", err)
+		}
+	}
+	cursor := r.messages.cursor
+	c, _, err := r.PrepareCompaction(false, 0)
+	if err != nil {
+		t.Fatalf("PrepareCompaction: %v", err)
+	}
+	if c.index < 1 || c.index+1 >= cursor {
+		t.Fatalf("the compaction keeps rounds from %d with the cursor at %d, want it to keep cut rounds", c.index, cursor)
+	}
+	if err := r.ApplyCompaction(c, api.Indexed[api.Content]{0: api.ContentText{Text: "the summary"}}, api.EventUsage{Output: 50}); err != nil {
+		t.Fatalf("ApplyCompaction: %v", err)
+	}
+	if r.messages.cursor == cursor-c.index {
+		t.Fatalf("the cursor is at %d, the old one moved back by the %d folded rounds, want the cut a Load makes of the kept rounds", r.messages.cursor, c.index)
+	}
+	matchesLoad(t, s, r)
 }

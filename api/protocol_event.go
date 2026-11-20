@@ -283,16 +283,14 @@ const (
 
 // ErrCode says why a turn is unusable and what the caller does about it. The
 // constants are grouped by remedy: change the input, adjust the request and
-// resend, retry unchanged, give up, decide yourself. CodeCapped,
-// CodeContextLength and CodeTooLarge stay apart because their fixes differ:
-// raise the cap, compact the conversation, or send fewer bytes.
+// resend, retry unchanged, give up, decide yourself.
 type ErrCode string
 
 const (
 	CodeRefused       ErrCode = "refused"        // the model or the provider would not produce this reply; change the input
 	CodeCapped        ErrCode = "capped"         // output was cut at the provider's configured response cap; raise it or continue
 	CodeContextLength ErrCode = "context_length" // the conversation does not fit the model; compact it and retry
-	CodeTooLarge      ErrCode = "too_large"      // the request is too large: over Model.RequestBytes, or refused by the service for its size; shed media and retry
+	CodeTooLarge      ErrCode = "too_large"      // the request is too large: over Model.RequestBytes, or refused by the service for its size; send fewer bytes
 	CodeNetwork       ErrCode = "network"        // connection, stream or deadline failed; retry as sent
 	CodeBusy          ErrCode = "busy"           // rate limited or out of capacity; back off and retry
 	CodeInvalid       ErrCode = "invalid"        // the request was refused as written; fix the request

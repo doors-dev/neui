@@ -23,6 +23,7 @@ import (
 type threadCompact struct {
 	thread  *thread
 	round   api.Round
+	failed  api.ErrCode
 	usage   api.EventUsage
 	content api.Indexed[api.Content]
 }
@@ -125,7 +126,7 @@ func (s *threadCompact) on(cmd any) {
 			return
 		}
 		if !applied {
-			if err := s.thread.replay.RoundError(errors.New(string(api.CodeContextLength)), s.usage, s.content); err != nil {
+			if err := s.thread.replay.RoundError(errors.New(string(s.failed)), s.usage, s.content); err != nil {
 				s.thread.criticalErr(nil, err)
 				return
 			}
@@ -133,7 +134,7 @@ func (s *threadCompact) on(cmd any) {
 				s.thread.criticalErr(nil, api.ErrCompactionFailed)
 				return
 			}
-			s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundEnd{Round: s.round.ID, State: api.RoundError, Error: string(api.CodeContextLength), Usage: s.usage, Final: true, CanCompact: s.thread.canCompact()}))
+			s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundEnd{Round: s.round.ID, State: api.RoundError, Error: string(s.failed), Usage: s.usage, Final: true, CanCompact: s.thread.canCompact()}))
 			wasPending := s.thread.pending
 			s.thread.pending = false
 			if wasPending {

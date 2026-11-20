@@ -20,8 +20,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"neui.dev/api"
 )
 
 func TestAPIErrorFormat(t *testing.T) {
@@ -75,14 +73,14 @@ func TestRetryAfter(t *testing.T) {
 	}
 }
 
-func TestMeasuredTooLargeMarksOnlyAMeasuredRequest(t *testing.T) {
+func TestMeasuredTooLargeNamesTheSizes(t *testing.T) {
 	refusal := &APIError{Provider: "gpt", Status: 413}
 	if got := MeasuredTooLarge("m", 10, 0, refusal); got != error(refusal) {
 		t.Errorf("an unmeasured request came back as %v", got)
 	}
 	got := MeasuredTooLarge("m", 10, 20, refusal)
 	var carried *APIError
-	if !errors.Is(got, api.ErrMeasuredTooLarge) || !errors.As(got, &carried) || carried != refusal {
+	if !errors.As(got, &carried) || carried != refusal {
 		t.Errorf("a measured request came back as %v", got)
 	}
 	if !strings.Contains(got.Error(), "sent 10 bytes") || !strings.Contains(got.Error(), "20 declared for m") {

@@ -245,7 +245,7 @@ func (l List) IndexedEvent(e api.IndexedEvent) {
 	live.On(e)
 }
 
-func (l List) RoundDone(ctx context.Context, state api.RoundState) {
+func (l List) RoundDone(ctx context.Context, state api.RoundState, err string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.sectionAppender == nil {
@@ -253,7 +253,7 @@ func (l List) RoundDone(ctx context.Context, state api.RoundState) {
 	}
 	live := l.lastSection.live
 	l.lastSection.live = nil
-	live.Done(ctx, state)
+	live.Done(ctx, state, err)
 	if live.Tools().IsEmpty() {
 		l.lastSection.tools = nil
 		return

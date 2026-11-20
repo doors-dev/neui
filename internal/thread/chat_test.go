@@ -34,6 +34,7 @@ import (
 	"neui.dev/api"
 	"neui.dev/internal/common"
 	"neui.dev/internal/modules/js"
+	"neui.dev/internal/replay"
 	"neui.dev/internal/schema"
 	"neui.dev/internal/storage/local"
 	"neui.dev/internal/testkit"
@@ -332,22 +333,141 @@ func TestRoundItemBudgetOmitsAResultOverIt(t *testing.T) {
 	}
 }
 
-func TestRoundItemBudgetDoesNotCountMedia(t *testing.T) {
-	run := probe(t, func(context.Context, json.RawMessage) (any, error) {
-		return api.UserContents{api.ContentImage{Data: make([]byte, 20<<10), Mime: "image/png"}, api.ContentText{Text: "ok"}}, nil
+func mediaProbe(t *testing.T, ran *atomic.Int64) common.Option {
+	t.Helper()
+	return probe(t, func(ctx context.Context, input json.RawMessage) (any, error) {
+		ran.Add(1)
+		var arg struct{ Size int }
+		if err := json.Unmarshal(input, &arg); err != nil {
+			return nil, err
+		}
+		return api.UserContents{
+			api.ContentText{Text: "ok"},
+			api.ContentImage{Data: make([]byte, arg.Size/2), Mime: "image/png"},
+			api.ContentDocument{Data: make([]byte, arg.Size-arg.Size/2), Mime: "text/plain", Name: "a.txt"},
+		}, nil
 	})
-	p := testkit.NewProvider(budgetModel, sizedCalls(0, 0), testkit.Say("done"))
-	c := stack.Headless(t, stack.Host{Provider: p, Options: []common.Option{run}})
+}
+
+var mediaModel = api.Model{Name: "stub", Context: 10_000}
+
+var mediaConfig = api.ThreadConfig{ThreadMemoryLimit: 200_000, ReplayMediaShare: 0.2}
+
+func TestMediaBudgetNotesResultsThatDoNotFit(t *testing.T) {
+	var ran atomic.Int64
+	p := testkit.NewProvider(mediaModel, sizedCalls(8000, 8000, 8000, 4000), testkit.Say("done"))
+	c := stack.Headless(t, stack.Host{Provider: p, Config: mediaConfig, Options: []common.Option{mediaProbe(t, &ran)}})
 	c.Send("call")
 	c.Wait()
+	if got := ran.Load(); got != 4 {
+		t.Fatalf("the tool ran %d times, want 4: a result that does not fit the 20000-byte media budget is noted and the budget stays open", got)
+	}
+	results := testkit.Results(p.Request(t, 1))
+	if len(results) != 4 {
+		t.Fatalf("4 calls got %d results", len(results))
+	}
+	for _, i := range []int{0, 1, 3} {
+		r := results[i]
+		image, isImage := r.Content[1].(api.ContentImage)
+		document, isDocument := r.Content[2].(api.ContentDocument)
+		if r.Error != api.ToolOk || !isImage || !isDocument || len(image.Data)+len(document.Data) == 0 {
+			t.Fatalf("call %d fit the media budget and came back as %q with %#v, want its text, image and document whole", i, r.Error, r.Content)
+		}
+	}
+	want := api.UserContents{api.ContentText{Text: "ok"}, api.ContentText{Text: replay.OmittedMediaNote(8000)}}
+	if results[2].Error != api.ToolOk || !reflect.DeepEqual(results[2].Content, want) {
+		t.Fatalf("the third result would take the round over the media budget and came back as %q with %#v, want its text and one note", results[2].Error, results[2].Content)
+	}
+}
+
+func TestMediaBudgetReachedExactlyStopsTheCalls(t *testing.T) {
+	var ran atomic.Int64
+	p := testkit.NewProvider(mediaModel, sizedCalls(10000, 10000, 10), testkit.Say("done"))
+	c := stack.Headless(t, stack.Host{Provider: p, Config: mediaConfig, Options: []common.Option{mediaProbe(t, &ran)}})
+	c.Send("call")
+	c.Wait()
+	if got := ran.Load(); got != 2 {
+		t.Fatalf("the tool ran %d times, want 2: two results reach the 20000-byte media budget exactly and the call after them must not run", got)
+	}
+	results := testkit.Results(p.Request(t, 1))
+	if text, ok := results[2].Content[0].(api.ContentText); len(results) != 3 || !ok || text.Text != notRun {
+		t.Fatalf("the call after the media budget was reached came back as %#v, want %q", results[2].Content, notRun)
+	}
+}
+
+func TestMediaBudgetNotesAResultOverIt(t *testing.T) {
+	var ran atomic.Int64
+	p := testkit.NewProvider(mediaModel, sizedCalls(30000, 8000), testkit.Say("done"))
+	c := stack.Headless(t, stack.Host{Provider: p, Config: mediaConfig, Options: []common.Option{mediaProbe(t, &ran)}})
+	c.Send("call")
+	c.Wait()
+	if got := ran.Load(); got != 2 {
+		t.Fatalf("the tool ran %d times, want 2: a result turned into notes leaves the media budget to the calls after it", got)
+	}
 	results := testkit.Results(p.Request(t, 1))
 	if len(results) != 2 {
 		t.Fatalf("2 calls got %d results", len(results))
 	}
-	for _, r := range results {
-		if _, ok := r.Content[0].(api.ContentImage); !ok || len(r.Content) != 2 || r.Error != api.ToolOk {
-			t.Fatalf("call %s came back as %q with %d blocks, want the 20 KiB image and its text: media does not count toward the budget", r.ID, r.Error, len(r.Content))
+	want := api.UserContents{api.ContentText{Text: "ok"}, api.ContentText{Text: replay.OmittedMediaNote(30000)}}
+	if results[0].Error != api.ToolOk || !reflect.DeepEqual(results[0].Content, want) {
+		t.Fatalf("the result over the media budget came back as %q with %#v, want its text and one note for its image and document", results[0].Error, results[0].Content)
+	}
+	if _, ok := results[1].Content[1].(api.ContentImage); !ok || results[1].Error != api.ToolOk {
+		t.Fatalf("the call after the noted result came back as %q with %#v, want its media", results[1].Error, results[1].Content)
+	}
+}
+
+func TestMediaNoteCountsTowardTheTextBudget(t *testing.T) {
+	const media = 30000
+	note := replay.OmittedMediaNote(media)
+	budget := replay.RoundItemBudget(api.ThreadConfig{ReplayItemShare: 0.1}, mediaModel)
+	for _, c := range []struct {
+		name   string
+		text   int
+		images int
+		kept   bool
+	}{
+		{"text and note fit", budget - len(note), 1, true},
+		{"many images, one note", budget - len(note), 30, true},
+		{"text and note over", budget - len(note) + 1, 1, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			text := strings.Repeat("x", c.text)
+			run := probe(t, func(context.Context, json.RawMessage) (any, error) {
+				content := api.UserContents{api.ContentText{Text: text}}
+				for range c.images {
+					content = append(content, api.ContentImage{Data: make([]byte, media/c.images), Mime: "image/png"})
+				}
+				return content, nil
+			})
+			p := testkit.NewProvider(mediaModel, testkit.Call("probe__run", struct{}{}), testkit.Say("done"))
+			h := stack.Headless(t, stack.Host{Provider: p, Config: mediaConfig, Options: []common.Option{run}})
+			h.Send("call")
+			h.Wait()
+			want := api.UserContents{api.ContentText{Text: text}, api.ContentText{Text: note}}
+			if !c.kept {
+				want = api.UserContents{api.ContentText{Text: replay.OmittedNote(c.text + len(note))}}
+			}
+			if results := testkit.Results(p.Request(t, 1)); len(results) != 1 || !reflect.DeepEqual(results[0].Content, want) {
+				t.Fatalf("the result went out as %#v, want %#v", results, want)
+			}
+		})
+	}
+}
+
+func TestMediaBudgetIsOffWithoutAThreadLimit(t *testing.T) {
+	var ran atomic.Int64
+	p := testkit.NewProvider(mediaModel, sizedCalls(30000, 30000), testkit.Say("done"))
+	c := stack.Headless(t, stack.Host{Provider: p, Config: api.ThreadConfig{ThreadMemoryLimit: -1}, Options: []common.Option{mediaProbe(t, &ran)}})
+	c.Send("call")
+	c.Wait()
+	for _, r := range testkit.Results(p.Request(t, 1)) {
+		if _, ok := r.Content[1].(api.ContentImage); !ok || r.Error != api.ToolOk {
+			t.Fatalf("call %s came back as %q with %#v, want its media: a negative ThreadMemoryLimit sets no media budget", r.ID, r.Error, r.Content)
 		}
+	}
+	if got := ran.Load(); got != 2 {
+		t.Fatalf("the tool ran %d times, want 2", got)
 	}
 }
 
@@ -533,36 +653,40 @@ func TestToolRoundEndWipesScratch(t *testing.T) {
 	}
 }
 
-func TestProviderRefusalOfMeasuredBytesIsTerminal(t *testing.T) {
-	const sent, declared = 33_000_000, 32_000_000
-	model := api.Model{Name: "stub", RequestBytes: declared}
-	refused := testkit.Events(api.EventErr{Code: api.CodeTooLarge, Err: fmt.Errorf("stub: the request is %d bytes, over the %d the model %s takes", sent, declared, model.Name)})
-	measured := testkit.Events(api.EventErr{Code: api.CodeTooLarge, Err: fmt.Errorf("%w: sent %d bytes, measured against the %d declared for %s: stub: 413", api.ErrMeasuredTooLarge, sent, declared, model.Name)})
-
-	t.Run("local", func(t *testing.T) {
-		p := testkit.NewProvider(model, refused, refused)
-		c := stack.Headless(t, stack.Host{Provider: p})
-		c.Send("go")
-		expectTrace(t, c.Wait(), "ThreadCreated", "RoundStart", "RoundStart(truncate)", "RoundEnd(error,too_large,final)")
-		if n := len(p.Requests()); n != 2 {
-			t.Fatalf("a refusal this process made itself led to %d requests, want the round sent again once under the tightened budget, then ended once Tighten is spent", n)
-		}
-	})
-
-	t.Run("measured", func(t *testing.T) {
-		p := testkit.NewProvider(model, measured, refused, testkit.Say("fits"))
-		c := stack.Headless(t, stack.Host{Provider: p})
-		c.Send("go")
-		expectTrace(t, c.Wait(), "ThreadCreated", "RoundStart", "RoundEnd(error,too_large,final)")
-		if n := len(p.Requests()); n != 1 {
-			t.Fatalf("a 413 answering a request measured as fitting made %d requests, want the round ended: nothing it sends instead is smaller enough", n)
-		}
-		c.Retry()
-		expectTrace(t, c.Wait(), "RoundStart(truncate)", "RoundStart(truncate)", "Indexed", "Indexed", "RoundUsage", "RoundEnd(ok,final)")
-		if n := len(p.Requests()); n != 3 {
-			t.Fatalf("the retry made %d requests in all, want 3: Tighten was spent on a refusal no tightening fixes", n)
-		}
-	})
+func TestRejectedRoundRefusesTheWaitingResults(t *testing.T) {
+	refused := api.ContentToolResult{}.Refused().Content[0].(api.ContentText).Text
+	for _, code := range []api.ErrCode{api.CodeInvalid, api.CodeTooLarge} {
+		t.Run(string(code), func(t *testing.T) {
+			run := probe(t, func(context.Context, json.RawMessage) (any, error) {
+				return api.UserContents{api.ContentText{Text: "shot"}, api.ContentImage{Data: make([]byte, 64), Mime: "image/png"}}, nil
+			})
+			rejected := testkit.Events(api.EventErr{Code: code, Err: errors.New("stub: rejected")})
+			p := testkit.NewProvider(api.Model{Name: "stub"}, testkit.Call("probe__run", struct{}{}), rejected, testkit.Say("moved on"))
+			c := stack.Headless(t, stack.Host{Provider: p, Options: []common.Option{run}})
+			c.Send("go")
+			expectTrace(t, c.Wait(),
+				"ThreadCreated", "RoundStart", "Indexed", "Indexed", "RoundUsage", "RoundEnd(ok)",
+				"ToolResults", "RoundStart", "RoundEnd(error,"+string(code)+",final)")
+			if n := len(p.Requests()); n != 2 {
+				t.Fatalf("the rejected round led to %d requests, want 2: it ends the turn", n)
+			}
+			if results := testkit.Results(p.Request(t, 1)); len(results) != 1 || len(results[0].Content) != 2 {
+				t.Fatalf("the rejected request carried %+v, want the result as the tool returned it", results)
+			}
+			if err := c.Do(thread.Link.Retry); !errors.Is(err, api.ErrWrongState) {
+				t.Fatalf("retry after the rejected round answered %v, want ErrWrongState: it would send the rejected request again", err)
+			}
+			c.Send("next")
+			c.Wait()
+			results := testkit.Results(p.Request(t, 2))
+			if len(results) != 1 || len(results[0].Content) != 1 {
+				t.Fatalf("the next request answers with %+v, want the one refused result", results)
+			}
+			if text, ok := results[0].Content[0].(api.ContentText); !ok || text.Text != refused {
+				t.Fatalf("the next request carries %#v, want the refused note in place of the rejected result", results[0].Content)
+			}
+		})
+	}
 }
 
 func TestOversizedInputIsRefusedWhereItIsSubmitted(t *testing.T) {
@@ -821,10 +945,10 @@ func TestByteDrivenCompactionBlocksTheRoundAfterTheTools(t *testing.T) {
 }
 
 func TestBytePressureBlocksTheRoundWhileTokensAlsoOverflow(t *testing.T) {
-	half := strings.Repeat("x", 20_000)
+	half := strings.Repeat("x", 25_000)
 	compacted := make(chan struct{})
 	run := probe(t, func(context.Context, json.RawMessage) (any, error) {
-		return api.UserContents{api.ContentImage{Data: make([]byte, 20<<10), Mime: "image/png"}}, nil
+		return api.UserContents{api.ContentImage{Data: make([]byte, 14<<10), Mime: "image/png"}}, nil
 	})
 	call := testkit.Events(
 		api.EventStart{ID: "call", Model: "stub"},
@@ -837,7 +961,7 @@ func TestBytePressureBlocksTheRoundWhileTokensAlsoOverflow(t *testing.T) {
 	p.OnCompaction(held(compacted, testkit.Say("the summary")))
 	c := stack.Headless(t, stack.Host{
 		Provider: p,
-		Config:   api.ThreadConfig{ThreadMemoryLimit: 60_000, CompactionPreserve: 0.25, CompactionTrigger: 0.5},
+		Config:   api.ThreadConfig{ThreadMemoryLimit: 60_000, ReplayItemShare: 0.25, CompactionPreserve: 0.25, CompactionTrigger: 0.5},
 		Options:  []common.Option{run},
 	})
 	c.Send("one")
@@ -872,7 +996,7 @@ func TestBytePressureBlocksTheRoundWhileTokensAlsoOverflow(t *testing.T) {
 		}
 	}
 	if images != 1 {
-		t.Fatalf("the resumed round carries %d images, want the 1 the tool produced: the park the byte cause exists for never engaged and the stash was shed instead", images)
+		t.Fatalf("the resumed round carries %d images, want the 1 the tool produced: the park the byte cause exists for never engaged", images)
 	}
 }
 

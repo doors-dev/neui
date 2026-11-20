@@ -101,9 +101,6 @@ func (r Builder) Flush() (response Response) {
 	if r.ok == nil && r.err == nil {
 		r.onErr(fmt.Errorf("%w: the stream ended with no terminal event", ErrNotEnded))
 	}
-	if r.ok != nil && len(r.blocks) == 0 {
-		r.onErr(fmt.Errorf("%w: %s arrived with nothing to store", ErrNoContent, r.ok.Code))
-	}
 	if r.err != nil {
 		response.code = r.err.Code
 		response.Cause = r.err.Err
@@ -206,7 +203,6 @@ func (r *builder) reset() {
 	r.err = nil
 }
 
-var ErrNoContent = errors.New("thread: turn ended with no content")
 var ErrNotStarted = errors.New("thread: turn has not started")
 var ErrStarted = errors.New("thread: turn already started")
 var ErrNotEnded = errors.New("thread: turn has not ended")

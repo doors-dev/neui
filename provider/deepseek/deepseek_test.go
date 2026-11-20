@@ -241,9 +241,6 @@ func TestProviderRefusesBytesMeasuredAsFitting(t *testing.T) {
 	if e.Code != api.CodeTooLarge {
 		t.Fatalf("code = %q, want %q: a 413 is the request refused by its size (err %v)", e.Code, api.CodeTooLarge, e.Err)
 	}
-	if !errors.Is(e.Err, api.ErrMeasuredTooLarge) {
-		t.Fatalf("error %v does not carry api.ErrMeasuredTooLarge: a caller cannot tell it from a refusal this adapter made itself, and will retry it", e.Err)
-	}
 	if msg := e.Err.Error(); sent == 0 || !strings.Contains(msg, fmt.Sprint(sent)) || !strings.Contains(msg, fmt.Sprint(declared)) {
 		t.Fatalf("error %q names neither the %d bytes sent nor the %d declared: nothing points at the misconfiguration", msg, sent, declared)
 	}
@@ -260,13 +257,7 @@ func serverURL(t *testing.T, h http.HandlerFunc) string {
 	return srv.URL
 }
 
-// A refusal by size against a model that declares no limit is not marked as
-// measured. api.ErrMeasuredTooLarge states that this adapter measured the body
-// against Model.RequestBytes and sent it only because it fit, which is why a
-// caller reading it stops instead of sending less; at a declared zero the check
-// in request never ran, so nothing was measured and sending less is the remedy
-// that works. The code still says the request was refused by its byte size.
-func TestUnmeasuredRequestTooLargeIsNotMarked(t *testing.T) {
+func TestUnmeasuredRequestTooLargeNamesNoLimit(t *testing.T) {
 	p := serve(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusRequestEntityTooLarge)
 		io.WriteString(w, "payload too large")
@@ -281,9 +272,6 @@ func TestUnmeasuredRequestTooLargeIsNotMarked(t *testing.T) {
 	}
 	if e.Code != api.CodeTooLarge {
 		t.Fatalf("code = %q, want %q: the refusal is still one about bytes (err %v)", e.Code, api.CodeTooLarge, e.Err)
-	}
-	if errors.Is(e.Err, api.ErrMeasuredTooLarge) {
-		t.Fatalf("error %v carries api.ErrMeasuredTooLarge with nothing measured: the caller ends the turn where sending less would have worked", e.Err)
 	}
 	if msg := e.Err.Error(); strings.Contains(msg, "the 0 declared") {
 		t.Fatalf("error %q reports a measurement against a limit the model never declared", msg)

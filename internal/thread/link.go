@@ -104,11 +104,13 @@ func (l *link) useTools(roundID api.RoundID, tools []api.ContentToolUse) (<-chan
 	stop, stopCancel := context.WithCancelCause(l.ctx)
 	var mu sync.Mutex
 	var running context.CancelCauseFunc
-	limit := l.backend.Config().ToolCallLimit
-	budget := replay.RoundItemBudget(l.backend.Config(), l.backend.Provider().Model())
+	config := l.backend.Config()
+	limit := config.ToolCallLimit
+	budget := replay.RoundItemBudget(config, l.backend.Provider().Model())
+	mediaBudget := replay.RoundMediaBudget(config)
 	go func() {
 		defer close(ch)
-		total := 0
+		total, media := 0, int64(0)
 		for i, tool := range tools {
 			if stop.Err() != nil {
 				ch <- api.NewContentToolResult(tool.ID, nil, context.Cause(stop))
@@ -127,7 +129,7 @@ func (l *link) useTools(roundID api.RoundID, tools []api.ContentToolUse) (<-chan
 				ch <- api.NewContentToolResult(tool.ID, nil, api.DiscardedArgumentsError{})
 				continue
 			}
-			if total >= budget {
+			if total >= budget || mediaBudget > 0 && media >= mediaBudget {
 				ch <- api.NewContentToolResult(tool.ID, nil, errors.New("Not run: this turn's tool results reached their size limit. Call it again next turn."))
 				continue
 			}
@@ -152,18 +154,42 @@ func (l *link) useTools(roundID api.RoundID, tools []api.ContentToolUse) (<-chan
 				content, err := t.Func(ctx, input)
 				return api.NewContentToolResult(tool.ID, content, err)
 			}()
-			size := 0
+			size, mediaSize := 0, int64(0)
 			for _, c := range res.Content {
-				if text, ok := c.(api.ContentText); ok {
-					size += len(text.Text)
+				switch c := c.(type) {
+				case api.ContentText:
+					size += len(c.Text)
+				case api.ContentImage:
+					mediaSize += int64(len(c.Data))
+				case api.ContentDocument:
+					mediaSize += int64(len(c.Data))
 				}
+			}
+			if mediaBudget > 0 && media+mediaSize > mediaBudget {
+				note := replay.OmittedMediaNote(int(mediaSize))
+				content := make(api.UserContents, 0, len(res.Content))
+				noted := false
+				for _, c := range res.Content {
+					switch c.(type) {
+					case api.ContentImage, api.ContentDocument:
+						if !noted {
+							content = append(content, api.ContentText{Text: note})
+							noted = true
+						}
+					default:
+						content = append(content, c)
+					}
+				}
+				res = api.ContentToolResult{ID: res.ID, Content: content, Error: res.Error}
+				size, mediaSize = size+len(note), 0
 			}
 			if size > budget {
 				note := replay.OmittedNote(size)
 				res = api.ContentToolResult{ID: res.ID, Content: api.UserContents{api.ContentText{Text: note}}, Error: res.Error}
-				size = len(note)
+				size, mediaSize = len(note), 0
 			}
 			total += size
+			media += mediaSize
 			ch <- res
 			cancel(nil)
 		}

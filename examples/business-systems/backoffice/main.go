@@ -20,6 +20,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
@@ -36,6 +37,20 @@ func main() {
 	var provider api.Provider
 	var err error
 	switch {
+	case os.Getenv("LOCAL_LLM_URL") != "":
+		window := 0
+		if v := os.Getenv("LOCAL_LLM_CONTEXT"); v != "" {
+			if window, err = strconv.Atoi(v); err != nil {
+				log.Fatalf("LOCAL_LLM_CONTEXT: %v", err)
+			}
+		}
+		name := os.Getenv("LOCAL_LLM_MODEL")
+		if name == "" {
+			name = "local"
+		}
+		provider, err = deepseek.New(deepseek.Conf{Model: api.Model{Name: name, Context: window}},
+			deepseek.WithBaseURL(os.Getenv("LOCAL_LLM_URL")),
+			deepseek.WithAPIKey(os.Getenv("LOCAL_LLM_KEY")))
 	case os.Getenv("DEEPSEEK_API_KEY") != "":
 		provider, err = deepseek.New(deepseek.Conf{Model: deepseek.Flash})
 	case os.Getenv("OPENAI_API_KEY") != "":
@@ -45,7 +60,7 @@ func main() {
 			claude.WithThinking(claude.Thinking{Type: claude.ThinkingAdaptive, Display: claude.DisplaySummarized}),
 			claude.WithEffort(claude.EffortMedium))
 	default:
-		log.Fatal("set DEEPSEEK_API_KEY, OPENAI_API_KEY or ANTHROPIC_API_KEY")
+		log.Fatal("set LOCAL_LLM_URL, DEEPSEEK_API_KEY, OPENAI_API_KEY or ANTHROPIC_API_KEY")
 	}
 	if err != nil {
 		log.Fatal(err)

@@ -237,7 +237,8 @@ type ChatThread interface {
 	// Retry runs the last round again when the thread is idle and that round
 	// ended without an answer (error, abort, or input only); the new round's
 	// ChatEventRoundStart names the replaced one in Truncate. ErrWrongState
-	// otherwise, including after an ok or refused round.
+	// otherwise, including after an ok or refused round and after an error
+	// round treated like a refused one (see RoundError).
 	Retry(ctx context.Context) error
 	// Compact starts a compaction of the history in the background. It
 	// returns ErrWrongState when ChatState.CanCompact, as last reported, is

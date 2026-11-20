@@ -55,14 +55,6 @@ var ErrNoProvider = errors.New("no provider: set WithProvider on the app or pass
 // Any other cancellation is the runtime's own.
 var ErrCanceledByUser = errors.New("canceled by user")
 
-// ErrMeasuredTooLarge marks the CodeTooLarge an adapter reports when the server
-// refused a request the adapter had already measured as fitting
-// Model.RequestBytes: the declared limit over-promises for that endpoint, or the
-// refusal is not about bytes at all. Neither is transient, so a caller reading
-// it with errors.Is ends the turn instead of sending less and trying again, and
-// the error names both the size measured and the limit it was measured against.
-var ErrMeasuredTooLarge = errors.New("provider refused a request measured as fitting")
-
 // ErrInputTooLarge reports an input over the round item budget
 // (ThreadConfig.ReplayItemShare), counting its text and the file links its
 // attachments turn into. It is refused where it is submitted, drafted or

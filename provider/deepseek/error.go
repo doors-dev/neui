@@ -112,11 +112,9 @@ func codeString(v any) string {
 // request again; 504 says the same thing and already lands there with the rest
 // of the 5xx.
 //
-// 413 is api.CodeTooLarge rather than a bad request. The body was measured
-// against Model.RequestBytes and sent only because it fit, so a refusal by size
-// says that declared limit over-promises for this endpoint; the error carries
-// api.ErrMeasuredTooLarge and both numbers, and a caller reads it as terminal
-// rather than sending less and trying again.
+// 413 is api.CodeTooLarge rather than a bad request. Where the body was
+// measured against Model.RequestBytes, the error names the bytes sent and the
+// declared limit.
 //
 // A status outside all of these is api.CodeUnknown rather than a guess at
 // the nearest 4xx. An unlisted status comes from a host this adapter does not

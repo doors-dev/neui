@@ -45,7 +45,7 @@ func TestFailedSeedIgnoresRoundEvents(t *testing.T) {
 	l.RoundStart(ctx, api.Round{ID: 2}, 1)
 	l.IndexedEvent(nil)
 	l.ToolsDone(ctx)
-	l.RoundDone(ctx, api.RoundOk)
+	l.RoundDone(ctx, api.RoundOk, "")
 	if l.lastSection.live != nil {
 		t.Fatal("an unseeded list took a live round")
 	}

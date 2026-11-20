@@ -297,11 +297,10 @@ func replayThinking(m api.Message) bool {
 // An empty text block and an attachment this API refuses are notes for the
 // thread's sake rather than the API's. This API refuses each outright, and a
 // user message and a tool result are both stored and replayed, so one sent as a
-// block would be refused again on every later turn of the thread rather than on
-// this one alone — a 400 no caller can act on, since shedding media does not
-// reach it and nothing short of a rewind drops the block. The attachment is
-// checked before the mime type, because a block that cannot be sent whatever it
-// claims to be is not a request worth refusing.
+// block would fail the turn: in a user message on every later turn until a
+// rewind drops it, in a tool result at the cost of the result's whole content.
+// The attachment is checked before the mime type, because a block that cannot
+// be sent whatever it claims to be is not a request worth refusing.
 //
 // A tool call is read against the result that answers it. Where that result
 // carries api.ToolErrJSON the call's arguments were discarded before they were

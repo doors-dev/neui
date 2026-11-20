@@ -63,9 +63,7 @@ func NewLiveRound(params params.Params, thread api.ChatThread, rewinder Rewinder
 		tools: rower.NewTools(r.Response, false),
 		rewind: deriveRewind(rewinder, r.ID),
 		rewinder: rewinder,
-		errored: doors.DeriveBeam(state, func(s api.RoundState) bool {
-			return s == api.RoundAbort || s == api.RoundError
-		}),
+		retriable: doors.NewSource(false),
 		last: doors.DeriveBeam(latest, func(latest api.RoundID) bool {
 			return latest == r.ID
 		}),
@@ -82,7 +80,7 @@ func NewLiveRound(params params.Params, thread api.ChatThread, rewinder Rewinder
 type liveRound struct {
 	params params.Params
 	last doors.Beam[bool]
-	errored doors.Beam[bool]
+	retriable doors.Source[bool]
 	rewind doors.Beam[rewindState]
 	rewinder Rewinder
 	state doors.Source[api.RoundState]
@@ -111,7 +109,8 @@ func (l LiveRound) IsErr() bool {
 	return false
 }
 
-func (l LiveRound) Done(ctx context.Context, state api.RoundState) {
+func (l LiveRound) Done(ctx context.Context, state api.RoundState, err string) {
+	l.retriable.Update(ctx, state == api.RoundAbort || state == api.RoundError && !rejected(err))
 	l.state.Update(ctx, state)
 	l.response.Close()
 	l.tools.Close(ctx)
@@ -173,8 +172,8 @@ elem (r LiveRound) Main() {
 
 elem (r LiveRound) retry() {
 	~>(new(doors.Door)) ~({
-		errored, ok := r.errored.Effect(ctx)
-		if !ok || !errored {
+		retriable, ok := r.retriable.Effect(ctx)
+		if !ok || !retriable {
 			return nil
 		}
 		last, ok := r.last.Effect(ctx)
@@ -185,13 +184,17 @@ elem (r LiveRound) retry() {
 	})
 }
 
+func rejected(err string) bool {
+	return err == string(api.CodeInvalid) || err == string(api.CodeTooLarge)
+}
+
 type Round = *round
 
 func NewRound(params params.Params, thread api.ChatThread, rewinder Rewinder, latest doors.Beam[api.RoundID], r api.Round, tools rower.Tools, span bool) Round {
-	errored := r.State == api.RoundAbort || r.State == api.RoundError || r.State == api.RoundInput
+	retriable := r.State == api.RoundAbort || r.State == api.RoundError && !rejected(r.Error) || r.State == api.RoundInput
 	return &round{
 		params: params,
-		errored: errored,
+		retriable: retriable,
 		last: doors.DeriveBeam(latest, func(latest api.RoundID) bool {
 			return latest == r.ID
 		}),
@@ -206,7 +209,7 @@ func NewRound(params params.Params, thread api.ChatThread, rewinder Rewinder, la
 
 type round struct {
 	params params.Params
-	errored bool
+	retriable bool
 	last doors.Beam[bool]
 	round api.Round
 	thread api.ChatThread
@@ -267,7 +270,7 @@ func (r Round) state() api.RoundState {
 }
 
 elem (r Round) retry() {
-	~(if r.errored {
+	~(if r.retriable {
 		~(r.last.Bind(elem(b bool) {
 			~(if b {
 				~(retryButton(r.thread))

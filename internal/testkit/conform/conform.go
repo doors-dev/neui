@@ -18,12 +18,12 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -310,8 +310,8 @@ func checkRequestBytes(t *testing.T, a Adapter, _ *schemas, srv *server, _ limit
 	events = collect(t, a.build(t, srv.srv.URL, at, Params{}), req)
 	CheckGrammar(t, events)
 	e, is := events[len(events)-1].(api.EventErr)
-	if !is || e.Code != api.CodeTooLarge || !errors.Is(e.Err, api.ErrMeasuredTooLarge) {
-		t.Fatalf("a 413 on a body measured as fitting ended %s, want %s carrying api.ErrMeasuredTooLarge", Describe(events[len(events)-1]), api.CodeTooLarge)
+	if !is || e.Code != api.CodeTooLarge || e.Err == nil || !strings.Contains(e.Err.Error(), "sent "+strconv.Itoa(n)+" bytes, measured against the "+strconv.Itoa(n)+" declared") {
+		t.Fatalf("a 413 on a body measured as fitting ended %s, want %s naming the %d bytes sent and the %d declared", Describe(events[len(events)-1]), api.CodeTooLarge, n, n)
 	}
 }
 

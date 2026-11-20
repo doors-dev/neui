@@ -737,10 +737,9 @@ func TestHTTPErrorBeforeStream(t *testing.T) {
 		{"gateway timeout", 504, `{"type":"error","error":{"type":"timeout_error","message":"timed out"}}`, api.CodeNetwork},
 		// Returned by the edge before the request reaches the API, so it need
 		// not use the documented envelope at all. It is the request's byte size
-		// and not the context window, so compacting the conversation is not the
-		// fix and the code is not CodeContextLength; it answers a body this
-		// adapter already measured as fitting, so it is not CodeInvalid either.
-		// See TestProviderRefusesBytesMeasuredAsFitting.
+		// and not the context window or a malformed body, so the code is neither
+		// CodeContextLength nor CodeInvalid. See
+		// TestProviderRefusesBytesMeasuredAsFitting.
 		{"too large, not JSON", 413, "<html>413 Request Entity Too Large</html>", api.CodeTooLarge},
 	}
 

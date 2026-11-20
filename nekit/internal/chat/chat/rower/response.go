@@ -16,6 +16,7 @@ package rower
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -32,9 +33,12 @@ func NewResponse(p params.Params, state api.Indexed[api.Content], fs api.FS) Res
 	for index, c := range state {
 		switch c := c.(type) {
 		case api.ContentText:
+			if strings.TrimSpace(c.Text) == "" {
+				continue
+			}
 			content[index] = newTextRow(c.Text, fs)
 		case api.ContentReasoning:
-			if p.Off(params.Thinking) {
+			if p.Off(params.Thinking) || blank(c.Thoughts) && blank(c.Summary) {
 				continue
 			}
 			content[index] = newThinking(c.Thoughts, c.Summary)
@@ -43,9 +47,12 @@ func NewResponse(p params.Params, state api.Indexed[api.Content], fs api.FS) Res
 	r := newRower(content, func(e api.IndexedEvent) streamer[api.IndexedEvent] {
 		switch e := e.(type) {
 		case api.EventText:
+			if strings.TrimSpace(e.Text) == "" {
+				return nil
+			}
 			return newTextRow(e.Text, fs)
 		case api.EventThinking:
-			if p.Off(params.Thinking) {
+			if p.Off(params.Thinking) || strings.TrimSpace(e.Text) == "" {
 				return nil
 			}
 			return newThinking(
@@ -55,7 +62,7 @@ func NewResponse(p params.Params, state api.Indexed[api.Content], fs api.FS) Res
 				nil,
 			)
 		case api.EventSummary:
-			if p.Off(params.Thinking) {
+			if p.Off(params.Thinking) || strings.TrimSpace(e.Text) == "" {
 				return nil
 			}
 			return newThinking(
@@ -71,6 +78,15 @@ func NewResponse(p params.Params, state api.Indexed[api.Content], fs api.FS) Res
 	return &response{
 		rower: r,
 	}
+}
+
+func blank(parts map[int]string) bool {
+	for _, s := range parts {
+		if strings.TrimSpace(s) != "" {
+			return false
+		}
+	}
+	return true
 }
 
 type Response = *response

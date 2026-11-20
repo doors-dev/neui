@@ -42,16 +42,11 @@ type APIError = lib.APIError
 // classifies correctly.
 //
 // 413 is CodeTooLarge rather than CodeContextLength or CodeInvalid. It is the
-// edge refusing the request by its byte size before the API has counted a token,
-// so compacting the conversation is not what fixes it. It is not an ordinary bad
-// request either: where this adapter measured the body against
-// Model.RequestBytes and sent it only because it fit, a refusal means that
-// declared limit over-promises for this endpoint. The error carries
-// api.ErrMeasuredTooLarge and both numbers to say so, and a caller reads it as
-// terminal rather than retrying; a model that declares no limit was never
-// measured, so that refusal goes back unmarked and the code is the same. A
-// conversation that genuinely does not fit comes back as a 400 instead, and
-// contextOverflow is what tells it from the other 4xx.
+// edge refusing the request by its byte size before the API has counted a token.
+// Where this adapter measured the body against Model.RequestBytes, the error
+// names the bytes sent and the declared limit. A conversation that genuinely does
+// not fit the window comes back as a 400 instead, and contextOverflow is what
+// tells it from the other 4xx.
 //
 // 500 and 502 are CodeNetwork rather than CodeBusy: the documented action for
 // them is to retry the request as sent, which is what CodeNetwork says, while

@@ -93,12 +93,8 @@ func httpError(h *lib.HTTPError, model string, sent int, declared int) api.Event
 // changes, and it is what this service's own conflict spelling maps to elsewhere.
 //
 // 413 is CodeTooLarge rather than CodeInvalid. Where the body was measured
-// against Model.RequestBytes and sent only because it fit, a refusal by size
-// says that declared limit over-promises for this endpoint; the error carries
-// api.ErrMeasuredTooLarge and both numbers, and a caller reads it as terminal
-// rather than sending less and trying again. A model that declares no limit was
-// never measured, so that refusal goes back unmarked and sending less is still
-// worth trying; the code is the same either way.
+// against Model.RequestBytes, the error names the bytes sent and the declared
+// limit.
 //
 // 402 is a balance, which is an account fact rather than a bad request, so it
 // goes with the credentials.
@@ -167,8 +163,8 @@ func inBandCode(code, typ string) api.ErrCode {
 //
 // CodeContextLength comes from context_length_exceeded alone.
 // string_above_max_length is a per-field schema limit, one string past its
-// maxLength with the field named in param, and neither compaction nor media
-// shedding shortens it, so it is CodeInvalid: the request is refused as written.
+// maxLength with the field named in param, and compaction does not shorten it,
+// so it is CodeInvalid: the request is refused as written.
 //
 // A spelling nobody here knows is CodeUnknown rather than the nearest code that
 // looks close, so a vocabulary that grew arrives unclassified and the raw string

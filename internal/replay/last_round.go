@@ -25,6 +25,7 @@ type lastRound struct {
 	created time.Time
 	input   api.Input
 	state   api.RoundState
+	err     string
 	records []api.Record
 }
 
@@ -56,7 +57,7 @@ func (l lastRound) isRetriable() bool {
 	if !l.isValid() {
 		return false
 	}
-	return l.state != api.RoundOk && l.state != api.RoundRefuse
+	return l.state != api.RoundOk && !refuses(l.state, l.err)
 }
 
 func (l lastRound) isValid() bool {

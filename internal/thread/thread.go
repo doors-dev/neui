@@ -537,10 +537,11 @@ func (t *thread) switchStateWait() {
 	t.state = threadWait{thread: t}
 }
 
-func (t *thread) switchStateCompact(round api.Round, usage api.EventUsage, content api.Indexed[api.Content]) *threadCompact {
+func (t *thread) switchStateCompact(round api.Round, failed api.ErrCode, usage api.EventUsage, content api.Indexed[api.Content]) *threadCompact {
 	state := &threadCompact{
 		thread:  t,
 		round:   round,
+		failed:  failed,
 		usage:   usage,
 		content: content,
 	}
@@ -557,7 +558,7 @@ func (t *thread) applyCompaction(cmd commandApplyCompaction) bool {
 		return false
 	}
 	if code, isErr := cmd.resp.Err(); isErr && code != api.CodeCapped {
-		if code == api.CodeContextLength && compaction.Half() > 0 {
+		if (code == api.CodeContextLength || code == api.CodeTooLarge) && compaction.Half() > 0 {
 			t.compaction.chunk = compaction.Half()
 			if _, err := t.compact(true); err != nil {
 				t.criticalErr(nil, err)

@@ -1984,7 +1984,7 @@ a.nechat-file_done:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.nechat-turn:is([data-state="abort"],[data-state="error"],[data-state="refuse"]) > .nechat-user, .nechat-turn:is([data-state="abort"],[data-state="error"],[data-state="refuse"]) > .nechat-agent {
+.nechat-turn:is([data-state="abort"],[data-state="error"],[data-state="refuse"]) > .nechat-agent {
   opacity: 70%;
   --nechat-tw-blur: blur(1px);
   filter: var(--nechat-tw-blur,) var(--nechat-tw-brightness,) var(--nechat-tw-contrast,) var(--nechat-tw-grayscale,) var(--nechat-tw-hue-rotate,) var(--nechat-tw-invert,) var(--nechat-tw-saturate,) var(--nechat-tw-sepia,) var(--nechat-tw-drop-shadow,);

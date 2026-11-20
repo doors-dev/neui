@@ -23,8 +23,8 @@ type ThreadConfig struct {
 	// CompactionTrigger is the share of Model.Context that the thread's token
 	// usage must reach, when a round ends, for the thread to start compacting.
 	// It has no effect when Model.Context is zero, and above 1 it never fires;
-	// the ThreadMemoryLimit byte budget and the API's over-length error still
-	// start compaction either way. Default 0.8.
+	// the ThreadMemoryLimit byte budget and the API's over-length and
+	// too-large errors still start compaction either way. Default 0.8.
 	CompactionTrigger float32
 	// CompactionAllowed is the share of Model.Context the thread's token usage
 	// must reach before a compaction the user requests is accepted; below it
@@ -40,38 +40,44 @@ type ThreadConfig struct {
 	// its Text plus the file links its Attachments turn into, add up to more
 	// than the budget is refused with ErrInputTooLarge where it is submitted,
 	// drafted or rewound to. Tool results: a round's calls run in order while
-	// their results' text is under the budget; the result that crosses it is
-	// kept whole and the calls after it are answered without running; a result
-	// whose text alone is over it is replaced by a note giving its size.
+	// their results' text is under the budget and their media under the
+	// media budget (see ReplayMediaShare); the result that crosses the text
+	// budget is kept whole, and once either budget is reached the calls after
+	// it are answered without running. A result whose text is over the budget
+	// is replaced by a note giving its size.
 	// Records: a round takes the waiting records in arrival order while their
 	// bodies add up to at most the budget, the rest wait for the next round,
 	// and a first record over it alone is cut to it and taken by itself. On
 	// replay each result's text, each record's body and the input's text are
 	// cut to the budget, keeping head and tail; an input is over it only when
 	// the budget shrank after it was sent, as after a switch to a smaller
-	// model. Media blocks are not counted. Half of it bounds the values an
-	// island script queues with ui.notify between draws. A non-positive value
-	// takes the default, 0.1; a value above 0.25 counts as 0.25.
+	// model. Half of it bounds the values an island script queues with
+	// ui.notify between draws. A non-positive value takes the default, 0.1; a
+	// value above 0.25 counts as 0.25.
 	ReplayItemShare float32
+	// ReplayMediaShare sets the media budget of a round's tool results:
+	// ReplayMediaShare * ThreadMemoryLimit / 2 bytes of images and documents,
+	// counted raw (none when ThreadMemoryLimit is negative). A result whose
+	// media would take the round over it keeps its text and its images and
+	// documents are replaced by one note giving their size, so a round never
+	// holds more media than the budget. The files module refuses an image or
+	// document bigger than the budget. A non-positive value takes the
+	// default, 0.5; a value above 1 counts as 1.
+	ReplayMediaShare float32
 	// ThreadMemoryLimit is the byte budget over everything a thread holds for
-	// replay: media counted raw, text counted as it stands. When
-	// Model.RequestBytes is known the budget is at most
-	// Model.RequestBytes*3/4 - ReplayHeadroom (the three quarters undo the
-	// base64 inflation media takes on the wire). The first request the
-	// provider refuses as too large lowers the budget and retries the round.
-	// Going over the budget starts compaction. Negative means no byte budget.
-	// Default 18 MiB.
+	// replay: media counted raw, text counted as it stands. When the media of
+	// a request goes over 80% of it, the images and documents of its oldest
+	// rounds are replaced by notes until its media is at most 50% of it; text
+	// is never cut. Text plus the media left after that going over the whole
+	// limit starts compaction. It also sets the media budget of a round's
+	// tool results (see ReplayMediaShare). Negative means no byte budget.
+	// Default 16 MiB.
 	ThreadMemoryLimit int64
 	// ToolCallLimit is how many tool calls of one round are executed; a call
 	// past it is not run and is answered with an error naming the limit.
 	// Negative runs every call a round asks for. Default 32.
 	ToolCallLimit int
 }
-
-// ReplayHeadroom is the part of the model's request limit, 1 MiB, that a
-// thread's byte budget leaves free for the tool schemas and the request
-// envelope, which the budget does not count.
-const ReplayHeadroom = 1 << 20
 
 // FilesConfig bounds the workspace filesystem and the files module: what the
 // workspace may hold on disk, how much of a file reaches the model, and how far
@@ -101,12 +107,16 @@ type FilesConfig struct {
 	// file, not the replacement, which the model's own output cap already
 	// bounds. Default 10 MiB.
 	EditLimit int
-	// ImageFileLimit is how many bytes an image file may have to be handed to
+	// ImageFileLimit is how many bytes an image file may have to be read for
 	// the model; a bigger one is refused with ErrTooLarge rather than read as
-	// an image. Default 20 MiB.
+	// an image. An image still bigger than the media budget of a round's tool
+	// results after resizing is refused too (see
+	// ThreadConfig.ReplayMediaShare). Default 20 MiB.
 	ImageFileLimit int
-	// DocumentLimit is how many bytes a document may have to be handed to the
-	// model; a bigger one is refused with ErrTooLarge. Default 32 MiB.
+	// DocumentLimit is how many bytes a document may have to be read for the
+	// model; a bigger one, or one bigger than the media budget of a round's
+	// tool results (see ThreadConfig.ReplayMediaShare), is refused with
+	// ErrTooLarge. Default 32 MiB.
 	DocumentLimit int
 	// UnzipLimit is the total unpacked size one archive may produce;
 	// extraction stops and reports the limit once the entries written pass it,

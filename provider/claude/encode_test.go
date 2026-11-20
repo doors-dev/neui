@@ -993,9 +993,6 @@ func TestProviderRefusesBytesMeasuredAsFitting(t *testing.T) {
 	if e.Code != api.CodeTooLarge {
 		t.Fatalf("code = %q, want %q: a 413 is the request refused by its size (err %v)", e.Code, api.CodeTooLarge, e.Err)
 	}
-	if !errors.Is(e.Err, api.ErrMeasuredTooLarge) {
-		t.Fatalf("error %v does not carry api.ErrMeasuredTooLarge: a caller cannot tell it from a refusal this adapter made itself, and will retry it", e.Err)
-	}
 	msg := e.Err.Error()
 	if sent == 0 {
 		t.Fatalf("the server read no body, so there is no measured size to report")
@@ -1013,9 +1010,6 @@ func TestProviderRefusesBytesMeasuredAsFitting(t *testing.T) {
 	refused, ok := events[0].(api.EventErr)
 	if !ok || refused.Code != api.CodeTooLarge {
 		t.Fatalf("a body over the declared limit: got %#v, want api.CodeTooLarge", events[0])
-	}
-	if errors.Is(refused.Err, api.ErrMeasuredTooLarge) {
-		t.Fatalf("a refusal this adapter made itself carries api.ErrMeasuredTooLarge: the one retry that frees room for the schemas is lost")
 	}
 }
 
@@ -1035,21 +1029,12 @@ func TestInbandRequestTooLargeIsMeasured(t *testing.T) {
 	if last.Code != api.CodeTooLarge {
 		t.Fatalf("code = %q, want %q: request_too_large is the in band spelling of the 413 (err %v)", last.Code, api.CodeTooLarge, last.Err)
 	}
-	if !errors.Is(last.Err, api.ErrMeasuredTooLarge) {
-		t.Fatalf("error %v does not carry api.ErrMeasuredTooLarge: the in band refusal answers a body measured as fitting too", last.Err)
-	}
 	if msg := last.Err.Error(); !strings.Contains(msg, fmt.Sprint(declared)) {
 		t.Fatalf("error %q does not name the %d declared", msg, declared)
 	}
 }
 
-// A refusal by size against a model that declares no limit is not marked as
-// measured. api.ErrMeasuredTooLarge says this adapter measured the body against
-// Model.RequestBytes and sent it only because it fit, which is why a caller
-// reading it stops instead of sending less; at a declared zero the check in
-// request never ran, nothing was measured, and sending less is the remedy that
-// works. The code still says the request was refused by its byte size.
-func TestUnmeasuredRequestTooLargeIsNotMarked(t *testing.T) {
+func TestUnmeasuredRequestTooLargeNamesNoLimit(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusRequestEntityTooLarge)
 		io.WriteString(w, `{"type":"error","error":{"type":"request_too_large","message":"too big"}}`)
@@ -1070,9 +1055,6 @@ func TestUnmeasuredRequestTooLargeIsNotMarked(t *testing.T) {
 		}
 		if last.Code != api.CodeTooLarge {
 			t.Fatalf("code = %q, want %q: the refusal is still one about bytes (err %v)", last.Code, api.CodeTooLarge, last.Err)
-		}
-		if errors.Is(last.Err, api.ErrMeasuredTooLarge) {
-			t.Fatalf("error %v carries api.ErrMeasuredTooLarge with nothing measured: the caller ends the turn where sending less would have worked", last.Err)
 		}
 		if msg := last.Err.Error(); strings.Contains(msg, "the 0 declared") {
 			t.Fatalf("error %q reports a measurement against a limit the model never declared", msg)

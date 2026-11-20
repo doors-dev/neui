@@ -82,8 +82,12 @@ func ConfigDefaults(c api.ThreadConfig) api.ThreadConfig {
 		c.ReplayItemShare = 0.1
 	}
 	c.ReplayItemShare = min(c.ReplayItemShare, 0.25)
+	if c.ReplayMediaShare <= 0 {
+		c.ReplayMediaShare = 0.5
+	}
+	c.ReplayMediaShare = min(c.ReplayMediaShare, 1)
 	if c.ThreadMemoryLimit == 0 {
-		c.ThreadMemoryLimit = 18 << 20
+		c.ThreadMemoryLimit = 16 << 20
 	}
 	if c.ToolCallLimit == 0 {
 		c.ToolCallLimit = 32

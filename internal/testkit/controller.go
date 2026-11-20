@@ -33,6 +33,7 @@ const threadID api.ThreadID = "thread"
 
 type Setup struct {
 	Model   api.Model
+	Config  api.ThreadConfig
 	Files   api.FilesConfig
 	Modules []common.Module
 }
@@ -86,7 +87,7 @@ func (c *Controller) Modules() iter.Seq[common.Module] {
 	}
 }
 
-func (c *Controller) Config() api.ThreadConfig { return common.ConfigDefaults(api.ThreadConfig{}) }
+func (c *Controller) Config() api.ThreadConfig { return common.ConfigDefaults(c.setup.Config) }
 
 func (c *Controller) FilesConfig() api.FilesConfig { return common.FilesConfigDefaults(c.setup.Files) }
 

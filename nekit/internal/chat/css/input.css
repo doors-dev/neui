@@ -1671,7 +1671,6 @@ a.nechat-file_done:hover { @apply bg-(--secondary-bg-hover) }
 	text-ellipsis
 }
 
-.nechat-turn:is([data-state="abort"],[data-state="error"],[data-state="refuse"]) > .nechat-user,
 .nechat-turn:is([data-state="abort"],[data-state="error"],[data-state="refuse"]) > .nechat-agent { @apply blur-[1px] opacity-70 }
 .nechat-turn[data-rewind="target"] > .nechat-user > .nechat-bubble { @apply bg-(--secondary-bg-hover) }
 .nechat-turn[data-rewind="target"] > .nechat-agent,

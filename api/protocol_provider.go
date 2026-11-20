@@ -59,8 +59,8 @@ type Model struct {
 	// lower than that refuses an over-long request with its context-length
 	// error, which starts compaction like any other. Zero means unknown, not a
 	// window of zero; a caller reading zero skips token-based compaction,
-	// leaving the ThreadMemoryLimit byte budget and the API's own over-length
-	// error to start it.
+	// leaving the ThreadMemoryLimit byte budget and the over-length and
+	// too-large errors to start it.
 	Context int `json:"context"`
 	// ImagePixels is the pixel area, width times height, worth sending in one
 	// image: past it the API either downscales or refuses, so the extra pixels
@@ -81,14 +81,16 @@ type Model struct {
 	// ImagesPerRequest is how many images the API reads in one request. It
 	// tracks the model's context rather than its byte limit, since every image
 	// costs tokens. A PDF charges one per page, the API rendering every page to
-	// an image. Zero means unknown.
+	// an image. A request that would go over it has the images and documents
+	// of its oldest rounds replaced by notes until it carries at most 60% of
+	// it or only what it adds; what it adds is cut, oldest first, only when it
+	// alone is over it. Zero means unknown, and nothing is cut.
 	ImagesPerRequest int `json:"imagesPerRequest"`
 	// RequestBytes is the largest request the API takes, counted as the
 	// marshalled body that goes on the wire: every block of every message
 	// included, media already base64-encoded. It is the one byte limit not
-	// counted raw; the replay budget derived from it takes three quarters of
-	// it to get back to raw media bytes (see ThreadConfig.ThreadMemoryLimit).
-	// Zero means unknown: the body is sent without a size check, and the
-	// replay budget is ThreadMemoryLimit alone.
+	// counted raw. A body over it is not sent: the turn ends with
+	// CodeTooLarge. Zero means unknown, and the body is sent without a size
+	// check.
 	RequestBytes int `json:"requestBytes"`
 }

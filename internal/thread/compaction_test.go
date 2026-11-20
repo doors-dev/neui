@@ -171,7 +171,7 @@ func TestStopDuringACompactionAfterToolsEndsTheTurn(t *testing.T) {
 	held.State = api.RoundOk
 	held.Results = maps.Clone(results)
 	th.pending = true
-	state := th.switchStateCompact(held, api.EventUsage{}, held.Response)
+	state := th.switchStateCompact(held, "", api.EventUsage{}, held.Response)
 	events()
 	op := NewOperation(context.Background())
 	state.on(commandStop{link: th.link, Operation: op})
@@ -218,7 +218,7 @@ func TestStopDuringACompactionAfterAnOkRoundEndsTheTurn(t *testing.T) {
 	held.State = api.RoundOk
 	th.pending = true
 	th.input = api.Input{Text: "queued"}
-	state := th.switchStateCompact(held, api.EventUsage{Input: 900}, held.Response)
+	state := th.switchStateCompact(held, "", api.EventUsage{Input: 900}, held.Response)
 	events()
 	op := NewOperation(context.Background())
 	state.on(commandStop{link: th.link, Operation: op})
@@ -259,7 +259,7 @@ func TestNotAppliedCompactionReleasesThePendingInput(t *testing.T) {
 	if _, err := th.compact(false); err != nil {
 		t.Fatalf("compact: %v", err)
 	}
-	state := th.switchStateCompact(round, api.EventUsage{}, nil)
+	state := th.switchStateCompact(round, api.CodeContextLength, api.EventUsage{}, nil)
 	th.pending = true
 	th.input = api.Input{Text: "queued"}
 	events()
@@ -335,6 +335,7 @@ func TestContextLengthCompactionIsHalvedInPlace(t *testing.T) {
 	}{
 		{"rejected", []api.Event{api.EventErr{Code: api.CodeContextLength, Err: errors.New("prompt is too long")}}},
 		{"cut off", []api.Event{api.EventText{Index: 0, Text: "a summary cut"}, api.EventErr{Code: api.CodeContextLength, Err: errors.New("model_context_window_exceeded")}}},
+		{"too large", []api.Event{api.EventErr{Code: api.CodeTooLarge, Err: errors.New("request_too_large")}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			th, r, events := growingThread(t, api.ThreadID("halve-"+tc.name), 8)
@@ -438,7 +439,7 @@ func TestOneRoundCompactionTooLongIsCompactionFailed(t *testing.T) {
 	if _, err := th.compact(true); err != nil || !th.compaction.isActive() {
 		t.Fatalf("compact: %v", err)
 	}
-	state := th.switchStateCompact(round, api.EventUsage{}, nil)
+	state := th.switchStateCompact(round, api.CodeContextLength, api.EventUsage{}, nil)
 	th.pending = true
 	events()
 	ch := th.link.ch
@@ -481,6 +482,76 @@ func TestContextLengthWithNothingToCompactIsCompactionFailed(t *testing.T) {
 	}) {
 		t.Fatalf("Send after reopening left the thread in %T without a round start", th.state)
 	}
+}
+
+func TestTooLargeRoundStartsACompaction(t *testing.T) {
+	stored := func(t *testing.T, th *thread, round api.RoundID) api.Round {
+		t.Helper()
+		for r, err := range th.link.backend.Storage().RoundRange(context.Background(), th.id, round, round) {
+			if err != nil {
+				t.Fatalf("RoundRange: %v", err)
+			}
+			return r
+		}
+		t.Fatalf("round %d is not stored", round)
+		return api.Round{}
+	}
+	ended := func(t *testing.T, th *thread, r replay.Replay, events []api.ChatEvent, round api.RoundID) {
+		t.Helper()
+		if _, ok := th.state.(threadWait); !ok || th.link == nil {
+			t.Fatalf("the thread is in %T with link %v, want idle and linked", th.state, th.link != nil)
+		}
+		if s := stored(t, th, round); s.State != api.RoundError || s.Error != string(api.CodeTooLarge) {
+			t.Fatalf("the round is stored as %s %q, want an error with too_large", s.State, s.Error)
+		}
+		end := slices.IndexFunc(events, func(e api.ChatEvent) bool {
+			end, ok := e.(api.ChatEventRoundEnd)
+			return ok && end.Round == round && end.State == api.RoundError && end.Error == string(api.CodeTooLarge) && end.Final
+		})
+		if end < 0 {
+			t.Fatalf("no final too_large round end in %+v", events)
+		}
+		if r.IsRetriable() {
+			t.Fatalf("the too_large round is retriable")
+		}
+	}
+
+	t.Run("applied", func(t *testing.T) {
+		th, r, events := growingThread(t, "too-large-applied", 8)
+		state := startRound(t, th, r, api.Input{Text: "too large"})
+		state.err(api.CodeTooLarge, errors.New("request_too_large"), nil, api.EventUsage{})
+		if _, ok := th.state.(*threadCompact); !ok || !th.compaction.isActive() {
+			t.Fatalf("the thread is in %T with compaction %v, want it compacting", th.state, th.compaction.isActive())
+		}
+		events()
+		th.state.(*threadCompact).on(commandApplyCompaction{resp: flushed(api.EventText{Index: 0, Text: "the summary"}, api.EventOk{Code: api.CodeTurn}), seq: th.compaction.seq})
+		if _, ok := th.state.(*threadRound); !ok {
+			t.Fatalf("after the compaction the thread is in %T, want the round sent again", th.state)
+		}
+		if !slices.ContainsFunc(events(), func(e api.ChatEvent) bool {
+			start, ok := e.(api.ChatEventRoundStart)
+			return ok && start.Truncate == state.round.ID
+		}) {
+			t.Fatalf("no round start replaces round %d", state.round.ID)
+		}
+	})
+
+	t.Run("not applied", func(t *testing.T) {
+		th, r, events := growingThread(t, "too-large-not-applied", 8)
+		state := startRound(t, th, r, api.Input{Text: "too large"})
+		state.err(api.CodeTooLarge, errors.New("request_too_large"), nil, api.EventUsage{})
+		events()
+		th.state.(*threadCompact).on(commandApplyCompaction{resp: flushed(api.EventErr{Code: api.CodeNetwork, Err: errors.New("reset")}), seq: th.compaction.seq})
+		ended(t, th, r, events(), state.round.ID)
+	})
+
+	t.Run("nothing to compact", func(t *testing.T) {
+		th, r, events := compactionThread(t, "too-large-nothing", api.Model{Name: "stub", Context: 1000}, 1)
+		state := startRound(t, th, r, api.Input{Text: "too large"})
+		events()
+		state.err(api.CodeTooLarge, errors.New("request_too_large"), nil, api.EventUsage{})
+		ended(t, th, r, events(), state.round.ID)
+	})
 }
 
 func TestChunkEndsWithTheCompactionProcess(t *testing.T) {

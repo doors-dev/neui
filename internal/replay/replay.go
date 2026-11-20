@@ -35,7 +35,6 @@ func NewReplay(ctx context.Context, thread api.ThreadID, s api.MessageStorage, c
 		storage: s,
 		config:  config,
 		model:   model,
-		factor:  1,
 		lastRound: lastRound{
 			id: api.NoRoundID,
 		},
@@ -48,24 +47,12 @@ type replay struct {
 	storage      api.MessageStorage
 	config       api.ThreadConfig
 	model        api.Model
-	factor       float32
 	thread       api.Thread
 	messages     *messages
 	lastRound    lastRound
 	failed       bool
 	failedWeight int64
 	failedTokens int
-}
-
-func (r Replay) Tighten() bool {
-	if r.factor < 1 {
-		return false
-	}
-	r.factor = 0.8
-	if r.messages != nil {
-		r.messages.factor = r.factor
-	}
-	return true
 }
 
 func (r Replay) IsPending() bool {
@@ -115,8 +102,7 @@ func (r Replay) NeedCompaction() CompactionCause {
 	if r.failed && r.messages.weight*4 <= r.failedWeight*5 && r.Usage().Total()*4 <= r.failedTokens*5 {
 		return CompactionNone
 	}
-	limit := memoryLimit(r.config, r.model, r.factor)
-	if limit > 0 && r.messages.weight+weigh(r.messages.pendingContent(api.Input{})...) > limit {
+	if limit := r.config.ThreadMemoryLimit; limit > 0 && r.messages.weightAfterCut(r.messages.pendingContent(api.Input{})) > limit {
 		return CompactionBytes
 	}
 	if r.model.Context != 0 && float32(r.Usage().Total()) >= r.config.CompactionTrigger*float32(r.model.Context) {
@@ -192,9 +178,9 @@ func (r Replay) ApplyCompaction(c Compaction, content api.Indexed[api.Content], 
 		return err
 	}
 	r.updateSeq(seq)
-	r.messages.applyCompaction(c, record)
 	r.failed = false
-	return nil
+	r.messages = nil
+	return r.Load()
 }
 
 func (r Replay) Rename(name string) error {
@@ -348,12 +334,13 @@ func (r Replay) RoundError(err error, usage api.EventUsage, content api.Indexed[
 	if !r.IsLoaded() || !r.lastRound.isActive() {
 		return errors.New("state missmatch")
 	}
-	seq, err := r.storage.RoundError(r.ctx, r.id, r.seq(), r.lastRound.id, err.Error(), usage, content)
+	reason := err.Error()
+	seq, err := r.storage.RoundError(r.ctx, r.id, r.seq(), r.lastRound.id, reason, usage, content)
 	if err != nil {
 		return err
 	}
 	r.updateSeq(seq)
-	r.lastRound.state = api.RoundError
+	r.lastRound.state, r.lastRound.err = api.RoundError, reason
 	if len(r.lastRound.records) != 0 {
 		r.messages.restoreRecords(r.lastRound.records)
 		r.lastRound.records = nil
@@ -363,6 +350,7 @@ func (r Replay) RoundError(err error, usage api.EventUsage, content api.Indexed[
 		Thread:   r.id,
 		State:    api.RoundError,
 		Input:    r.lastRound.input,
+		Error:    reason,
 		Usage:    usage,
 		Response: content,
 	})
@@ -419,14 +407,6 @@ func (r Replay) RoundRefuse(usage api.EventUsage, content api.Indexed[api.Conten
 	return nil
 }
 
-func (r Replay) RoundReject(code api.ErrCode, usage api.EventUsage, content api.Indexed[api.Content]) error {
-	if err := r.RoundError(errors.New(string(code)), usage, content); err != nil {
-		return err
-	}
-	r.messages.shedStash(rejectedMedia)
-	return nil
-}
-
 func (r Replay) RoundResult(results map[string]api.ContentToolResult) error {
 	if !r.IsLoaded() || !r.lastRound.isCompleted() {
 		return errors.New("state missmatch")
@@ -469,17 +449,15 @@ func (r Replay) Retry() (api.Round, api.RoundID, []api.Message, error) {
 	if !r.lastRound.isRetriable() {
 		return api.Round{}, api.NoRoundID, nil, errors.New("nothing to retry")
 	}
-	truncate := r.lastRound.id
-	seq, err := r.storage.ThreadCut(r.ctx, r.id, r.seq(), truncate)
-	if err != nil {
+	truncate, input := r.lastRound.id, r.lastRound.input
+	if _, err := r.storage.ThreadCut(r.ctx, r.id, r.seq(), truncate); err != nil {
 		return api.Round{}, api.NoRoundID, nil, err
 	}
-	r.updateSeq(seq)
-	if len(r.lastRound.records) != 0 {
-		r.messages.restoreRecords(r.lastRound.records)
-		r.lastRound.records = nil
+	r.messages = nil
+	if err := r.Load(); err != nil {
+		return api.Round{}, api.NoRoundID, nil, err
 	}
-	round, replay, err := r.RoundInit(r.lastRound.input)
+	round, replay, err := r.RoundInit(input)
 	return round, truncate, replay, err
 }
 
@@ -496,7 +474,7 @@ func (r Replay) Load() error {
 	if err != nil {
 		return err
 	}
-	r.messages = newMessages(compaction, r.config, r.model, r.factor)
+	r.messages = newMessages(compaction, r.config, r.model)
 	last := lastRound{
 		id: api.NoRoundID,
 	}
@@ -511,6 +489,7 @@ func (r Replay) Load() error {
 			created: round.Created,
 			input:   round.Input,
 			state:   round.State,
+			err:     round.Error,
 		}
 	}
 	r.lastRound = last
@@ -531,7 +510,7 @@ func (r Replay) Create() (bool, error) {
 		return false, err
 	}
 	r.thread = thread
-	r.messages = newMessages(api.NoCompaction, r.config, r.model, r.factor)
+	r.messages = newMessages(api.NoCompaction, r.config, r.model)
 	return true, nil
 }
 

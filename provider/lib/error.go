@@ -20,8 +20,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"neui.dev/api"
 )
 
 // APIError is a failure the API itself reported, as opposed to one the
@@ -143,15 +141,13 @@ func RetryAfter(h http.Header) time.Duration {
 	return 0
 }
 
-// MeasuredTooLarge wraps err, the API's refusal of a request by its size, in
-// api.ErrMeasuredTooLarge when the model declares a request limit: the body
-// of sent bytes was measured against the declared limit and sent because it
-// fit, so the limit over-promises and no smaller request fixes it. With
-// declared at zero or less the request was never measured and err is
-// returned as it is.
+// MeasuredTooLarge wraps err, the API's refusal of a request by its size,
+// with the bytes sent and the request limit the model declares. With declared
+// at zero or less the request was never measured and err is returned as it
+// is.
 func MeasuredTooLarge(model string, sent int, declared int, err error) error {
 	if declared <= 0 {
 		return err
 	}
-	return fmt.Errorf("%w: sent %d bytes, measured against the %d declared for %s: %w", api.ErrMeasuredTooLarge, sent, declared, model, err)
+	return fmt.Errorf("sent %d bytes, measured against the %d declared for %s: %w", sent, declared, model, err)
 }

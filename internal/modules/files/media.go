@@ -17,6 +17,7 @@ package files
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -26,6 +27,7 @@ import (
 	"neui.dev/api"
 	"neui.dev/internal/common"
 	"neui.dev/internal/media"
+	"neui.dev/internal/replay"
 )
 
 const readImageDesc = `Look at an image file: PNG, JPEG, WebP or non-animated GIF; oversized images are downscaled.`
@@ -66,12 +68,27 @@ func readImageTool(ctx context.Context, arg PathArg) (api.Image, error) {
 			return api.Image{}, fmt.Errorf("%q is %w", arg.Path, err)
 		}
 	}
-	return media.Shape(data, mimeType, thread.Model())
+	img, err := media.Shape(data, mimeType, thread.Model())
+	if err != nil {
+		return api.Image{}, err
+	}
+	if budget := replay.RoundMediaBudget(thread.Config()); budget > 0 && int64(len(img.Data)) > budget {
+		return api.Image{}, fmt.Errorf("%q is %s after resizing, more than a turn's tool results can hold: %w", arg.Path, replay.HumanSize(len(img.Data)), api.ErrTooLarge)
+	}
+	return img, nil
 }
 
 func readDocumentTool(ctx context.Context, arg PathArg) (api.Document, error) {
 	thread := common.GetController(ctx)
-	data, err := readCapped(ctx, thread.FS(), arg.Path, int64(thread.FilesConfig().DocumentLimit))
+	limit := int64(thread.FilesConfig().DocumentLimit)
+	budget := replay.RoundMediaBudget(thread.Config())
+	if budget > 0 && (limit < 0 || budget < limit) {
+		limit = budget
+	}
+	data, err := readCapped(ctx, thread.FS(), arg.Path, limit)
+	if errors.Is(err, api.ErrTooLarge) && limit == budget {
+		return api.Document{}, fmt.Errorf("%q is more than a turn's tool results can hold: %w", arg.Path, api.ErrTooLarge)
+	}
 	if err != nil {
 		return api.Document{}, err
 	}

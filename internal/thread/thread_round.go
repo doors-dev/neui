@@ -220,7 +220,7 @@ func (s *threadRound) ok(code api.OkCode, content api.Indexed[api.Content], usag
 		round := s.round
 		round.State = api.RoundOk
 		round.Response = content
-		s.thread.switchStateCompact(round, usage, content)
+		s.thread.switchStateCompact(round, "", usage, content)
 		return
 	}
 	round, err := s.thread.switchStateRound()
@@ -237,7 +237,8 @@ func (s *threadRound) err(code api.ErrCode, cause error, content api.Indexed[api
 		api.CodeBusy,
 		api.CodeNetwork,
 		api.CodeUnknown,
-		api.CodeCapped:
+		api.CodeCapped,
+		api.CodeInvalid:
 		if code != api.CodeCapped {
 			doors.Logger(s.thread.link.backend.Context()).Error("thread: turn failed", "thread", s.thread.id, "code", code, "err", cause)
 		}
@@ -246,47 +247,28 @@ func (s *threadRound) err(code api.ErrCode, cause error, content api.Indexed[api
 			return
 		}
 		s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundEnd{Round: s.round.ID, State: api.RoundError, Error: string(code), Usage: usage, Final: true, CanCompact: s.thread.canCompact()}))
-	case api.CodeInvalid:
-		doors.Logger(s.thread.link.backend.Context()).Error("thread: turn failed", "thread", s.thread.id, "code", code, "err", cause)
-		if err := s.thread.replay.RoundReject(code, usage, content); err != nil {
-			s.thread.criticalErr(nil, err)
-			return
-		}
-		s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundEnd{Round: s.round.ID, State: api.RoundError, Error: string(code), Usage: usage, Final: true, CanCompact: s.thread.canCompact()}))
-	case api.CodeContextLength:
+	case api.CodeContextLength, api.CodeTooLarge:
 		if held := s.thread.compaction.held; held != nil {
 			s.thread.compaction.held = nil
-			s.thread.switchStateCompact(s.round, usage, content).on(*held)
+			s.thread.switchStateCompact(s.round, code, usage, content).on(*held)
 			return
 		}
 		if _, err := s.thread.compact(true); err != nil {
 			doors.Logger(s.thread.link.backend.Context()).Error("thread: compaction", "thread", s.thread.id, "err", err)
 		}
 		if s.thread.compaction.isActive() {
-			s.thread.switchStateCompact(s.round, usage, content)
+			s.thread.switchStateCompact(s.round, code, usage, content)
 			return
 		}
 		if err := s.thread.replay.RoundError(errors.New(string(code)), usage, content); err != nil {
 			s.thread.criticalErr(nil, err)
 			return
 		}
-		s.thread.criticalErr(nil, api.ErrCompactionFailed)
-		return
-	case api.CodeTooLarge:
-		if !errors.Is(cause, api.ErrMeasuredTooLarge) && s.thread.replay.Tighten() {
-			round, truncate, messages, err := s.thread.replay.Retry()
-			if err != nil {
-				s.thread.criticalErr(nil, err)
-				return
-			}
-			s.thread.switchStateRoundReplay(round, messages)
-			s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundStart{Round: round, Truncate: truncate, Usage: s.thread.replay.Usage(), CanCompact: s.thread.canCompact()}))
+		if code == api.CodeContextLength {
+			s.thread.criticalErr(nil, api.ErrCompactionFailed)
 			return
 		}
-		if err := s.thread.replay.RoundReject(code, usage, content); err != nil {
-			s.thread.criticalErr(nil, err)
-			return
-		}
+		doors.Logger(s.thread.link.backend.Context()).Error("thread: turn failed", "thread", s.thread.id, "code", code, "err", cause)
 		s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundEnd{Round: s.round.ID, State: api.RoundError, Error: string(code), Usage: usage, Final: true, CanCompact: s.thread.canCompact()}))
 	case api.CodeRefused:
 		if err := s.thread.replay.RoundRefuse(usage, content); err != nil {
