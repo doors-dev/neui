@@ -34,16 +34,14 @@ import (
 type Page = *page
 
 func NewPage(ctx context.Context) Page {
-	root := &page{}
-	root.space = &space{
-		root: root,
-		ctx:  ctx,
-	}
+	root := &page{ctx: ctx}
+	root.space = &space{root: root}
 	return root
 }
 
 type page struct {
 	mu      sync.Mutex
+	ctx     context.Context
 	counter uint
 	space   *space
 }
@@ -53,7 +51,7 @@ func (s Page) Space() Space {
 }
 
 func (s Page) Context() context.Context {
-	return s.space.ctx
+	return s.ctx
 }
 
 type Module = *module

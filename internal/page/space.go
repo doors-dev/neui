@@ -37,12 +37,11 @@ type Space = *space
 
 type space struct {
 	root     *page
-	ctx      context.Context
+	parts    []*part
 	children []*space
 	path     string
 	name     string
 	desc     string
-	nav      bool
 	tools    []*tool
 	data     []*data
 	island   island.Island
@@ -51,6 +50,11 @@ type space struct {
 	plain    uint64
 	counts   [4]map[uint64]int
 	inputs
+}
+
+type part struct {
+	desc string
+	nav  bool
 }
 
 func (s Space) AddSpace(ctx context.Context, name string, desc string) (context.Context, error) {
@@ -75,56 +79,58 @@ func (s Space) addSpace(ctx context.Context, name string, desc string, island is
 		return nil, errors.New("space name is empty")
 	}
 	name = utils.SanitizeName(name)
+	path := name
+	if s.path != "" {
+		path = s.path + "." + name
+	}
 	s.root.mu.Lock()
 	if ctx.Err() != nil {
 		s.root.mu.Unlock()
 		return nil, context.Canceled
 	}
-	space := &space{
-		root: s.root,
-		name: name,
-		path: func() string {
-			if s.path == "" {
-				return name
-			}
-			return s.path + "." + name
-		}(),
-		desc:   desc,
-		nav:    nav,
-		island: island,
-		within: cmp.Or(island, s.within),
-	}
-	defer doors.OnClean(ctx, func() {
-		s.removeSpace(space)
-	})
-	defer s.root.mu.Unlock()
 	index, found := s.search(name)
-	ctx = context.WithValue(ctx, common.KeySpace, space)
-	space.ctx = doors.DetachedContext(ctx)
-	if found {
-		s.children[index] = space
-		s.rehash(3)
-		return ctx, nil
-	}
-	s.children = slices.Insert(s.children, index, space)
-	s.rehash(3)
-	return ctx, nil
-}
-
-func (s *space) removeSpace(space *space) {
-	s.root.mu.Lock()
-	defer s.root.mu.Unlock()
-	if s.ctx.Err() != nil {
-		return
-	}
-	for i, c := range s.children {
-		if c != space {
-			continue
+	if !found || island != nil || s.children[index].island != nil {
+		fresh := &space{
+			root:   s.root,
+			name:   name,
+			path:   path,
+			island: island,
+			within: cmp.Or(island, s.within),
 		}
-		s.children = slices.Delete(s.children, i, i+1)
+		if found {
+			if (island == nil) != (s.children[index].island == nil) {
+				doors.Logger(ctx).Warn("neui: a space and an island share a name, the later render replaces the other", "space", path)
+			}
+			s.children[index] = fresh
+		} else {
+			s.children = slices.Insert(s.children, index, fresh)
+		}
 		s.rehash(3)
-		return
 	}
+	space := s.children[index]
+	added := &part{desc: desc, nav: nav}
+	space.parts = append(space.parts, added)
+	if desc != "" {
+		space.desc = desc
+	}
+	s.root.mu.Unlock()
+	doors.OnClean(ctx, func() {
+		s.root.mu.Lock()
+		defer s.root.mu.Unlock()
+		space.parts = slices.DeleteFunc(space.parts, func(p *part) bool { return p == added })
+		space.desc = ""
+		for _, p := range space.parts {
+			space.desc = cmp.Or(p.desc, space.desc)
+		}
+		if len(space.parts) > 0 {
+			return
+		}
+		if i, found := s.search(name); found && s.children[i] == space {
+			s.children = slices.Delete(s.children, i, i+1)
+			s.rehash(3)
+		}
+	})
+	return context.WithValue(ctx, common.KeySpace, space), nil
 }
 
 func (s *space) search(name string) (int, bool) {
@@ -341,7 +347,7 @@ func (s *space) tree(depth uint, tier common.ModelTier) node {
 			out.Data++
 		}
 	}
-	if s.nav {
+	if slices.ContainsFunc(s.parts, func(p *part) bool { return p.nav }) {
 		for _, in := range s.list {
 			if in.Kind == kindLink && !slices.Contains(out.Goes, in.Desc) {
 				out.Goes = append(out.Goes, in.Desc)
@@ -380,9 +386,6 @@ func (s Space) AddData(ctx context.Context, text string, object any) error {
 	doors.OnClean(ctx, func() {
 		s.root.mu.Lock()
 		defer s.root.mu.Unlock()
-		if s.ctx.Err() != nil {
-			return
-		}
 		if i := slices.Index(s.data, d); i >= 0 {
 			s.data = slices.Delete(s.data, i, i+1)
 			s.count(2, d.hash, -1)
@@ -459,9 +462,6 @@ func (s Space) AddTool(ctx context.Context, from common.Tool) error {
 	doors.OnClean(ctx, func() {
 		s.root.mu.Lock()
 		defer s.root.mu.Unlock()
-		if s.ctx.Err() != nil {
-			return
-		}
 		if i, found := s.searchTool(t.Name); found && s.tools[i] == t {
 			s.tools = slices.Delete(s.tools, i, i+1)
 			s.rehash(0)

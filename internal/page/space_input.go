@@ -98,7 +98,7 @@ func (s Space) Radio(ctx context.Context, permissios Rights, desc string, attrs 
 		return nil, errors.New("element is already used")
 	}
 	s.root.mu.Lock()
-	if s.ctx.Err() != nil {
+	if ctx.Err() != nil {
 		s.root.mu.Unlock()
 		return nil, context.Canceled
 	}
@@ -149,9 +149,6 @@ func (s Space) Radio(ctx context.Context, permissios Rights, desc string, attrs 
 	doors.OnClean(ctx, func() {
 		s.root.mu.Lock()
 		defer s.root.mu.Unlock()
-		if s.ctx.Err() != nil {
-			return
-		}
 		i := slices.IndexFunc(s.list, func(in input) bool { return in.elementID == elementID })
 		if i < 0 {
 			return
@@ -176,7 +173,7 @@ func (s Space) element(ctx context.Context, permissios Rights, desc string, attr
 		return nil, errors.New("element is already used")
 	}
 	s.root.mu.Lock()
-	if s.ctx.Err() != nil {
+	if ctx.Err() != nil {
 		s.root.mu.Unlock()
 		return nil, context.Canceled
 	}
@@ -215,9 +212,6 @@ func (s Space) element(ctx context.Context, permissios Rights, desc string, attr
 	doors.OnClean(ctx, func() {
 		s.root.mu.Lock()
 		defer s.root.mu.Unlock()
-		if s.ctx.Err() != nil {
-			return
-		}
 		if i := slices.IndexFunc(s.list, func(in input) bool { return in.elementID == elementID }); i >= 0 {
 			s.count(1, s.list[i].hash, -1)
 			s.list = slices.Delete(s.list, i, i+1)
@@ -239,7 +233,7 @@ func (s *space) getInput(id string, action string) (input, error) {
 	case n == 0:
 		return input{}, fmt.Errorf("input %q in space %q: %w", id, s.path, errInputNotFound)
 	case n > 1:
-		doors.Logger(s.ctx).Error("neui: inputs in a space cannot be told apart, a call on them was refused", "space", s.path, "id", id, "desc", in.Desc)
+		doors.Logger(s.root.ctx).Error("neui: inputs in a space cannot be told apart, a call on them was refused", "space", s.path, "id", id, "desc", in.Desc)
 		return input{}, fmt.Errorf("input %q in space %q: %w", id, s.path, errRefusedDuplicate)
 	}
 	switch action {

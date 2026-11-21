@@ -35,16 +35,19 @@ import (
 //
 //	~>neui.Space{Name: "cart", Desc: "the user's shopping cart"} <section>...</section>
 //
-// Content rendered outside any Space belongs to the page root. A space lives
-// as long as its render: when that part of the page re-renders or unmounts,
-// the space and everything in it go away.
+// Content rendered outside any Space belongs to the page root. Spaces with
+// the same name under one parent are one space, described by the latest
+// non-empty Desc among them. What a render adds to a space lives as long as
+// that render: when that part of the page re-renders or unmounts, it goes
+// away, and the space goes with its last render.
 type Space struct {
 	// Name identifies the space among its siblings; the agent sees it with
 	// Desc. Names are reduced to ASCII letters, digits and _ (runs of other
-	// characters become one _); a sibling rendered later with the same
-	// reduced name replaces the earlier one. Give it at least one letter or
-	// digit: a name without one is replaced and a warning is logged. An empty
-	// name fails the render.
+	// characters become one _); siblings with the same reduced name are one
+	// space, unless one of them is an Island: then the one rendered later
+	// replaces the other and a warning is logged. Give it at least one letter
+	// or digit: a name without one is replaced and a warning is logged. An
+	// empty name fails the render.
 	Name string
 	// Desc tells the agent what the region is and what it is for.
 	Desc string
@@ -333,10 +336,11 @@ var _ gox.Proxy = Use{}
 type Island struct {
 	// Name identifies the island among the spaces next to it; the agent sees
 	// it with Desc. Names are reduced to ASCII letters, digits and _ (runs of
-	// other characters become one _); names that reduce to the same value
-	// replace each other. Give it at least one letter or digit: a name
-	// without one is replaced and a warning is logged. An empty name fails
-	// the render.
+	// other characters become one _). When a Space or Island next to it has
+	// the same reduced name, the one rendered later replaces the other; a
+	// warning is logged when a Space and an Island replace each other. Give
+	// it at least one letter or digit: a name without one is replaced and a
+	// warning is logged. An empty name fails the render.
 	Name string
 	// Desc tells the agent what the island is for.
 	Desc string

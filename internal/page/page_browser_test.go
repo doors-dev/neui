@@ -907,3 +907,36 @@ func TestFileInputIsReadAndFocusedOnly(t *testing.T) {
 		`{"diff":{}}`,
 	)
 }
+
+func TestFormSplitAcrossSameNamedSpacesSubmits(t *testing.T) {
+	type form struct {
+		Name string `form:"name"`
+	}
+	submits := make(chan string, 1)
+	p := steps(t,
+		step{tool: "page__write", input: "the name", value: "Ann"},
+		step{tool: "page__click", input: "sends"},
+	)
+	c := stack.Browser(t, stack.Host{Provider: p, Page: html("form", "",
+		doors.ASubmit[form]{On: func(_ context.Context, r doors.RequestForm[form]) bool {
+			submits <- r.Data().Name
+			return false
+		}},
+		space(exposed("the name", html("input", "", "name", "name"))),
+		space(neui.Data{Text: "the form takes a name"}.Main(), exposed("sends", html("button", "Send", "type", "submit"))),
+	)})
+	c.Send("send the name Ann")
+	c.Wait()
+	expect(t, answers(t, p, 2),
+		`{"handled":false,"diff":{}}`,
+		`{"handled":true,"diff":{}}`,
+	)
+	select {
+	case name := <-submits:
+		if name != "Ann" {
+			t.Fatalf("the form submitted the name %q, want Ann", name)
+		}
+	default:
+		t.Fatal("the click returned before the form was submitted")
+	}
+}

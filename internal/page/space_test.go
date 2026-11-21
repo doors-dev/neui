@@ -34,7 +34,7 @@ func TestIslandPathIsCanonical(t *testing.T) {
 	p := NewPage(context.Background())
 	isl := island.NewIsland(context.Background(), gox.Elem(func(gox.Cursor) error { return nil }), func(slot gox.Comp) gox.Elem { return slot.Main() }, nil, nil, island.NewLibrary())
 	t.Cleanup(isl.Unmount)
-	p.space.children = []*space{{root: p, ctx: context.Background(), name: "isl", path: "isl", island: isl}}
+	p.space.children = []*space{{root: p, name: "isl", path: "isl", island: isl}}
 	got, path, err := p.Island(context.Background(), "isl")
 	if err != nil {
 		t.Fatal(err)
@@ -53,7 +53,7 @@ func TestTreeListsWhereNavigationLeads(t *testing.T) {
 	links := inputs{list: []input{{Kind: kindLink, Desc: "the orders list"}, {Kind: kindButton, Desc: "log out"}, {Kind: kindLink, Desc: "the orders list"}, {Kind: kindLink, Desc: "the customers list"}}}
 	p := NewPage(context.Background())
 	p.space.children = []*space{
-		{root: p, name: "menu", path: "menu", nav: true, inputs: links},
+		{root: p, name: "menu", path: "menu", parts: []*part{{nav: true}}, inputs: links},
 		{root: p, name: "recent", path: "recent", inputs: links},
 	}
 	got := p.space.tree(1, common.TierArchitect)
@@ -250,7 +250,6 @@ func TestFailureUnwrapsItsError(t *testing.T) {
 
 func TestCleanedInputIsNoDuplicate(t *testing.T) {
 	s := tree("form").at("form")
-	s.ctx = context.Background()
 	gone, cancel := context.WithCancel(context.Background())
 	cancel()
 	s.list = []input{{ID: "a1", ctx: gone, elementID: "form-1", Rights: RW}, {ID: "a1", ctx: context.Background(), elementID: "form-2", Rights: RW}}

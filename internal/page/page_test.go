@@ -1458,3 +1458,493 @@ func TestTierShowsPageToolResultDescriptions(t *testing.T) {
 		}
 	}
 }
+
+func (s state) String() string {
+	var out []string
+	for _, t := range s.Tools {
+		out = append(out, "tool "+t.Name)
+	}
+	for _, in := range s.Inputs {
+		out = append(out, "input "+in.Desc)
+	}
+	for _, d := range s.Data {
+		out = append(out, "data "+d.Text)
+	}
+	for _, c := range s.Children {
+		out = append(out, "space "+c.Name)
+	}
+	slices.Sort(out)
+	return strings.Join(out, ", ")
+}
+
+func halves(first doors.Source[bool], second doors.Source[bool]) gox.Elem {
+	added := doors.NewSource(0)
+	tool := func(name string, run func(ctx context.Context)) neui.Tool[struct{}, string] {
+		return neui.Tool[struct{}, string]{Name: name, Desc: "runs " + name, Handler: func(ctx context.Context, _ struct{}) (string, error) {
+			run(ctx)
+			return name, nil
+		}}
+	}
+	hide := func(part doors.Source[bool]) func(ctx context.Context) {
+		return func(ctx context.Context) { part.Mutate(ctx, func(bool) bool { return false }) }
+	}
+	field := func(desc string) gox.Elem {
+		return func(cur gox.Cursor) error {
+			return (neui.Use{Desc: desc}).Proxy(cur, func(cur gox.Cursor) error {
+				if err := cur.InitVoid("input"); err != nil {
+					return err
+				}
+				return cur.Submit()
+			})
+		}
+	}
+	space := func(name string, desc string, content ...any) gox.Elem {
+		return func(cur gox.Cursor) error {
+			return (neui.Space{Name: name, Desc: desc}).Proxy(cur, func(cur gox.Cursor) error {
+				for _, c := range content {
+					if err := cur.Any(c); err != nil {
+						return err
+					}
+				}
+				return nil
+			})
+		}
+	}
+	part := func(on doors.Source[bool], content ...any) gox.Elem {
+		return on.Bind(func(on bool) gox.Elem {
+			if !on {
+				return func(gox.Cursor) error { return nil }
+			}
+			return space("orders", "the orders", content...)
+		})
+	}
+	return func(cur gox.Cursor) error {
+		for _, el := range []any{
+			tool("hide_first", hide(first)),
+			tool("hide_second", hide(second)),
+			part(first, tool("archive", func(context.Context) {}), field("the filter"), neui.Data{Text: "first"}, space("detail", "the detail", tool("open", func(context.Context) {}))),
+			part(second, tool("add", func(ctx context.Context) { added.Mutate(ctx, func(n int) int { return n + 1 }) }), field("the note"), neui.Data{Text: "second"}, added.Bind(func(n int) gox.Elem {
+				if n == 0 {
+					return func(gox.Cursor) error { return nil }
+				}
+				return neui.Data{Text: "added", Object: n}.Main()
+			}), space("detail", "", neui.Data{Text: "detail"})),
+		} {
+			if err := cur.Any(el); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+}
+
+func TestSameNamedSpacesAreOne(t *testing.T) {
+	p := testkit.NewProvider(api.Model{},
+		round(call("tree", "page__tree", map[string]any{}), call("orders", "page__sync", map[string]any{"path": "orders"})),
+		testkit.Say("done"),
+	)
+	c := stack.Page(t, stack.Host{Provider: p, Page: halves(doors.NewSource(true), doors.NewSource(true))})
+	c.Send("look")
+	c.Wait()
+	results := testkit.Results(p.Request(t, 1))
+	var tree json.RawMessage
+	testkit.Decode(t, results[0], &tree)
+	if want := `{"name":"","desc":"","tools":2,"children":[{"name":"orders","desc":"the orders","tools":2,"inputs":2,"data":2,"children":[{"name":"detail","desc":"the detail","tools":1,"data":1}]}]}`; string(tree) != want {
+		t.Fatalf("tree answered\n%s\nwant\n%s", tree, want)
+	}
+	var orders state
+	testkit.Decode(t, results[1], &orders)
+	if want := "data first, data second, input the filter, input the note, space detail, tool add, tool archive"; orders.String() != want {
+		t.Fatalf("orders synced as %q, want %q", orders, want)
+	}
+}
+
+func TestSpaceOutlivesItsFirstPart(t *testing.T) {
+	var root page.Space
+	var stale []string
+	p := testkit.NewProvider(api.Model{},
+		round(call("root", "page__sync", map[string]any{"path": ""}), call("orders", "page__sync", map[string]any{"path": "orders"})),
+		testkit.Call("page__tool", map[string]any{"path": "", "tool": "hide_first", "arg": map[string]any{}}),
+		testkit.Call("page__sync", map[string]any{"path": "orders"}),
+		testkit.Call("page__tool", map[string]any{"path": "orders", "tool": "add", "arg": map[string]any{}}),
+		testkit.Then(func(api.Request) testkit.Turn {
+			stale = page.StaleDigests(root)
+			return testkit.Say("done")
+		}),
+	)
+	c := stack.Page(t, stack.Host{Provider: p, Page: func(cur gox.Cursor) error {
+		root = cur.Context().Value(common.KeySpace).(page.Space)
+		return cur.Any(halves(doors.NewSource(true), doors.NewSource(true)))
+	}})
+	c.Send("hide the first part")
+	c.Wait()
+	var hidden toolOutput
+	testkit.Decode(t, testkit.Results(p.Request(t, 2))[0], &hidden)
+	if want := `[{"path":"orders","changed":["tools","inputs","data"]},{"path":"orders.detail","changed":["tools"]}]`; hidden.Output != "hide_first" || string(hidden.Changes) != want {
+		t.Fatalf("hiding the first part answered %+v with changes %s, want %s", hidden, hidden.Changes, want)
+	}
+	var orders state
+	testkit.Decode(t, testkit.Results(p.Request(t, 3))[0], &orders)
+	if want := "data second, input the note, space detail, tool add"; orders.String() != want {
+		t.Fatalf("orders synced as %q, want %q", orders, want)
+	}
+	var added toolOutput
+	testkit.Decode(t, testkit.Results(p.Request(t, 4))[0], &added)
+	if added.Output != "add" || added.Diff == nil || len(added.Diff.Data) != 2 || added.Diff.Data[1].Text != "added" {
+		t.Fatalf("the add answered %+v, want it run and its data added", added)
+	}
+	if stale != nil {
+		t.Fatalf("spaces %q stored digests that differ from a recount", stale)
+	}
+}
+
+func TestSpaceGoesWithItsLastPart(t *testing.T) {
+	p := testkit.NewProvider(api.Model{},
+		testkit.Call("page__sync", map[string]any{"path": ""}),
+		testkit.Call("page__tool", map[string]any{"path": "", "tool": "hide_second", "arg": map[string]any{}}),
+		testkit.Call("page__tool", map[string]any{"path": "", "tool": "hide_first", "arg": map[string]any{}}),
+		testkit.Call("page__tree", map[string]any{}),
+		testkit.Say("done"),
+	)
+	c := stack.Page(t, stack.Host{Provider: p, Page: halves(doors.NewSource(true), doors.NewSource(true))})
+	c.Send("hide both parts")
+	c.Wait()
+	var second toolOutput
+	testkit.Decode(t, testkit.Results(p.Request(t, 2))[0], &second)
+	if want := `[{"path":"orders","changed":["tools","inputs","data"]},{"path":"orders.detail","changed":["data"]}]`; !empty(second.Diff) || string(second.Changes) != want {
+		t.Fatalf("hiding the second part answered %+v with changes %s, want orders kept with %s", second, second.Changes, want)
+	}
+	var first toolOutput
+	testkit.Decode(t, testkit.Results(p.Request(t, 3))[0], &first)
+	if first.Diff == nil || first.Diff.Children == nil || !slices.Equal(first.Diff.Children.Removed, []string{"orders"}) {
+		t.Fatalf("hiding the last part answered %+v, want orders removed", first.Diff)
+	}
+	var tree json.RawMessage
+	testkit.Decode(t, testkit.Results(p.Request(t, 4))[0], &tree)
+	if want := `{"name":"","desc":"","tools":2}`; string(tree) != want {
+		t.Fatalf("tree answered %s, want %s", tree, want)
+	}
+}
+
+func TestSpacePartsShareDescAndNav(t *testing.T) {
+	main, footer := doors.NewSource(true), doors.NewSource(false)
+	part := func(on doors.Source[bool], s neui.Space, desc string, href string) gox.Elem {
+		return on.Bind(func(on bool) gox.Elem {
+			return func(cur gox.Cursor) error {
+				if !on {
+					return nil
+				}
+				return s.Proxy(cur, func(cur gox.Cursor) error {
+					return (neui.Use{Desc: desc}).Proxy(cur, func(cur gox.Cursor) error {
+						if err := cur.Init("a"); err != nil {
+							return err
+						}
+						if err := cur.Set("href", href); err != nil {
+							return err
+						}
+						if err := cur.Submit(); err != nil {
+							return err
+						}
+						return cur.Close()
+					})
+				})
+			}
+		})
+	}
+	page := func(cur gox.Cursor) error {
+		for _, el := range []any{
+			neui.Tool[struct{}, string]{Name: "show_footer", Desc: "shows the footer", Handler: func(ctx context.Context, _ struct{}) (string, error) {
+				footer.Mutate(ctx, func(bool) bool { return true })
+				return "shown", nil
+			}},
+			neui.Tool[struct{}, string]{Name: "hide_main", Desc: "hides the main menu", Handler: func(ctx context.Context, _ struct{}) (string, error) {
+				main.Mutate(ctx, func(bool) bool { return false })
+				return "hidden", nil
+			}},
+			part(doors.NewSource(true), neui.Space{Name: "menu"}, "the orders list", "/orders"),
+			part(main, neui.Space{Name: "menu", Desc: "the main menu", Nav: true}, "the customers list", "/customers"),
+			part(footer, neui.Space{Name: "menu", Desc: "the footer menu"}, "the help", "/help"),
+		} {
+			if err := cur.Any(el); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	p := testkit.NewProvider(api.Model{},
+		round(call("tree", "page__tree", map[string]any{}), call("root", "page__sync", map[string]any{"path": ""})),
+		testkit.Call("page__tool", map[string]any{"path": "", "tool": "show_footer", "arg": map[string]any{}}),
+		testkit.Call("page__tree", map[string]any{}),
+		testkit.Call("page__tool", map[string]any{"path": "", "tool": "hide_main", "arg": map[string]any{}}),
+		testkit.Call("page__tree", map[string]any{}),
+		testkit.Say("done"),
+	)
+	c := stack.Page(t, stack.Host{Provider: p, Page: page})
+	c.Send("swap the menus")
+	c.Wait()
+	var got []string
+	for _, i := range []int{1, 3, 5} {
+		var tree json.RawMessage
+		testkit.Decode(t, testkit.Results(p.Request(t, i))[0], &tree)
+		got = append(got, string(tree))
+	}
+	want := []string{
+		`{"name":"","desc":"","tools":2,"children":[{"name":"menu","desc":"the main menu","inputs":2,"goes":["the orders list","the customers list"]}]}`,
+		`{"name":"","desc":"","tools":2,"children":[{"name":"menu","desc":"the footer menu","inputs":3,"goes":["the orders list","the customers list","the help"]}]}`,
+		`{"name":"","desc":"","tools":2,"children":[{"name":"menu","desc":"the footer menu","inputs":2}]}`,
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("tree answered\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+func island(name string, desc string) neui.Island {
+	return neui.Island{
+		Name:        name,
+		Desc:        desc,
+		Placeholder: func(gox.Cursor) error { return nil },
+		Template:    func(slot gox.Comp) gox.Elem { return func(cur gox.Cursor) error { return cur.Comp(slot) } },
+		Library:     func(neui.Library) error { return nil },
+	}
+}
+
+func TestIslandReplacesItsNamesake(t *testing.T) {
+	logged := &logs{}
+	logger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(logged, nil)))
+	t.Cleanup(func() { slog.SetDefault(logger) })
+	first, second := doors.NewSource(true), doors.NewSource(false)
+	none := func(gox.Cursor) error { return nil }
+	page := func(cur gox.Cursor) error {
+		for _, el := range []any{
+			neui.Tool[struct{}, string]{Name: "show_second", Desc: "shows the second pair", Handler: func(ctx context.Context, _ struct{}) (string, error) {
+				second.Mutate(ctx, func(bool) bool { return true })
+				return "shown", nil
+			}},
+			neui.Tool[struct{}, string]{Name: "hide_first", Desc: "hides the first pair", Handler: func(ctx context.Context, _ struct{}) (string, error) {
+				first.Mutate(ctx, func(bool) bool { return false })
+				return "hidden", nil
+			}},
+			first.Bind(func(on bool) gox.Elem {
+				if !on {
+					return none
+				}
+				return func(cur gox.Cursor) error {
+					if err := (neui.Space{Name: "board", Desc: "a space"}).Proxy(cur, none); err != nil {
+						return err
+					}
+					return cur.Comp(island("pad", "an island"))
+				}
+			}),
+			second.Bind(func(on bool) gox.Elem {
+				if !on {
+					return none
+				}
+				return func(cur gox.Cursor) error {
+					if err := cur.Comp(island("board", "an island")); err != nil {
+						return err
+					}
+					return (neui.Space{Name: "pad", Desc: "a space"}).Proxy(cur, none)
+				}
+			}),
+		} {
+			if err := cur.Any(el); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	p := testkit.NewProvider(api.Model{},
+		testkit.Call("page__sync", map[string]any{"path": ""}),
+		testkit.Call("page__tool", map[string]any{"path": "", "tool": "show_second", "arg": map[string]any{}}),
+		testkit.Call("page__tree", map[string]any{"depth": 1}),
+		testkit.Call("page__tool", map[string]any{"path": "", "tool": "hide_first", "arg": map[string]any{}}),
+		testkit.Call("page__tree", map[string]any{"depth": 1}),
+		testkit.Say("done"),
+	)
+	c := stack.Page(t, stack.Host{Provider: p, Page: page})
+	c.Send("look")
+	c.Wait()
+	var got []string
+	for _, i := range []int{3, 5} {
+		var tree json.RawMessage
+		testkit.Decode(t, testkit.Results(p.Request(t, i))[0], &tree)
+		got = append(got, string(tree))
+	}
+	want := []string{
+		`{"name":"","desc":"","tools":2,"children":[{"name":"board","desc":"an island","island":true,"more":1},{"name":"pad","desc":"a space"}]}`,
+		`{"name":"","desc":"","tools":2,"children":[{"name":"board","desc":"an island","island":true,"more":1},{"name":"pad","desc":"a space"}]}`,
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("tree answered\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	for _, space := range []string{"board", "pad"} {
+		if n := strings.Count(logged.String(), `msg="neui: a space and an island share a name, the later render replaces the other" space=`+space+"\n"); n != 1 {
+			t.Fatalf("the type change of %s was logged %d times, want once:\n%s", space, n, logged)
+		}
+	}
+}
+
+func TestDeferredRerenderKeepsSpacesCurrent(t *testing.T) {
+	d := new(doors.Door)
+	content := func(desc string) gox.Elem {
+		return func(cur gox.Cursor) error {
+			if err := cur.Comp(island("board", desc)); err != nil {
+				return err
+			}
+			return (neui.Space{Name: "orders", Desc: desc}).Proxy(cur, neui.Data{Text: desc}.Main())
+		}
+	}
+	page := func(cur gox.Cursor) error {
+		if err := cur.Comp(neui.Tool[struct{}, string]{Name: "load", Desc: "loads the orders", Handler: func(ctx context.Context, _ struct{}) (string, error) {
+			for err := range d.DeferredInner(ctx, content("the orders")) {
+				if err != nil {
+					return "", err
+				}
+			}
+			return "loaded", nil
+		}}); err != nil {
+			return err
+		}
+		return d.Proxy(cur, func(cur gox.Cursor) error {
+			if err := cur.Init("div"); err != nil {
+				return err
+			}
+			if err := cur.Submit(); err != nil {
+				return err
+			}
+			if err := cur.Any(content("loading")); err != nil {
+				return err
+			}
+			return cur.Close()
+		})
+	}
+	p := testkit.NewProvider(api.Model{},
+		testkit.Call("page__sync", map[string]any{"path": ""}),
+		testkit.Call("page__tool", map[string]any{"path": "", "tool": "load", "arg": map[string]any{}}),
+		testkit.Call("page__tree", map[string]any{"depth": 1}),
+		testkit.Say("done"),
+	)
+	c := stack.Page(t, stack.Host{Provider: p, Page: page})
+	c.Send("load the orders")
+	c.Wait()
+	var tree json.RawMessage
+	testkit.Decode(t, testkit.Results(p.Request(t, 3))[0], &tree)
+	if want := `{"name":"","desc":"","tools":1,"children":[{"name":"board","desc":"the orders","island":true,"more":1},{"name":"orders","desc":"the orders","data":1}]}`; string(tree) != want {
+		t.Fatalf("tree answered\n%s\nwant\n%s", tree, want)
+	}
+}
+
+func TestSpacesMovedBetweenDoorsStayCurrent(t *testing.T) {
+	var root page.Space
+	var stale []string
+	at := doors.NewSource(0)
+	side := func(odd bool) gox.Elem {
+		return at.Bind(func(n int) gox.Elem {
+			return func(cur gox.Cursor) error {
+				if (n%2 == 1) != odd {
+					return nil
+				}
+				if err := cur.Comp(island("board", fmt.Sprintf("board %d", n))); err != nil {
+					return err
+				}
+				return (neui.Space{Name: "detail", Desc: fmt.Sprintf("order %d", n)}).Proxy(cur, func(gox.Cursor) error { return nil })
+			}
+		})
+	}
+	turns := []testkit.Turn{testkit.Call("page__sync", map[string]any{"path": ""})}
+	for range 20 {
+		turns = append(turns,
+			testkit.Call("page__tool", map[string]any{"path": "", "tool": "bump", "arg": map[string]any{}}),
+			testkit.Then(func(api.Request) testkit.Turn {
+				stale = append(stale, page.StaleDigests(root)...)
+				return testkit.Call("page__tree", map[string]any{"depth": 1})
+			}),
+		)
+	}
+	p := testkit.NewProvider(api.Model{}, append(turns, testkit.Say("done"))...)
+	c := stack.Page(t, stack.Host{Provider: p, Page: func(cur gox.Cursor) error {
+		root = cur.Context().Value(common.KeySpace).(page.Space)
+		for _, el := range []any{
+			neui.Tool[struct{}, string]{Name: "bump", Desc: "moves the board to the other side", Handler: func(ctx context.Context, _ struct{}) (string, error) {
+				at.Mutate(ctx, func(n int) int { return n + 1 })
+				return "bumped", nil
+			}},
+			side(false),
+			side(true),
+		} {
+			if err := cur.Any(el); err != nil {
+				return err
+			}
+		}
+		return nil
+	}})
+	c.Send("move the board")
+	c.Wait()
+	for n := 1; n <= 20; n++ {
+		var tree json.RawMessage
+		testkit.Decode(t, testkit.Results(p.Request(t, 2*n+1))[0], &tree)
+		if want := fmt.Sprintf(`{"name":"","desc":"","tools":1,"children":[{"name":"board","desc":"board %d","island":true,"more":1},{"name":"detail","desc":"order %d"}]}`, n, n); string(tree) != want {
+			t.Fatalf("after move %d tree answered\n%s\nwant\n%s", n, tree, want)
+		}
+	}
+	if stale != nil {
+		t.Fatalf("spaces %q stored digests that differ from a recount", stale)
+	}
+}
+
+func TestSpaceRulesHoldAcrossParts(t *testing.T) {
+	logged := &logs{}
+	logger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(logged, nil)))
+	t.Cleanup(func() { slog.SetDefault(logger) })
+	part := func(which string) gox.Elem {
+		return func(cur gox.Cursor) error {
+			return (neui.Space{Name: "orders", Desc: "the orders"}).Proxy(cur, func(cur gox.Cursor) error {
+				if err := cur.Comp(neui.Tool[struct{}, string]{Name: "open", Desc: "opens the " + which + " order", Handler: func(context.Context, struct{}) (string, error) {
+					return which, nil
+				}}); err != nil {
+					return err
+				}
+				if err := cur.Comp(neui.Data{Text: which}); err != nil {
+					return err
+				}
+				return (neui.Use{Desc: "the filter"}).Proxy(cur, func(cur gox.Cursor) error {
+					if err := cur.InitVoid("input"); err != nil {
+						return err
+					}
+					return cur.Submit()
+				})
+			})
+		}
+	}
+	filter := inputID("input", "text", "the filter", "", "")
+	p := testkit.NewProvider(api.Model{},
+		testkit.Call("page__sync", map[string]any{"path": "orders"}),
+		testkit.Call("page__tool", map[string]any{"path": "orders", "tool": "open", "arg": map[string]any{}}),
+		testkit.Call("page__click", map[string]any{"path": "orders", "id": filter}),
+		testkit.Say("done"),
+	)
+	c := stack.Page(t, stack.Host{Provider: p, Page: func(cur gox.Cursor) error {
+		if err := cur.Any(part("first")); err != nil {
+			return err
+		}
+		return cur.Any(part("second"))
+	}})
+	c.Send("open an order")
+	c.Wait()
+	var orders state
+	testkit.Decode(t, testkit.Results(p.Request(t, 1))[0], &orders)
+	if len(orders.Tools) != 1 || len(orders.Inputs) != 1 || len(orders.Data) != 2 || orders.Data[0].Text != "first" || orders.Data[1].Text != "second" {
+		t.Fatalf("orders synced as %+v, want one tool, the filter once and the data first then second", orders)
+	}
+	var opened toolOutput
+	testkit.Decode(t, testkit.Results(p.Request(t, 2))[0], &opened)
+	if opened.Output != "second" {
+		t.Fatalf("open answered %+v, want the second part's tool", opened)
+	}
+	plain(t, testkit.Results(p.Request(t, 3))[0], fmt.Sprintf(`input %q in space "orders": not done: more than one input`, filter))
+	if !strings.Contains(logged.String(), "level=ERROR") || !strings.Contains(logged.String(), "space=orders") {
+		t.Fatalf("the refused click logged %q, want an error naming the space", logged.String())
+	}
+}
