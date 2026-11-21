@@ -216,7 +216,6 @@ type wireUsage struct {
 // read it nowhere.
 type outputItem struct {
 	Type             string `json:"type"`
-	ID               string `json:"id"`
 	Status           string `json:"status"`
 	Phase            string `json:"phase"`
 	CallID           string `json:"call_id"`

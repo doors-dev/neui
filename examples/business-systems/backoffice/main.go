@@ -58,7 +58,7 @@ func main() {
 		provider, err = gpt.New(gpt.Conf{Model: gpt.GPT61Terra}, gpt.WithEffort(gpt.EffortMedium))
 	case os.Getenv("ANTHROPIC_API_KEY") != "":
 		provider, err = claude.New(claude.Conf{Model: claude.Haiku55},
-			claude.WithThinking(claude.Thinking{Type: claude.ThinkingAdaptive, Display: claude.DisplaySummarized}),
+			claude.WithThinkingDisplay(claude.DisplaySummarized),
 			claude.WithEffort(claude.EffortMedium))
 	case os.Getenv("GEMINI_API_KEY") != "":
 		provider, err = gemini.New(gemini.Conf{Model: gemini.Hydrogen4}, gemini.WithEffort(gemini.EffortMedium))

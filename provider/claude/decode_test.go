@@ -219,7 +219,7 @@ func TestStreamSequences(t *testing.T) {
 				// The signature arrives alone and is stored alone: it is what
 				// the block is replayed by, and the envelope around it is built
 				// on the way out, so no readable half is held back here.
-				`meta 0 "EqQBCgIYAhIM"`,
+				`meta 0 {"provider":"claude","data":"EqQBCgIYAhIM"}`,
 				"close 0",
 				`text 1 "21."`,
 				"close 1",
@@ -247,7 +247,7 @@ func TestStreamSequences(t *testing.T) {
 				// the thinking happened is the signature on its own, behind the
 				// empty event that says the block is reasoning at all.
 				`thinking 0 part=0 ""`,
-				`meta 0 "EosnCkYICxIMMb3"`,
+				`meta 0 {"provider":"claude","data":"EosnCkYICxIMMb3"}`,
 				"close 0",
 				`text 1 "done"`,
 				"close 1",
@@ -271,7 +271,7 @@ func TestStreamSequences(t *testing.T) {
 				"start msg_01 claude-opus-5",
 				"usage in=25 out=1 rsn=0 cr=0 cw=0",
 				`thinking 0 part=0 ""`,
-				`meta 0 {"type":"redacted_thinking","data":"EvwBCkYIA"}`,
+				`meta 0 {"provider":"claude","data":{"type":"redacted_thinking","data":"EvwBCkYIA"}}`,
 				"close 0",
 				`text 1 "ok"`,
 				"close 1",
@@ -412,10 +412,10 @@ func TestStreamSequences(t *testing.T) {
 				// and the arguments that stream into it follow as fragments.
 				// Splicing them in here would mean decoding the one thing that
 				// has to go back byte for byte.
-				`opaque 1 "server_tool_use" {"type":"server_tool_use","id":"srvtoolu_1","name":"web_search","input":{}} ""`,
+				`opaque 1 "claude.server_tool_use" {"type":"server_tool_use","id":"srvtoolu_1","name":"web_search","input":{}} ""`,
 				`opaque 1 "" - "{\"query\":\"x\"}"`,
 				"close 1",
-				`opaque 2 "web_search_tool_result" {"type":"web_search_tool_result","tool_use_id":"srvtoolu_1","content":[{"type":"web_search_result","encrypted_content":"Ev0DCio"}]} ""`,
+				`opaque 2 "claude.web_search_tool_result" {"type":"web_search_tool_result","tool_use_id":"srvtoolu_1","content":[{"type":"web_search_result","encrypted_content":"Ev0DCio"}]} ""`,
 				"close 2",
 				`text 3 "done"`,
 				"close 3",
@@ -624,14 +624,14 @@ func TestThinkingDisplayDecidesTheEvent(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			p := testProvider(t, sseServer(body), WithThinking(Thinking{Type: "enabled", Budget: 1024, Display: tc.display}))
+			p := testProvider(t, sseServer(body), WithThinkingDisplay(tc.display))
 			got := collect(t, p, hello())
 			conform.CheckGrammar(t, got)
 			equalSeq(t, got, []string{
 				"start msg_01 claude-opus-5",
 				"usage in=25 out=1 rsn=0 cr=0 cw=0",
 				tc.want,
-				`meta 0 "EqQBCgIYAhIM"`,
+				`meta 0 {"provider":"claude","data":"EqQBCgIYAhIM"}`,
 				"close 0",
 				"usage in=25 out=9 rsn=0 cr=0 cw=0",
 				"ok turn",
@@ -814,7 +814,7 @@ func TestRequestShapeOnTheWire(t *testing.T) {
 	if headers.Get("x-api-key") != "test-key" {
 		t.Fatalf("x-api-key %q", headers.Get("x-api-key"))
 	}
-	if headers.Get("anthropic-beta") != "fine-grained-tool-streaming-2025-05-14" {
+	if headers.Get("anthropic-beta") != "fine-grained-tool-streaming-2025-05-14,"+bindingBeta {
 		t.Fatalf("anthropic-beta %q", headers.Get("anthropic-beta"))
 	}
 }
@@ -836,7 +836,7 @@ func TestAdaptiveThinkingDropsMismatchedBlocks(t *testing.T) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		io.WriteString(w, sse("message_start", fixStart, "message_delta",
 			`{"type":"message_delta","delta":{"stop_reason":"end_turn"}}`, "message_stop", fixStopFrame))
-	}, WithThinking(Thinking{Type: ThinkingAdaptive}), WithBeta("fine-grained-tool-streaming-2025-05-14"))
+	}, WithBeta("fine-grained-tool-streaming-2025-05-14"))
 
 	collect(t, p, hello())
 

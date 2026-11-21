@@ -303,14 +303,14 @@ func (c *converter) onBlockStart(ev *sseMessage) ([]api.Event, bool) {
 		idx := c.claim(b)
 		return append(c.events,
 			api.EventThinking{Index: idx},
-			api.EventMeta{Index: idx, Data: ev.ContentBlock},
+			api.EventMeta{Index: idx, Data: lib.Meta(providerName, ev.ContentBlock)},
 		), true
 	case "tool_use":
 		b.kind = kindTool
 		return append(c.events, api.EventTool{Index: c.claim(b), ID: bs.ID, Name: bs.Name}), true
 	default:
 		b.kind = kindOpaque
-		return append(c.events, api.EventOpaque{Index: c.claim(b), Kind: bs.Type, Data: ev.ContentBlock}), true
+		return append(c.events, api.EventOpaque{Index: c.claim(b), Kind: providerName + "." + bs.Type, Data: ev.ContentBlock}), true
 	}
 	return nil, true
 }
@@ -398,7 +398,7 @@ func (c *converter) onBlockDelta(ev *sseMessage) ([]api.Event, bool) {
 		if d.Signature != "" {
 			opened := b.open
 			idx := c.claim(b)
-			meta := api.EventMeta{Index: idx, Data: sealSignature(d.Signature)}
+			meta := api.EventMeta{Index: idx, Data: lib.Meta(providerName, sealSignature(d.Signature))}
 			if opened {
 				return append(c.events, meta), true
 			}

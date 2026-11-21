@@ -148,7 +148,7 @@ func TestStreamSequences(t *testing.T) {
 				startStep(1, `{"type":"model_output"}`) +
 				deltaStep(1, `{"text":"Hel","type":"text"}`) + deltaStep(1, `{"text":"","type":"text"}`) + deltaStep(1, `{"text":"lo","type":"text"}`) +
 				stopStep(1) + completed("completed") + done,
-			want: []string{start, `thinking 0 part=0 ""`, `meta 0 {"type":"thought","signature":"c2ln"}`, "close 0", `text 1 "Hel"`, `text 1 "lo"`, "close 1", usageLine, "ok turn"},
+			want: []string{start, `thinking 0 part=0 ""`, `meta 0 {"provider":"gemini","data":{"type":"thought","signature":"c2ln"}}`, "close 0", `text 1 "Hel"`, `text 1 "lo"`, "close 1", usageLine, "ok turn"},
 		},
 		{
 			name: "summary then signature",
@@ -158,7 +158,7 @@ func TestStreamSequences(t *testing.T) {
 				deltaStep(0, `{"content":{"type":"image","data":"AA=="},"type":"thought_summary"}`) +
 				deltaStep(0, `{"signature":"c2ln","type":"thought_signature"}`) + stopStep(0) +
 				startStep(1, `{"type":"model_output"}`) + deltaStep(1, `{"text":"208","type":"text"}`) + stopStep(1) + completed("completed") + done,
-			want: []string{start, `summary 0 part=0 "**Plan**\n\nFirst.\n\n\n"`, `summary 0 part=0 "**More**\n\nThen.\n\n\n"`, `meta 0 {"type":"thought","signature":"c2ln"}`, "close 0", `text 1 "208"`, "close 1", usageLine, "ok turn"},
+			want: []string{start, `summary 0 part=0 "**Plan**\n\nFirst.\n\n\n"`, `summary 0 part=0 "**More**\n\nThen.\n\n\n"`, `meta 0 {"provider":"gemini","data":{"type":"thought","signature":"c2ln"}}`, "close 0", `text 1 "208"`, "close 1", usageLine, "ok turn"},
 		},
 		{
 			name: "an empty thought opens nothing",
@@ -173,8 +173,8 @@ func TestStreamSequences(t *testing.T) {
 				startStep(1, `{"type":"model_output","content":[{"type":"text","text":"Hi"}]}`) + deltaStep(1, `{"text":" there","type":"text"}`) + stopStep(1) +
 				startStep(2, `{"type":"thought","signature":"c2lnMg=="}`) + stopStep(2) +
 				completed("completed") + done,
-			want: []string{start, `summary 0 part=0 "Plan."`, `meta 0 {"type":"thought","signature":"c2ln"}`, "close 0", `text 1 "Hi"`, `text 1 " there"`, "close 1",
-				`thinking 2 part=0 ""`, `meta 2 {"type":"thought","signature":"c2lnMg=="}`, "close 2", usageLine, "ok turn"},
+			want: []string{start, `summary 0 part=0 "Plan."`, `meta 0 {"provider":"gemini","data":{"type":"thought","signature":"c2ln"}}`, "close 0", `text 1 "Hi"`, `text 1 " there"`, "close 1",
+				`thinking 2 part=0 ""`, `meta 2 {"provider":"gemini","data":{"type":"thought","signature":"c2lnMg=="}}`, "close 2", usageLine, "ok turn"},
 		},
 		{
 			name: "a call with an arguments delta",
@@ -182,7 +182,7 @@ func TestStreamSequences(t *testing.T) {
 				startStep(1, `{"id":"call_1","type":"function_call","name":"get_weather","arguments":{}}`) +
 				deltaStep(1, `{"arguments":"{\"city\":","type":"arguments_delta"}`) + deltaStep(1, `{"arguments":"\"Paris\"}","type":"arguments_delta"}`) +
 				stopStep(1) + completed("requires_action") + done,
-			want: []string{start, `thinking 0 part=0 ""`, `meta 0 {"type":"thought","signature":"c2ln"}`, "close 0",
+			want: []string{start, `thinking 0 part=0 ""`, `meta 0 {"provider":"gemini","data":{"type":"thought","signature":"c2ln"}}`, "close 0",
 				`tool 1 "call_1" "get_weather" ""`, `tool 1 "" "" "{\"city\":"`, `tool 1 "" "" "\"Paris\"}"`, "close 1", usageLine, "ok turn"},
 		},
 		{
@@ -205,7 +205,7 @@ func TestStreamSequences(t *testing.T) {
 				startStep(2, `{"id":"call_a","type":"function_call","name":"w","arguments":{}}`) + deltaStep(2, `{"arguments":"{\"c\":\"Paris\"}","type":"arguments_delta"}`) + stopStep(2) +
 				startStep(3, `{"id":"call_b","type":"function_call","name":"w","arguments":{}}`) + deltaStep(3, `{"arguments":"{\"c\":\"Tokyo\"}","type":"arguments_delta"}`) + stopStep(3) +
 				completed("requires_action") + done,
-			want: []string{start, `thinking 0 part=0 ""`, `meta 0 {"type":"thought","signature":"c2ln"}`, "close 0", `text 1 "Checking."`, "close 1",
+			want: []string{start, `thinking 0 part=0 ""`, `meta 0 {"provider":"gemini","data":{"type":"thought","signature":"c2ln"}}`, "close 0", `text 1 "Checking."`, "close 1",
 				`tool 2 "call_a" "w" ""`, `tool 2 "" "" "{\"c\":\"Paris\"}"`, "close 2", `tool 3 "call_b" "w" ""`, `tool 3 "" "" "{\"c\":\"Tokyo\"}"`, "close 3", usageLine, "ok turn"},
 		},
 		{

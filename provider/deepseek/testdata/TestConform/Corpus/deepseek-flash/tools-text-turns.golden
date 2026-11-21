@@ -35,7 +35,7 @@
     {
       "role": "assistant",
       "content": "hello",
-      "reasoning_content": "greet back"
+      "reasoning_content": ""
     },
     {
       "role": "user",

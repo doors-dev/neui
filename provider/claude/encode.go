@@ -36,15 +36,10 @@ func (p *Provider) encode(req api.Request) (*request, error) {
 		Stream:        true,
 		StopSequences: p.stopSeqs,
 	}
-	if p.thinking.Type != "" {
-		w.Thinking = &thinkingWire{
-			Type:    string(p.thinking.Type),
-			Budget:  p.thinking.Budget,
-			Display: string(p.thinking.Display),
-		}
-		if p.thinking.Type == ThinkingAdaptive {
-			w.Thinking.BlockBinding = &blockBinding{PrefixMismatchBehavior: "drop_block"}
-		}
+	w.Thinking = &thinkingWire{
+		Type:         "adaptive",
+		Display:      string(p.display),
+		BlockBinding: &blockBinding{PrefixMismatchBehavior: "drop_block"},
 	}
 	if p.effort != "" {
 		w.OutputConfig = &outputConfig{Effort: p.effort}
@@ -73,10 +68,8 @@ func (p *Provider) encode(req api.Request) (*request, error) {
 }
 
 // encodeToolChoice maps the choice onto this API's, and on a declared model
-// refuses the two cases the API refuses forcing a tool in: on a model whose
-// rules say so on every request, and alongside manual extended thinking on any
-// other, because adaptive thinking accepts it there, including on models that
-// think by default. A model not declared here is sent the choice as it is.
+// whose rules say so refuses forcing a tool, which the API refuses on every
+// request there. A model not declared here is sent the choice as it is.
 func (p *Provider) encodeToolChoice(choice api.ToolChoice) (*toolChoice, error) {
 	var tc *toolChoice
 	if name, forced := choice.Tool(); forced {
@@ -93,15 +86,8 @@ func (p *Provider) encodeToolChoice(choice api.ToolChoice) (*toolChoice, error) 
 			tc = &toolChoice{Type: "any"}
 		}
 	}
-	m, ok := declared[p.model.Name]
-	if !ok || tc.Type != "any" && tc.Type != "tool" {
-		return tc, nil
-	}
-	if m.refusesForcedTool {
+	if m, ok := declared[p.model.Name]; ok && m.refusesForcedTool && (tc.Type == "any" || tc.Type == "tool") {
 		return nil, fmt.Errorf("claude: model %q refuses tool choice %q; use auto with strict tools, or structured outputs", p.model.Name, choice)
-	}
-	if p.thinking.Type == ThinkingEnabled {
-		return nil, fmt.Errorf("claude: tool choice %q is not accepted with extended thinking; use adaptive thinking or leave the choice to the model", choice)
 	}
 	return tc, nil
 }
@@ -140,76 +126,43 @@ func (p *Provider) encodeSystem(system string) ([]textBlock, error) {
 	return []textBlock{{Type: "text", Text: system}}, nil
 }
 
-// encodeMessages keeps the caller's arrangement but for one move. A tool result
-// is a block inside a user message here, and this API requires the results of a
-// user message to come before anything else in it, so they go first in the
-// order they were written and the other blocks follow in theirs. This API has
-// an is_error field for a result that failed rather than a convention to
-// invent. Both of api.ToolError's failures set it: the field says
-// a call did not produce what was asked of it, and the classification telling
-// the two apart is for whoever routes the result rather than for the model,
-// which reads the text in the result either way.
-//
-// Which results carry api.ToolErrJSON is collected before the first block is
-// encoded, because a tool call is encoded against the result that answers it and
-// that result is in a later message. A call whose arguments were discarded is
-// the one case where the call's own Input holds nothing sendable, so the pairing
-// is what licenses the empty object. See encodeContent.
-//
-// Which calls go out as a note is collected the same way, because the result
-// answering such a call has no call left to answer and becomes a note as well:
-// a call written into a user message, one with no name, and one whose stored
-// arguments are not valid JSON.
-//
-// Which message it was written in is the one thing the arrangement cannot carry:
-// tool_result is a block of the user turn on this API and an assistant message
-// has no room for one, so a result written into an assistant message leaves the
-// note omitted returns. Moving it would be inventing a turn the caller did not
-// write. The role is passed down for that decision.
-//
-// A message with no blocks takes the note emptyMessage in their place: this API
-// refuses an empty content array, and the message is stored, so it would be
-// refused again on every later turn of the thread.
-//
-// A cache marker never goes on a block that has to be replayed verbatim, so the
-// last block that can carry one is tracked separately from the last one overall.
 const emptyMessage = "[empty]"
 
 func (p *Provider) encodeMessages(msgs []api.Message) ([]message, error) {
-	discarded := map[string]bool{}
-	for _, m := range msgs {
-		for _, c := range m.Content {
-			if r, is := c.(api.ContentToolResult); is && r.Error == api.ToolErrJSON {
-				discarded[r.ID] = true
-			}
-		}
-	}
-	noted := map[string]bool{}
-	for _, m := range msgs {
-		for _, c := range m.Content {
-			u, is := c.(api.ContentToolUse)
-			if !is {
-				continue
-			}
-			if m.Role == api.RoleUser || u.Name == "" || !discarded[u.ID] && len(u.Input) > 0 && !bytes.Equal(u.Input, api.DiscardedArguments) && !json.Valid(u.Input) {
-				noted[u.ID] = true
-			}
-		}
-	}
 	out := make([]message, 0, len(msgs))
 	for i, m := range msgs {
 		role := string(m.Role)
 		if role != string(api.RoleUser) && role != string(api.RoleAssistant) {
 			return nil, fmt.Errorf("claude: message %d has role %q", i, m.Role)
 		}
+		replay := true
+		for _, c := range m.Content {
+			if r, is := c.(api.ContentReasoning); is {
+				data, own := lib.OwnMeta(r.Meta, providerName)
+				var signature string
+				var block struct {
+					Type string `json:"type"`
+				}
+				switch {
+				case !own:
+					replay = false
+				case json.Unmarshal(data, &signature) == nil:
+					replay = replay && signature != ""
+				default:
+					replay = replay && json.Unmarshal(data, &block) == nil && block.Type == "redacted_thinking"
+				}
+			}
+		}
 		blocks := make([]any, 0, len(m.Content))
 		var results []any
 		var markable, resultMark *cached
-		replay := replayThinking(m)
 		for j, c := range m.Content {
-			block, mark, err := p.encodeContent(c, role, replay, discarded, noted, i)
+			block, mark, err := p.encodeContent(msgs, i, c, replay)
 			if err != nil {
 				return nil, fmt.Errorf("claude: message %d block %d: %w", i, j, err)
+			}
+			if block == nil {
+				continue
 			}
 			if _, is := block.(*toolResultBlock); is {
 				results = append(results, block)
@@ -239,85 +192,8 @@ func (p *Provider) encodeMessages(msgs []api.Message) ([]message, error) {
 	return out, nil
 }
 
-// replayThinking decides, once for a whole message, whether its thinking goes
-// back with it. Every thinking and redacted_thinking block of the message
-// replays or none does, and that is the whole rule.
-//
-// Models are not compared. This API ignores or drops thinking the target model
-// cannot read instead of rejecting the request, so a block another Claude model
-// wrote goes back like this model's own. Partial dropping is the part that is
-// refused:
-// within the latest assistant message the sequence of consecutive thinking
-// blocks has to match what the model generated, and anything else comes back as
-// "`thinking` or `redacted_thinking` blocks in the latest assistant message
-// cannot be modified". So one block that cannot go settles the message.
-//
-// A block that cannot go is one Anthropic did not issue: its meta is neither a
-// signature, a JSON string, nor a redacted_thinking block. That covers another
-// provider's sealed payload and a block that arrived unsigned, which this API
-// rejects and which has nothing to be replayed by. Both are counted here rather
-// than at the block, because a message that drops either one has to drop the
-// rest with it.
-func replayThinking(m api.Message) bool {
-	for _, c := range m.Content {
-		r, is := c.(api.ContentReasoning)
-		if !is {
-			continue
-		}
-		var signature string
-		if json.Unmarshal(r.Meta, &signature) == nil {
-			if signature == "" {
-				return false
-			}
-			continue
-		}
-		var block struct {
-			Type string `json:"type"`
-		}
-		if json.Unmarshal(r.Meta, &block) != nil || block.Type != "redacted_thinking" {
-			return false
-		}
-	}
-	return true
-}
-
-// encodeContent returns the wire block and, where a cache marker may be
-// attached to it, the field the marker goes in. Content this API cannot send becomes the note omitted returns,
-// in the place the block held: a text block with no non whitespace content in
-// it, an image or a document that arrived with no bytes in it, an image of a
-// type this API does not take, a document in an assistant message that is not
-// a UTF-8 text type with non whitespace content, or one encodeDocument cannot
-// send, thinking the message does not replay, a payload
-// this API did not issue, a payload whose streamed fragments never parsed back
-// into it, a tool result
-// in an assistant message or with no tool use id, a tool call with no name or
-// whose stored arguments are not JSON, and a tool call, thinking or a payload
-// in a user message. A type this version
-// of the adapter has no case for becomes the note lib.Unknown returns.
-//
-// An empty text block and an attachment this API refuses are notes for the
-// thread's sake rather than the API's. This API refuses each outright, and a
-// user message and a tool result are both stored and replayed, so one sent as a
-// block would fail the turn: in a user message on every later turn until a
-// rewind drops it, in a tool result at the cost of the result's whole content.
-// The attachment is checked before the mime type, because a block that cannot
-// be sent whatever it claims to be is not a request worth refusing.
-//
-// A tool call is read against the result that answers it. Where that result
-// carries api.ToolErrJSON the call's arguments were discarded before they were
-// stored, so Input is not read at all: the API requires an object, and the failed
-// result is what tells the model what happened, so an empty object is the honest
-// stand in for arguments that no longer exist. Otherwise Input goes out as it
-// stands, and nil — a call the provider sent no arguments for — becomes the same
-// empty object because this API has no other shape for one.
-//
-// A call holding api.DiscardedArguments that no such result answers is the one
-// tool call refused rather than noted. The marker says the arguments are gone
-// and the missing result says nothing happened to them, and sending {} between
-// those two would replay as a call that legitimately took none. It is an
-// invariant of whoever dispatched the calls, so a thread that breaks it is a
-// caller's defect and not content this API cannot carry.
-func (p *Provider) encodeContent(c api.Content, role string, replay bool, discarded map[string]bool, noted map[string]bool, at int) (any, *cached, error) {
+func (p *Provider) encodeContent(msgs []api.Message, at int, c api.Content, replay bool) (any, *cached, error) {
+	role := string(msgs[at].Role)
 	switch c := c.(type) {
 	case api.ContentText:
 		if strings.TrimSpace(c.Text) == "" {
@@ -351,26 +227,39 @@ func (p *Provider) encodeContent(c api.Content, role string, replay bool, discar
 		}
 		return encodeDocument(c)
 	case api.ContentToolUse:
-		if noted[c.ID] {
-			return omitted(c, "a tool call in a user message, with no name, or whose stored arguments are not valid JSON is refused by this API, and the block is stored, so it would be refused again on every later turn of the thread")
+		if role == string(api.RoleUser) {
+			return omitted(c, "a tool call is a block of the assistant turn that made it, and a user message on this API takes none")
 		}
-		input := c.Input
+		discarded := false
+		if at+1 < len(msgs) && msgs[at+1].Role == api.RoleUser {
+			for _, next := range msgs[at+1].Content {
+				r, is := next.(api.ContentToolResult)
+				discarded = discarded || is && r.ID == c.ID && r.Error == api.ToolErrJSON
+			}
+		}
+		input := json.RawMessage(`{}`)
 		switch {
-		case discarded[c.ID]:
-			input = json.RawMessage(`{}`)
-		case bytes.Equal(input, api.DiscardedArguments):
+		case discarded:
+		case bytes.Equal(c.Input, api.DiscardedArguments):
 			return nil, nil, fmt.Errorf("tool call %q holds discarded arguments and no result answers it as %s, so there are no arguments to send and an empty object would replay as a call that took none", c.ID, api.ToolErrJSON)
-		case len(input) == 0:
-			input = json.RawMessage(`{}`)
+		default:
+			input = lib.ObjectInput(c.Input)
 		}
-		b := &toolUseBlock{Type: "tool_use", ID: c.ID, Name: c.Name, Input: input}
+		b := &toolUseBlock{Type: "tool_use", ID: lib.CallID(c.ID), Name: lib.CallName(c.Name), Input: input}
 		return b, &b.cached, nil
 	case api.ContentToolResult:
 		if role == string(api.RoleAssistant) {
 			return omitted(c, "a tool result is a block of the user turn that answers the call, and an assistant message on this API takes none")
 		}
-		if c.ID == "" || noted[c.ID] {
-			return omitted(c, "a tool result with no tool use id, or one answering a call that went out as a note, answers no call and is refused by this API, and the block is stored, so it would be refused again on every later turn of the thread")
+		answers := false
+		if at > 0 && msgs[at-1].Role == api.RoleAssistant {
+			for _, prev := range msgs[at-1].Content {
+				u, is := prev.(api.ContentToolUse)
+				answers = answers || is && u.ID == c.ID
+			}
+		}
+		if !answers {
+			return omitted(c, "a tool result has to answer a call of the assistant message right before it, and this API refuses one that does not on every later turn of the thread")
 		}
 		b, err := encodeToolResult(c)
 		if err != nil {
@@ -378,15 +267,39 @@ func (p *Provider) encodeContent(c api.Content, role string, replay bool, discar
 		}
 		return b, &b.cached, nil
 	case api.ContentReasoning:
-		if role == string(api.RoleUser) {
-			return omitted(c, "thinking is a block of the assistant turn that produced it, and a user message on this API takes none")
+		if role == string(api.RoleUser) || !replay {
+			return nil, nil, nil
 		}
-		return encodeReasoning(c, replay)
+		data, _ := lib.OwnMeta(c.Meta, providerName)
+		var signature string
+		if json.Unmarshal(data, &signature) != nil {
+			return data, nil, nil
+		}
+		readable := c.Thoughts.Ordered()
+		if len(readable) == 0 {
+			readable = c.Summary.Ordered()
+		}
+		return &thinkingBlock{
+			Type:      "thinking",
+			Thinking:  strings.Join(readable, ""),
+			Signature: signature,
+		}, nil, nil
 	case api.ContentOpaque:
-		if role == string(api.RoleUser) {
-			return omitted(c, "a payload this API issued belongs to the assistant turn that produced it, and a user message on this API takes none")
+		kind, own := strings.CutPrefix(c.Kind, providerName+".")
+		var block struct {
+			Type string `json:"type"`
 		}
-		return encodeOpaque(c)
+		if role == string(api.RoleUser) || !own || json.Unmarshal(c.Data, &block) != nil || block.Type == "" || block.Type != kind {
+			return nil, nil, nil
+		}
+		if len(c.Deltas) == 0 {
+			return c.Data, nil, nil
+		}
+		raw, err := spliceField(c.Data, "input", json.RawMessage(strings.Join(c.Deltas, "")))
+		if err != nil {
+			return omitted(c, "the fragments this block collected never parsed as JSON, or the payload holding the field they belong in is not the object this API sent, and either way there is nothing to splice back into it")
+		}
+		return raw, nil, nil
 	}
 	b := &textBlock{Type: "text", Text: lib.Unknown(providerName, at, c)}
 	return b, &b.cached, nil
@@ -486,94 +399,10 @@ func encodeToolResult(c api.ContentToolResult) (*toolResultBlock, error) {
 	}
 	return &toolResultBlock{
 		Type:      "tool_result",
-		ToolUseID: c.ID,
+		ToolUseID: lib.CallID(c.ID),
 		Content:   content,
 		IsError:   c.Error != api.ToolOk,
 	}, nil
-}
-
-// encodeReasoning replays thinking. Meta holds one of two shapes here and the
-// branch is on which one arrived: a JSON string is the signature of a thinking
-// block, and the envelope this API replays one by is built back around it; a
-// JSON object is a redacted_thinking block, which is a wire block this API sent
-// and goes back byte for byte. A signature is stored alone because the envelope
-// is fabricated either way — the readable half streams out of a field the
-// signature frame does not carry — while a redacted block arrived whole.
-//
-// Which of the two readable fields holds the text is what the caller configured
-// display as on the turn that produced the block, and both stream out of the
-// same thinking field, so whichever is filled is what goes into it. A summary is
-// the model's thinking as far as this API is concerned: the signature was issued
-// over the block the API sent, and it sent the summary. An envelope with nothing
-// readable in it is normal and replays as it is: that is what a model whose
-// thinking display is omitted returns, and dropping one is the documented way to
-// break a tool use turn.
-//
-// replay is the message's decision, taken before any of its blocks were
-// encoded, because this API refuses a message whose thinking was partly kept.
-// See replayThinking. A message that does not replay leaves a note in place of
-// each of its thinking blocks, rather than the gap a model reads as a turn that
-// never thought. The readable half is not sent as the assistant's text: it is
-// another provider's thinking, or a summary this API wrote, and either one replayed
-// as words this model spoke is a fabrication.
-func encodeReasoning(c api.ContentReasoning, replay bool) (any, *cached, error) {
-	if !replay {
-		return omitted(c, "the message holds thinking another provider issued or thinking that arrived unsigned, and this API refuses a message whose thinking was partly kept")
-	}
-	var signature string
-	if json.Unmarshal(c.Meta, &signature) != nil {
-		return c.Meta, nil, nil
-	}
-	readable := c.Thoughts.Ordered()
-	if len(readable) == 0 {
-		readable = c.Summary.Ordered()
-	}
-	return &thinkingBlock{
-		Type:      "thinking",
-		Thinking:  strings.Join(readable, ""),
-		Signature: signature,
-	}, nil, nil
-}
-
-// encodeOpaque replays a payload this protocol has no type for.
-//
-// What this API needs handed back is the bytes it sent. It signs the blocks it
-// issues and checks them for having been modified, and a signature covers bytes
-// rather than a value, so Data goes back byte for byte: decoding it and
-// marshalling it again keeps what it means and reorders the keys it is checked
-// by. That is this adapter's requirement and not a rule about opaque payloads
-// anywhere else. Deltas are the fragments of the one field this API streams
-// inside such a payload, the arguments of a tool it ran itself, and they are
-// spliced back into it without the rest of it being decoded.
-//
-// Models are not compared, as replayThinking does not compare them: the API
-// restores what it sealed in a server tool's result whichever Claude model reads
-// it. A payload this API did not issue leaves a note in its place: one that is
-// not a JSON object whose type is its Kind, or one that carries an id without
-// being a *_use block, which is the shape of a Responses item, since every
-// Responses item carries an id and the only Messages blocks that do are tool
-// calls. So does one the splice cannot be done on. A turn cut inside a server
-// tool's arguments stores fragments that never became JSON, and then there is
-// neither anything to put back nor a half written field worth sending: the
-// placeholder the payload opened with would replay as a call made with
-// arguments it never had. Failing the request instead would end the thread on
-// stored history the caller cannot rewrite, over one block that is already lost.
-func encodeOpaque(c api.ContentOpaque) (any, *cached, error) {
-	var block struct {
-		Type string `json:"type"`
-		ID   string `json:"id"`
-	}
-	if json.Unmarshal(c.Data, &block) != nil || block.Type == "" || block.Type != c.Kind || block.ID != "" && !strings.HasSuffix(block.Type, "_use") {
-		return omitted(c, "the payload was issued by another provider")
-	}
-	if len(c.Deltas) == 0 {
-		return c.Data, nil, nil
-	}
-	raw, err := spliceField(c.Data, "input", json.RawMessage(strings.Join(c.Deltas, "")))
-	if err != nil {
-		return omitted(c, "the fragments this block collected never parsed as JSON, or the payload holding the field they belong in is not the object this API sent, and either way there is nothing to splice back into it")
-	}
-	return raw, nil, nil
 }
 
 // spliceField replaces the value of one field of a payload and leaves every

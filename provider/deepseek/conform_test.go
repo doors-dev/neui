@@ -29,6 +29,7 @@ const (
 	docCreate   = "https://api-docs.deepseek.com/api/create-chat-completion"
 	docThinking = "https://api-docs.deepseek.com/guides/thinking_mode"
 	docErrors   = "https://api-docs.deepseek.com/quick_start/error_codes"
+	docWebTools = "https://api-docs.deepseek.com/guides/web_tools"
 )
 
 func TestConform(t *testing.T) {
@@ -88,6 +89,22 @@ func conformAdapter() conform.Adapter {
 			}},
 		},
 		Render:   renderDeepSeek,
+		Messages: "/messages",
+		CrossCheck: func(t *testing.T, body []byte) {
+			conform.CheckChatPairs(t, body)
+			var req struct {
+				Messages []map[string]json.RawMessage `json:"messages"`
+			}
+			if err := json.Unmarshal(body, &req); err != nil {
+				t.Fatal(err)
+			}
+			for i, m := range req.Messages {
+				_, rc := m["reasoning_content"]
+				if assistant := string(m["role"]) == `"assistant"`; rc != assistant {
+					t.Errorf("message %d with role %s carries reasoning_content: %v", i, m["role"], rc)
+				}
+			}
+		},
 		Errors:   deepseekErrors(),
 		Unframed: true,
 		Sampling: true,
@@ -103,8 +120,8 @@ func conformAdapter() conform.Adapter {
 			{When: func(p conform.Params) bool { return p.Choice == api.ToolChoiceAny }, Carry: map[string]any{"/tool_choice": "required"}, Source: docCreate},
 			{When: func(p conform.Params) bool { return p.Choice == conform.ChoiceNamed }, Carry: map[string]any{"/tool_choice": map[string]any{"type": "function", "function": map[string]any{"name": "lookup"}}}, Source: docCreate},
 			{Carry: map[string]any{"/stream_options": map[string]any{"include_usage": true}}, Source: docCreate},
-			{Entry: "tools-text-turns", Carry: map[string]any{"/messages/1/reasoning_content": "greet back"}, Source: docThinking},
-			{Entry: "reasoning-unsigned", Omit: []string{"/messages/1/reasoning_content"}, Source: docThinking},
+			{Entry: "tools-text-turns", Carry: map[string]any{"/messages/1/reasoning_content": ""}, Source: docThinking},
+			{Entry: "reasoning-unsigned", Carry: map[string]any{"/messages/1/reasoning_content": ""}, Source: docThinking},
 			{Entry: "tool-error", Carry: map[string]any{"/messages/2/role": "tool", "/messages/2/content": "Error: lookup is down"}, Source: docCreate},
 			{Entry: "documents", Carry: map[string]any{"/messages/0/content": "summarize these\n\n[document omitted]\n\nplain words"}, Source: docCreate},
 			{Entry: "document-csv", Carry: map[string]any{"/messages/0/content": "summarize\n\na,b\n1,2\n"}, Source: docCreate},
@@ -113,7 +130,7 @@ func conformAdapter() conform.Adapter {
 		Live: conform.Live{
 			Env:    "DEEPSEEK_API_KEY",
 			Model:  Flash,
-			Params: conform.Params{MaxTokens: 64, Effort: conform.EffortLow},
+			Params: conform.Params{MaxTokens: 1024, Effort: conform.EffortLow},
 			Base:   defaultBaseURL,
 			Auth: func(r *http.Request, key string) {
 				r.Header.Set("Authorization", "Bearer "+key)
@@ -188,6 +205,7 @@ func deepseekErrors() []conform.ErrorCase {
 		{Name: "server-error", Status: 500, Body: body("server_error", "Server error."), Want: api.CodeNetwork, Source: docErrors},
 		{Name: "overloaded", Status: 503, Body: body("server_error", "Server overloaded."), Want: api.CodeBusy, Source: docErrors},
 		{Name: "too-large", Status: 413, Body: "payload too large", Want: api.CodeTooLarge, Source: docErrors},
+		{Name: "generation-failure", Stream: "data: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"created\":1785000000,\"model\":\"deepseek-v4-pro\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Partial\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-1\",\"object\":\"chat.completion.chunk\",\"created\":1785000000,\"model\":\"deepseek-v4-pro\",\"choices\":[],\"usage\":{\"prompt_tokens\":11,\"completion_tokens\":7,\"total_tokens\":18},\"error\":{\"message\":\"The model failed to generate a complete response. Please retry.\",\"type\":\"api_error\"}}\n\n", Want: api.CodeNetwork, Source: docWebTools + "#generation-failures"},
 		{Name: "in-stream-error", Stream: "data: {\"error\":{\"message\":\"Rate limit reached.\",\"type\":\"rate_limit_error\",\"code\":\"rate_limit_exceeded\"}}\n\n", Want: api.CodeBusy, Source: docErrors},
 	}
 }

@@ -108,6 +108,35 @@ func conformAdapter() conform.Adapter {
 			}},
 		},
 		Render:   renderGPT,
+		Messages: "/input",
+		CrossCheck: func(t *testing.T, body []byte) {
+			var req struct {
+				Input []struct {
+					Type   string `json:"type"`
+					CallID string `json:"call_id"`
+				} `json:"input"`
+			}
+			if err := json.Unmarshal(body, &req); err != nil {
+				t.Fatal(err)
+			}
+			called, answered := map[string]bool{}, map[string]bool{}
+			for _, it := range req.Input {
+				switch it.Type {
+				case "function_call":
+					called[it.CallID] = true
+				case "function_call_output":
+					if !called[it.CallID] {
+						t.Errorf("function_call_output %q comes before any function_call with its call_id", it.CallID)
+					}
+					answered[it.CallID] = true
+				}
+			}
+			for id := range called {
+				if !answered[id] {
+					t.Errorf("function_call %q has no function_call_output", id)
+				}
+			}
+		},
 		Signed:   true,
 		Sampling: true,
 		Errors:   gptErrors(),
@@ -161,7 +190,7 @@ func conformAdapter() conform.Adapter {
 		Live: conform.Live{
 			Env:    "OPENAI_API_KEY",
 			Model:  GPT56Luna,
-			Params: conform.Params{MaxTokens: 64, Effort: conform.EffortLow},
+			Params: conform.Params{MaxTokens: 1024, Effort: conform.EffortLow},
 			Base:   defaultBaseURL,
 			Count:  "/responses/input_tokens",
 			Strip:  []string{"/stream", "/stream_options", "/store", "/include", "/max_output_tokens", "/service_tier", "/temperature", "/top_p", "/metadata", "/prompt_cache_key", "/prompt_cache_options"},

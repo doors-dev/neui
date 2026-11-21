@@ -111,11 +111,40 @@ func conformAdapter() conform.Adapter {
 						map[string]any{"$ref": "#/components/schemas/ImageContent"},
 						map[string]any{"$ref": "#/components/schemas/TextContent"},
 					}}},
-					Source: "https://aistudio.google.com/docs/function-calling#multimodal and the 2026-11-05 changelog (https://aistudio.google.com/docs/changelog) add document blocks to function_result; live on v1 Hydrogen 2026-11-19 a PDF in a result was read",
+					Source: "https://aistudio.google.com/docs/function-calling#multimodal and the 2026-11-05 changelog (https://aistudio.google.com/docs/changelog) add document blocks to function_result; live 2026-11-20 (g1) a PDF, a CSV and a DOCX in a function_result were each read on Flash-Lite and Hydrogen",
 				},
 			},
 		},
 		Render:   renderGemini,
+		Messages: "/input",
+		CrossCheck: func(t *testing.T, body []byte) {
+			var req struct {
+				Input []struct {
+					Type      string          `json:"type"`
+					Arguments json.RawMessage `json:"arguments"`
+				} `json:"input"`
+			}
+			if err := json.Unmarshal(body, &req); err != nil {
+				t.Fatal(err)
+			}
+			first := ""
+			for i, st := range req.Input {
+				switch st.Type {
+				case "user_input", "function_result":
+					first = ""
+					continue
+				}
+				if first == "" {
+					first = st.Type
+				}
+				if st.Type == "function_call" && first != "thought" {
+					t.Errorf("step %d: a call whose turn opens with %s, not a thought", i, first)
+				}
+				if st.Type == "function_call" && !strings.HasPrefix(string(st.Arguments), "{") {
+					t.Errorf("step %d: arguments %s are not an object", i, st.Arguments)
+				}
+			}
+		},
 		Errors:   geminiErrors(),
 		Signed:   true,
 		Sampling: false,
@@ -177,8 +206,8 @@ func conformAdapter() conform.Adapter {
 			{Entry: "document-csv", Carry: map[string]any{"/input/0/content/1/mime_type": "text/csv"}, Source: docDocuments},
 			{Entry: "document-no-bytes", Carry: map[string]any{"/input/0/content/1/text": "[document omitted]"}, Source: docDocuments},
 			{Entry: "whitespace-text", Carry: map[string]any{"/input/0/content/1/text": "  "}, Source: docCreate},
-			{Entry: "tools-text-turns", Carry: map[string]any{"/input/1": map[string]any{"type": "model_output", "content": []any{map[string]any{"type": "text", "text": "[reasoning omitted]"}, map[string]any{"type": "text", "text": "hello"}}}}, Source: docSignatures},
-			{Entry: "reasoning-unsigned", Carry: map[string]any{"/input/1": map[string]any{"type": "model_output", "content": []any{map[string]any{"type": "text", "text": "[reasoning omitted]"}, map[string]any{"type": "text", "text": "hello"}}}}, Source: docSignatures},
+			{Entry: "tools-text-turns", Carry: map[string]any{"/input/1": map[string]any{"type": "model_output", "content": []any{map[string]any{"type": "text", "text": "hello"}}}}, Source: docSignatures},
+			{Entry: "reasoning-unsigned", Carry: map[string]any{"/input/1": map[string]any{"type": "model_output", "content": []any{map[string]any{"type": "text", "text": "hello"}}}}, Source: docSignatures},
 		},
 		Live: conform.Live{
 			Env:    "GEMINI_API_KEY",

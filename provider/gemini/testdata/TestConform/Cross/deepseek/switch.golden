@@ -1,0 +1,198 @@
+{
+  "model": "gemini-4-hydrogen",
+  "stream": true,
+  "store": false,
+  "tools": [
+    {
+      "type": "function",
+      "name": "lookup",
+      "description": "Look a word up.",
+      "parameters": {
+        "properties": {
+          "q": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "q"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "type": "function",
+      "name": "clock",
+      "description": "Read the time.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ],
+  "input": [
+    {
+      "type": "user_input",
+      "content": [
+        {
+          "type": "text",
+          "text": "look up cat"
+        }
+      ]
+    },
+    {
+      "type": "thought",
+      "signature": "c2lnbmF0dXJlIDIgb2YgZ2VtaW5pIGZvciB0aGUgY3Jvc3MgY29ycHVz"
+    },
+    {
+      "type": "function_call",
+      "id": "call_gemini_2",
+      "name": "lookup",
+      "arguments": {
+        "q": "cat"
+      }
+    },
+    {
+      "type": "function_call",
+      "id": "call_gemini_3",
+      "name": "clock",
+      "arguments": {}
+    },
+    {
+      "type": "function_result",
+      "name": "lookup",
+      "call_id": "call_gemini_2",
+      "result": [
+        {
+          "type": "text",
+          "text": "result of call_gemini_2"
+        }
+      ]
+    },
+    {
+      "type": "function_result",
+      "name": "clock",
+      "call_id": "call_gemini_3",
+      "result": [
+        {
+          "type": "text",
+          "text": "result of call_gemini_3"
+        }
+      ]
+    },
+    {
+      "type": "model_output",
+      "content": [
+        {
+          "type": "text",
+          "text": "Hello from deepseek."
+        }
+      ]
+    },
+    {
+      "type": "user_input",
+      "content": [
+        {
+          "type": "text",
+          "text": "thanks"
+        }
+      ]
+    },
+    {
+      "type": "thought",
+      "signature": "skip_thought_signature_validator"
+    },
+    {
+      "type": "model_output",
+      "content": [
+        {
+          "type": "text",
+          "text": "Checking."
+        }
+      ]
+    },
+    {
+      "type": "function_call",
+      "id": "call_deepseek_1",
+      "name": "lookup",
+      "arguments": {
+        "q": "dog"
+      }
+    },
+    {
+      "type": "function_result",
+      "name": "lookup",
+      "call_id": "call_deepseek_1",
+      "result": [
+        {
+          "type": "text",
+          "text": "result of call_deepseek_1"
+        }
+      ]
+    },
+    {
+      "type": "thought",
+      "signature": "skip_thought_signature_validator"
+    },
+    {
+      "type": "function_call",
+      "id": "call_deepseek_2",
+      "name": "lookup",
+      "arguments": {
+        "q": "cat"
+      }
+    },
+    {
+      "type": "function_call",
+      "id": "call_deepseek_3",
+      "name": "clock",
+      "arguments": {}
+    },
+    {
+      "type": "function_result",
+      "name": "lookup",
+      "call_id": "call_deepseek_2",
+      "result": [
+        {
+          "type": "text",
+          "text": "result of call_deepseek_2"
+        }
+      ]
+    },
+    {
+      "type": "function_result",
+      "name": "clock",
+      "call_id": "call_deepseek_3",
+      "result": [
+        {
+          "type": "text",
+          "text": "result of call_deepseek_3"
+        }
+      ]
+    },
+    {
+      "type": "thought",
+      "signature": "c2lnbmF0dXJlIDEgb2YgZ2VtaW5pIGZvciB0aGUgY3Jvc3MgY29ycHVz"
+    },
+    {
+      "type": "model_output",
+      "content": [
+        {
+          "type": "text",
+          "text": "Hello from gemini."
+        }
+      ]
+    },
+    {
+      "type": "user_input",
+      "content": [
+        {
+          "type": "text",
+          "text": "again"
+        }
+      ]
+    }
+  ],
+  "generation_config": {
+    "thinking_summaries": "auto"
+  }
+}

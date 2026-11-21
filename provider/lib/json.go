@@ -38,11 +38,26 @@ func MarshalRaw(v any) ([]byte, error) {
 	return bytes.TrimRight(buf.Bytes(), "\n"), nil
 }
 
-// OwnMeta reads Meta in the shared form {"provider":"<name>","data":<payload>}
-// that an adapter writes on a reasoning block it can replay. It returns the
-// payload, nil when there is none, and true when Meta names provider; for
-// empty Meta, Meta in another form or Meta naming another provider it
-// returns false, and the adapter skips the block.
+// Meta returns the Meta an adapter writes on a block it issues:
+// {"provider":"<provider>","data":<data>}, or {"provider":"<provider>"} when
+// data is empty. provider is the adapter's Name; data must be valid JSON and
+// keeps its bytes. OwnMeta reads it back.
+func Meta(provider string, data json.RawMessage) json.RawMessage {
+	name, _ := MarshalRaw(provider)
+	out := make([]byte, 0, len(`{"provider":,"data":}`)+len(name)+len(data))
+	out = append(out, `{"provider":`...)
+	out = append(out, name...)
+	if len(data) > 0 {
+		out = append(out, `,"data":`...)
+		out = append(out, data...)
+	}
+	return append(out, '}')
+}
+
+// OwnMeta reads Meta in the form Meta writes. It returns the payload, nil when
+// there is none, and true when Meta names provider; for empty Meta, Meta in
+// another form or Meta naming another provider it returns false, and the
+// adapter skips the block.
 func OwnMeta(meta json.RawMessage, provider string) (json.RawMessage, bool) {
 	if len(meta) == 0 {
 		return nil, false

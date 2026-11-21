@@ -57,20 +57,16 @@ const (
 
 var errTooLarge = errors.New("gpt: request too large")
 
-// ReplayMode says which earlier reasoning items are sent back on later turns;
-// set it with WithReasoningReplay. The default, ReplayToolTurns, suits every
-// reasoning model the service documents.
+// ReplayMode says whether earlier reasoning items are sent back on later
+// turns; set it with WithReasoningReplay.
 type ReplayMode int
 
 const (
-	// ReplayToolTurns replays a reasoning item when a tool call follows it in
-	// the same message, with any preamble or commentary messages in between;
-	// the case the service requires. Default.
-	ReplayToolTurns ReplayMode = iota
-	// ReplayAlways replays every reasoning item that has an item after it in
-	// the same message, including one before a text answer. If the service
-	// rejects that pairing, every multi-turn conversation fails with a 400.
-	ReplayAlways
+	// ReplayAll sends every reasoning item this provider issued back where it
+	// was, before text and at the end of a turn included. With WithStore on, an
+	// item goes back only when a tool call or a tool the service ran follows it
+	// in its message. Default.
+	ReplayAll ReplayMode = iota
 	// ReplayNever sends no reasoning items back; tool calls and results still
 	// travel. Use it for a model or gateway that rejects reasoning input
 	// ("Reasoning input items can only be provided to a reasoning or computer
@@ -110,7 +106,7 @@ type settings struct {
 // what makes reasoning items come back with encrypted_content populated.
 func defaultSettings() settings {
 	return settings{
-		replay: ReplayToolTurns,
+		replay: ReplayAll,
 		store:  false,
 	}
 }
@@ -399,7 +395,7 @@ func WithReasoningContext(context ReasoningContext) Option {
 func WithReasoningReplay(mode ReplayMode) Option {
 	return func(p *Provider) error {
 		switch mode {
-		case ReplayToolTurns, ReplayAlways, ReplayNever:
+		case ReplayAll, ReplayNever:
 		default:
 			return fmt.Errorf("gpt: unknown replay mode %d", mode)
 		}

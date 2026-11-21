@@ -194,6 +194,7 @@ func TestStreamReasoning(t *testing.T) {
 	wantTrace(t, events,
 		"start chatcmpl-1 deepseek-v4-pro",
 		`thinking 0 part=0 "Let me compare"`,
+		`meta 0 {"provider":"deepseek"}`,
 		`thinking 0 part=0 " the decimals"`,
 		`text 1 "9.11"`,
 		`thinking 0 part=0 " actually, hold on"`,
@@ -220,6 +221,7 @@ func TestStreamReasoningTextAndToolCallEachTakeABlock(t *testing.T) {
 	wantTrace(t, events,
 		"start chatcmpl-1 deepseek-v4-pro",
 		`thinking 0 part=0 "which city"`,
+		`meta 0 {"provider":"deepseek"}`,
 		`text 1 "looking it up"`,
 		`tool 2 "chatcmpl-1_call_2" "get_weather" "{}"`,
 		"ok turn",
@@ -389,8 +391,8 @@ func TestReplayReproducesTheTurnByteForByte(t *testing.T) {
 	if m.Content.(string) != "9.11 wins" {
 		t.Fatalf("the model said %q and is replayed %q", "9.11 wins", m.Content.(string))
 	}
-	if want := "Let me compare the decimals actually, hold on"; m.ReasoningContent != want {
-		t.Fatalf("reasoning_content %q, want %q", m.ReasoningContent, want)
+	if want := "Let me compare the decimals actually, hold on"; m.ReasoningContent == nil || *m.ReasoningContent != want {
+		t.Fatalf("reasoning_content %v, want %q", m.ReasoningContent, want)
 	}
 }
 
@@ -781,11 +783,11 @@ func TestHTTPErrors(t *testing.T) {
 	}
 }
 
-// DeepSeek documents no in band error frame at all, and the two shapes that
-// circulate for OpenAI compatible hosts are unconfirmed for it. Neither is
-// asserted to be what DeepSeek sends; what is asserted is that a frame carrying
-// one ends the turn with a single EventErr instead of being folded into content
-// or read as a completed turn.
+// DeepSeek ends a generation that fails after the 200 with a chunk carrying
+// error and usage and empty choices, and no [DONE]. A frame carrying that or
+// the other shape that circulates for OpenAI compatible hosts ends the turn
+// with a single EventErr instead of being folded into content or read as a
+// completed turn.
 func TestStreamInBandError(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -800,6 +802,11 @@ func TestStreamInBandError(t *testing.T) {
 			"openai envelope",
 			frame(`{"error":{"message":"This model's maximum context length is 1048576 tokens","type":"invalid_request_error","code":"context_length_exceeded"}}`),
 			api.CodeContextLength,
+		},
+		{
+			"deepseek generation failure",
+			frame(`{"id":"chatcmpl-1","object":"chat.completion.chunk","created":1785000000,"model":"deepseek-v4-pro","choices":[],"error":{"message":"The model failed to generate a complete response. Please retry.","type":"api_error"}}`),
+			api.CodeNetwork,
 		},
 		{
 			"vllm style pair",

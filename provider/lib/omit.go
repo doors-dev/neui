@@ -39,8 +39,6 @@ func Omitted(c api.Content, why string) string {
 		return "[image omitted]"
 	case api.ContentDocument:
 		return "[document omitted]"
-	case api.ContentReasoning:
-		return "[reasoning omitted]"
 	}
 	return "[content omitted]"
 }

@@ -184,6 +184,10 @@ func fold(t *testing.T, events []api.Event) api.Contents {
 			b := content[e.Index].(api.ContentReasoning)
 			b.Thoughts[e.Part] += e.Text
 			content[e.Index] = b
+		case api.EventMeta:
+			b := content[e.Index].(api.ContentReasoning)
+			b.Meta = e.Data
+			content[e.Index] = b
 		}
 	}
 	return content

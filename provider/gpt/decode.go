@@ -358,10 +358,6 @@ func (c *converter) item(oi int) *block {
 // nothing behind, because a value the adapter cannot replay anyway would be
 // noise.
 //
-// The meta stores the phase and the model that claimed it, because those two are
-// what replay reads: a phase is one model's label and protocol stamps no model
-// on a text block.
-//
 // A reasoning item announces nothing here. It is named so that it does not reach
 // the opaque case, and it opens its block on whichever of its own events comes
 // first.
@@ -369,8 +365,8 @@ func (c *converter) item(oi int) *block {
 // Everything else is an item this protocol has no type for — a tool the service
 // ran itself, a call whose input is freeform text, whatever ships next — which
 // is what an opaque block is for. Kind is the item's type as the service spells
-// it, because that is the name the input array reads it back by, and Data is the
-// item as it stands, which the finished item replaces.
+// it after "gpt.", and Data is the item as it stands, which the finished item
+// replaces.
 //
 // The item's type is what every later frame at its output_index is checked
 // against. A call_id is what a tool result is matched by, so a function call
@@ -390,8 +386,8 @@ func (c *converter) itemAdded(ev *streamEvent) error {
 		if item.Phase == "" {
 			return nil
 		}
-		data, _ := json.Marshal(messageMeta{Model: c.model, Phase: item.Phase})
-		c.item(oi).phase = data
+		data, _ := json.Marshal(messageMeta{Phase: item.Phase})
+		c.item(oi).phase = lib.Meta(providerName, data)
 		c.textIndex(oi, 0)
 	case "function_call":
 		if item.CallID == "" {
@@ -401,7 +397,7 @@ func (c *converter) itemAdded(ev *streamEvent) error {
 		c.emit(api.EventTool{Index: b.idx, ID: item.CallID, Name: item.Name})
 	case "reasoning":
 	default:
-		c.emit(api.EventOpaque{Index: c.itemIndex(oi), Kind: item.Type, Data: ev.Item})
+		c.emit(api.EventOpaque{Index: c.itemIndex(oi), Kind: providerName + "." + item.Type, Data: ev.Item})
 	}
 	return nil
 }
@@ -449,11 +445,11 @@ func (c *converter) itemDone(ev *streamEvent) error {
 			b.idx = c.take()
 			c.emit(api.EventThinking{Index: b.idx})
 		}
-		c.emit(api.EventMeta{Index: b.idx, Data: ev.Item})
+		c.emit(api.EventMeta{Index: b.idx, Data: lib.Meta(providerName, ev.Item)})
 		c.closeItem(b.idx, item.Status)
 	default:
 		idx := c.itemIndex(*ev.OutputIndex)
-		c.emit(api.EventOpaque{Index: idx, Kind: item.Type, Data: ev.Item})
+		c.emit(api.EventOpaque{Index: idx, Kind: providerName + "." + item.Type, Data: ev.Item})
 		c.closeItem(idx, item.Status)
 	}
 	return nil

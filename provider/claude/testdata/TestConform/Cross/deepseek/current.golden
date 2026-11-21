@@ -1,0 +1,150 @@
+{
+  "model": "claude-fable-5-1",
+  "max_tokens": 16384,
+  "stream": true,
+  "tools": [
+    {
+      "name": "lookup",
+      "description": "Look a word up.",
+      "input_schema": {
+        "properties": {
+          "q": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "q"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "clock",
+      "description": "Read the time.",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      },
+      "cache_control": {
+        "type": "ephemeral"
+      }
+    }
+  ],
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "look up cat"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Hello from deepseek."
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "thanks"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Checking."
+        },
+        {
+          "type": "tool_use",
+          "id": "call_deepseek_1",
+          "name": "lookup",
+          "input": {
+            "q": "dog"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_deepseek_1",
+          "content": [
+            {
+              "type": "text",
+              "text": "result of call_deepseek_1"
+            }
+          ],
+          "is_error": false
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "call_deepseek_2",
+          "name": "lookup",
+          "input": {
+            "q": "cat"
+          }
+        },
+        {
+          "type": "tool_use",
+          "id": "call_deepseek_3",
+          "name": "clock",
+          "input": {}
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call_deepseek_2",
+          "content": [
+            {
+              "type": "text",
+              "text": "result of call_deepseek_2"
+            }
+          ],
+          "is_error": false
+        },
+        {
+          "cache_control": {
+            "type": "ephemeral"
+          },
+          "type": "tool_result",
+          "tool_use_id": "call_deepseek_3",
+          "content": [
+            {
+              "type": "text",
+              "text": "result of call_deepseek_3"
+            }
+          ],
+          "is_error": false
+        }
+      ]
+    }
+  ],
+  "thinking": {
+    "type": "adaptive",
+    "block_binding": {
+      "prefix_mismatch_behavior": "drop_block"
+    }
+  }
+}

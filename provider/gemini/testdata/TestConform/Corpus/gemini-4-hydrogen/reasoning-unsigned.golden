@@ -17,10 +17,6 @@
       "content": [
         {
           "type": "text",
-          "text": "[reasoning omitted]"
-        },
-        {
-          "type": "text",
           "text": "hello"
         }
       ]

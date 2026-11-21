@@ -77,9 +77,9 @@ func corpusRequests() []corpusRequest {
 	r := rand.New(rand.NewPCG(1, 2))
 	model := Conf{Model: api.Model{Name: testModel}}
 	esc := corpusBackslash + "u003c"
-	sig := json.RawMessage(`"EqQBCgIYAhIM1gbcDa9GJwZA2b3hGgxDYOaHNj0Xz6Y<&>"`)
-	redacted := json.RawMessage(`{"type":"redacted_thinking","data":"EmwKAhgBEgy<&>` + esc + `"}`)
-	redactedSpaced := json.RawMessage("{ \"type\" : \"redacted_thinking\",\n \"data\" : \"abc" + esc + "\" }")
+	sig := lib.Meta(providerName, json.RawMessage(`"EqQBCgIYAhIM1gbcDa9GJwZA2b3hGgxDYOaHNj0Xz6Y<&>"`))
+	redacted := lib.Meta(providerName, json.RawMessage(`{"type":"redacted_thinking","data":"EmwKAhgBEgy<&>`+esc+`"}`))
+	redactedSpaced := lib.Meta(providerName, json.RawMessage("{ \"type\" : \"redacted_thinking\",\n \"data\" : \"abc"+esc+"\" }"))
 	png := corpusBytes(r, 4099)
 	jpeg := corpusBytes(r, 1)
 	gif := corpusBytes(r, 2)
@@ -96,17 +96,17 @@ func corpusRequests() []corpusRequest {
 	}
 	assistantFull := api.Message{Role: api.RoleAssistant, Content: api.Contents{
 		api.ContentReasoning{Model: testModel, Thoughts: api.Indexed[string]{1: "second <b>", 0: "first & "}, Meta: sig},
-		api.ContentReasoning{Model: testModel, Summary: api.Indexed[string]{0: "sum<m>ary"}, Meta: json.RawMessage(`"sig2"`)},
-		api.ContentReasoning{Model: testModel, Meta: json.RawMessage(`"sig3"`)},
+		api.ContentReasoning{Model: testModel, Summary: api.Indexed[string]{0: "sum<m>ary"}, Meta: lib.Meta(providerName, json.RawMessage(`"sig2"`))},
+		api.ContentReasoning{Model: testModel, Meta: lib.Meta(providerName, json.RawMessage(`"sig3"`))},
 		api.ContentReasoning{Model: testModel, Meta: redacted},
 		api.ContentReasoning{Model: testModel, Meta: redactedSpaced},
 		corpusText("Let me look <here> & there."),
 		api.ContentToolUse{ID: "toolu_01<&>", Name: "read<&>", Input: json.RawMessage(`{"path": "a<b>&c.go", "n": 1.50, "e": "` + esc + `"}`)},
 		api.ContentToolUse{ID: "toolu_02", Name: "now"},
 		api.ContentToolUse{ID: "toolu_03", Name: "read<&>", Input: api.DiscardedArguments},
-		api.ContentOpaque{Model: testModel, Kind: "server_tool_use", Data: json.RawMessage(`{"type":"server_tool_use","id":"srvtoolu_1","name":"web_search","input":{}}`), Deltas: []string{`{"query":`, ` "<x> & y"}`}},
-		api.ContentOpaque{Model: testModel, Kind: "web_search_tool_result", Data: json.RawMessage(`{"type":"web_search_tool_result", "tool_use_id":"srvtoolu_1","content":[{"type":"web_search_result","title":"<T&>"}]}`)},
-		api.ContentOpaque{Model: testModel, Kind: "compaction", Data: json.RawMessage(`{"type":"compaction","content":"short"}`)},
+		api.ContentOpaque{Model: testModel, Kind: "claude.server_tool_use", Data: json.RawMessage(`{"type":"server_tool_use","id":"srvtoolu_1","name":"web_search","input":{}}`), Deltas: []string{`{"query":`, ` "<x> & y"}`}},
+		api.ContentOpaque{Model: testModel, Kind: "claude.web_search_tool_result", Data: json.RawMessage(`{"type":"web_search_tool_result", "tool_use_id":"srvtoolu_1","content":[{"type":"web_search_result","title":"<T&>"}]}`)},
+		api.ContentOpaque{Model: testModel, Kind: "claude.compaction", Data: json.RawMessage(`{"type":"compaction","content":"short"}`)},
 	}}
 	results := api.Message{Role: api.RoleUser, Content: api.Contents{
 		api.ContentToolResult{ID: "toolu_01<&>", Content: api.UserContents{
@@ -149,17 +149,18 @@ func corpusRequests() []corpusRequest {
 	assistantNotes := api.Message{Role: api.RoleAssistant, Content: api.Contents{
 		api.ContentDocument{Data: pdf, Mime: "application/pdf"},
 		api.ContentToolResult{ID: "toolu_x", Content: api.UserContents{corpusText("x")}},
-		api.ContentReasoning{Model: "gpt-5", Meta: json.RawMessage(`{"type":"reasoning","id":"rs_1"}`)},
+		api.ContentReasoning{Model: "gpt-5", Meta: lib.Meta("gpt", json.RawMessage(`{"type":"reasoning","id":"rs_1"}`))},
 		corpusText("after"),
 	}}
 	foreign := api.Message{Role: api.RoleAssistant, Content: api.Contents{
-		api.ContentReasoning{Model: testModel, Meta: json.RawMessage(`""`)},
+		api.ContentReasoning{Model: testModel, Meta: lib.Meta(providerName, json.RawMessage(`""`))},
 		api.ContentReasoning{Model: testModel, Thoughts: api.Indexed[string]{0: "kept?"}, Meta: sig},
-		api.ContentOpaque{Model: testModel, Kind: "reasoning", Data: json.RawMessage(`{"type":"reasoning","id":"rs_1"}`)},
-		api.ContentOpaque{Model: testModel, Kind: "other", Data: json.RawMessage(`{"type":"mismatch"}`)},
-		api.ContentOpaque{Model: testModel, Kind: "x", Data: json.RawMessage(`not json`)},
-		api.ContentOpaque{Model: testModel, Kind: "server_tool_use", Data: json.RawMessage(`{"type":"server_tool_use","id":"s","input":{}}`), Deltas: []string{`{"q":`}},
-		api.ContentOpaque{Model: testModel, Kind: "server_tool_use", Data: json.RawMessage(`{"type":"server_tool_use","id":"s"}`), Deltas: []string{`{"q":1}`}},
+		api.ContentOpaque{Model: testModel, Kind: "gpt.reasoning", Data: json.RawMessage(`{"type":"reasoning","id":"rs_1"}`)},
+		api.ContentOpaque{Model: testModel, Kind: "claude.other", Data: json.RawMessage(`{"type":"mismatch"}`)},
+		api.ContentOpaque{Model: testModel, Kind: "claude.x", Data: json.RawMessage(`not json`)},
+		api.ContentOpaque{Model: testModel, Kind: "claude.server_tool_use", Data: json.RawMessage(`{"type":"server_tool_use","id":"s","input":{}}`), Deltas: []string{`{"q":`}},
+		api.ContentOpaque{Model: testModel, Kind: "claude.server_tool_use", Data: json.RawMessage(`{"type":"server_tool_use","id":"s"}`), Deltas: []string{`{"q":1}`}},
+		api.ContentOpaque{Model: testModel, Kind: "compaction", Data: json.RawMessage(`{"type":"compaction"}`)},
 		corpusText("end"),
 	}}
 	unsigned := api.Message{Role: api.RoleAssistant, Content: api.Contents{
@@ -170,7 +171,7 @@ func corpusRequests() []corpusRequest {
 	endsReplayed := api.Message{Role: api.RoleAssistant, Content: api.Contents{
 		corpusText("markable"),
 		api.ContentReasoning{Model: testModel, Meta: sig},
-		api.ContentOpaque{Model: testModel, Kind: "compaction", Data: json.RawMessage(`{"type":"compaction"}`)},
+		api.ContentOpaque{Model: testModel, Kind: "claude.compaction", Data: json.RawMessage(`{"type":"compaction"}`)},
 	}}
 	onlyReplayed := api.Message{Role: api.RoleAssistant, Content: api.Contents{
 		api.ContentReasoning{Model: testModel, Meta: sig},
@@ -198,9 +199,9 @@ func corpusRequests() []corpusRequest {
 	add("mark note", model, api.Request{Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{corpusText("")}}}}, withCache())
 	add("mark unknown", model, api.Request{Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{nil}}}}, withCache())
 	add("empty tool result", model, api.Request{Messages: []api.Message{userText("go"), {Role: api.RoleAssistant, Content: api.Contents{api.ContentToolUse{ID: "t", Name: "n"}}}, {Role: api.RoleUser, Content: api.Contents{api.ContentToolResult{ID: "t"}}}}}, withCache())
-	add("options", Conf{Model: Haiku45}, api.Request{Messages: []api.Message{userText("hi")}}, WithMaxTokens(32000), WithStopSequences("<stop>", "&&"), WithThinking(Thinking{Type: ThinkingEnabled, Budget: 2048, Display: DisplaySummarized}))
-	add("effort", Conf{Model: Opus55}, api.Request{Messages: []api.Message{userText("hi")}, ToolChoice: api.ToolChoiceAuto, Tools: tools[:2]}, WithEffort(EffortXHigh), WithThinking(Thinking{Type: ThinkingAdaptive, Display: DisplayOmitted}))
-	add("disabled thinking", Conf{Model: Haiku55}, api.Request{Messages: []api.Message{userText("hi")}, ToolChoice: api.ToolChoiceNone, Tools: tools[:1]}, WithThinking(Thinking{Type: ThinkingDisabled}), WithEffort(EffortLow))
+	add("options", Conf{Model: Haiku55}, api.Request{Messages: []api.Message{userText("hi")}}, WithMaxTokens(32000), WithStopSequences("<stop>", "&&"), WithThinkingDisplay(DisplaySummarized))
+	add("effort", Conf{Model: Opus55}, api.Request{Messages: []api.Message{userText("hi")}, ToolChoice: api.ToolChoiceAuto, Tools: tools[:2]}, WithEffort(EffortXHigh), WithThinkingDisplay(DisplayOmitted))
+	add("low effort", Conf{Model: Haiku55}, api.Request{Messages: []api.Message{userText("hi")}, ToolChoice: api.ToolChoiceNone, Tools: tools[:1]}, WithEffort(EffortLow))
 	add("tool choice any", model, api.Request{Messages: []api.Message{userText("hi")}, ToolChoice: api.ToolChoiceAny, Tools: tools})
 	add("tool choice forced", model, api.Request{Messages: []api.Message{userText("hi")}, ToolChoice: api.ToolChoice("read<&>"), Tools: tools})
 	add("err no messages", model, api.Request{})
@@ -213,7 +214,6 @@ func corpusRequests() []corpusRequest {
 	add("err tool name", model, api.Request{Tools: []api.Tool{{Desc: "x"}}, Messages: []api.Message{userText("hi")}})
 	add("note tool input", model, api.Request{Messages: []api.Message{userText("go"), {Role: api.RoleAssistant, Content: api.Contents{api.ContentToolUse{ID: "t", Name: "n", Input: json.RawMessage(`{bad`)}}}}})
 	add("err forced refused", Conf{Model: Opus55}, api.Request{Messages: []api.Message{userText("hi")}, ToolChoice: api.ToolChoiceAny, Tools: tools})
-	add("err forced extended", Conf{Model: Haiku45}, api.Request{Messages: []api.Message{userText("hi")}, ToolChoice: api.ToolChoiceAny, Tools: tools}, WithThinking(Thinking{Type: ThinkingEnabled, Budget: 2048}))
 	for i := range 40 {
 		var msgs []api.Message
 		for j := range 1 + r.IntN(6) {
@@ -236,7 +236,7 @@ func corpusRequests() []corpusRequest {
 			}
 			thoughts := api.Indexed[string]{0: corpusString(r, r.IntN(100)), 1: corpusString(r, r.IntN(30))}
 			msgs = append(msgs, api.Message{Role: api.RoleAssistant, Content: api.Contents{
-				api.ContentReasoning{Model: testModel, Thoughts: thoughts, Meta: json.RawMessage(fmt.Sprintf("%q", "s"+corpusString(r, 4)))},
+				api.ContentReasoning{Model: testModel, Thoughts: thoughts, Meta: lib.Meta(providerName, json.RawMessage(fmt.Sprintf("%q", "s"+corpusString(r, 4))))},
 				corpusText(corpusString(r, r.IntN(500))),
 				api.ContentToolUse{ID: corpusString(r, 1+r.IntN(6)), Name: corpusString(r, 1+r.IntN(6)), Input: json.RawMessage(fmt.Sprintf(`{"a": %q}`, corpusString(r, r.IntN(60))))},
 			}})
@@ -381,7 +381,7 @@ func corpusBody(t testing.TB, c corpusRequest) string {
 func corpusEvents(t *testing.T, c corpusStream) string {
 	var opts []Option
 	if c.summary {
-		opts = append(opts, WithThinking(Thinking{Type: ThinkingAdaptive, Display: DisplaySummarized}))
+		opts = append(opts, WithThinkingDisplay(DisplaySummarized))
 	}
 	var b strings.Builder
 	for _, e := range collect(t, testProvider(t, sseServer(c.body), opts...), hello()) {
@@ -400,85 +400,84 @@ func corpusEvents(t *testing.T, c corpusStream) string {
 }
 
 var corpusRequestHashes = map[string]string{
-	"minimal":                     "82f3c65b38021182",
-	"system":                      "ee66b61b8da05c0c",
-	"full no cache":               "aad045f69de0bca1",
-	"full all breakpoints":        "ada96025ace03be2",
-	"full breakpoints ttl":        "6b888549d5fc726f",
-	"system breakpoint":           "611e7db7515814ff",
-	"tools breakpoint":            "8ad65316dc56b071",
-	"breakpoints without targets": "c4cdfef4bf7e8fed",
-	"mark avoids replayed":        "79de692ad69cf7e1",
-	"mark nothing markable":       "22755ee3fe6775ae",
-	"mark tool result":            "c7f8fa1bb97d6b01",
-	"mark image":                  "54b22b77dfeb4575",
-	"mark document":               "7b590fa24982e4e7",
-	"mark text document":          "e8a99e2ff32d2fa0",
-	"mark tool use":               "00092d3989bd5804",
-	"mark note":                   "16d6d769a308f978",
-	"mark unknown":                "16d6d769a308f978",
-	"empty tool result":           "81cd9ff7fa8f78f0",
-	"options":                     "9890a38facb897ea",
+	"minimal":                     "aee2902e7874578d",
+	"system":                      "1926bd8d4b010cb0",
+	"full no cache":               "cb17be34dffb7608",
+	"full all breakpoints":        "3dc0a816909bad8e",
+	"full breakpoints ttl":        "385c2c20c9a30ad6",
+	"system breakpoint":           "abc22e8dd1cf6907",
+	"tools breakpoint":            "5f9434064848eb07",
+	"breakpoints without targets": "03f75999fb3b3765",
+	"mark avoids replayed":        "5dc83700febde3ab",
+	"mark nothing markable":       "7824d24b93c98433",
+	"mark tool result":            "426a474886675d3b",
+	"mark image":                  "2e481c4d2bb9ffdb",
+	"mark document":               "172aed6e3a3eb82b",
+	"mark text document":          "c79022af621e82fb",
+	"mark tool use":               "e0b3b36cbbb6fc4e",
+	"mark note":                   "f5d7360ee0c40952",
+	"mark unknown":                "f5d7360ee0c40952",
+	"empty tool result":           "bc602ac4a11f7e57",
+	"options":                     "98546fd6c8bb6a9a",
 	"effort":                      "77d90fcfe5424138",
-	"disabled thinking":           "3edb0654d8816a52",
-	"tool choice any":             "fa99010651b04d07",
-	"tool choice forced":          "3cbaf13ef3370fb6",
+	"low effort":                  "d9b9e694e32c01be",
+	"tool choice any":             "e3e4712f22ca18a7",
+	"tool choice forced":          "284de20fa624e57e",
 	"err no messages":             "d8bc720b1a784a3f",
-	"note empty message":          "c142382f1d2c3b06",
+	"note empty message":          "1ff920f5f1a88477",
 	"err role":                    "9e3fb82d508ccd57",
-	"note result id":              "1f0216c9b413186a",
+	"note result id":              "4dbc71e08b1395d0",
 	"err discarded":               "54ea0a6bdb4aaad8",
-	"sent schema":                 "d75388b359510b85",
+	"sent schema":                 "22b387855256c37b",
 	"err schema marshal":          "c33f18da575c1150",
 	"err tool name":               "a17f8f6ec58b78ad",
-	"note tool input":             "ab01adf5f582abfe",
+	"note tool input":             "5d929e2dd6d6b713",
 	"err forced refused":          "c914f78650b59f43",
-	"err forced extended":         "00ebb4d277102ece",
-	"random 0":                    "9a54b7a865feb851",
-	"random 1":                    "63566b620c9edeff",
-	"random 2":                    "14507205f7a78b55",
-	"random 3":                    "08b1accbb5b73f86",
-	"random 4":                    "f9fbae5fdc46476a",
-	"random 5":                    "be1f97c7da3ac7f9",
-	"random 6":                    "ffec54bf953ce2de",
-	"random 7":                    "f68bd08ae3fc893d",
-	"random 8":                    "f86c566c195cfd59",
-	"random 9":                    "7284d69740b53a87",
-	"random 10":                   "a3a71f32043c3da6",
-	"random 11":                   "858c90bf038a8bde",
-	"random 12":                   "fa8f48fa013d07da",
-	"random 13":                   "f568ed6f189f32bc",
-	"random 14":                   "52f0c131006d3b0c",
-	"random 15":                   "f68c26451fce21c6",
-	"random 16":                   "c75aae660953bbd6",
-	"random 17":                   "59fc995b07180eac",
-	"random 18":                   "291f9d5492fa69c5",
-	"random 19":                   "bdf89cf6cf6dda97",
-	"random 20":                   "2e2f32a4648f4648",
-	"random 21":                   "bca3f9c6077b15a9",
-	"random 22":                   "18da5cb8a0f8db0f",
-	"random 23":                   "4dc1279203ade970",
-	"random 24":                   "bf07fbbce243dd49",
-	"random 25":                   "1a64281e5fb5454b",
-	"random 26":                   "074b072940ae2fe7",
-	"random 27":                   "312a4297e46875ec",
-	"random 28":                   "8bd3cf45d96d0bc2",
-	"random 29":                   "65630d4a5f7288d6",
-	"random 30":                   "dfcaba3a032d3b51",
-	"random 31":                   "670f31626c364e32",
-	"random 32":                   "60864a3c941d4c45",
-	"random 33":                   "ddace69560f2873c",
-	"random 34":                   "2bc0ef6dd257d598",
-	"random 35":                   "3492a3315e96f901",
-	"random 36":                   "e13fb2c3fef4ceec",
-	"random 37":                   "c835396330adaa73",
-	"random 38":                   "a8bb26eada64fb69",
-	"random 39":                   "f9f3870e4312e81a",
+	"random 0":                    "1851a1a475b7af3c",
+	"random 1":                    "8a134a031efc0c22",
+	"random 2":                    "ca1689bf543882a1",
+	"random 3":                    "5badbf982baaec05",
+	"random 4":                    "84362910bcfbdc34",
+	"random 5":                    "27e3dea5842e82bb",
+	"random 6":                    "fd0f14ddd0479b09",
+	"random 7":                    "235ac431139f54ce",
+	"random 8":                    "209388bb7e9db129",
+	"random 9":                    "89b23b977634c7a4",
+	"random 10":                   "f525818da62ab85a",
+	"random 11":                   "2b7481bbb8e061ea",
+	"random 12":                   "6827ccd5c568389f",
+	"random 13":                   "095b01e863bf839c",
+	"random 14":                   "250e1330ecf98969",
+	"random 15":                   "918f561a868b9cd2",
+	"random 16":                   "0f0513eb2c634fc9",
+	"random 17":                   "7f09583eaf7e56e9",
+	"random 18":                   "2e19b1a74a0a955f",
+	"random 19":                   "1fd193cf49b6568d",
+	"random 20":                   "8838bf012a6ee911",
+	"random 21":                   "065b9edff7e64adb",
+	"random 22":                   "6a3807544e72315f",
+	"random 23":                   "450d1432a81e64e7",
+	"random 24":                   "5bd23918fda62498",
+	"random 25":                   "8c9daebe9c61bdc5",
+	"random 26":                   "1aaa22eaf010b1d9",
+	"random 27":                   "cbd4765035463bff",
+	"random 28":                   "0c8ddd284c3f9dae",
+	"random 29":                   "c6058d3edf578a4b",
+	"random 30":                   "abe545bdb219cab8",
+	"random 31":                   "2a2ebaa5d454618f",
+	"random 32":                   "1be05a307da5d521",
+	"random 33":                   "971e05799060524e",
+	"random 34":                   "a97d01afd38ed6d8",
+	"random 35":                   "0a21247e48306ab0",
+	"random 36":                   "3ea9af19202222d9",
+	"random 37":                   "3442e32cd4ced2bd",
+	"random 38":                   "92a0a8d4e4828bcf",
+	"random 39":                   "21aa496876c60bd3",
 }
 
 var corpusStreamHashes = map[string]string{
-	"full":                                   "f9c7f406c34f64a5",
-	"full summarized":                        "bfd1de57c2277233",
+	"full":                                   "44eee56f710595b2",
+	"full summarized":                        "ba78066a17901fe6",
 	"stop \"end_turn\"":                      "f6d1ad774e6568dd",
 	"stop \"stop_sequence\"":                 "f6d1ad774e6568dd",
 	"stop \"pause_turn\"":                    "f6d1ad774e6568dd",
@@ -501,35 +500,35 @@ var corpusStreamHashes = map[string]string{
 	"error too large":                        "a06327bf864770e8",
 	"error empty":                            "10eb88c5909f79c4",
 	"error unknown":                          "88abbdcab35f5662",
-	"random 0":                               "1e4580d28492fa6e",
+	"random 0":                               "021d7e8016b7527d",
 	"random 1":                               "cde0bd936ee56b77",
-	"random 2":                               "85d181f94ec58674",
-	"random 3":                               "b0a390673b626542",
-	"random 4":                               "dfc1b31dad1097b8",
-	"random 5":                               "66ee9b841cd7e743",
-	"random 6":                               "4196af441dc4e9d6",
-	"random 7":                               "d187795db7bd87fb",
-	"random 8":                               "e94c37aa7f9fece6",
-	"random 9":                               "87200344ade18bab",
-	"random 10":                              "0ac94809e4bc9ab0",
+	"random 2":                               "491c211693504bbe",
+	"random 3":                               "42d2f5f7c601523f",
+	"random 4":                               "87f8a557a76b4976",
+	"random 5":                               "60031dac429fa2e6",
+	"random 6":                               "f9447efdc3a542cf",
+	"random 7":                               "ab5c060733d2b218",
+	"random 8":                               "e92f3633b8cf4947",
+	"random 9":                               "969c4d39510f39aa",
+	"random 10":                              "63c0248e28ea4fd3",
 	"random 11":                              "c18537899c48736e",
-	"random 12":                              "d58bdcec96adf04b",
-	"random 13":                              "21bd0bbb3711231d",
-	"random 14":                              "f74a5f21c198a367",
-	"random 15":                              "92d82f584875c493",
-	"random 16":                              "e638148387706dd5",
-	"random 17":                              "022e446ebb50baa8",
-	"random 18":                              "34833937e7ed2fab",
-	"random 19":                              "08f86cdbd38dc90e",
-	"random 20":                              "31bd400140dae925",
-	"random 21":                              "5c58bf74103c648b",
-	"random 22":                              "b1330640f7a5efc4",
+	"random 12":                              "2a7daebf94e46e70",
+	"random 13":                              "ca9c0ff9a14418a6",
+	"random 14":                              "84a356afd04e9cdf",
+	"random 15":                              "796e917c4f7b29c0",
+	"random 16":                              "0a4e626caecf0d97",
+	"random 17":                              "54af08062b9a16d4",
+	"random 18":                              "020071192b66c4d9",
+	"random 19":                              "57570fadf8f7fba5",
+	"random 20":                              "1898fdc556f75082",
+	"random 21":                              "0977911ede80127d",
+	"random 22":                              "1083fc7cd13423b7",
 	"random 23":                              "0affe2c29737a1d0",
-	"random 24":                              "b888dc783d0a4845",
-	"random 25":                              "f7be542019bd4b1a",
-	"random 26":                              "316b6146653d7008",
-	"random 27":                              "69583bc2d4e0f685",
-	"random 28":                              "e51485445637b649",
+	"random 24":                              "22406a1e44df556b",
+	"random 25":                              "6ed30742c885cba6",
+	"random 26":                              "ed4fa0a37a8d8818",
+	"random 27":                              "2a087e6286ca7307",
+	"random 28":                              "0f38d22623f64c22",
 	"random 29":                              "757cc6839188123d",
 }
 
@@ -588,7 +587,7 @@ func benchThread(images bool) api.Request {
 		msgs = append(msgs,
 			userText(src[:1024]),
 			api.Message{Role: api.RoleAssistant, Content: api.Contents{
-				api.ContentReasoning{Model: testModel, Thoughts: api.Indexed[string]{0: src[:512]}, Meta: json.RawMessage(`"` + strings.Repeat("EqQBCgIYAhIM", 30) + `"`)},
+				api.ContentReasoning{Model: testModel, Thoughts: api.Indexed[string]{0: src[:512]}, Meta: lib.Meta(providerName, json.RawMessage(`"`+strings.Repeat("EqQBCgIYAhIM", 30)+`"`))},
 				corpusText(src[:2048]),
 				api.ContentToolUse{ID: id, Name: "read", Input: json.RawMessage(`{"path":"provider/claude/decode.go","line":120}`)},
 			}},

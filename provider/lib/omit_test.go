@@ -68,7 +68,6 @@ func TestOmittedLogsNothing(t *testing.T) {
 	}{
 		{api.ContentImage{}, "[image omitted]"},
 		{api.ContentDocument{}, "[document omitted]"},
-		{api.ContentReasoning{}, "[reasoning omitted]"},
 		{api.ContentOpaque{}, "[content omitted]"},
 		{api.ContentToolResult{}, "[content omitted]"},
 	}

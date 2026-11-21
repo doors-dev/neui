@@ -17,10 +17,6 @@
       "content": [
         {
           "type": "text",
-          "text": "[reasoning omitted]"
-        },
-        {
-          "type": "text",
           "text": "hello"
         }
       ]
@@ -37,5 +33,11 @@
         }
       ]
     }
-  ]
+  ],
+  "thinking": {
+    "type": "adaptive",
+    "block_binding": {
+      "prefix_mismatch_behavior": "drop_block"
+    }
+  }
 }

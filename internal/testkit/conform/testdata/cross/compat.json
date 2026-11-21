@@ -1,0 +1,5 @@
+[
+{"name":"reasoning-text","model":"qwen3.8-27b","message":{"role":"assistant","content":[{"type":"reasoning","model":"qwen3.8-27b","summary":null,"thoughts":{"0":"compat weighs it 1."},"meta":{"provider":"compat","data":"reasoning"}},{"type":"text","text":"Hello from compat."}]}},
+{"name":"text-call","model":"qwen3.8-27b","message":{"role":"assistant","content":[{"type":"text","text":"Checking."},{"type":"tool_use","id":"call_compat_1","name":"lookup","input":{"q":"dog"}}]}},
+{"name":"reasoning-calls","model":"qwen3.8-27b","message":{"role":"assistant","content":[{"type":"reasoning","model":"qwen3.8-27b","summary":null,"thoughts":{"0":"compat weighs it 2."},"meta":{"provider":"compat","data":"reasoning"}},{"type":"tool_use","id":"call_compat_2","name":"lookup","input":{"q":"cat"}},{"type":"tool_use","id":"call_compat_3","name":"clock","input":{}}]}}
+]

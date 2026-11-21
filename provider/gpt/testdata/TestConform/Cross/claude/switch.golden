@@ -1,0 +1,217 @@
+{
+  "model": "gpt-5.6-sol",
+  "stream": true,
+  "stream_options": {
+    "include_obfuscation": false
+  },
+  "store": false,
+  "include": [
+    "reasoning.encrypted_content"
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "name": "lookup",
+      "description": "Look a word up.",
+      "parameters": {
+        "properties": {
+          "q": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "q"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "type": "function",
+      "name": "clock",
+      "description": "Read the time.",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      }
+    }
+  ],
+  "input": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "input_text",
+          "text": "look up cat"
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "text": "gpt weighs it 2.",
+          "type": "reasoning_text"
+        }
+      ],
+      "encrypted_content": "c2lnbmF0dXJlIDIgb2YgZ3B0IGZvciB0aGUgY3Jvc3MgY29ycHVz",
+      "id": "rs_0",
+      "summary": [],
+      "type": "reasoning"
+    },
+    {
+      "type": "function_call",
+      "call_id": "call_gpt_2",
+      "name": "lookup",
+      "arguments": "{\"q\":\"cat\"}"
+    },
+    {
+      "type": "function_call",
+      "call_id": "call_gpt_3",
+      "name": "clock",
+      "arguments": "{}"
+    },
+    {
+      "type": "function_call_output",
+      "call_id": "call_gpt_2",
+      "output": [
+        {
+          "type": "input_text",
+          "text": "result of call_gpt_2"
+        }
+      ]
+    },
+    {
+      "type": "function_call_output",
+      "call_id": "call_gpt_3",
+      "output": [
+        {
+          "type": "input_text",
+          "text": "result of call_gpt_3"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "Hello from claude."
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "input_text",
+          "text": "thanks"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "Found it."
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "input_text",
+          "text": "thanks"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "Checking."
+        }
+      ]
+    },
+    {
+      "type": "function_call",
+      "call_id": "call_claude_1",
+      "name": "lookup",
+      "arguments": "{\"q\":\"dog\"}"
+    },
+    {
+      "type": "function_call_output",
+      "call_id": "call_claude_1",
+      "output": [
+        {
+          "type": "input_text",
+          "text": "result of call_claude_1"
+        }
+      ]
+    },
+    {
+      "type": "function_call",
+      "call_id": "call_claude_2",
+      "name": "lookup",
+      "arguments": "{\"q\":\"cat\"}"
+    },
+    {
+      "type": "function_call",
+      "call_id": "call_claude_3",
+      "name": "clock",
+      "arguments": "{}"
+    },
+    {
+      "type": "function_call_output",
+      "call_id": "call_claude_2",
+      "output": [
+        {
+          "type": "input_text",
+          "text": "result of call_claude_2"
+        }
+      ]
+    },
+    {
+      "type": "function_call_output",
+      "call_id": "call_claude_3",
+      "output": [
+        {
+          "type": "input_text",
+          "text": "result of call_claude_3"
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "text": "gpt weighs it 1.",
+          "type": "reasoning_text"
+        }
+      ],
+      "encrypted_content": "c2lnbmF0dXJlIDEgb2YgZ3B0IGZvciB0aGUgY3Jvc3MgY29ycHVz",
+      "id": "rs_0",
+      "summary": [],
+      "type": "reasoning"
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "Hello from gpt."
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "input_text",
+          "text": "again"
+        }
+      ]
+    }
+  ]
+}

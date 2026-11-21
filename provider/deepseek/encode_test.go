@@ -168,9 +168,9 @@ func TestEncodeNotesWhatItCannotSend(t *testing.T) {
 			"[content omitted]",
 		},
 		{
-			"reasoning in a user turn",
-			api.Message{Role: api.RoleUser, Content: api.Contents{api.ContentReasoning{Thoughts: map[int]string{0: "x"}}}},
-			"[reasoning omitted]",
+			"reasoning in a user turn sends nothing",
+			api.Message{Role: api.RoleUser, Content: api.Contents{api.ContentReasoning{Thoughts: map[int]string{0: "x"}, Meta: own}}},
+			"[empty]",
 		},
 		{
 			"tool result in an assistant turn",
@@ -222,7 +222,7 @@ func TestEncodeNotesAttachmentsInAToolResult(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			body := encodeBody(t, mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), api.Request{
-				Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{
+				Messages: []api.Message{calls("t1"), {Role: api.RoleUser, Content: api.Contents{
 					api.ContentToolResult{ID: "t1", Content: api.UserContents{
 						api.ContentText{Text: "the chart:"},
 						tc.rc,
@@ -230,10 +230,10 @@ func TestEncodeNotesAttachmentsInAToolResult(t *testing.T) {
 					}},
 				}}},
 			})
-			if len(body.Messages) != 1 {
+			if len(body.Messages) != 2 {
 				t.Fatalf("messages %+v", body.Messages)
 			}
-			m := body.Messages[0]
+			m := body.Messages[1]
 			if m.Role != "tool" || m.ToolCallID != "t1" {
 				t.Fatalf("result message %+v", m)
 			}
@@ -261,18 +261,18 @@ func TestEveryDocumentMimeEncodes(t *testing.T) {
 		if asText[mime] || mime == " Text/Markdown " {
 			want = "a,b\n1,2"
 		}
-		body := encodeBody(t, p, api.Request{Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{
+		body := encodeBody(t, p, api.Request{Messages: []api.Message{calls("t1"), {Role: api.RoleUser, Content: api.Contents{
 			api.ContentToolResult{ID: "t1", Content: api.UserContents{doc}},
 			api.ContentText{Text: "read it"},
 			doc,
 		}}}})
-		if len(body.Messages) != 2 {
+		if len(body.Messages) != 3 {
 			t.Fatalf("%q: messages %+v", mime, body.Messages)
 		}
-		if got := body.Messages[0].Content.(string); got != want {
+		if got := body.Messages[1].Content.(string); got != want {
 			t.Fatalf("%q: tool content %q, want %q", mime, got, want)
 		}
-		if got := body.Messages[1].Content.(string); got != "read it\n\n"+want {
+		if got := body.Messages[2].Content.(string); got != "read it\n\n"+want {
 			t.Fatalf("%q: user content %q, want %q", mime, got, "read it\n\n"+want)
 		}
 	}
@@ -284,7 +284,7 @@ func TestEveryDocumentMimeEncodes(t *testing.T) {
 func TestEncodeToolResults(t *testing.T) {
 	p := mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k"))
 	body := encodeBody(t, p, api.Request{
-		Messages: []api.Message{{
+		Messages: []api.Message{calls("call_a", "call_b"), {
 			Role: api.RoleUser,
 			Content: api.Contents{
 				api.ContentText{Text: "and now?"},
@@ -293,37 +293,37 @@ func TestEncodeToolResults(t *testing.T) {
 			},
 		}},
 	})
-	if len(body.Messages) != 3 {
+	if len(body.Messages) != 4 {
 		t.Fatalf("messages %+v", body.Messages)
 	}
-	if body.Messages[0].Role != "tool" || body.Messages[0].ToolCallID != "call_a" || body.Messages[0].Content.(string) != "24C" {
-		t.Fatalf("first result %+v", body.Messages[0])
+	if body.Messages[1].Role != "tool" || body.Messages[1].ToolCallID != "call_a" || body.Messages[1].Content.(string) != "24C" {
+		t.Fatalf("first result %+v", body.Messages[1])
 	}
 	// There is no error flag on a tool message, so a failed result says so in
 	// the text or the model never learns it failed.
-	if body.Messages[1].Content.(string) != "Error: boom" {
-		t.Fatalf("failed result %q", body.Messages[1].Content.(string))
+	if body.Messages[2].Content.(string) != "Error: boom" {
+		t.Fatalf("failed result %q", body.Messages[2].Content.(string))
 	}
-	if body.Messages[2].Role != "user" || body.Messages[2].Content.(string) != "and now?" {
-		t.Fatalf("trailing user message %+v", body.Messages[2])
+	if body.Messages[3].Role != "user" || body.Messages[3].Content.(string) != "and now?" {
+		t.Fatalf("trailing user message %+v", body.Messages[3])
 	}
 }
 
 func TestEncodeEmptyToolResult(t *testing.T) {
 	p := mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k"))
 	body := encodeBody(t, p, api.Request{
-		Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{
+		Messages: []api.Message{calls("call_a", "call_b"), {Role: api.RoleUser, Content: api.Contents{
 			api.ContentToolResult{ID: "call_a"},
 			api.ContentToolResult{ID: "call_b", Error: api.ToolErrRuntime},
 		}}},
 	})
-	if len(body.Messages) != 2 {
+	if len(body.Messages) != 3 {
 		t.Fatalf("messages %+v", body.Messages)
 	}
-	if got := body.Messages[0].Content.(string); got != lib.EmptyResult {
+	if got := body.Messages[1].Content.(string); got != lib.EmptyResult {
 		t.Fatalf("empty result %q", got)
 	}
-	if got := body.Messages[1].Content.(string); got != "Error: " {
+	if got := body.Messages[2].Content.(string); got != "Error: " {
 		t.Fatalf("empty failed result %q", got)
 	}
 }
@@ -342,9 +342,9 @@ func TestEncodeAssistantCollapsesToOneMessage(t *testing.T) {
 		Messages: []api.Message{{
 			Role: api.RoleAssistant,
 			Content: api.Contents{
-				api.ContentReasoning{Model: "deepseek-v4-pro", Thoughts: map[int]string{0: "first I think"}},
+				api.ContentReasoning{Model: "deepseek-v4-pro", Thoughts: map[int]string{0: "first I think"}, Meta: own},
 				api.ContentText{Text: "let me look"},
-				api.ContentReasoning{Model: "deepseek-v4-pro", Thoughts: map[int]string{0: ", then some more"}},
+				api.ContentReasoning{Model: "deepseek-v4-pro", Thoughts: map[int]string{0: ", then some more"}, Meta: own},
 				api.ContentText{Text: "at this"},
 				api.ContentToolUse{ID: "call_a", Name: "get_weather", Input: json.RawMessage(`{"city":"Paris"}`)},
 				api.ContentToolUse{ID: "call_b", Name: "get_time"},
@@ -358,8 +358,8 @@ func TestEncodeAssistantCollapsesToOneMessage(t *testing.T) {
 	if m.Role != "assistant" || m.Content.(string) != "let me look\n\nat this" {
 		t.Fatalf("message %+v", m)
 	}
-	if m.ReasoningContent != "first I think, then some more" {
-		t.Fatalf("reasoning_content %q", m.ReasoningContent)
+	if m.ReasoningContent == nil || *m.ReasoningContent != "first I think, then some more" {
+		t.Fatalf("reasoning_content %v", m.ReasoningContent)
 	}
 	if len(m.ToolCalls) != 2 {
 		t.Fatalf("tool_calls %+v", m.ToolCalls)
@@ -441,17 +441,13 @@ func TestStoredContentTheServerRefusesIsANote(t *testing.T) {
 		msg  api.Message
 		want string
 	}{
-		"call with no name": {
-			api.Message{Role: api.RoleAssistant, Content: api.Contents{api.ContentToolUse{ID: "call_a", Input: json.RawMessage(`{}`)}}},
-			`{"role":"assistant","content":"[content omitted]"}`,
-		},
 		"foreign reasoning": {
 			api.Message{Role: api.RoleAssistant, Content: api.Contents{
-				api.ContentReasoning{Meta: json.RawMessage(`"sig"`), Thoughts: map[int]string{0: "sealed"}},
+				api.ContentReasoning{Meta: lib.Meta("claude", json.RawMessage(`"sig"`)), Thoughts: map[int]string{0: "sealed"}},
 				api.ContentReasoning{Summary: map[int]string{0: "a summary"}},
 				api.ContentText{Text: "answer"},
 			}},
-			`{"role":"assistant","content":"[reasoning omitted]\n\n[reasoning omitted]\n\nanswer"}`,
+			`{"role":"assistant","content":"answer","reasoning_content":""}`,
 		},
 		"result with no id": {
 			api.Message{Role: api.RoleUser, Content: api.Contents{api.ContentToolResult{Content: api.UserContents{api.ContentText{Text: "72F"}}}}},
@@ -463,13 +459,50 @@ func TestStoredContentTheServerRefusesIsANote(t *testing.T) {
 			t.Errorf("%s: body\n%s\nwant to contain\n%s", name, raw, c.want)
 		}
 	}
+	for name, msgs := range map[string][]api.Message{
+		"orphan": {
+			{Role: api.RoleUser, Content: text("hi")},
+			{Role: api.RoleAssistant, Content: text("ok")},
+			{Role: api.RoleUser, Content: api.Contents{api.ContentToolResult{ID: "call_a", Content: api.UserContents{api.ContentText{Text: "72F"}}}}},
+		},
+		"two turns late": {
+			{Role: api.RoleUser, Content: text("hi")},
+			{Role: api.RoleAssistant, Content: api.Contents{api.ContentToolUse{ID: "call_a", Name: "t"}}},
+			{Role: api.RoleUser, Content: text("and?")},
+			{Role: api.RoleAssistant, Content: text("ok")},
+			{Role: api.RoleUser, Content: api.Contents{api.ContentToolResult{ID: "call_a", Content: api.UserContents{api.ContentText{Text: "72F"}}}}},
+		},
+		"answering a call in a user message": {
+			{Role: api.RoleUser, Content: api.Contents{api.ContentToolUse{ID: "call_a", Name: "t"}, api.ContentToolResult{ID: "call_a", Content: api.UserContents{api.ContentText{Text: "72F"}}}}},
+		},
+	} {
+		raw := encodeJSON(t, p, api.Request{Messages: msgs})
+		if strings.Contains(raw, `"role":"tool"`) || !strings.Contains(raw, `[content omitted]"}]`) {
+			t.Errorf("%s: the result was sent:\n%s", name, raw)
+		}
+	}
+}
+
+func TestCallsCarryPortableIDsAndNames(t *testing.T) {
+	p := mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k"))
 	raw := encodeJSON(t, p, api.Request{Messages: []api.Message{
 		{Role: api.RoleUser, Content: text("hi")},
-		{Role: api.RoleAssistant, Content: api.Contents{api.ContentToolUse{ID: "call_a", Input: json.RawMessage(`{}`)}}},
-		{Role: api.RoleUser, Content: api.Contents{api.ContentToolResult{ID: "call_a", Content: api.UserContents{api.ContentText{Text: "72F"}}}}},
+		{Role: api.RoleAssistant, Content: api.Contents{
+			api.ContentToolUse{ID: "call.1:x", Name: "functions.lookup", Input: json.RawMessage(`[1]`)},
+			api.ContentToolUse{Input: json.RawMessage(`"cat"`)},
+		}},
+		{Role: api.RoleUser, Content: api.Contents{
+			api.ContentToolResult{ID: "call.1:x", Content: api.UserContents{api.ContentText{Text: "a"}}},
+			api.ContentToolResult{Content: api.UserContents{api.ContentText{Text: "b"}}},
+		}},
 	}})
-	if strings.Contains(raw, `"role":"tool"`) || !strings.HasSuffix(raw, `{"role":"user","content":"[content omitted]"}],"stream":true,"stream_options":{"include_usage":true},"thinking":{"type":"enabled"}}`) {
-		t.Errorf("the result answering a call that went out as a note was sent:\n%s", raw)
+	want := `{"role":"assistant","content":null,"reasoning_content":"","tool_calls":[` +
+		`{"id":"` + lib.CallID("call.1:x") + `","type":"function","function":{"name":"` + lib.CallName("functions.lookup") + `","arguments":"[1]"}},` +
+		`{"id":"` + lib.CallID("") + `","type":"function","function":{"name":"` + lib.CallName("") + `","arguments":"\"cat\""}}]},` +
+		`{"role":"tool","content":"a","tool_call_id":"` + lib.CallID("call.1:x") + `"},` +
+		`{"role":"tool","content":"b","tool_call_id":"` + lib.CallID("") + `"}`
+	if !strings.Contains(raw, want) {
+		t.Errorf("body\n%s\nwant to contain\n%s", raw, want)
 	}
 }
 
@@ -495,14 +528,19 @@ func TestEncodeAssistantContentNull(t *testing.T) {
 	}
 }
 
-// Reasoning goes back on every assistant turn of a request that declares tools,
-// including turns that called none, which is where the server requires it and
-// answers a 400 without it, and nowhere in a request without tools, which is
-// where the server ignores it.
-//
-// Nothing about a model decides this. Both models follow the same rule, and a
-// stamp the fold layer never wrote would only turn a required field into a
-// rejected request.
+// reasoning_content goes on every assistant message whatever the tool set,
+// carrying the Thoughts of the blocks whose Meta names this provider and
+// nothing else. Models are not compared.
+var own = lib.Meta(providerName, nil)
+
+func calls(ids ...string) api.Message {
+	m := api.Message{Role: api.RoleAssistant}
+	for _, id := range ids {
+		m.Content = append(m.Content, api.ContentToolUse{ID: id, Name: "t"})
+	}
+	return m
+}
+
 func TestEncodeReasoningReplay(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -513,7 +551,7 @@ func TestEncodeReasoningReplay(t *testing.T) {
 		{
 			name: "a tool call turn replays it",
 			content: api.Contents{
-				api.ContentReasoning{Model: "deepseek-v4-pro", Thoughts: map[int]string{0: "mine"}},
+				api.ContentReasoning{Model: "deepseek-v4-pro", Thoughts: map[int]string{0: "mine"}, Meta: own},
 				api.ContentToolUse{ID: "call_a", Name: "t", Input: json.RawMessage(`{}`)},
 			},
 			want: "mine",
@@ -521,35 +559,35 @@ func TestEncodeReasoningReplay(t *testing.T) {
 		{
 			name: "another model's stamp decides nothing",
 			content: api.Contents{
-				api.ContentReasoning{Model: "deepseek-v4-flash", Thoughts: map[int]string{0: "theirs"}},
+				api.ContentReasoning{Model: "deepseek-v4-flash", Thoughts: map[int]string{0: "theirs"}, Meta: own},
 				api.ContentToolUse{ID: "call_a", Name: "t", Input: json.RawMessage(`{}`)},
 			},
 			want: "theirs",
 		},
 		{
-			name: "neither does no stamp at all",
+			name: "a block with no Meta, as stored before the stamp, is nobody's",
 			content: api.Contents{
 				api.ContentReasoning{Thoughts: map[int]string{0: "nobody's"}},
 				api.ContentToolUse{ID: "call_a", Name: "t", Input: json.RawMessage(`{}`)},
 			},
-			want: "nobody's",
+			want: "",
 		},
 		{
 			name: "a turn that only spoke replays it when the request has tools",
 			content: api.Contents{
-				api.ContentReasoning{Model: "deepseek-v4-pro", Thoughts: map[int]string{0: "mine"}},
+				api.ContentReasoning{Model: "deepseek-v4-pro", Thoughts: map[int]string{0: "mine"}, Meta: own},
 				api.ContentText{Text: "hi"},
 			},
 			want: "mine",
 		},
 		{
-			name:    "a request without tools sends none",
+			name:    "a request without tools sends it too",
 			noTools: true,
 			content: api.Contents{
-				api.ContentReasoning{Model: "deepseek-v4-pro", Thoughts: map[int]string{0: "mine"}},
+				api.ContentReasoning{Model: "deepseek-v4-pro", Thoughts: map[int]string{0: "mine"}, Meta: own},
 				api.ContentToolUse{ID: "call_a", Name: "t", Input: json.RawMessage(`{}`)},
 			},
-			want: "",
+			want: "mine",
 		},
 		{
 			// reasoning_content is the thinking, this adapter never produces a
@@ -558,7 +596,7 @@ func TestEncodeReasoningReplay(t *testing.T) {
 			// model's own thinking.
 			name: "a summary has no field on this wire",
 			content: api.Contents{
-				api.ContentReasoning{Model: "deepseek-v4-pro", Summary: map[int]string{0: "in short"}},
+				api.ContentReasoning{Model: "deepseek-v4-pro", Summary: map[int]string{0: "in short"}, Meta: own},
 				api.ContentToolUse{ID: "call_a", Name: "t", Input: json.RawMessage(`{}`)},
 			},
 			want: "",
@@ -567,7 +605,7 @@ func TestEncodeReasoningReplay(t *testing.T) {
 			name: "thinking another provider signed is not replayed as this model's",
 			content: api.Contents{
 				api.ContentReasoning{Model: "claude-opus-5", Thoughts: map[int]string{0: "theirs"}, Meta: json.RawMessage(`"sig"`)},
-				api.ContentReasoning{Model: "deepseek-v4-pro", Thoughts: map[int]string{0: "mine"}},
+				api.ContentReasoning{Model: "deepseek-v4-pro", Thoughts: map[int]string{0: "mine"}, Meta: own},
 				api.ContentToolUse{ID: "call_a", Name: "t", Input: json.RawMessage(`{}`)},
 			},
 			want: "mine",
@@ -583,9 +621,9 @@ func TestEncodeReasoningReplay(t *testing.T) {
 		{
 			name: "several blocks join into one field",
 			content: api.Contents{
-				api.ContentReasoning{Model: "deepseek-v4-pro", Thoughts: map[int]string{0: "first"}},
+				api.ContentReasoning{Model: "deepseek-v4-pro", Thoughts: map[int]string{0: "first"}, Meta: own},
 				api.ContentText{Text: "hi"},
-				api.ContentReasoning{Model: "deepseek-v4-pro", Thoughts: map[int]string{0: "second"}},
+				api.ContentReasoning{Model: "deepseek-v4-pro", Thoughts: map[int]string{0: "second"}, Meta: own},
 				api.ContentToolUse{ID: "call_a", Name: "t", Input: json.RawMessage(`{}`)},
 			},
 			want: "firstsecond",
@@ -604,19 +642,14 @@ func TestEncodeReasoningReplay(t *testing.T) {
 				req.Tools = nil
 			}
 			body := encodeBody(t, mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k")), req)
-			if got := body.Messages[0].ReasoningContent; got != tc.want {
-				t.Fatalf("reasoning_content %q, want %q", got, tc.want)
+			if got := body.Messages[0].ReasoningContent; got == nil || *got != tc.want {
+				t.Fatalf("reasoning_content %v, want %q", got, tc.want)
 			}
 		})
 	}
 }
 
-// This adapter issues no opaque blocks, since DeepSeek runs no tools of its own
-// and seals nothing, so one met on replay has nowhere to go on this wire and
-// leaves a note. The note stands apart from the model's own text, because an
-// assistant turn's text joins with the blank line every other role's joins
-// with.
-func TestEncodeNotesOpaque(t *testing.T) {
+func TestEncodeSkipsOpaque(t *testing.T) {
 	p := mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k"))
 	body := encodeBody(t, p, api.Request{
 		Messages: []api.Message{{
@@ -634,7 +667,7 @@ func TestEncodeNotesOpaque(t *testing.T) {
 	if len(body.Messages) != 1 {
 		t.Fatalf("messages %d, want 1", len(body.Messages))
 	}
-	if got := body.Messages[0].Content.(string); got != "[content omitted]\n\nhi" {
+	if got := body.Messages[0].Content.(string); got != "hi" {
 		t.Fatalf("content %q", got)
 	}
 }
@@ -863,7 +896,7 @@ func TestEncodeImages(t *testing.T) {
 		}
 	})
 	t.Run("a tool result", func(t *testing.T) {
-		raw := encodeJSON(t, flash, api.Request{Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{
+		raw := encodeJSON(t, flash, api.Request{Messages: []api.Message{calls("t1"), {Role: api.RoleUser, Content: api.Contents{
 			api.ContentToolResult{ID: "t1", Error: api.ToolErrRuntime, Content: api.UserContents{
 				api.ContentText{Text: "the chart:"},
 				api.ContentImage{Data: []byte("img"), Mime: "image/png"},

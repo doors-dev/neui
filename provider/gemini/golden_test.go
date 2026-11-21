@@ -32,8 +32,8 @@ import (
 )
 
 const (
-	goldenRequestsHash = "f3982d3000d9964c67654f93e68b6ceabc6990de9c512c34253f465bdbcfdfe3"
-	goldenStreamsHash  = "0d2f8e517b5844fb2865c80cb5fd085695a989171939c8d9c05fcb5e6ce38786"
+	goldenRequestsHash = "592988c2c696f75a8ffe3f3fb0ffce5191c9087624c97753611061bcfec2e82e"
+	goldenStreamsHash  = "c63c731a8bb56ad266bc890ac999b757e91983fd06004c22456baad3d4d5a38e"
 )
 
 func goldenBytes(r *rand.Rand, n int) []byte {
@@ -85,7 +85,7 @@ func goldenRequest(r *rand.Rand) api.Request {
 			u = append(u, goldenAttachment(r))
 		}
 		if r.IntN(10) == 0 {
-			u = append(u, goldenPick[api.Content](r, nil, api.ContentReasoning{Meta: json.RawMessage(ownMeta)}, api.ContentToolUse{ID: "x", Name: "now"}))
+			u = append(u, goldenPick[api.Content](r, nil, api.ContentReasoning{Meta: ownThought}, api.ContentToolUse{ID: "x", Name: "now"}))
 		}
 		req.Messages = append(req.Messages, api.Message{Role: api.RoleUser, Content: u})
 		if r.IntN(4) == 0 {
@@ -99,11 +99,11 @@ func goldenRequest(r *rand.Rand) api.Request {
 				a = append(a, api.ContentText{Text: goldenPick(r, "the answer", "", "<b>bold</b> & co")})
 			case 1:
 				a = append(a, api.ContentReasoning{Model: goldenPick(r, testModel, "other"), Summary: map[int]string{0: "thinking"}, Meta: goldenPick(r,
-					json.RawMessage(nil), json.RawMessage(ownMeta), json.RawMessage(`"claude-signature"`),
+					json.RawMessage(nil), ownThought, lib.Meta("claude", json.RawMessage(`"claude-signature"`)),
 					json.RawMessage(`{"type":"redacted_thinking","data":"x"}`), json.RawMessage(`{"id":"rs_1","type":"reasoning","encrypted_content":"SEALED"}`),
-					json.RawMessage(`{"type":"thought","signature":""}`))})
+					lib.Meta(providerName, json.RawMessage(`{"type":"thought","signature":""}`)))})
 			case 2:
-				a = append(a, api.ContentOpaque{Model: testModel, Kind: goldenPick(r, "gemini.google_search_call", "web_search_tool_result", "file_search_call", "gemini.code_execution_call"), Data: goldenPick(r,
+				a = append(a, api.ContentOpaque{Model: testModel, Kind: goldenPick(r, "gemini.google_search_call", "claude.web_search_tool_result", "gpt.file_search_call", "gemini.code_execution_call"), Data: goldenPick(r,
 					json.RawMessage(`{"arguments":{"queries":["cats"]},"id":"gs_1","signature":"c2ln","type":"google_search_call"}`),
 					json.RawMessage(`{"id":"fs_1","type":"file_search_call"}`),
 					json.RawMessage(`{"type":"code_execution_call","id":"ce_1","arguments":{"code":"print(1)"}}`))})

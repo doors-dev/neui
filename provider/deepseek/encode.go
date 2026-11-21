@@ -38,10 +38,9 @@ import (
 // The one refusal is a call whose arguments were discarded with no failed
 // result answering it.
 //
-// One thing goes out in neither form: all earlier thinking in a request without
-// tools, because the server ignores it there. It leaves no note. A note stands
-// in for a block that is gone, and the block is still there carrying everything
-// this wire takes of it. It is stated at encodeAssistant.
+// Reasoning goes back only from a block whose Meta names this provider, as
+// reasoning_content, which every assistant message carries, empty when it has
+// none. Anything else of reasoning, and every opaque payload, sends nothing.
 //
 // thinking always goes out, since it is the field that decides when
 // reasoning_effort is present too, and a disabled thinking never carries an
@@ -127,200 +126,111 @@ func (p *Provider) encodeTools(out *chatRequest, req api.Request) error {
 // requires of every adapter that flattens a block list: a single newline runs
 // the end of one block into the start of the next, and a list, a heading or a
 // code fence loses its framing at exactly that join.
-//
-// discarded is read before any call is encoded, because api.ContentToolUse says
-// the result answering a call is what says whether its arguments ever parsed.
-// The whole thread is scanned for it first: a result sits in a message after the
-// one carrying the call, so the call cannot be encoded on a single pass that has
-// not seen it. The same scan collects the calls that go out as a note, one with
-// no name and one written into a user message, because the result answering
-// such a call has no call left to answer and becomes a note as well.
 func (p *Provider) encodeMessages(req api.Request) ([]message, error) {
-	discarded := make(map[string]bool)
-	noted := make(map[string]bool)
-	for _, m := range req.Messages {
-		for _, c := range m.Content {
-			switch c := c.(type) {
-			case api.ContentToolResult:
-				if c.Error == api.ToolErrJSON {
-					discarded[c.ID] = true
-				}
-			case api.ContentToolUse:
-				if c.Name == "" || m.Role == api.RoleUser {
-					noted[c.ID] = true
-				}
-			}
-		}
-	}
 	msgs := make([]message, 0, len(req.Messages)+1)
 	if req.System != "" {
 		msgs = append(msgs, message{Role: "system", Content: req.System})
 	}
 	for i, m := range req.Messages {
-		var err error
 		switch m.Role {
 		case api.RoleUser:
-			msgs, err = p.encodeUser(msgs, m, i, noted)
-		case api.RoleAssistant:
-			msgs, err = p.encodeAssistant(msgs, m, i, discarded, len(req.Tools) > 0)
-		default:
-			err = fmt.Errorf("deepseek: message %d has role %q, which is neither user nor assistant", i, m.Role)
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-	return msgs, nil
-}
-
-// encodeUser lowers one user message. Tool results are their own role here, so
-// a message carrying several of them explodes into several messages, and they
-// are emitted before the user text regardless of where they sat in the block
-// list: results have to follow the assistant turn that asked for them with
-// nothing in between, and a user message in the gap is rejected.
-//
-// A block this wire has no field for becomes a note among the text, which is
-// where the note belongs.
-func (p *Provider) encodeUser(msgs []message, m api.Message, at int, noted map[string]bool) ([]message, error) {
-	var parts []any
-	var results []message
-	for _, c := range m.Content {
-		switch c := c.(type) {
-		case api.ContentText:
-			parts = append(parts, textPart{Type: "text", Text: c.Text})
-		case api.ContentToolResult:
-			if c.ID == "" || noted[c.ID] {
-				parts = append(parts, note(c, "a tool result with no tool call id, or one answering a call that went out as a note, answers no call, and a tool message that answers none is refused by the server"))
-				continue
+			var parts []any
+			var results []message
+			for _, c := range m.Content {
+				switch c := c.(type) {
+				case api.ContentText:
+					parts = append(parts, textPart{Type: "text", Text: c.Text})
+				case api.ContentToolResult:
+					answers := false
+					if i > 0 && req.Messages[i-1].Role == api.RoleAssistant {
+						for _, prev := range req.Messages[i-1].Content {
+							u, is := prev.(api.ContentToolUse)
+							answers = answers || is && u.ID == c.ID
+						}
+					}
+					if !answers {
+						parts = append(parts, note(c, "a tool message has to answer a call of the assistant message right before it, and the server refuses one that does not"))
+						continue
+					}
+					results = append(results, toolResult(c))
+				case api.ContentImage:
+					parts = append(parts, image(c))
+				case api.ContentDocument:
+					parts = append(parts, document(c))
+				case api.ContentToolUse:
+					parts = append(parts, note(c, "a tool call is a field of the assistant message that made it"))
+				case api.ContentReasoning, api.ContentOpaque:
+				default:
+					parts = append(parts, textPart{Type: "text", Text: lib.Unknown(providerName, i, c)})
+				}
 			}
-			results = append(results, toolResult(c))
-		case api.ContentImage:
-			parts = append(parts, image(c))
-		case api.ContentDocument:
-			parts = append(parts, document(c))
-		case api.ContentToolUse:
-			parts = append(parts, note(c, "a tool call is a field of the assistant message that made it"))
-		case api.ContentReasoning:
-			parts = append(parts, note(c, "reasoning_content is a field of an assistant message"))
-		case api.ContentOpaque:
-			parts = append(parts, note(c, "DeepSeek runs no tools of its own, so this wire has no field that could carry a payload back"))
-		default:
-			parts = append(parts, textPart{Type: "text", Text: lib.Unknown(providerName, at, c)})
-		}
-	}
-	msgs = append(msgs, results...)
-	if len(parts) > 0 || len(results) == 0 {
-		msgs = append(msgs, message{Role: "user", Content: content(parts)})
-	}
-	return msgs, nil
-}
-
-// encodeAssistant lowers one assistant message into exactly one message.
-// content, reasoning_content and tool_calls are sibling fields of the same
-// object rather than blocks, so a turn that thought, spoke and called two tools
-// is one message with three fields set.
-//
-// This adapter writes no Meta, because DeepSeek's reasoning is plain readable
-// text in a field of its own, sealed behind nothing, so there is no encoding of
-// it to replay verbatim and Thoughts is the whole of it. A block carrying Meta
-// or a Summary is therefore one another provider issued, and it leaves a note
-// among the text rather than being replayed as this model's own:
-// reasoning_content is the thinking, this adapter never produces a summary to
-// put in it, and there is no second field on this wire a paraphrase could go
-// in.
-//
-// A block this wire has no field for leaves a note among the text, an opaque
-// payload for the reason encodeUser gives.
-//
-// A call with no name is not a call. The field is required and naming nothing
-// dispatches nothing, so a stored turn that lost the name leaves a note among
-// the text rather than being replayed as "name":"" for the model to make sense
-// of.
-//
-// Arguments follow api.ContentToolUse: a call its paired result marks as
-// api.ToolErrJSON had its arguments thrown away before they were ever JSON, so
-// Input is not read at all and the empty object goes out, which is what the
-// required field takes and what the paired tool message already explains. Input
-// that is nothing goes out the same way, being a call that takes no arguments.
-// api.DiscardedArguments with no such result is the pairing invariant broken: it
-// is refused rather than flattened to {}, which would replay as a legitimate
-// call that takes none.
-//
-// Reasoning goes back on every assistant turn exactly when the request declares
-// tools, which is the case the server requires it in: with tools, every earlier
-// turn's reasoning_content has to come back, including turns that called none,
-// or the request is a 400. Without tools the server ignores the field and keeps
-// none of it in the context, so sending it there would buy nothing. No model
-// decides this, because both models follow the same rule. Several blocks
-// join into one field: one turn produces one reasoning block, however often v4
-// breaks off to speak, so several mean a caller merged turns, and the wire has
-// one reasoning_content per message either way.
-//
-// Text joins with the blank line every other role here joins with. One turn of
-// this adapter produces exactly one text block, so several mean a caller merged
-// turns, and a note left where an unsendable block was is among them: joining
-// with nothing glued the note to the model's own words.
-//
-// content is documented as string or null, and null is what a turn that only
-// called tools has to send.
-func (p *Provider) encodeAssistant(msgs []message, m api.Message, at int, discarded map[string]bool, tools bool) ([]message, error) {
-	var text, reasoning []string
-	var calls []toolCall
-	for _, c := range m.Content {
-		switch c := c.(type) {
-		case api.ContentText:
-			text = append(text, c.Text)
-		case api.ContentReasoning:
-			if len(c.Meta) > 0 || len(c.Summary) > 0 {
-				text = append(text, lib.Omitted(c, "the block carries another provider's encoding or summary, and reasoning_content takes only this model's own thinking"))
-				continue
-			}
-			reasoning = append(reasoning, c.Thoughts.Ordered()...)
-		case api.ContentToolUse:
-			if c.Name == "" {
-				text = append(text, lib.Omitted(c, "a tool call with no name names no tool and is refused by the server"))
-				continue
-			}
-			args := "{}"
+			msgs = append(msgs, results...)
 			switch {
-			case discarded[c.ID]:
-			case bytes.Equal(c.Input, api.DiscardedArguments):
-				return nil, fmt.Errorf("deepseek: message %d replays tool call %q whose arguments were discarded, with no failed result answering it", at, c.ID)
-			case len(c.Input) > 0:
-				args = string(c.Input)
+			case len(parts) > 0:
+				msgs = append(msgs, message{Role: "user", Content: content(parts)})
+			case len(results) == 0:
+				msgs = append(msgs, message{Role: "user", Content: emptyMessage})
 			}
-			calls = append(calls, toolCall{
-				ID:   c.ID,
-				Type: "function",
-				Function: toolCallFunction{
-					Name:      c.Name,
-					Arguments: args,
-				},
-			})
-		case api.ContentImage:
-			text = append(text, lib.Omitted(c, "DeepSeek refuses an image in an assistant message"))
-		case api.ContentDocument:
-			text = append(text, document(c).Text)
-		case api.ContentToolResult:
-			text = append(text, lib.Omitted(c, "a tool result is a message of the tool role and belongs to the user turn that answers the call"))
-		case api.ContentOpaque:
-			text = append(text, lib.Omitted(c, "DeepSeek runs no tools of its own, so this wire has no field that could carry a payload back"))
+		case api.RoleAssistant:
+			var text, reasoning []string
+			var calls []toolCall
+			for _, c := range m.Content {
+				switch c := c.(type) {
+				case api.ContentText:
+					text = append(text, c.Text)
+				case api.ContentReasoning:
+					if _, own := lib.OwnMeta(c.Meta, providerName); own {
+						reasoning = append(reasoning, c.Thoughts.Ordered()...)
+					}
+				case api.ContentToolUse:
+					discarded := false
+					if i+1 < len(req.Messages) && req.Messages[i+1].Role == api.RoleUser {
+						for _, next := range req.Messages[i+1].Content {
+							r, is := next.(api.ContentToolResult)
+							discarded = discarded || is && r.ID == c.ID && r.Error == api.ToolErrJSON
+						}
+					}
+					args := "{}"
+					switch {
+					case discarded:
+					case bytes.Equal(c.Input, api.DiscardedArguments):
+						return nil, fmt.Errorf("deepseek: message %d replays tool call %q whose arguments were discarded, with no failed result answering it", i, c.ID)
+					case len(c.Input) > 0:
+						args = string(c.Input)
+					}
+					calls = append(calls, toolCall{
+						ID:   lib.CallID(c.ID),
+						Type: "function",
+						Function: toolCallFunction{
+							Name:      lib.CallName(c.Name),
+							Arguments: args,
+						},
+					})
+				case api.ContentImage:
+					text = append(text, lib.Omitted(c, "DeepSeek refuses an image in an assistant message"))
+				case api.ContentDocument:
+					text = append(text, document(c).Text)
+				case api.ContentToolResult:
+					text = append(text, lib.Omitted(c, "a tool result is a message of the tool role and belongs to the user turn that answers the call"))
+				case api.ContentOpaque:
+				default:
+					text = append(text, lib.Unknown(providerName, i, c))
+				}
+			}
+			thoughts := strings.Join(reasoning, "")
+			msg := message{Role: "assistant", ReasoningContent: &thoughts, ToolCalls: calls}
+			switch {
+			case len(text) > 0:
+				msg.Content = strings.Join(text, "\n\n")
+			case len(calls) == 0:
+				msg.Content = emptyMessage
+			}
+			msgs = append(msgs, msg)
 		default:
-			text = append(text, lib.Unknown(providerName, at, c))
+			return nil, fmt.Errorf("deepseek: message %d has role %q, which is neither user nor assistant", i, m.Role)
 		}
 	}
-	msg := message{Role: "assistant", ToolCalls: calls}
-	if tools {
-		msg.ReasoningContent = strings.Join(reasoning, "")
-	}
-	switch {
-	case len(text) > 0:
-		msg.Content = strings.Join(text, "\n\n")
-	case len(calls) > 0:
-	default:
-		msg.Content = ""
-	}
-	return append(msgs, msg), nil
+	return msgs, nil
 }
 
 // toolResult lowers one result into a tool role message.
@@ -361,7 +271,7 @@ func toolResult(c api.ContentToolResult) message {
 			body = append([]any{textPart{Type: "text", Text: "Error:"}}, parts...)
 		}
 	}
-	return message{Role: "tool", ToolCallID: c.ID, Content: body}
+	return message{Role: "tool", ToolCallID: lib.CallID(c.ID), Content: body}
 }
 
 func image(c api.ContentImage) any {
@@ -392,6 +302,8 @@ func document(c api.ContentDocument) textPart {
 	}
 	return textPart{Type: "text", Text: string(c.Data)}
 }
+
+const emptyMessage = "[empty]"
 
 func note(c api.Content, why string) textPart {
 	return textPart{Type: "text", Text: lib.Omitted(c, why)}

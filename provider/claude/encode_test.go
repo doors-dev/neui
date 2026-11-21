@@ -94,7 +94,7 @@ func userText(s string) api.Message {
 }
 
 func TestEncodeRequestShape(t *testing.T) {
-	p := mustNew(t, Conf{Model: api.Model{Name: testModel}}, WithAPIKey("k"), WithMaxTokens(2048), WithEffort("medium"), WithThinking(Thinking{Type: "adaptive", Display: "summarized"}))
+	p := mustNew(t, Conf{Model: api.Model{Name: testModel}}, WithAPIKey("k"), WithMaxTokens(2048), WithEffort("medium"), WithThinkingDisplay("summarized"))
 	got := mustEncode(t, p, api.Request{
 		ToolChoice: api.ToolChoiceAny,
 		Tools: []api.Tool{{
@@ -142,25 +142,29 @@ func TestEncodeToolChoice(t *testing.T) {
 	}
 }
 
-// Forcing a tool is refused only alongside manual extended thinking, and only on
-// a declared model. Adaptive thinking accepts it, including on models that think
-// by default.
-func TestForcedToolChoiceWithExtendedThinking(t *testing.T) {
-	req := api.Request{
-		ToolChoice: api.ToolChoiceAny,
-		Messages:   []api.Message{userText("hi")},
-	}
-	mustFail(t, mustNew(t, Conf{Model: Haiku45}, WithThinking(Thinking{Type: "enabled", Budget: 4096})), req, "extended thinking")
-	if got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: "claude-sonnet-4-5"}}, WithThinking(Thinking{Type: "enabled", Budget: 4096})), req); string(got["tool_choice"]) != `{"type":"any"}` {
-		t.Fatalf("unknown model: tool_choice = %s", got["tool_choice"])
-	}
-
-	p := mustNew(t, Conf{Model: api.Model{Name: testModel}}, WithThinking(Thinking{Type: "adaptive"}))
-	if got := mustEncode(t, p, api.Request{
-		ToolChoice: api.ToolChoiceAny,
-		Messages:   []api.Message{userText("hi")},
-	}); string(got["tool_choice"]) != `{"type":"any"}` {
-		t.Fatalf("tool_choice = %s", got["tool_choice"])
+func TestThinkingIsAlwaysAdaptiveWithDropBlock(t *testing.T) {
+	for _, tc := range []struct {
+		opts  []Option
+		want  string
+		betas string
+	}{
+		{nil, `{"type":"adaptive","block_binding":{"prefix_mismatch_behavior":"drop_block"}}`, bindingBeta},
+		{[]Option{WithThinkingDisplay(DisplayOmitted)}, `{"type":"adaptive","display":"omitted","block_binding":{"prefix_mismatch_behavior":"drop_block"}}`, bindingBeta},
+		{[]Option{WithBeta("a-1"), WithEffort(EffortLow)}, `{"type":"adaptive","block_binding":{"prefix_mismatch_behavior":"drop_block"}}`, "a-1," + bindingBeta},
+		{[]Option{WithBeta(bindingBeta, "a-1")}, `{"type":"adaptive","block_binding":{"prefix_mismatch_behavior":"drop_block"}}`, bindingBeta + ",a-1"},
+	} {
+		p := mustNew(t, Conf{Model: api.Model{Name: testModel}}, tc.opts...)
+		req := api.Request{Messages: []api.Message{userText("hi")}}
+		if got := mustEncode(t, p, req); string(got["thinking"]) != tc.want {
+			t.Errorf("thinking = %s, want %s", got["thinking"], tc.want)
+		}
+		httpReq, _, err := p.request(context.Background(), req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := httpReq.Header.Get("anthropic-beta"); got != tc.betas {
+			t.Errorf("anthropic-beta = %q, want %q", got, tc.betas)
+		}
 	}
 }
 
@@ -257,22 +261,14 @@ func TestStoredContentTheAPIRefusesIsANote(t *testing.T) {
 			api.Message{Role: api.RoleUser, Content: api.Contents{api.ContentToolResult{Content: api.UserContents{api.ContentText{Text: "72F"}}}}},
 			`{"role":"user","content":[{"type":"text","text":"[content omitted]"}]}`,
 		},
-		"call with no name": {
-			api.Message{Role: api.RoleAssistant, Content: api.Contents{api.ContentToolUse{ID: "toolu_1", Input: json.RawMessage(`{}`)}}},
-			`{"role":"assistant","content":[{"type":"text","text":"[content omitted]"}]}`,
-		},
-		"call with invalid arguments": {
-			api.Message{Role: api.RoleAssistant, Content: api.Contents{api.ContentToolUse{ID: "toolu_1", Name: "weather", Input: json.RawMessage(`{"city":`)}}},
-			`{"role":"assistant","content":[{"type":"text","text":"[content omitted]"}]}`,
-		},
 		"assistant blocks in a user message": {
 			api.Message{Role: api.RoleUser, Content: api.Contents{
 				api.ContentText{Text: "hi"},
 				api.ContentToolUse{ID: "toolu_1", Name: "weather", Input: json.RawMessage(`{}`)},
-				api.ContentReasoning{Meta: json.RawMessage(`"sig"`)},
-				api.ContentOpaque{Kind: "server_tool_use", Data: json.RawMessage(`{"type":"server_tool_use","id":"srvtoolu_1"}`)},
+				api.ContentReasoning{Meta: lib.Meta(providerName, json.RawMessage(`"sig"`))},
+				api.ContentOpaque{Kind: "claude.server_tool_use", Data: json.RawMessage(`{"type":"server_tool_use","id":"srvtoolu_1"}`)},
 			}},
-			`{"role":"user","content":[{"type":"text","text":"hi"},{"type":"text","text":"[content omitted]"},{"type":"text","text":"[reasoning omitted]"},{"type":"text","text":"[content omitted]"}]}`,
+			`{"role":"user","content":[{"type":"text","text":"hi"},{"type":"text","text":"[content omitted]"}]}`,
 		},
 		"message with no blocks": {
 			api.Message{Role: api.RoleAssistant},
@@ -285,12 +281,53 @@ func TestStoredContentTheAPIRefusesIsANote(t *testing.T) {
 		}
 	}
 	got := mustEncode(t, p, api.Request{Messages: []api.Message{
-		userText("hi"),
-		{Role: api.RoleAssistant, Content: api.Contents{api.ContentToolUse{ID: "toolu_1", Input: json.RawMessage(`{}`)}}},
-		{Role: api.RoleUser, Content: api.Contents{api.ContentToolResult{ID: "toolu_1", Content: api.UserContents{api.ContentText{Text: "72F"}}}}},
+		{Role: api.RoleUser, Content: api.Contents{
+			api.ContentToolUse{ID: "toolu_1", Name: "weather", Input: json.RawMessage(`{}`)},
+			api.ContentToolResult{ID: "toolu_1", Content: api.UserContents{api.ContentText{Text: "72F"}}},
+		}},
 	}})
-	if strings.Contains(string(got["messages"]), "tool_result") || !strings.HasSuffix(string(got["messages"]), `{"role":"user","content":[{"type":"text","text":"[content omitted]"}]}]`) {
-		t.Errorf("the result answering a call that went out as a note was sent:\n%s", got["messages"])
+	if strings.Contains(string(got["messages"]), "tool_result") || string(got["messages"]) != `[{"role":"user","content":[{"type":"text","text":"[content omitted]"},{"type":"text","text":"[content omitted]"}]}]` {
+		t.Errorf("the result answering a call in a user message was sent:\n%s", got["messages"])
+	}
+}
+
+func TestCallsCarryPortableIDsNamesAndObjects(t *testing.T) {
+	p := mustNew(t, Conf{Model: api.Model{Name: testModel}})
+	for _, c := range []struct {
+		call api.ContentToolUse
+		want string
+	}{
+		{api.ContentToolUse{ID: "call.1:x", Name: "functions.lookup", Input: json.RawMessage(`[1]`)}, `{"type":"tool_use","id":"` + lib.CallID("call.1:x") + `","name":"` + lib.CallName("functions.lookup") + `","input":{"input":[1]}}`},
+		{api.ContentToolUse{Input: json.RawMessage(`"cat"`)}, `{"type":"tool_use","id":"` + lib.CallID("") + `","name":"` + lib.CallName("") + `","input":{"input":"cat"}}`},
+		{api.ContentToolUse{ID: "toolu_1", Name: "weather", Input: json.RawMessage(`{"city":`)}, `{"type":"tool_use","id":"toolu_1","name":"weather","input":{"input":"{\"city\":"}}`},
+		{api.ContentToolUse{ID: "toolu_1", Name: "weather"}, `{"type":"tool_use","id":"toolu_1","name":"weather","input":{}}`},
+	} {
+		got := mustEncode(t, p, api.Request{Messages: []api.Message{
+			userText("hi"),
+			{Role: api.RoleAssistant, Content: api.Contents{c.call}},
+			{Role: api.RoleUser, Content: api.Contents{api.ContentToolResult{ID: c.call.ID, Content: api.UserContents{api.ContentText{Text: "72F"}}}}},
+		}})
+		want := `[{"role":"user","content":[{"type":"text","text":"hi"}]},{"role":"assistant","content":[` + c.want + `]},` +
+			`{"role":"user","content":[{"type":"tool_result","tool_use_id":"` + lib.CallID(c.call.ID) + `","content":[{"type":"text","text":"72F"}],"is_error":false}]}]`
+		if string(got["messages"]) != want {
+			t.Errorf("messages =\n%s\nwant\n%s", got["messages"], want)
+		}
+	}
+}
+
+func TestResultPairsOnlyWithTheMessageBeforeIt(t *testing.T) {
+	p := mustNew(t, Conf{Model: api.Model{Name: testModel}})
+	call := api.Message{Role: api.RoleAssistant, Content: api.Contents{api.ContentToolUse{ID: "toolu_1", Name: "weather"}}}
+	result := api.Message{Role: api.RoleUser, Content: api.Contents{api.ContentToolResult{ID: "toolu_1", Content: api.UserContents{api.ContentText{Text: "72F"}}}}}
+	for name, msgs := range map[string][]api.Message{
+		"orphan":          {userText("hi"), {Role: api.RoleAssistant, Content: api.Contents{api.ContentText{Text: "ok"}}}, result},
+		"two turns late":  {userText("hi"), call, userText("and?"), {Role: api.RoleAssistant, Content: api.Contents{api.ContentText{Text: "ok"}}}, result},
+		"before the call": {result, call, userText("next")},
+	} {
+		got := mustEncode(t, p, api.Request{Messages: msgs})
+		if strings.Contains(string(got["messages"]), `"tool_result"`) {
+			t.Errorf("%s: the result was sent:\n%s", name, got["messages"])
+		}
 	}
 }
 
@@ -337,10 +374,6 @@ func TestTextGoesOutWithoutHTMLEscapes(t *testing.T) {
 	}
 }
 
-// A message whose every block was another provider's still goes out, as the note
-// each of those blocks left. Failing the request instead would end a thread on
-// stored history the caller cannot rewrite, and dropping the message would take
-// the turn out of the conversation.
 func TestEncodeEmptiedMessageStillEncodes(t *testing.T) {
 	got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{
 		Messages: []api.Message{
@@ -351,32 +384,39 @@ func TestEncodeEmptiedMessageStillEncodes(t *testing.T) {
 			userText("again"),
 		},
 	})
-	want := `{"role":"assistant","content":[{"type":"text","text":"[reasoning omitted]"}]}`
+	want := `{"role":"assistant","content":[{"type":"text","text":"[empty]"}]}`
 	if !strings.Contains(string(got["messages"]), want) {
 		t.Fatalf("messages =\n%s\nwant to contain\n%s", got["messages"], want)
 	}
 }
 
-// Every content type that cannot be sent leaves a note naming what was there,
-// and the message keeps whatever else it held.
-func TestEncodeNotesWhatItCannotSend(t *testing.T) {
-	const model = "claude-opus-5"
-	got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{
-		Messages: []api.Message{
-			userText("go"),
-			{Role: api.RoleAssistant, Content: api.Contents{
-				api.ContentReasoning{Model: "gpt-5.6-sol", Summary: map[int]string{0: "theirs"}, Meta: json.RawMessage(`{"id":"rs_1","type":"reasoning","encrypted_content":"SEALED"}`)},
-				api.ContentOpaque{Model: "gpt-5.6-sol", Kind: "web_search_call", Data: json.RawMessage(`{"id":"ws_1","type":"web_search_call","status":"completed"}`)},
-				api.ContentText{Text: "answer"},
-			}},
+func TestForeignReasoningAndPayloadsSendNothing(t *testing.T) {
+	for name, blocks := range map[string]api.Contents{
+		"gpt": {
+			api.ContentReasoning{Model: "gpt-5.6-sol", Summary: map[int]string{0: "theirs"}, Meta: lib.Meta("gpt", json.RawMessage(`{"id":"rs_1","type":"reasoning","encrypted_content":"SEALED"}`))},
+			api.ContentOpaque{Model: "gpt-5.6-sol", Kind: "gpt.web_search_call", Data: json.RawMessage(`{"id":"ws_1","type":"web_search_call","status":"completed"}`)},
 		},
-	})
-	want := `{"role":"assistant","content":[` +
-		`{"type":"text","text":"[reasoning omitted]"},` +
-		`{"type":"text","text":"[content omitted]"},` +
-		`{"type":"text","text":"answer"}]}`
-	if !strings.Contains(string(got["messages"]), want) {
-		t.Fatalf("messages =\n%s\nwant to contain\n%s", got["messages"], want)
+		"stored before Meta named its provider": {
+			api.ContentReasoning{Model: testModel, Thoughts: map[int]string{0: "mine once"}, Meta: json.RawMessage(`"sig"`)},
+			api.ContentOpaque{Model: testModel, Kind: "compaction", Data: json.RawMessage(`{"type":"compaction","content":"x"}`)},
+		},
+		"no Meta": {
+			api.ContentReasoning{Model: testModel, Thoughts: map[int]string{0: "unsigned"}},
+		},
+		"payload under another kind": {
+			api.ContentOpaque{Model: testModel, Kind: "claude.server_tool_use", Data: json.RawMessage(`{"type":"web_search_tool_result"}`)},
+		},
+	} {
+		got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{
+			Messages: []api.Message{
+				userText("go"),
+				{Role: api.RoleAssistant, Content: append(blocks, api.ContentText{Text: "answer"})},
+			},
+		})
+		want := `[{"role":"user","content":[{"type":"text","text":"go"}]},{"role":"assistant","content":[{"type":"text","text":"answer"}]}]`
+		if string(got["messages"]) != want {
+			t.Errorf("%s: messages =\n%s\nwant\n%s", name, got["messages"], want)
+		}
 	}
 }
 
@@ -611,8 +651,8 @@ func TestEmptyTextIsANote(t *testing.T) {
 func TestReplayReasoningAndOpaque(t *testing.T) {
 	const model = "claude-opus-5"
 	sealed := json.RawMessage(`{"type":"redacted_thinking","data":"EvwBCkYIA"}`)
-	signed := json.RawMessage(`"sig2"`)
-	summarized := json.RawMessage(`"sig3"`)
+	signed := lib.Meta(providerName, json.RawMessage(`"sig2"`))
+	summarized := lib.Meta(providerName, json.RawMessage(`"sig3"`))
 	result := json.RawMessage(`{"type":"web_search_tool_result","tool_use_id":"srvtoolu_1","content":[]}`)
 	got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{
 		Messages: []api.Message{
@@ -621,7 +661,7 @@ func TestReplayReasoningAndOpaque(t *testing.T) {
 				// An envelope with nothing readable in it is what a model whose
 				// thinking display is omitted returns, and dropping one of those
 				// is the classic way to break a tool use turn.
-				api.ContentReasoning{Model: model, Meta: json.RawMessage(`"sig1"`)},
+				api.ContentReasoning{Model: model, Meta: lib.Meta(providerName, json.RawMessage(`"sig1"`))},
 				// The readable half goes into the envelope built around the
 				// signature.
 				api.ContentReasoning{Model: model, Thoughts: map[int]string{0: "because"}, Meta: signed},
@@ -631,9 +671,9 @@ func TestReplayReasoningAndOpaque(t *testing.T) {
 				api.ContentReasoning{Model: model, Summary: map[int]string{0: "in short"}, Meta: summarized},
 				// The other shape meta holds here: a redacted_thinking block is
 				// bytes this API sent, so it goes back as they are.
-				api.ContentReasoning{Model: model, Meta: sealed},
-				api.ContentOpaque{Model: "claude-sonnet-5", Kind: "web_search_tool_result", Data: result},
-				api.ContentOpaque{Model: model, Kind: "compaction", Data: json.RawMessage(`{"id":"cmp_1","type":"compaction","encrypted_content":"x"}`)},
+				api.ContentReasoning{Model: model, Meta: lib.Meta(providerName, sealed)},
+				api.ContentOpaque{Model: "claude-sonnet-5", Kind: "claude.web_search_tool_result", Data: result},
+				api.ContentOpaque{Model: model, Kind: "gpt.compaction", Data: json.RawMessage(`{"id":"cmp_1","type":"compaction","encrypted_content":"x"}`)},
 				api.ContentText{Text: "answer"},
 			}},
 		},
@@ -644,7 +684,6 @@ func TestReplayReasoningAndOpaque(t *testing.T) {
 		`{"type":"thinking","thinking":"in short","signature":"sig3"},` +
 		string(sealed) + `,` +
 		string(result) + `,` +
-		`{"type":"text","text":"[content omitted]"},` +
 		`{"type":"text","text":"answer"}]}`
 	if !strings.Contains(string(got["messages"]), want) {
 		t.Fatalf("messages =\n%s\nwant to contain\n%s", got["messages"], want)
@@ -654,12 +693,11 @@ func TestReplayReasoningAndOpaque(t *testing.T) {
 // TestThinkingReplayIsAllOrNothing pins the decision as a property of the
 // message rather than of the block. Keeping part of a message's thinking is what
 // this API refuses; keeping none of it costs tokens and continuity and nothing
-// else. Each block that stays behind leaves a note, so the turn tells the model
-// it thought without telling it what.
+// else.
 func TestThinkingReplayIsAllOrNothing(t *testing.T) {
 	const model = "claude-opus-5"
-	signed := json.RawMessage(`"sig"`)
-	sealed := json.RawMessage(`{"type":"redacted_thinking","data":"EvwBCkYIA"}`)
+	signed := lib.Meta(providerName, json.RawMessage(`"sig"`))
+	sealed := lib.Meta(providerName, json.RawMessage(`{"type":"redacted_thinking","data":"EvwBCkYIA"}`))
 
 	tests := []struct {
 		name    string
@@ -667,8 +705,8 @@ func TestThinkingReplayIsAllOrNothing(t *testing.T) {
 	}{
 		// Another provider's sealed payload is no block of this API's, so it
 		// does not travel; the blocks beside it cannot travel without it.
-		{"another provider", api.ContentReasoning{Model: "gpt-5.6-sol", Meta: json.RawMessage(`{"id":"rs_1","type":"reasoning","encrypted_content":"SEALED"}`)}},
-		{"an empty signature", api.ContentReasoning{Model: model, Thoughts: map[int]string{0: "x"}, Meta: json.RawMessage(`""`)}},
+		{"another provider", api.ContentReasoning{Model: "gpt-5.6-sol", Meta: lib.Meta("gpt", json.RawMessage(`{"id":"rs_1","type":"reasoning","encrypted_content":"SEALED"}`))}},
+		{"an empty signature", api.ContentReasoning{Model: model, Thoughts: map[int]string{0: "x"}, Meta: lib.Meta(providerName, json.RawMessage(`""`))}},
 		// A block with no meta has no signature, and this API rejects unsigned
 		// thinking, so it can never be sent and the rest goes with it.
 		{"no meta", api.ContentReasoning{Model: model, Thoughts: map[int]string{0: "unsigned"}}},
@@ -687,9 +725,6 @@ func TestThinkingReplayIsAllOrNothing(t *testing.T) {
 				},
 			})
 			want := `{"role":"assistant","content":[` +
-				`{"type":"text","text":"[reasoning omitted]"},` +
-				`{"type":"text","text":"[reasoning omitted]"},` +
-				`{"type":"text","text":"[reasoning omitted]"},` +
 				`{"type":"text","text":"answer"}]}`
 			if !strings.Contains(string(got["messages"]), want) {
 				t.Fatalf("messages =\n%s\nwant to contain\n%s", got["messages"], want)
@@ -703,12 +738,12 @@ func TestThinkingReplayIsAllOrNothing(t *testing.T) {
 // one inside a single assistant turn.
 func TestThinkingReplayIsPerMessage(t *testing.T) {
 	const model = "claude-opus-5"
-	signed := json.RawMessage(`"sig"`)
+	signed := lib.Meta(providerName, json.RawMessage(`"sig"`))
 	got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{
 		Messages: []api.Message{
 			userText("go"),
 			{Role: api.RoleAssistant, Content: api.Contents{
-				api.ContentReasoning{Model: "gpt-5.6-sol", Meta: json.RawMessage(`{"id":"rs_1","type":"reasoning","encrypted_content":"SEALED"}`)},
+				api.ContentReasoning{Model: "gpt-5.6-sol", Meta: lib.Meta("gpt", json.RawMessage(`{"id":"rs_1","type":"reasoning","encrypted_content":"SEALED"}`))},
 				api.ContentText{Text: "first"},
 			}},
 			userText("again"),
@@ -719,7 +754,7 @@ func TestThinkingReplayIsPerMessage(t *testing.T) {
 		},
 	})
 	msgs := string(got["messages"])
-	if !strings.Contains(msgs, `{"role":"assistant","content":[{"type":"text","text":"[reasoning omitted]"},{"type":"text","text":"first"}]}`) {
+	if !strings.Contains(msgs, `{"role":"assistant","content":[{"type":"text","text":"first"}]}`) {
 		t.Fatalf("the first turn kept thinking it should have left behind:\n%s", msgs)
 	}
 	if !strings.Contains(msgs, `{"type":"thinking","thinking":"mine","signature":"sig"},{"type":"text","text":"second"}`) {
@@ -735,7 +770,7 @@ func TestOpaqueStaysByteExact(t *testing.T) {
 		Messages: []api.Message{
 			userText("go"),
 			{Role: api.RoleAssistant, Content: api.Contents{
-				api.ContentOpaque{Model: "claude-opus-5", Kind: "web_search_tool_result", Data: sealed},
+				api.ContentOpaque{Model: "claude-opus-5", Kind: "claude.web_search_tool_result", Data: sealed},
 				api.ContentText{Text: "x"},
 			}},
 		},
@@ -755,7 +790,7 @@ func TestOpaquePartsGoBackIntoThePayload(t *testing.T) {
 			{Role: api.RoleAssistant, Content: api.Contents{
 				api.ContentOpaque{
 					Model:  testModel,
-					Kind:   "server_tool_use",
+					Kind:   "claude.server_tool_use",
 					Data:   data,
 					Deltas: []string{`{"query":`, `"x"}`},
 				},
@@ -770,27 +805,31 @@ func TestOpaquePartsGoBackIntoThePayload(t *testing.T) {
 }
 
 // A splice that cannot be done leaves the note every other unsendable block
-// leaves, whichever half of the stored block went bad. The payload never goes
-// out with the placeholder input it opened with, because a server tool call
-// replayed with arguments it never had reads as one the model made, and failing
-// the request would end the thread on stored history the caller cannot rewrite.
+// leaves. The payload never goes out with the placeholder input it opened with,
+// because a server tool call replayed with arguments it never had reads as one
+// the model made, and failing the request would end the thread on stored
+// history the caller cannot rewrite. A payload that is not the object its Kind
+// names is not this adapter's and sends nothing.
 func TestOpaqueThatCannotBeSplicedIsANote(t *testing.T) {
 	const model = "claude-opus-5"
 	tests := []struct {
 		name   string
 		data   json.RawMessage
 		deltas []string
+		want   string
 	}{
-		// The one a live turn reaches: cut inside a server tool's arguments.
 		{"fragments that never parsed",
 			json.RawMessage(`{"type":"server_tool_use","id":"srvtoolu_1","name":"web_search","input":{}}`),
-			[]string{`{"query":`}},
+			[]string{`{"query":`},
+			`{"type":"text","text":"[content omitted]"},`},
 		{"a payload that is not an object",
 			json.RawMessage(`["server_tool_use"]`),
-			[]string{`{"query":"x"}`}},
+			[]string{`{"query":"x"}`},
+			``},
 		{"a payload that stops mid value",
 			json.RawMessage(`{"type":"server_tool_use","input":{`),
-			[]string{`{"query":"x"}`}},
+			[]string{`{"query":"x"}`},
+			``},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -798,13 +837,12 @@ func TestOpaqueThatCannotBeSplicedIsANote(t *testing.T) {
 				Messages: []api.Message{
 					userText("go"),
 					{Role: api.RoleAssistant, Content: api.Contents{
-						api.ContentOpaque{Model: model, Kind: "server_tool_use", Data: tc.data, Deltas: tc.deltas},
+						api.ContentOpaque{Model: model, Kind: "claude.server_tool_use", Data: tc.data, Deltas: tc.deltas},
 						api.ContentText{Text: "answer"},
 					}},
 				},
 			})
-			want := `{"role":"assistant","content":[` +
-				`{"type":"text","text":"[content omitted]"},` +
+			want := `{"role":"assistant","content":[` + tc.want +
 				`{"type":"text","text":"answer"}]}`
 			msgs := string(got["messages"])
 			if !strings.Contains(msgs, want) {
@@ -897,8 +935,8 @@ func TestCacheMarkerAvoidsReplayedBlocks(t *testing.T) {
 			userText("go"),
 			{Role: api.RoleAssistant, Content: api.Contents{
 				api.ContentText{Text: "answer"},
-				api.ContentReasoning{Model: "claude-opus-5", Thoughts: map[int]string{0: "t"}, Meta: json.RawMessage(`"s"`)},
-				api.ContentOpaque{Model: "claude-opus-5", Kind: "web_search_tool_result", Data: sealed},
+				api.ContentReasoning{Model: "claude-opus-5", Thoughts: map[int]string{0: "t"}, Meta: lib.Meta(providerName, json.RawMessage(`"s"`))},
+				api.ContentOpaque{Model: "claude-opus-5", Kind: "claude.web_search_tool_result", Data: sealed},
 			}},
 		},
 	})
@@ -1080,10 +1118,7 @@ func TestDeclaredModels(t *testing.T) {
 			t.Errorf("%s: %+v, want the 1M window, the high resolution tier and 600 images", m.Name, m)
 		}
 	}
-	if Haiku45.Context != 200_000 || Haiku45.ImagePixels != 1568*28*28 || Haiku45.ImageSide != 1568 || Haiku45.ImagesPerRequest != 100 {
-		t.Errorf("%s: %+v, want the 200k window, the standard tier and 100 images", Haiku45.Name, Haiku45)
-	}
-	for _, m := range []api.Model{Fable51, Opus55, Sonnet55, Haiku55, Sonnet5, Haiku45} {
+	for _, m := range []api.Model{Fable51, Opus55, Sonnet55, Haiku55, Sonnet5} {
 		if m.RequestBytes != 32_000_000 || m.ImageBytes != 10_000_000*3/4 {
 			t.Errorf("%s: request %d, image %d bytes, want 32 MB and the raw size of 10 MB base64", m.Name, m.RequestBytes, m.ImageBytes)
 		}
@@ -1105,46 +1140,11 @@ func TestNewRefusesInvalidSettings(t *testing.T) {
 		t.Errorf("WithMaxTokens(0) left %d, want the default %d", got, defaultMaxTokens)
 	}
 
-	haiku := Conf{Model: Haiku45}
-	mustRefuse(t, haiku, "only with enabled", WithThinking(Thinking{Type: ThinkingAdaptive, Budget: 2048}))
-	mustRefuse(t, haiku, "only with enabled", WithThinking(Thinking{Budget: 2048}))
-	mustRefuse(t, haiku, "under the 1024", WithThinking(Thinking{Type: ThinkingEnabled, Budget: 1023}))
-	mustRefuse(t, haiku, "not below max tokens", WithMaxTokens(4096), WithThinking(Thinking{Type: ThinkingEnabled, Budget: 4096}))
-	mustNew(t, haiku, WithMaxTokens(4096), WithThinking(Thinking{Type: ThinkingEnabled, Budget: 4095}))
-	mustNew(t, haiku, WithMaxTokens(4096), WithBeta("interleaved-thinking-2025-05-14"), WithThinking(Thinking{Type: ThinkingEnabled, Budget: 8192}))
-	mustRefuse(t, haiku, "needs thinking that is on", WithThinking(Thinking{Display: DisplaySummarized}))
-	mustRefuse(t, haiku, "needs thinking that is on", WithThinking(Thinking{Type: ThinkingDisabled, Display: DisplayOmitted}))
-
-	enabled := WithThinking(Thinking{Type: ThinkingEnabled, Budget: 2048})
-	disabled := WithThinking(Thinking{Type: ThinkingDisabled})
-	adaptive := WithThinking(Thinking{Type: ThinkingAdaptive})
-	for _, m := range []api.Model{Fable51, Opus55, Sonnet55} {
-		mustRefuse(t, Conf{Model: m}, "refuses enabled thinking", enabled)
-		mustRefuse(t, Conf{Model: m}, "refuses disabled thinking", disabled)
-		mustNew(t, Conf{Model: m}, adaptive, WithEffort(EffortMax), WithMaxTokens(128_000))
+	for _, m := range []api.Model{Fable51, Opus55, Sonnet55, Haiku55, Sonnet5} {
+		mustNew(t, Conf{Model: m}, WithEffort(EffortMax), WithMaxTokens(128_000), WithThinkingDisplay(DisplaySummarized))
 		mustRefuse(t, Conf{Model: m}, "over the 128000", WithMaxTokens(128_001))
 	}
-	for _, m := range []api.Model{Haiku55, Sonnet5} {
-		mustRefuse(t, Conf{Model: m}, "refuses enabled thinking", enabled)
-		mustNew(t, Conf{Model: m}, disabled, WithEffort(EffortHigh))
-	}
-	mustNew(t, Conf{Model: Sonnet5}, disabled, WithEffort(EffortMax))
-	mustNew(t, Conf{Model: Haiku55}, disabled)
-	mustRefuse(t, Conf{Model: Haiku55}, "at effort xhigh", disabled, WithEffort(EffortXHigh))
-	mustRefuse(t, Conf{Model: Haiku55}, "at effort max", disabled, WithEffort(EffortMax))
-	mustNew(t, Conf{Model: Haiku55}, adaptive, WithEffort(EffortMax))
-
-	mustRefuse(t, Conf{Model: Haiku45}, "refuses adaptive thinking", adaptive)
-	mustRefuse(t, Conf{Model: Haiku45}, "takes no effort", WithEffort(EffortLow))
-	mustRefuse(t, Conf{Model: Haiku45}, "over the 64000", WithMaxTokens(64_001))
-	mustNew(t, Conf{Model: Haiku45}, enabled, WithMaxTokens(64_000))
-
-	own := Conf{Model: api.Model{Name: Opus55.Name}}
-	mustRefuse(t, own, "refuses disabled thinking", disabled)
-	mustNew(t, Conf{Model: api.Model{Name: "claude-opus-4-6"}}, disabled, WithEffort(EffortMax), WithMaxTokens(1_000_000))
-	mustNew(t, model, WithThinking(Thinking{Type: ThinkingAdaptive, Budget: 512, Display: DisplaySummarized}))
-	mustNew(t, model, WithMaxTokens(4096), WithThinking(Thinking{Type: ThinkingEnabled, Budget: 8192}))
-	mustNew(t, model, WithThinking(Thinking{Type: ThinkingDisabled, Display: DisplayOmitted}))
+	mustNew(t, Conf{Model: api.Model{Name: "claude-opus-4-6"}}, WithEffort(EffortMax), WithMaxTokens(1_000_000))
 }
 
 func TestDocumentInAssistantMessage(t *testing.T) {
@@ -1171,9 +1171,9 @@ func TestDocumentInAssistantMessage(t *testing.T) {
 }
 
 func TestModel(t *testing.T) {
-	var p api.Provider = mustNew(t, Conf{Model: Haiku45})
-	if got := p.Model(); got != Haiku45 || got.Context != 200_000 {
-		t.Fatalf("Model = %+v, want %+v", got, Haiku45)
+	var p api.Provider = mustNew(t, Conf{Model: Haiku55})
+	if got := p.Model(); got != Haiku55 || got.Context != 1_000_000 {
+		t.Fatalf("Model = %+v, want %+v", got, Haiku55)
 	}
 	own := api.Model{Name: testModel}
 	if got := mustNew(t, Conf{Model: own}).Model(); got != own {
@@ -1186,8 +1186,8 @@ func TestThinkingAnotherClaudeModelWroteReplays(t *testing.T) {
 		Messages: []api.Message{
 			userText("go"),
 			{Role: api.RoleAssistant, Content: api.Contents{
-				api.ContentReasoning{Model: "claude-opus-5", Thoughts: map[int]string{0: "earlier"}, Meta: json.RawMessage(`"sig"`)},
-				api.ContentReasoning{Model: "claude-opus-5", Meta: json.RawMessage(`{"type":"redacted_thinking","data":"EvwBCkYIA"}`)},
+				api.ContentReasoning{Model: "claude-opus-5", Thoughts: map[int]string{0: "earlier"}, Meta: lib.Meta(providerName, json.RawMessage(`"sig"`))},
+				api.ContentReasoning{Model: "claude-opus-5", Meta: lib.Meta(providerName, json.RawMessage(`{"type":"redacted_thinking","data":"EvwBCkYIA"}`))},
 				api.ContentText{Text: "answer"},
 			}},
 		},

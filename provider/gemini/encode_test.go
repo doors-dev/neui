@@ -126,6 +126,8 @@ const (
 	ownMeta = `{"type":"thought","signature":"c2lnbmF0dXJl"}`
 )
 
+var ownThought = lib.Meta(providerName, json.RawMessage(ownMeta))
+
 type levelCounter map[slog.Level]int
 
 func (c levelCounter) Enabled(context.Context, slog.Level) bool { return true }
@@ -472,10 +474,10 @@ func TestNotes(t *testing.T) {
 			`[{"type":"user_input","content":[{"type":"text","text":"hi"}]},` + dummy + `,{"type":"function_call","id":"c1","name":"fetch","arguments":{}},{"type":"function_result","name":"fetch","call_id":"c1","result":[{"type":"text","text":"[document omitted]"}]}]`},
 		{"call in a user message", []api.Message{user(text("hi"), call("c1", "lookup", `{}`))},
 			`[{"type":"user_input","content":[{"type":"text","text":"hi"},{"type":"text","text":"[content omitted]"}]}]`},
-		{"reasoning in a user message", []api.Message{user(api.ContentReasoning{Meta: json.RawMessage(ownMeta)})},
-			`[{"type":"user_input","content":[{"type":"text","text":"[reasoning omitted]"}]}]`},
-		{"opaque in a user message", []api.Message{user(api.ContentOpaque{Kind: "gemini.google_search_call", Data: json.RawMessage(`{"type":"google_search_call","id":"g"}`)})},
-			`[{"type":"user_input","content":[{"type":"text","text":"[content omitted]"}]}]`},
+		{"reasoning in a user message sends nothing", []api.Message{user(api.ContentReasoning{Meta: ownThought})},
+			`[{"type":"user_input","content":[{"type":"text","text":"[empty]"}]}]`},
+		{"opaque in a user message sends nothing", []api.Message{user(api.ContentOpaque{Kind: "gemini.google_search_call", Data: json.RawMessage(`{"type":"google_search_call","id":"g"}`)})},
+			`[{"type":"user_input","content":[{"type":"text","text":"[empty]"}]}]`},
 		{"unknown type in a user message", []api.Message{user(text("a"), nil)},
 			`[{"type":"user_input","content":[{"type":"text","text":"a"},{"type":"text","text":"[content omitted]"}]}]`},
 		{"empty user message", []api.Message{user()},
@@ -485,19 +487,23 @@ func TestNotes(t *testing.T) {
 		{"empty text in an assistant run before a call", []api.Message{user(text("hi")), assistant(text(""), call("c1", "lookup", `{"q":"x"}`)), user(result("c1", api.ToolOk, text("ok")))},
 			`[{"type":"user_input","content":[{"type":"text","text":"hi"}]},` + dummy + `,{"type":"model_output","content":[{"type":"text","text":"[content omitted]"}]},{"type":"function_call","id":"c1","name":"lookup","arguments":{"q":"x"}},{"type":"function_result","name":"lookup","call_id":"c1","result":[{"type":"text","text":"ok"}]}]`},
 		{"call without a name", []api.Message{user(text("hi")), assistant(call("c1", "", `{}`)), user(result("c1", api.ToolOk, text("ok")))},
-			`[{"type":"user_input","content":[{"type":"text","text":"hi"}]},{"type":"model_output","content":[{"type":"text","text":"[content omitted]"}]},{"type":"user_input","content":[{"type":"text","text":"[content omitted]"}]}]`},
+			`[{"type":"user_input","content":[{"type":"text","text":"hi"}]},` + dummy + `,{"type":"function_call","id":"c1","name":"` + lib.CallName("") + `","arguments":{}},{"type":"function_result","name":"` + lib.CallName("") + `","call_id":"c1","result":[{"type":"text","text":"ok"}]}]`},
 		{"call without an id", []api.Message{user(text("hi")), assistant(call("", "lookup", `{}`)), user(result("", api.ToolOk, text("ok")))},
-			`[{"type":"user_input","content":[{"type":"text","text":"hi"}]},{"type":"model_output","content":[{"type":"text","text":"[content omitted]"}]},{"type":"user_input","content":[{"type":"text","text":"[content omitted]"}]}]`},
+			`[{"type":"user_input","content":[{"type":"text","text":"hi"}]},` + dummy + `,{"type":"function_call","id":"` + lib.CallID("") + `","name":"lookup","arguments":{}},{"type":"function_result","name":"lookup","call_id":"` + lib.CallID("") + `","result":[{"type":"text","text":"ok"}]}]`},
 		{"call whose input is not an object", []api.Message{user(text("hi")), assistant(call("c1", "lookup", `[1]`), call("c2", "lookup", `{"q":`)), user(result("c1", api.ToolOk, text("a")), result("c2", api.ToolOk, text("b")))},
-			`[{"type":"user_input","content":[{"type":"text","text":"hi"}]},{"type":"model_output","content":[{"type":"text","text":"[content omitted]"},{"type":"text","text":"[content omitted]"}]},{"type":"user_input","content":[{"type":"text","text":"[content omitted]"},{"type":"text","text":"[content omitted]"}]}]`},
+			`[{"type":"user_input","content":[{"type":"text","text":"hi"}]},` + dummy + `,{"type":"function_call","id":"c1","name":"lookup","arguments":{"input":[1]}},{"type":"function_call","id":"c2","name":"lookup","arguments":{"input":"{\"q\":"}},{"type":"function_result","name":"lookup","call_id":"c1","result":[{"type":"text","text":"a"}]},{"type":"function_result","name":"lookup","call_id":"c2","result":[{"type":"text","text":"b"}]}]`},
 		{"result in an assistant message", []api.Message{user(text("hi")), assistant(text("x"), result("c1", api.ToolOk, text("ok")))},
 			`[{"type":"user_input","content":[{"type":"text","text":"hi"}]},{"type":"model_output","content":[{"type":"text","text":"x"},{"type":"text","text":"[content omitted]"}]}]`},
-		{"result answering no call", []api.Message{user(text("hi"), result("c9", api.ToolOk, text("ok")))},
-			`[{"type":"user_input","content":[{"type":"text","text":"hi"},{"type":"text","text":"[content omitted]"}]}]`},
-		{"reasoning without own meta", []api.Message{user(text("hi")), assistant(api.ContentReasoning{Summary: api.Indexed[string]{0: "plan"}}, text("hello"))},
-			`[{"type":"user_input","content":[{"type":"text","text":"hi"}]},{"type":"model_output","content":[{"type":"text","text":"[reasoning omitted]"},{"type":"text","text":"hello"}]}]`},
-		{"foreign opaque", []api.Message{user(text("hi")), assistant(api.ContentOpaque{Kind: "web_search_tool_result", Data: json.RawMessage(`{"type":"web_search_tool_result"}`)}, text("x"))},
-			`[{"type":"user_input","content":[{"type":"text","text":"hi"}]},{"type":"model_output","content":[{"type":"text","text":"[content omitted]"},{"type":"text","text":"x"}]}]`},
+		{"result answering no call goes in place under a placeholder name", []api.Message{user(text("hi"), result("c9", api.ToolOk, text("ok")))},
+			`[{"type":"function_result","name":"` + lib.CallName("") + `","call_id":"c9","result":[{"type":"text","text":"ok"}]},{"type":"user_input","content":[{"type":"text","text":"hi"}]}]`},
+		{"result two turns after its call takes the call's name", []api.Message{user(text("hi")), assistant(call("c1", "lookup", `{}`)), user(text("wait")), assistant(text("ok")), user(result("c1", api.ToolOk, text("late")))},
+			`[{"type":"user_input","content":[{"type":"text","text":"hi"}]},` + dummy + `,{"type":"function_call","id":"c1","name":"lookup","arguments":{}},{"type":"user_input","content":[{"type":"text","text":"wait"}]},{"type":"model_output","content":[{"type":"text","text":"ok"}]},{"type":"function_result","name":"lookup","call_id":"c1","result":[{"type":"text","text":"late"}]}]`},
+		{"result answering a call in a user message", []api.Message{user(call("c1", "lookup", `{}`), result("c1", api.ToolOk, text("ok")))},
+			`[{"type":"user_input","content":[{"type":"text","text":"[content omitted]"},{"type":"text","text":"[content omitted]"}]}]`},
+		{"reasoning without own meta sends nothing", []api.Message{user(text("hi")), assistant(api.ContentReasoning{Summary: api.Indexed[string]{0: "plan"}}, text("hello"))},
+			`[{"type":"user_input","content":[{"type":"text","text":"hi"}]},{"type":"model_output","content":[{"type":"text","text":"hello"}]}]`},
+		{"foreign opaque sends nothing", []api.Message{user(text("hi")), assistant(api.ContentOpaque{Kind: "claude.web_search_tool_result", Data: json.RawMessage(`{"type":"web_search_tool_result"}`)}, text("x"))},
+			`[{"type":"user_input","content":[{"type":"text","text":"hi"}]},{"type":"model_output","content":[{"type":"text","text":"x"}]}]`},
 		{"unknown type in an assistant message", []api.Message{user(text("hi")), assistant(nil)},
 			`[{"type":"user_input","content":[{"type":"text","text":"hi"}]},{"type":"model_output","content":[{"type":"text","text":"[content omitted]"}]}]`},
 		{"image in an assistant message", []api.Message{user(text("draw")), assistant(text("here"), png)},
@@ -624,7 +630,7 @@ func TestSignatures(t *testing.T) {
 	}{
 		{"own meta replayed in place and the summary never sent", []api.Message{
 			user(text("hi")),
-			assistant(api.ContentReasoning{Summary: api.Indexed[string]{0: "secret plan"}, Meta: json.RawMessage(ownMeta)}, text("hello")),
+			assistant(api.ContentReasoning{Summary: api.Indexed[string]{0: "secret plan"}, Meta: ownThought}, text("hello")),
 		}, `[{"type":"user_input","content":[{"type":"text","text":"hi"}]},` + ownMeta + `,{"type":"model_output","content":[{"type":"text","text":"hello"}]}]`},
 		{"foreign metas", []api.Message{
 			user(text("hi")),
@@ -633,11 +639,14 @@ func TestSignatures(t *testing.T) {
 				api.ContentReasoning{Meta: json.RawMessage(`{"type":"redacted_thinking","data":"x"}`)},
 				api.ContentReasoning{Meta: json.RawMessage(`{"id":"rs_1","type":"reasoning","encrypted_content":"x"}`)},
 				api.ContentReasoning{Meta: json.RawMessage(`{"type":"thought","signature":""}`)},
+				api.ContentReasoning{Meta: json.RawMessage(ownMeta)},
+				api.ContentReasoning{Meta: lib.Meta(providerName, json.RawMessage(`{"type":"thought","signature":""}`))},
+				api.ContentReasoning{Meta: lib.Meta("claude", json.RawMessage(`"claude-signature"`))},
 				text("hello")),
-		}, `[{"type":"user_input","content":[{"type":"text","text":"hi"}]},{"type":"model_output","content":[{"type":"text","text":"[reasoning omitted]"},{"type":"text","text":"[reasoning omitted]"},{"type":"text","text":"[reasoning omitted]"},{"type":"text","text":"[reasoning omitted]"},{"type":"text","text":"hello"}]}]`},
+		}, `[{"type":"user_input","content":[{"type":"text","text":"hi"}]},{"type":"model_output","content":[{"type":"text","text":"hello"}]}]`},
 		{"own calls get no dummy", []api.Message{
 			user(text("hi")),
-			assistant(api.ContentReasoning{Meta: json.RawMessage(ownMeta)}, call("a", "x", `{}`), call("b", "x", `{}`)),
+			assistant(api.ContentReasoning{Meta: ownThought}, call("a", "x", `{}`), call("b", "x", `{}`)),
 			user(result("a", api.ToolOk, text("1")), result("b", api.ToolOk, text("2"))),
 		}, `[{"type":"user_input","content":[{"type":"text","text":"hi"}]},` + ownMeta + `,{"type":"function_call","id":"a","name":"x","arguments":{}},{"type":"function_call","id":"b","name":"x","arguments":{}},{"type":"function_result","name":"x","call_id":"a","result":[{"type":"text","text":"1"}]},{"type":"function_result","name":"x","call_id":"b","result":[{"type":"text","text":"2"}]}]`},
 		{"one dummy for parallel calls", []api.Message{
@@ -649,17 +658,17 @@ func TestSignatures(t *testing.T) {
 			user(text("hi")),
 			assistant(api.ContentReasoning{Meta: json.RawMessage(`"claude-signature"`)}, text("Checking."), call("a", "x", `{}`)),
 			user(result("a", api.ToolOk, text("1"))),
-		}, `[{"type":"user_input","content":[{"type":"text","text":"hi"}]},` + dummy + `,{"type":"model_output","content":[{"type":"text","text":"[reasoning omitted]"},{"type":"text","text":"Checking."}]},{"type":"function_call","id":"a","name":"x","arguments":{}},{"type":"function_result","name":"x","call_id":"a","result":[{"type":"text","text":"1"}]}]`},
+		}, `[{"type":"user_input","content":[{"type":"text","text":"hi"}]},` + dummy + `,{"type":"model_output","content":[{"type":"text","text":"Checking."}]},{"type":"function_call","id":"a","name":"x","arguments":{}},{"type":"function_result","name":"x","call_id":"a","result":[{"type":"text","text":"1"}]}]`},
 		{"text between calls goes after the last one", []api.Message{
 			user(text("hi")),
 			assistant(text("first"), call("a", "x", `{}`), text("and"), call("b", "x", `{}`), text("last")),
 			user(result("a", api.ToolOk, text("1")), result("b", api.ToolOk, text("2"))),
 		}, `[{"type":"user_input","content":[{"type":"text","text":"hi"}]},` + dummy + `,{"type":"model_output","content":[{"type":"text","text":"first"}]},{"type":"function_call","id":"a","name":"x","arguments":{}},{"type":"function_call","id":"b","name":"x","arguments":{}},{"type":"model_output","content":[{"type":"text","text":"and"},{"type":"text","text":"last"}]},{"type":"function_result","name":"x","call_id":"a","result":[{"type":"text","text":"1"}]},{"type":"function_result","name":"x","call_id":"b","result":[{"type":"text","text":"2"}]}]`},
-		{"a noted call between calls goes after the last one", []api.Message{
+		{"a call with array input goes wrapped between the others", []api.Message{
 			user(text("hi")),
-			assistant(api.ContentReasoning{Meta: json.RawMessage(ownMeta)}, call("a", "x", `{}`), call("n", "x", `[1]`), api.ContentReasoning{Meta: json.RawMessage(ownMeta)}, call("b", "x", `{}`)),
-			user(result("a", api.ToolOk, text("1")), result("b", api.ToolOk, text("2"))),
-		}, `[{"type":"user_input","content":[{"type":"text","text":"hi"}]},` + ownMeta + `,{"type":"function_call","id":"a","name":"x","arguments":{}},` + ownMeta + `,{"type":"function_call","id":"b","name":"x","arguments":{}},{"type":"model_output","content":[{"type":"text","text":"[content omitted]"}]},{"type":"function_result","name":"x","call_id":"a","result":[{"type":"text","text":"1"}]},{"type":"function_result","name":"x","call_id":"b","result":[{"type":"text","text":"2"}]}]`},
+			assistant(api.ContentReasoning{Meta: ownThought}, call("a", "x", `{}`), call("n", "x", `[1]`), api.ContentReasoning{Meta: ownThought}, call("b", "x", `{}`)),
+			user(result("a", api.ToolOk, text("1")), result("n", api.ToolOk, text("0")), result("b", api.ToolOk, text("2"))),
+		}, `[{"type":"user_input","content":[{"type":"text","text":"hi"}]},` + ownMeta + `,{"type":"function_call","id":"a","name":"x","arguments":{}},{"type":"function_call","id":"n","name":"x","arguments":{"input":[1]}},` + ownMeta + `,{"type":"function_call","id":"b","name":"x","arguments":{}},{"type":"function_result","name":"x","call_id":"a","result":[{"type":"text","text":"1"}]},{"type":"function_result","name":"x","call_id":"n","result":[{"type":"text","text":"0"}]},{"type":"function_result","name":"x","call_id":"b","result":[{"type":"text","text":"2"}]}]`},
 		{"a dummy in a previous turn too", []api.Message{
 			user(text("hi")),
 			assistant(call("a", "x", `{}`)),
@@ -669,13 +678,14 @@ func TestSignatures(t *testing.T) {
 		}, `[{"type":"user_input","content":[{"type":"text","text":"hi"}]},` + dummy + `,{"type":"function_call","id":"a","name":"x","arguments":{}},{"type":"function_result","name":"x","call_id":"a","result":[{"type":"text","text":"1"}]},{"type":"model_output","content":[{"type":"text","text":"done"}]},{"type":"user_input","content":[{"type":"text","text":"thanks"}]}]`},
 		{"an own thought after text does not open the turn", []api.Message{
 			user(text("hi")),
-			assistant(text("Checking."), api.ContentReasoning{Meta: json.RawMessage(ownMeta)}, call("a", "x", `{}`)),
+			assistant(text("Checking."), api.ContentReasoning{Meta: ownThought}, call("a", "x", `{}`)),
 			user(result("a", api.ToolOk, text("1"))),
 		}, `[{"type":"user_input","content":[{"type":"text","text":"hi"}]},` + dummy + `,{"type":"model_output","content":[{"type":"text","text":"Checking."}]},` + ownMeta + `,{"type":"function_call","id":"a","name":"x","arguments":{}},{"type":"function_result","name":"x","call_id":"a","result":[{"type":"text","text":"1"}]}]`},
-		{"a noted call needs no dummy", []api.Message{
+		{"a nameless call gets the dummy and a placeholder name", []api.Message{
 			user(text("hi")),
 			assistant(call("a", "", `{}`), text("x")),
-		}, `[{"type":"user_input","content":[{"type":"text","text":"hi"}]},{"type":"model_output","content":[{"type":"text","text":"[content omitted]"},{"type":"text","text":"x"}]}]`},
+			user(result("a", api.ToolOk, text("1"))),
+		}, `[{"type":"user_input","content":[{"type":"text","text":"hi"}]},` + dummy + `,{"type":"function_call","id":"a","name":"` + lib.CallName("") + `","arguments":{}},{"type":"model_output","content":[{"type":"text","text":"x"}]},{"type":"function_result","name":"` + lib.CallName("") + `","call_id":"a","result":[{"type":"text","text":"1"}]}]`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			wantJSON(t, steps(t, api.Request{Messages: c.msgs}), c.want)
@@ -686,9 +696,9 @@ func TestSignatures(t *testing.T) {
 func TestEncodingIsStableAsTheThreadGrows(t *testing.T) {
 	msgs := []api.Message{
 		user(text("hi")),
-		assistant(api.ContentReasoning{Meta: json.RawMessage(`"claude"`)}, text("Checking."), call("a", "x", `{"k": 1}`)),
+		assistant(api.ContentReasoning{Meta: lib.Meta("claude", json.RawMessage(`"claude"`))}, text("Checking."), call("a", "x", `{"k": 1}`)),
 		user(result("a", api.ToolOk, text("1"))),
-		assistant(api.ContentReasoning{Meta: json.RawMessage(ownMeta)}, text("done")),
+		assistant(api.ContentReasoning{Meta: ownThought}, text("done")),
 	}
 	short := steps(t, api.Request{Messages: msgs})
 	long := steps(t, api.Request{Messages: append(slices.Clone(msgs), user(text("more")))})
@@ -713,7 +723,7 @@ func TestOpaque(t *testing.T) {
 			text("found"),
 		),
 	}})
-	wantJSON(t, got, `[{"type":"user_input","content":[{"type":"text","text":"hi"}]},`+own+`,{"type":"model_output","content":[{"type":"text","text":"[content omitted]"},{"type":"text","text":"[content omitted]"},{"type":"text","text":"[content omitted]"},{"type":"text","text":"[content omitted]"},{"type":"text","text":"found"}]}]`)
+	wantJSON(t, got, `[{"type":"user_input","content":[{"type":"text","text":"hi"}]},`+own+`,{"type":"model_output","content":[{"type":"text","text":"found"}]}]`)
 	if !strings.Contains(got, own) {
 		t.Fatalf("own step not replayed byte for byte: %s", got)
 	}

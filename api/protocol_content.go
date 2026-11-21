@@ -54,7 +54,9 @@ func (i Indexed[T]) Ordered() []T {
 //
 // Meta on ContentText, ContentToolUse and ContentReasoning is the issuing
 // adapter's own data, handed back to it unchanged on replay; folding a stream,
-// a non-empty Meta replaces the one before it. On user-authored blocks
+// a non-empty Meta replaces the one before it. An adapter writes it as
+// {"provider":"<its Name>","data":<its payload>} and reads only Meta naming
+// itself. On user-authored blocks
 // (ContentText, ContentImage, ContentDocument) Meta is the caller's data, which
 // no adapter reads or sends.
 //
@@ -368,14 +370,13 @@ func (ContentToolResult) contentType() string {
 // index parts fills key 0. Any of Summary, Thoughts and Meta may be empty.
 //
 // Where a provider signs or seals reasoning, Meta is what is replayed, byte for
-// byte, and the text never is; such a block without Meta is not replayed.
-// Whether a stored block is replayed at all is the adapter's decision. A sealed
-// payload fails at any other provider and nothing here records the issuer, so
-// each adapter replays only blocks its provider issued, judged by their shape,
-// and drops the rest; nothing upstream strips them.
+// byte, and the text never is. An adapter replays a block only when its Meta
+// names that adapter's provider, and then may use any of the block; a block
+// whose Meta is missing or names another provider is skipped whole, with
+// nothing sent in its place. Nothing upstream strips them.
 type ContentReasoning struct {
 	// Model is the model the provider was configured with, as EventStart.Model
-	// reports. It is informational: adapters judge a stored block by its shape,
+	// reports. It is informational: adapters judge a stored block by its Meta,
 	// not by comparing this with the model of a later request.
 	Model    string          `json:"model"`
 	Summary  Indexed[string] `json:"summary"`        // paraphrase written by the service
@@ -398,14 +399,14 @@ func (ContentReasoning) contentType() string {
 
 // ContentOpaque carries a payload this protocol has no type for, such as the
 // output of a tool the provider ran itself. It is meant for the adapter that
-// issued it, and no field records the provider, so each adapter replays only
-// opaque blocks its provider issued, judged by Kind and the shape of Data, and
-// drops the rest; nothing upstream strips them. Folding a stream, a non-empty
+// issued it: Kind starts with that adapter's Name and a dot, as in
+// "claude.compaction", and an adapter replays only the kinds it issues and
+// skips every other one; nothing upstream strips them. Folding a stream, a non-empty
 // Kind or Data replaces the one before it and each Delta appends to Deltas in
 // arrival order.
 type ContentOpaque struct {
 	Model  string          `json:"model"`  // configured model, as on ContentReasoning
-	Kind   string          `json:"kind"`   // issuing adapter's name for the payload
+	Kind   string          `json:"kind"`   // issuing adapter's Name, a dot, and its name for the payload
 	Data   json.RawMessage `json:"data"`   // bytes as the API sent them, which it may have signed
 	Deltas []string        `json:"deltas"` // streamed fragments of a field inside Data, put back by the adapter
 }

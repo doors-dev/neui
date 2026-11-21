@@ -32,8 +32,8 @@ import (
 )
 
 const (
-	goldenRequestsHash = "ba9d6066b2961c5541fd49a2364d10581e3e23f6466765cc6419ed291c2a448c"
-	goldenStreamsHash  = "4a62824ae4e3330a30eeea333e95f1361e92659ce23f8791ffe0db966829e78c"
+	goldenRequestsHash = "a9cea639ea70a58f59ff82745cd58a77f84d3e8072a7a125e3422e142ae69552"
+	goldenStreamsHash  = "97c72348a203994455645e8a10fb44d202daf233b2edd2ff615fe166ade07000"
 )
 
 func goldenBytes(r *rand.Rand, n int) []byte {
@@ -93,13 +93,19 @@ func goldenRequest(r *rand.Rand) api.Request {
 			case 0:
 				a = append(a, api.ContentText{Text: "the answer"})
 			case 1:
-				a = append(a, api.ContentText{Text: "preamble", Meta: phaseMeta(goldenPick(r, testModel, "gpt-6-astra"), goldenPick(r, "commentary", "final_answer"))})
+				own := goldenPick(r, true, false)
+				phase := goldenPick(r, "commentary", "final_answer")
+				meta := json.RawMessage(`{"phase":"` + phase + `"}`)
+				if own {
+					meta = phaseMeta(phase)
+				}
+				a = append(a, api.ContentText{Text: "preamble", Meta: meta})
 			case 2:
-				a = append(a, api.ContentReasoning{Model: goldenPick(r, testModel, "other"), Summary: map[int]string{0: "thinking", 1: "more"}, Meta: goldenPick(r, json.RawMessage(nil), json.RawMessage(`{"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"SEALED"}`), json.RawMessage(`{"id":"rs_2","type":"reasoning"}`))})
+				a = append(a, api.ContentReasoning{Model: goldenPick(r, testModel, "other"), Summary: map[int]string{0: "thinking", 1: "more"}, Meta: goldenPick(r, json.RawMessage(nil), ownMeta(`{"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"SEALED"}`), ownMeta(`{"id":"rs_2","type":"reasoning"}`))})
 			case 3:
 				a = append(a, api.ContentReasoning{Model: testModel, Thoughts: map[int]string{0: "raw thought"}})
 			case 4:
-				a = append(a, api.ContentOpaque{Model: goldenPick(r, testModel, "other"), Kind: goldenPick(r, "web_search_call", "code_interpreter_call", "custom_tool_call"), Data: goldenPick(r, json.RawMessage(`{"id":"ws_1","type":"web_search_call","status":"completed"}`), json.RawMessage(`{"type":"code_interpreter_call","code":""}`)), Deltas: goldenPick(r, []string(nil), []string{"print(", "1)"})})
+				a = append(a, api.ContentOpaque{Model: goldenPick(r, testModel, "other"), Kind: goldenPick(r, "gpt.web_search_call", "gpt.code_interpreter_call", "gpt.custom_tool_call"), Data: goldenPick(r, json.RawMessage(`{"id":"ws_1","type":"web_search_call","status":"completed"}`), json.RawMessage(`{"type":"code_interpreter_call","code":""}`)), Deltas: goldenPick(r, []string(nil), []string{"print(", "1)"})})
 			default:
 				call++
 				id := fmt.Sprintf("call_%d", call)
@@ -134,7 +140,7 @@ func goldenOptions(r *rand.Rand) []Option {
 		{WithReasoningSummary(goldenPick(r, SummaryAuto, SummaryConcise, SummaryDetailed))},
 		{WithReasoningMode(goldenPick(r, ReasoningStandard, ReasoningPro))},
 		{WithReasoningContext(goldenPick(r, ContextAuto, ContextCurrentTurn, ContextAllTurns))},
-		{WithReasoningReplay(goldenPick(r, ReplayToolTurns, ReplayAlways, ReplayNever))},
+		{WithReasoningReplay(goldenPick(r, ReplayAll, ReplayAll, ReplayNever))},
 		{WithVerbosity(goldenPick(r, VerbosityLow, VerbosityMedium, VerbosityHigh))},
 		{WithParallelToolCalls(r.IntN(2) == 0), WithStrictTools(r.IntN(2) == 0)},
 		{WithStore(r.IntN(2) == 0), WithInclude("reasoning.encrypted_content")},

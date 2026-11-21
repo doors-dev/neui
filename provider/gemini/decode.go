@@ -309,7 +309,7 @@ func (c *converter) signature(s *step, sig string) {
 		c.emit(api.EventThinking{Index: s.idx})
 	}
 	meta, _ := lib.MarshalRaw(thought{Type: "thought", Signature: sig})
-	c.emit(api.EventMeta{Index: s.idx, Data: meta})
+	c.emit(api.EventMeta{Index: s.idx, Data: lib.Meta(providerName, meta)})
 }
 
 func (c *converter) readUsage(u *usage) {

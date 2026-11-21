@@ -26,7 +26,11 @@ var update = flag.Bool("update", false, "rewrite the golden files under testdata
 
 func Golden(t *testing.T, got []byte) {
 	t.Helper()
-	path := filepath.Join("testdata", t.Name()+".golden")
+	GoldenFile(t, filepath.Join("testdata", t.Name()+".golden"), got)
+}
+
+func GoldenFile(t *testing.T, path string, got []byte) {
+	t.Helper()
 	if *update {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)

@@ -72,7 +72,7 @@ func (p *Provider) encode(req api.Request) (*chatRequest, error) {
 	if req.System != "" {
 		out.Messages = append(out.Messages, message{Role: "system", Content: req.System})
 	}
-	var called []toolCall
+	var called []string
 	for i, m := range req.Messages {
 		switch m.Role {
 		case api.RoleUser:
@@ -85,7 +85,7 @@ func (p *Provider) encode(req api.Request) (*chatRequest, error) {
 				case api.ContentToolResult:
 					answers := false
 					for _, call := range called {
-						answers = answers || (c.ID != "" && call.ID == c.ID)
+						answers = answers || call == c.ID
 					}
 					if !answers {
 						parts = append(parts, textPart{Type: "text", Text: lib.Omitted(c, "a tool message has to answer a call of the assistant message right before it, and the server refuses one that does not")})
@@ -115,17 +115,15 @@ func (p *Provider) encode(req api.Request) (*chatRequest, error) {
 							result = append([]any{textPart{Type: "text", Text: "Error:"}}, body...)
 						}
 					}
-					out.Messages = append(out.Messages, message{Role: "tool", ToolCallID: c.ID, Content: result})
+					out.Messages = append(out.Messages, message{Role: "tool", ToolCallID: lib.CallID(c.ID), Content: result})
 					results++
 				case api.ContentImage:
 					parts = append(parts, image(c))
 				case api.ContentDocument:
 					parts = append(parts, document(c))
-				case api.ContentReasoning:
+				case api.ContentReasoning, api.ContentOpaque:
 				case api.ContentToolUse:
 					parts = append(parts, textPart{Type: "text", Text: lib.Omitted(c, "a tool call is a field of the assistant message that made it")})
-				case api.ContentOpaque:
-					parts = append(parts, textPart{Type: "text", Text: lib.Omitted(c, "this wire has no field for a payload of a tool the server ran itself")})
 				default:
 					parts = append(parts, textPart{Type: "text", Text: lib.Unknown(providerName, i, c)})
 				}
@@ -140,6 +138,7 @@ func (p *Provider) encode(req api.Request) (*chatRequest, error) {
 		case api.RoleAssistant:
 			var text, thoughts []string
 			var field []byte
+			var calls []toolCall
 			called = nil
 			for _, c := range m.Content {
 				switch c := c.(type) {
@@ -153,10 +152,6 @@ func (p *Provider) encode(req api.Request) (*chatRequest, error) {
 					field = data
 					thoughts = append(thoughts, c.Thoughts.Ordered()...)
 				case api.ContentToolUse:
-					if c.ID == "" || c.Name == "" {
-						text = append(text, lib.Omitted(c, "a tool call with no id or no name cannot be answered, and the server refuses it"))
-						continue
-					}
 					discarded := false
 					if i+1 < len(req.Messages) && req.Messages[i+1].Role == api.RoleUser {
 						for _, next := range req.Messages[i+1].Content {
@@ -172,7 +167,8 @@ func (p *Provider) encode(req api.Request) (*chatRequest, error) {
 					case len(c.Input) > 0:
 						args = string(c.Input)
 					}
-					called = append(called, toolCall{ID: c.ID, Type: "function", Function: toolCallFunction{Name: c.Name, Arguments: args}})
+					called = append(called, c.ID)
+					calls = append(calls, toolCall{ID: lib.CallID(c.ID), Type: "function", Function: toolCallFunction{Name: lib.CallName(c.Name), Arguments: args}})
 				case api.ContentDocument:
 					text = append(text, document(c).Text)
 				case api.ContentImage:
@@ -180,12 +176,11 @@ func (p *Provider) encode(req api.Request) (*chatRequest, error) {
 				case api.ContentToolResult:
 					text = append(text, lib.Omitted(c, "a tool result is a message of the tool role and follows the assistant message that called it"))
 				case api.ContentOpaque:
-					text = append(text, lib.Omitted(c, "this wire has no field for a payload of a tool the server ran itself"))
 				default:
 					text = append(text, lib.Unknown(providerName, i, c))
 				}
 			}
-			msg := message{Role: "assistant", ToolCalls: called}
+			msg := message{Role: "assistant", ToolCalls: calls}
 			if string(field) == `"reasoning"` {
 				msg.Reasoning = strings.Join(thoughts, "")
 			} else {
@@ -194,7 +189,7 @@ func (p *Provider) encode(req api.Request) (*chatRequest, error) {
 			switch {
 			case len(text) > 0:
 				msg.Content = strings.Join(text, "\n\n")
-			case len(called) == 0:
+			case len(calls) == 0:
 				msg.Content = emptyMessage
 			}
 			out.Messages = append(out.Messages, msg)

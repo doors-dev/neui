@@ -33,6 +33,10 @@ func TestConformLive(t *testing.T) {
 	conform.RunLive(t, conformAdapter())
 }
 
+func TestLiveCross(t *testing.T) {
+	conform.RunLiveCross(t, conformAdapter())
+}
+
 func TestLiveV4ProReadsNoImages(t *testing.T) {
 	if os.Getenv("DEEPSEEK_API_KEY") == "" {
 		t.Skip("DEEPSEEK_API_KEY is not set")

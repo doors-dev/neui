@@ -175,10 +175,16 @@ func TestEncodeResultsPairPositionally(t *testing.T) {
 		assistant(api.ContentToolUse{ID: "c1", Name: "now"}, api.ContentToolUse{Name: "now"}, api.ContentToolUse{ID: "c3"}),
 		user(text("first")),
 		user(api.ContentToolResult{ID: "c1", Content: api.UserContents{text("late")}}, api.ContentToolResult{Content: api.UserContents{text("no id")}}),
+		assistant(api.ContentToolUse{Name: "now"}),
+		user(api.ContentToolResult{Content: api.UserContents{text("no id")}}),
 	)
 	want := `[{"role":"user","content":"[content omitted]"},` +
-		`{"role":"assistant","content":"[content omitted]\n\n[content omitted]","tool_calls":[{"id":"c1","type":"function","function":{"name":"now","arguments":"{}"}}]},` +
-		`{"role":"user","content":"first"},{"role":"user","content":"[content omitted]\n\n[content omitted]"}]`
+		`{"role":"assistant","content":null,"tool_calls":[{"id":"c1","type":"function","function":{"name":"now","arguments":"{}"}},` +
+		`{"id":"` + lib.CallID("") + `","type":"function","function":{"name":"now","arguments":"{}"}},` +
+		`{"id":"c3","type":"function","function":{"name":"` + lib.CallName("") + `","arguments":"{}"}}]},` +
+		`{"role":"user","content":"first"},{"role":"user","content":"[content omitted]\n\n[content omitted]"},` +
+		`{"role":"assistant","content":null,"tool_calls":[{"id":"` + lib.CallID("") + `","type":"function","function":{"name":"now","arguments":"{}"}}]},` +
+		`{"role":"tool","content":"no id","tool_call_id":"` + lib.CallID("") + `"}]`
 	if got != want {
 		t.Fatalf("messages\n%s\nwant\n%s", got, want)
 	}
@@ -238,12 +244,12 @@ func TestEncodeMedia(t *testing.T) {
 }
 
 func TestEncodeNotesOtherBlocks(t *testing.T) {
-	opaque := api.ContentOpaque{Kind: "web_search_call", Data: json.RawMessage(`{"x":1}`)}
+	opaque := api.ContentOpaque{Kind: "gpt.web_search_call", Data: json.RawMessage(`{"type":"web_search_call"}`)}
 	got := messagesJSON(t, provider(t),
 		user(api.ContentToolUse{ID: "c1", Name: "now"}, opaque),
 		assistant(opaque, api.ContentToolResult{ID: "c1"}),
 	)
-	if got != `[{"role":"user","content":"[content omitted]\n\n[content omitted]"},{"role":"assistant","content":"[content omitted]\n\n[content omitted]"}]` {
+	if got != `[{"role":"user","content":"[content omitted]"},{"role":"assistant","content":"[content omitted]"}]` {
 		t.Fatalf("messages %s", got)
 	}
 }

@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 
@@ -30,7 +31,7 @@ const (
 	docErrors   = "https://platform.claude.com/docs/en/api/errors"
 	docVision   = "https://platform.claude.com/docs/en/build-with-claude/vision"
 	docPDF      = "https://platform.claude.com/docs/en/build-with-claude/pdf-support"
-	docModels   = "https://platform.claude.com/docs/en/about-claude/models/overview"
+	docBinding  = "https://platform.claude.com/docs/en/build-with-claude/preserved-thinking/prefix-checks"
 )
 
 func TestConform(t *testing.T) {
@@ -42,31 +43,20 @@ func conformAdapter() conform.Adapter {
 	for _, m := range []api.Model{Fable51, Opus55, Sonnet55, Haiku55, Sonnet5} {
 		ceiling[m.Name] = 128_000
 	}
-	ceiling[Haiku45.Name] = 64_000
 	overCeiling := func(model string) func(conform.Params) bool {
 		return func(p conform.Params) bool { return p.MaxTokens == ceiling[model]+1 }
 	}
 	rules := []conform.Rule{{
-		Model:  "haiku-4-5",
-		When:   func(p conform.Params) bool { return p.Effort != "" && p.Effort != conform.EffortOff },
-		Want:   conform.RefuseNew,
-		Source: docModels,
+		Carry:  map[string]any{"/thinking": map[string]any{"type": "adaptive", "block_binding": map[string]any{"prefix_mismatch_behavior": "drop_block"}}},
+		Source: docBinding,
 	}}
 	for _, m := range []string{"opus-5-5", "sonnet-5-5", "fable-5-1"} {
-		rules = append(rules,
-			conform.Rule{
-				Model:  m,
-				When:   conform.Params.Forced,
-				Want:   conform.RefuseLocal,
-				Source: docErrors + "#forced-tool-use-not-supported",
-			},
-			conform.Rule{
-				Model:  m,
-				When:   func(p conform.Params) bool { return p.Effort == conform.EffortOff },
-				Want:   conform.RefuseNew,
-				Source: docThinking + "#configuring-thinking",
-			},
-		)
+		rules = append(rules, conform.Rule{
+			Model:  m,
+			When:   conform.Params.Forced,
+			Want:   conform.RefuseLocal,
+			Source: docErrors + "#forced-tool-use-not-supported",
+		})
 	}
 	for name := range ceiling {
 		rules = append(rules, conform.Rule{
@@ -79,7 +69,7 @@ func conformAdapter() conform.Adapter {
 	rules = append(rules,
 		conform.Rule{
 			When:   func(p conform.Params) bool { return p.Effort == conform.EffortOff },
-			Carry:  map[string]any{"/thinking/type": "disabled"},
+			Carry:  map[string]any{"/output_config/effort": "low"},
 			Source: docThinking,
 		},
 		conform.Rule{
@@ -102,7 +92,7 @@ func conformAdapter() conform.Adapter {
 	)
 	return conform.Adapter{
 		Name:   providerName,
-		Models: []api.Model{Fable51, Opus55, Sonnet55, Haiku55, Sonnet5, Haiku45},
+		Models: []api.Model{Fable51, Opus55, Sonnet55, Haiku55, Sonnet5},
 		New: func(base string, m api.Model, p conform.Params) (api.Provider, error) {
 			key := p.Key
 			if key == "" {
@@ -112,7 +102,7 @@ func conformAdapter() conform.Adapter {
 			switch p.Effort {
 			case "":
 			case conform.EffortOff:
-				opts = append(opts, WithThinking(Thinking{Type: ThinkingDisabled}))
+				opts = append(opts, WithEffort(EffortLow))
 			default:
 				opts = append(opts, WithEffort(Effort(p.Effort)))
 			}
@@ -123,7 +113,7 @@ func conformAdapter() conform.Adapter {
 		},
 		Wire: map[string]string{
 			"effort":     "/output_config/effort",
-			"off":        "/thinking/type",
+			"off":        "/output_config/effort",
 			"choice":     "/tool_choice",
 			"max_tokens": "/max_tokens",
 		},
@@ -134,15 +124,32 @@ func conformAdapter() conform.Adapter {
 			Event:   "/components/schemas/MessageStreamEvent",
 			Error:   "/components/schemas/ErrorResponse",
 			Version: "anthropic-version",
+			Accept: []conform.Accept{{
+				At: "/components/schemas/ThinkingConfigAdaptive",
+				Also: map[string]any{
+					"type": "object", "additionalProperties": false, "required": []any{"type"},
+					"properties": map[string]any{
+						"type":    map[string]any{"const": "adaptive"},
+						"display": map[string]any{"anyOf": []any{map[string]any{"$ref": "#/components/schemas/ThinkingDisplayMode"}, map[string]any{"type": "null"}}},
+						"block_binding": map[string]any{
+							"type": "object", "additionalProperties": false, "required": []any{"prefix_mismatch_behavior"},
+							"properties": map[string]any{"prefix_mismatch_behavior": map[string]any{"enum": []any{"error", "drop_block"}}},
+						},
+					},
+				},
+				Source: docBinding,
+			}},
 		},
-		Render: renderClaude,
-		Errors: claudeErrors(),
-		Rules:  rules,
-		Signed: true,
+		Render:     renderClaude,
+		Messages:   "/messages",
+		CrossCheck: crossCheck,
+		Errors:     claudeErrors(),
+		Rules:      rules,
+		Signed:     true,
 		Live: conform.Live{
 			Env:    "ANTHROPIC_API_KEY",
-			Model:  Haiku45,
-			Params: conform.Params{MaxTokens: 64},
+			Model:  Haiku55,
+			Params: conform.Params{MaxTokens: 1024, Effort: conform.EffortLow},
 			Base:   defaultBaseURL,
 			Count:  "/v1/messages/count_tokens",
 			Strip:  []string{"/max_tokens", "/stream", "/stop_sequences", "/temperature", "/top_p", "/top_k"},
@@ -244,5 +251,37 @@ func claudeErrors() []conform.ErrorCase {
 		{Name: "unparseable", Status: 502, Body: "<html>bad gateway</html>", Want: api.CodeNetwork, Source: docErrors},
 		{Name: "in-stream-overloaded", Stream: "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_01\",\"model\":\"m\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}}\n\nevent: error\ndata: {\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\",\"message\":\"Overloaded\"}}\n\n", Want: api.CodeBusy, Source: docErrors + "#errors-during-streaming"},
 		{Name: "in-stream-too-large", Stream: "event: error\ndata: {\"type\":\"error\",\"error\":{\"type\":\"request_too_large\",\"message\":\"too large\"}}\n\n", Want: api.CodeTooLarge, Source: docErrors + "#errors-during-streaming"},
+	}
+}
+
+func crossCheck(t *testing.T, body []byte) {
+	type block struct {
+		Type      string          `json:"type"`
+		ID        string          `json:"id"`
+		ToolUseID string          `json:"tool_use_id"`
+		Input     json.RawMessage `json:"input"`
+	}
+	var req struct {
+		Messages []struct {
+			Content []block `json:"content"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		t.Fatal(err)
+	}
+	for i, m := range req.Messages {
+		results := true
+		for _, c := range m.Content {
+			if c.Type == "tool_result" && !results {
+				t.Errorf("message %d: a tool_result follows another block", i)
+			}
+			results = results && c.Type == "tool_result"
+			if c.Type == "tool_result" && (i == 0 || !slices.ContainsFunc(req.Messages[i-1].Content, func(u block) bool { return u.Type == "tool_use" && u.ID == c.ToolUseID })) {
+				t.Errorf("message %d: tool_result %q answers no tool_use of the message before it", i, c.ToolUseID)
+			}
+			if c.Type == "tool_use" && !strings.HasPrefix(string(c.Input), "{") {
+				t.Errorf("message %d: tool_use %q input %s is not an object", i, c.ID, c.Input)
+			}
+		}
 	}
 }

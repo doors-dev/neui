@@ -115,7 +115,7 @@ func claudeCorpus() []corpusCase {
 		sseFrame("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"half"}}`) +
 		sseFrame("error", `{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}`)
 	return []corpusCase{
-		{name: "claude/rich", body: rich, want: "7556f02463a7de45775c6ee4929759215ea85df202797b2e05a6e06416a24fa9"},
+		{name: "claude/rich", body: rich, want: "c729ed0afe1abe5c3fa86122b6f6873721b72fbd20c10cf40b6938d6ef357d3c"},
 		{name: "claude/capped", body: capped, want: "081481db4a4cec434aa1c9cda413c915070627863068940e2e22bb28a6a111b9"},
 		{name: "claude/overloaded", body: overloaded, want: "b40830a64c39306adb05c6c353ec1779e5602a646df1c11e1f76b882cab7f435"},
 	}
@@ -165,7 +165,7 @@ func gptCorpus() []corpusCase {
 	failed := sseFrame("response.created", `{"type":"response.created","sequence_number":0,"response":{"id":"resp_3","model":"gpt-5.6-sol","status":"in_progress","usage":null}}`) +
 		sseFrame("error", `{"type":"error","sequence_number":1,"code":"server_error","message":"The server had an error <retry>","param":null}`)
 	return []corpusCase{
-		{name: "gpt/rich", body: rich, want: "2b41fd6f6f50e565746b39a1138be96829e72b6fd77743d055617a58ea90245b"},
+		{name: "gpt/rich", body: rich, want: "d5cd3565857abfbf3c62c562afb3f76391f904889eac46c38a9ae0830bade7c2"},
 		{name: "gpt/incomplete", body: incomplete, want: "62bdd789bda3e14a73c9d5c3e58f0539a48580323a39847f24d2c83d4ab05899"},
 		{name: "gpt/error", body: failed, want: "3c6ce18e7a3a02c0e5f1d00c9fe52e7f06516a07e16e270dd6e83e819902d2ef"},
 	}
@@ -194,7 +194,7 @@ func deepseekCorpus() []corpusCase {
 		sseFrame("", `{"id":"chatcmpl-1","object":"chat.completion.chunk","created":1,"model":"deepseek-v4-pro","choices":[{"index":0,"delta":{"content":" off"},"finish_reason":"length"}],"usage":`+usage+`}`) +
 		"data: [DONE]\n\n"
 	return []corpusCase{
-		{name: "deepseek/rich", body: rich, want: "99a0bd33cfe610214c77fd703c37424ccf9cf395bc304457cf1f676b17ce0553"},
+		{name: "deepseek/rich", body: rich, want: "b4904adcb4a9bf07bd47310ce78a723afbee36c22f3695c3d62654968f0d5b3d"},
 		{name: "deepseek/capped", body: capped, want: "4e76fa5a63950b63253aa8923092acc8d83ea06dc6545aa62b10d3c6a9594d26"},
 	}
 }
@@ -244,8 +244,8 @@ func geminiCorpus() []corpusCase {
 		sseFrame("step.delta", `{"index":0,"delta":{"text":"half","type":"text"},"event_type":"step.delta"}`) +
 		sseFrame("error", `{"error":{"message":"The model is overloaded <retry>.","code":"service_unavailable"},"event_type":"error"}`)
 	return []corpusCase{
-		{name: "gemini/rich", body: rich, want: "45631c22d2d615eef250d5eac615ed8f25a8c68fecc10afd1d585d476441de57"},
-		{name: "gemini/capped", body: capped, want: "b265acbdcc2ce0b4f9bdce28bcf0e01b18cd401fd1a72406bc1289b154406cb5"},
+		{name: "gemini/rich", body: rich, want: "64fd6b3be4c4ba9fc789062c25091d21c524a566db4a7337ed47361e817a79c7"},
+		{name: "gemini/capped", body: capped, want: "76a8839faec728467cfbb3b136d2356c74c9deb5c35aa526dfcca39663b52b4b"},
 		{name: "gemini/error", body: failed, want: "c5c26f8d7b4c5d2c319b7200e3ca6d11e8b777688c5dc78244c97cc7b6abd22d"},
 	}
 }

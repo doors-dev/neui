@@ -25,10 +25,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
 	"neui.dev/api"
+	"neui.dev/provider/lib"
 )
 
 func encodeBody(t *testing.T, model string, set settings, req api.Request) map[string]any {
@@ -76,14 +78,16 @@ func assistant(cs ...api.Content) api.Message {
 	return api.Message{Role: api.RoleAssistant, Content: api.Contents(cs)}
 }
 
-// phaseMeta is what this adapter stores on a text block whose message announced
-// a phase, written the way the stream writes it.
-func phaseMeta(model, phase string) json.RawMessage {
-	raw, err := json.Marshal(messageMeta{Model: model, Phase: phase})
+func phaseMeta(phase string) json.RawMessage {
+	raw, err := json.Marshal(messageMeta{Phase: phase})
 	if err != nil {
 		panic(err)
 	}
-	return raw
+	return lib.Meta(providerName, raw)
+}
+
+func ownMeta(item string) json.RawMessage {
+	return lib.Meta(providerName, json.RawMessage(item))
 }
 
 func TestEncodeInput(t *testing.T) {
@@ -321,7 +325,7 @@ func TestEncodeInput(t *testing.T) {
 					api.ContentReasoning{
 						Model:   "gpt-5.6-sol",
 						Summary: map[int]string{0: "thinking"},
-						Meta:    json.RawMessage(`{"id":"rs_1","type":"reasoning","summary":[{"type":"summary_text","text":"thinking"}],"encrypted_content":"SEALED"}`),
+						Meta:    ownMeta(`{"id":"rs_1","type":"reasoning","summary":[{"type":"summary_text","text":"thinking"}],"encrypted_content":"SEALED"}`),
 					},
 					api.ContentToolUse{ID: "call_a", Name: "t", Input: json.RawMessage(`{}`)},
 				),
@@ -330,7 +334,7 @@ func TestEncodeInput(t *testing.T) {
 				{"type":"function_call","call_id":"call_a","name":"t","arguments":"{}"}]`,
 		},
 		{
-			name: "reasoning with no encoding of its own is left out, and the call it produced still goes",
+			name: "reasoning with no encoding of its own sends nothing, and the call it produced still goes",
 			req: api.Request{Messages: []api.Message{
 				assistant(
 					api.ContentReasoning{Model: "gpt-5.6-sol", Summary: map[int]string{0: "thinking"}},
@@ -344,14 +348,13 @@ func TestEncodeInput(t *testing.T) {
 			// function_call names the reasoning item the service would pair it
 			// with, and the result answering it is in the message after this
 			// one.
-			want: `[{"role":"assistant","content":[{"type":"output_text","text":"[reasoning omitted]"}]},
-				{"type":"function_call","call_id":"call_a","name":"t","arguments":"{}"}]`,
+			want: `[{"type":"function_call","call_id":"call_a","name":"t","arguments":"{}"}]`,
 		},
 		{
 			name: "a reasoning item that cannot travel takes nothing beside it with it",
 			req: api.Request{Messages: []api.Message{
 				assistant(
-					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: json.RawMessage(`{"id":"rs_1","type":"reasoning","encrypted_content":"SEALED"}`)},
+					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: ownMeta(`{"id":"rs_1","type":"reasoning","encrypted_content":"SEALED"}`)},
 					api.ContentToolUse{ID: "call_a", Name: "t", Input: json.RawMessage(`{}`)},
 					api.ContentReasoning{Model: "gpt-5.6-sol", Summary: map[int]string{0: "unsealed"}},
 					api.ContentToolUse{ID: "call_b", Name: "t", Input: json.RawMessage(`{}`)},
@@ -359,47 +362,52 @@ func TestEncodeInput(t *testing.T) {
 			}},
 			want: `[{"id":"rs_1","type":"reasoning","encrypted_content":"SEALED"},
 				{"type":"function_call","call_id":"call_a","name":"t","arguments":"{}"},
-				{"role":"assistant","content":[{"type":"output_text","text":"[reasoning omitted]"}]},
 				{"type":"function_call","call_id":"call_b","name":"t","arguments":"{}"}]`,
 		},
 		{
-			// The last of them has nothing behind it to be its required
-			// following item, which is the one direction of the pairing that
-			// names an id this adapter sends. The two in front of it are each
-			// followed by an item and go.
-			name:     "a reasoning item with nothing following it is not sent",
-			settings: func(s *settings) { s.replay = ReplayAlways },
+			name: "every reasoning item this provider issued goes back, the last of a turn included",
 			req: api.Request{Messages: []api.Message{
 				assistant(
-					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: json.RawMessage(`{"id":"rs_1","type":"reasoning","encrypted_content":"ONE"}`)},
-					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: json.RawMessage(`{"id":"rs_2","type":"reasoning","encrypted_content":"TWO"}`)},
-					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: json.RawMessage(`{"id":"rs_3","type":"reasoning","encrypted_content":"THREE"}`)},
+					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: ownMeta(`{"id":"rs_1","type":"reasoning","encrypted_content":"ONE"}`)},
+					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: ownMeta(`{"id":"rs_2","type":"reasoning","encrypted_content":"TWO"}`)},
+					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: ownMeta(`{"id":"rs_3","type":"reasoning","encrypted_content":"THREE"}`)},
 				),
 			}},
 			want: `[{"id":"rs_1","type":"reasoning","encrypted_content":"ONE"},
-				{"id":"rs_2","type":"reasoning","encrypted_content":"TWO"}]`,
+				{"id":"rs_2","type":"reasoning","encrypted_content":"TWO"},
+				{"id":"rs_3","type":"reasoning","encrypted_content":"THREE"}]`,
 		},
 		{
-			name: "reasoning that only preceded text is left out by default",
+			name: "reasoning that only preceded text goes back",
 			req: api.Request{Messages: []api.Message{
 				assistant(
-					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: json.RawMessage(`{"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"SEALED"}`)},
+					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: ownMeta(`{"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"SEALED"}`)},
 					api.ContentText{Text: "the answer"},
-				),
-			}},
-			want: `[{"role":"assistant","content":[{"type":"output_text","text":"the answer"}]}]`,
-		},
-		{
-			name:     "ReplayAlways keeps it",
-			settings: func(s *settings) { s.replay = ReplayAlways },
-			req: api.Request{Messages: []api.Message{
-				assistant(
-					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: json.RawMessage(`{"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"SEALED"}`)},
-					api.ContentText{Text: "the answer"},
+					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: ownMeta(`{"id":"rs_2","type":"reasoning","summary":[],"encrypted_content":"LAST"}`)},
 				),
 			}},
 			want: `[{"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"SEALED"},
-				{"role":"assistant","content":[{"type":"output_text","text":"the answer"}]}]`,
+				{"role":"assistant","content":[{"type":"output_text","text":"the answer"}]},
+				{"id":"rs_2","type":"reasoning","summary":[],"encrypted_content":"LAST"}]`,
+		},
+		{
+			name:     "with store on, a reasoning item goes back only when a call or a hosted tool follows it",
+			settings: func(s *settings) { s.store = true },
+			req: api.Request{Messages: []api.Message{
+				assistant(
+					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: ownMeta(`{"id":"rs_1","type":"reasoning","summary":[]}`)},
+					api.ContentText{Text: "looking"},
+					api.ContentToolUse{ID: "call_a", Name: "t", Input: json.RawMessage(`{}`)},
+					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: ownMeta(`{"id":"rs_2","type":"reasoning","summary":[]}`)},
+					api.ContentText{Text: "the answer"},
+				),
+				user(api.ContentToolResult{ID: "call_a", Content: api.UserContents{api.ContentText{Text: "ok"}}}),
+			}},
+			want: `[{"id":"rs_1","type":"reasoning","summary":[]},
+				{"role":"assistant","content":[{"type":"output_text","text":"looking"}]},
+				{"type":"function_call","call_id":"call_a","name":"t","arguments":"{}"},
+				{"role":"assistant","content":[{"type":"output_text","text":"the answer"}]},
+				{"type":"function_call_output","call_id":"call_a","output":[{"type":"input_text","text":"ok"}]}]`,
 		},
 		{
 			// The reasoning items are the whole of what this mode removes. A
@@ -411,12 +419,12 @@ func TestEncodeInput(t *testing.T) {
 			req: api.Request{Messages: []api.Message{
 				user(api.ContentText{Text: "weather?"}),
 				assistant(
-					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: json.RawMessage(`{"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"SEALED"}`)},
+					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: ownMeta(`{"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"SEALED"}`)},
 					api.ContentToolUse{ID: "call_a", Name: "get_weather", Input: json.RawMessage(`{"city":"Paris"}`)},
 				),
 				user(api.ContentToolResult{ID: "call_a", Content: api.UserContents{api.ContentText{Text: "18C"}}}),
 				assistant(
-					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: json.RawMessage(`{"id":"rs_2","type":"reasoning","summary":[],"encrypted_content":"ALSO"}`)},
+					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: ownMeta(`{"id":"rs_2","type":"reasoning","summary":[],"encrypted_content":"ALSO"}`)},
 					api.ContentText{Text: "It is 18C."},
 				),
 			}},
@@ -426,32 +434,20 @@ func TestEncodeInput(t *testing.T) {
 				{"role":"assistant","content":[{"type":"output_text","text":"It is 18C."}]}]`,
 		},
 		{
-			name:     "reasoning at the end of a turn has no following item to be paired with",
-			settings: func(s *settings) { s.replay = ReplayAlways },
-			req: api.Request{Messages: []api.Message{
-				assistant(
-					api.ContentText{Text: "so far"},
-					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: json.RawMessage(`{"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"SEALED"}`)},
-				),
-			}},
-			want: `[{"role":"assistant","content":[{"type":"output_text","text":"so far"}]}]`,
-		},
-		{
-			name: "reasoning carrying neither a summary nor an encoding of its own leaves its note, and its call goes",
+			name: "reasoning carrying neither a summary nor an encoding of its own sends nothing, and its call goes",
 			req: api.Request{Messages: []api.Message{
 				assistant(
 					api.ContentReasoning{Model: "gpt-5.6-sol"},
 					api.ContentToolUse{ID: "call_a", Name: "t", Input: json.RawMessage(`{}`)},
 				),
 			}},
-			want: `[{"role":"assistant","content":[{"type":"output_text","text":"[reasoning omitted]"}]},
-				{"type":"function_call","call_id":"call_a","name":"t","arguments":"{}"}]`,
+			want: `[{"type":"function_call","call_id":"call_a","name":"t","arguments":"{}"}]`,
 		},
 		{
 			// A block with nothing to send becomes no item at all, so the note
 			// standing for it is a part like any other and the text either side
 			// of it stays one message.
-			name: "a reasoning block with nothing to send leaves a part rather than splitting the message",
+			name: "a reasoning block with nothing to send leaves the text either side of it one message",
 			req: api.Request{Messages: []api.Message{
 				assistant(
 					api.ContentText{Text: "so far"},
@@ -461,7 +457,6 @@ func TestEncodeInput(t *testing.T) {
 			}},
 			want: `[{"role":"assistant","content":[
 				{"type":"output_text","text":"so far"},
-				{"type":"output_text","text":"[reasoning omitted]"},
 				{"type":"output_text","text":"the answer"}]}]`,
 		},
 		{
@@ -471,9 +466,9 @@ func TestEncodeInput(t *testing.T) {
 			name: "a reasoning item replays whatever model stamped it, and whether it was stamped at all",
 			req: api.Request{Messages: []api.Message{
 				assistant(
-					api.ContentReasoning{Model: "gpt-5.1", Meta: json.RawMessage(`{"id":"rs_1","type":"reasoning","encrypted_content":"SEALED"}`)},
+					api.ContentReasoning{Model: "gpt-5.1", Meta: ownMeta(`{"id":"rs_1","type":"reasoning","encrypted_content":"SEALED"}`)},
 					api.ContentToolUse{ID: "call_a", Name: "t", Input: json.RawMessage(`{}`)},
-					api.ContentReasoning{Meta: json.RawMessage(`{"id":"rs_2","type":"reasoning","encrypted_content":"ALSO"}`)},
+					api.ContentReasoning{Meta: ownMeta(`{"id":"rs_2","type":"reasoning","encrypted_content":"ALSO"}`)},
 					api.ContentToolUse{ID: "call_b", Name: "t", Input: json.RawMessage(`{}`)},
 				),
 			}},
@@ -483,26 +478,23 @@ func TestEncodeInput(t *testing.T) {
 				{"type":"function_call","call_id":"call_b","name":"t","arguments":"{}"}]`,
 		},
 		{
-			// The phase is this adapter's own invention rather than something the
-			// service issued, and it labels the message one model wrote, so it is
-			// the one replayed thing a model stamp still decides.
-			name: "a phase another model produced is not replayed",
+			name: "a phase replays whichever model of this provider produced it",
 			req: api.Request{Messages: []api.Message{
 				assistant(
-					api.ContentText{Text: "the answer", Meta: phaseMeta("gpt-5.1", "commentary")},
+					api.ContentText{Text: "the answer", Meta: phaseMeta("commentary")},
 				),
 			}},
-			want: `[{"role":"assistant","content":[{"type":"output_text","text":"the answer"}]}]`,
+			want: `[{"role":"assistant","content":[{"type":"output_text","text":"the answer"}],"phase":"commentary"}]`,
 		},
 		{
-			name:  "a gateway spelling is another model and does not label the message",
+			name:  "a phase replays under a gateway spelling of the model too",
 			model: "openai/GPT-5.6-sol",
 			req: api.Request{Messages: []api.Message{
 				assistant(
-					api.ContentText{Text: "the answer", Meta: phaseMeta("gpt-5.6-sol", "commentary")},
+					api.ContentText{Text: "the answer", Meta: phaseMeta("commentary")},
 				),
 			}},
-			want: `[{"role":"assistant","content":[{"type":"output_text","text":"the answer"}]}]`,
+			want: `[{"role":"assistant","content":[{"type":"output_text","text":"the answer"}],"phase":"commentary"}]`,
 		},
 		{
 			// The label is on the block, so it travels with it wherever the block
@@ -510,9 +502,9 @@ func TestEncodeInput(t *testing.T) {
 			name: "phase labels the message the block it is on becomes",
 			req: api.Request{Messages: []api.Message{
 				assistant(
-					api.ContentText{Text: "let me look", Meta: phaseMeta("gpt-5.6-sol", "commentary")},
+					api.ContentText{Text: "let me look", Meta: phaseMeta("commentary")},
 					api.ContentToolUse{ID: "call_a", Name: "t", Input: json.RawMessage(`{}`)},
-					api.ContentText{Text: "the answer", Meta: phaseMeta("gpt-5.6-sol", "final_answer")},
+					api.ContentText{Text: "the answer", Meta: phaseMeta("final_answer")},
 				),
 			}},
 			want: `[{"role":"assistant","content":[{"type":"output_text","text":"let me look"}],"phase":"commentary"},
@@ -525,8 +517,8 @@ func TestEncodeInput(t *testing.T) {
 			name: "a change of phase inside a run ends the message",
 			req: api.Request{Messages: []api.Message{
 				assistant(
-					api.ContentText{Text: "let me look", Meta: phaseMeta("gpt-5.6-sol", "commentary")},
-					api.ContentText{Text: "still looking", Meta: phaseMeta("gpt-5.6-sol", "commentary")},
+					api.ContentText{Text: "let me look", Meta: phaseMeta("commentary")},
+					api.ContentText{Text: "still looking", Meta: phaseMeta("commentary")},
 					api.ContentText{Text: "the answer"},
 				),
 			}},
@@ -554,7 +546,7 @@ func TestEncodeInput(t *testing.T) {
 			req: api.Request{Messages: []api.Message{
 				assistant(
 					api.ContentText{Text: "let me search"},
-					api.ContentOpaque{Model: "gpt-5.6-sol", Kind: "web_search_call", Data: json.RawMessage(`{"id":"ws_1","type":"web_search_call","status":"completed"}`)},
+					api.ContentOpaque{Model: "gpt-5.6-sol", Kind: "gpt.web_search_call", Data: json.RawMessage(`{"id":"ws_1","type":"web_search_call","status":"completed"}`)},
 					api.ContentText{Text: "the answer"},
 				),
 			}},
@@ -571,7 +563,7 @@ func TestEncodeInput(t *testing.T) {
 				assistant(
 					api.ContentOpaque{
 						Model:  "gpt-5.6-sol",
-						Kind:   "code_interpreter_call",
+						Kind:   "gpt.code_interpreter_call",
 						Data:   json.RawMessage(`{"id":"ci_1","type":"code_interpreter_call","code":"print(1)"}`),
 						Deltas: []string{"print(", "1)"},
 					},
@@ -586,75 +578,69 @@ func TestEncodeInput(t *testing.T) {
 			name: "a hosted tool call carries the reasoning in front of it",
 			req: api.Request{Messages: []api.Message{
 				assistant(
-					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: json.RawMessage(`{"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"SEALED"}`)},
-					api.ContentOpaque{Model: "gpt-5.6-sol", Kind: "web_search_call", Data: json.RawMessage(`{"id":"ws_1","type":"web_search_call","status":"completed"}`)},
+					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: ownMeta(`{"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"SEALED"}`)},
+					api.ContentOpaque{Model: "gpt-5.6-sol", Kind: "gpt.web_search_call", Data: json.RawMessage(`{"id":"ws_1","type":"web_search_call","status":"completed"}`)},
 				),
 			}},
 			want: `[{"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"SEALED"},
 				{"id":"ws_1","type":"web_search_call","status":"completed"}]`,
 		},
 		{
-			name: "a Claude signature as meta is another provider's and leaves a note, and the call goes",
+			name: "a Claude signature as meta is another provider's and sends nothing, and the call goes",
 			req: api.Request{Messages: []api.Message{
 				assistant(
-					api.ContentReasoning{Model: "claude-opus-5", Thoughts: map[int]string{0: "theirs"}, Meta: json.RawMessage(`"EqQBCkYIBRgC"`)},
+					api.ContentReasoning{Model: "claude-opus-5", Thoughts: map[int]string{0: "theirs"}, Meta: lib.Meta("claude", json.RawMessage(`"EqQBCkYIBRgC"`))},
 					api.ContentToolUse{ID: "call_a", Name: "t", Input: json.RawMessage(`{}`)},
 				),
 			}},
-			want: `[{"role":"assistant","content":[{"type":"output_text","text":"[reasoning omitted]"}]},
-				{"type":"function_call","call_id":"call_a","name":"t","arguments":"{}"}]`,
+			want: `[{"type":"function_call","call_id":"call_a","name":"t","arguments":"{}"}]`,
 		},
 		{
 			name: "a redacted_thinking block as meta is another provider's",
 			req: api.Request{Messages: []api.Message{
 				assistant(
-					api.ContentReasoning{Model: "claude-opus-5", Meta: json.RawMessage(`{"type":"redacted_thinking","data":"EvwBCkYIA"}`)},
+					api.ContentReasoning{Model: "claude-opus-5", Meta: lib.Meta("claude", json.RawMessage(`{"type":"redacted_thinking","data":"EvwBCkYIA"}`))},
 					api.ContentToolUse{ID: "call_a", Name: "t", Input: json.RawMessage(`{}`)},
 				),
 			}},
-			want: `[{"role":"assistant","content":[{"type":"output_text","text":"[reasoning omitted]"}]},
-				{"type":"function_call","call_id":"call_a","name":"t","arguments":"{}"}]`,
+			want: `[{"type":"function_call","call_id":"call_a","name":"t","arguments":"{}"}]`,
 		},
 		{
-			name: "a reasoning item without an rs_ id is not this service's",
+			name: "a reasoning item stored before Meta named its provider is not this provider's",
 			req: api.Request{Messages: []api.Message{
 				assistant(
 					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: json.RawMessage(`{"id":"x_1","type":"reasoning","encrypted_content":"SEALED"}`)},
 					api.ContentToolUse{ID: "call_a", Name: "t", Input: json.RawMessage(`{}`)},
 				),
 			}},
-			want: `[{"role":"assistant","content":[{"type":"output_text","text":"[reasoning omitted]"}]},
-				{"type":"function_call","call_id":"call_a","name":"t","arguments":"{}"}]`,
+			want: `[{"type":"function_call","call_id":"call_a","name":"t","arguments":"{}"}]`,
 		},
 		{
-			name: "Messages API server tool blocks are another provider's and leave notes",
+			name: "Messages API server tool blocks are another provider's and send nothing",
 			req: api.Request{Messages: []api.Message{
 				assistant(
-					api.ContentOpaque{Model: "claude-opus-5", Kind: "server_tool_use", Data: json.RawMessage(`{"type":"server_tool_use","id":"srvtoolu_1","name":"web_search","input":{"query":"q"}}`)},
-					api.ContentOpaque{Model: "claude-opus-5", Kind: "web_search_tool_result", Data: json.RawMessage(`{"type":"web_search_tool_result","tool_use_id":"srvtoolu_1","content":[]}`)},
+					api.ContentOpaque{Model: "claude-opus-5", Kind: "claude.server_tool_use", Data: json.RawMessage(`{"type":"server_tool_use","id":"srvtoolu_1","name":"web_search","input":{"query":"q"}}`)},
+					api.ContentOpaque{Model: "claude-opus-5", Kind: "claude.web_search_tool_result", Data: json.RawMessage(`{"type":"web_search_tool_result","tool_use_id":"srvtoolu_1","content":[]}`)},
 					api.ContentText{Text: "the answer"},
 				),
 			}},
-			want: `[{"role":"assistant","content":[
-				{"type":"output_text","text":"[content omitted]"},
-				{"type":"output_text","text":"[content omitted]"},
-				{"type":"output_text","text":"the answer"}]}]`,
+			want: `[{"role":"assistant","content":[{"type":"output_text","text":"the answer"}]}]`,
 		},
 		{
 			name: "an opaque payload whose type is not its kind is not this service's",
 			req: api.Request{Messages: []api.Message{
 				assistant(
-					api.ContentOpaque{Model: "gpt-5.6-sol", Kind: "web_search_call", Data: json.RawMessage(`{"id":"ci_1","type":"code_interpreter_call"}`)},
+					api.ContentOpaque{Model: "gpt-5.6-sol", Kind: "gpt.web_search_call", Data: json.RawMessage(`{"id":"ci_1","type":"code_interpreter_call"}`)},
 				),
 			}},
-			want: `[{"role":"assistant","content":[{"type":"output_text","text":"[content omitted]"}]}]`,
+			want: `[]`,
 		},
 		{
 			name:  "a reasoning item another model of the family made goes back byte for byte",
 			model: "gpt-5.5",
 			req: api.Request{Messages: []api.Message{
 				assistant(
-					api.ContentReasoning{Model: "gpt-5", Meta: json.RawMessage(`{"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"SEALED"}`)},
+					api.ContentReasoning{Model: "gpt-5", Meta: ownMeta(`{"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"SEALED"}`)},
 					api.ContentToolUse{ID: "call_a", Name: "t", Input: json.RawMessage(`{}`)},
 				),
 			}},
@@ -662,22 +648,21 @@ func TestEncodeInput(t *testing.T) {
 				{"type":"function_call","call_id":"call_a","name":"t","arguments":"{}"}]`,
 		},
 		{
-			name: "with store off a reasoning item with no encrypted content leaves a note, and the call goes",
+			name: "with store off a reasoning item with no encrypted content sends nothing, and the call goes",
 			req: api.Request{Messages: []api.Message{
 				assistant(
-					api.ContentReasoning{Model: "gpt-5.6-sol", Summary: map[int]string{0: "thinking"}, Meta: json.RawMessage(`{"id":"rs_1","type":"reasoning","summary":[{"type":"summary_text","text":"thinking"}]}`)},
+					api.ContentReasoning{Model: "gpt-5.6-sol", Summary: map[int]string{0: "thinking"}, Meta: ownMeta(`{"id":"rs_1","type":"reasoning","summary":[{"type":"summary_text","text":"thinking"}]}`)},
 					api.ContentToolUse{ID: "call_a", Name: "t", Input: json.RawMessage(`{}`)},
 				),
 			}},
-			want: `[{"role":"assistant","content":[{"type":"output_text","text":"[reasoning omitted]"}]},
-				{"type":"function_call","call_id":"call_a","name":"t","arguments":"{}"}]`,
+			want: `[{"type":"function_call","call_id":"call_a","name":"t","arguments":"{}"}]`,
 		},
 		{
 			name:     "with store on a reasoning item replays by id",
 			settings: func(s *settings) { s.store = true },
 			req: api.Request{Messages: []api.Message{
 				assistant(
-					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: json.RawMessage(`{"id":"rs_1","type":"reasoning","summary":[]}`)},
+					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: ownMeta(`{"id":"rs_1","type":"reasoning","summary":[]}`)},
 					api.ContentToolUse{ID: "call_a", Name: "t", Input: json.RawMessage(`{}`)},
 				),
 			}},
@@ -690,7 +675,7 @@ func TestEncodeInput(t *testing.T) {
 			req: api.Request{Messages: []api.Message{
 				assistant(
 					api.ContentText{Text: "so far"},
-					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: json.RawMessage(`{"id":"rs_1","type":"reasoning","summary":[]}`)},
+					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: ownMeta(`{"id":"rs_1","type":"reasoning","summary":[]}`)},
 				),
 			}},
 			want: `[{"role":"assistant","content":[{"type":"output_text","text":"so far"}]}]`,
@@ -699,8 +684,8 @@ func TestEncodeInput(t *testing.T) {
 			name: "a commentary preamble between reasoning and its call keeps the pairing",
 			req: api.Request{Messages: []api.Message{
 				assistant(
-					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: json.RawMessage(`{"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"SEALED"}`)},
-					api.ContentText{Text: "let me look", Meta: phaseMeta("gpt-5.6-sol", "commentary")},
+					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: ownMeta(`{"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"SEALED"}`)},
+					api.ContentText{Text: "let me look", Meta: phaseMeta("commentary")},
 					api.ContentToolUse{ID: "call_a", Name: "t", Input: json.RawMessage(`{}`)},
 				),
 			}},
@@ -709,28 +694,30 @@ func TestEncodeInput(t *testing.T) {
 				{"type":"function_call","call_id":"call_a","name":"t","arguments":"{}"}]`,
 		},
 		{
-			name: "a reasoning item whose next reasoning item comes before any call is dropped",
+			name: "two reasoning items before one call both go back",
 			req: api.Request{Messages: []api.Message{
 				assistant(
-					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: json.RawMessage(`{"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"ONE"}`)},
-					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: json.RawMessage(`{"id":"rs_2","type":"reasoning","summary":[],"encrypted_content":"TWO"}`)},
+					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: ownMeta(`{"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"ONE"}`)},
+					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: ownMeta(`{"id":"rs_2","type":"reasoning","summary":[],"encrypted_content":"TWO"}`)},
 					api.ContentText{Text: "let me look"},
 					api.ContentToolUse{ID: "call_a", Name: "t", Input: json.RawMessage(`{}`)},
 				),
 			}},
-			want: `[{"id":"rs_2","type":"reasoning","summary":[],"encrypted_content":"TWO"},
+			want: `[{"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"ONE"},
+				{"id":"rs_2","type":"reasoning","summary":[],"encrypted_content":"TWO"},
 				{"role":"assistant","content":[{"type":"output_text","text":"let me look"}]},
 				{"type":"function_call","call_id":"call_a","name":"t","arguments":"{}"}]`,
 		},
 		{
-			name: "reasoning last in a turn is not sent by default",
+			name: "reasoning last in a turn goes back",
 			req: api.Request{Messages: []api.Message{
 				assistant(
 					api.ContentToolUse{ID: "call_a", Name: "t", Input: json.RawMessage(`{}`)},
-					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: json.RawMessage(`{"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"SEALED"}`)},
+					api.ContentReasoning{Model: "gpt-5.6-sol", Meta: ownMeta(`{"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"SEALED"}`)},
 				),
 			}},
-			want: `[{"type":"function_call","call_id":"call_a","name":"t","arguments":"{}"}]`,
+			want: `[{"type":"function_call","call_id":"call_a","name":"t","arguments":"{}"},
+				{"id":"rs_1","type":"reasoning","summary":[],"encrypted_content":"SEALED"}]`,
 		},
 		{
 			name: "a user image the service refuses by type and a user document with no type leave notes",
@@ -787,18 +774,15 @@ func TestEncodeInput(t *testing.T) {
 				{"type":"output_text","text":"the answer"}]}]`,
 		},
 		{
-			name: "reasoning and a payload in a user turn belong to the assistant turn that produced them",
+			name: "reasoning and a payload in a user turn send nothing",
 			req: api.Request{Messages: []api.Message{
 				user(
 					api.ContentReasoning{Model: "gpt-5.6-sol", Thoughts: map[int]string{0: "theirs"}},
-					api.ContentOpaque{Model: "gpt-5.6-sol", Kind: "web_search_call", Data: json.RawMessage(`{"id":"ws_1","type":"web_search_call","status":"completed"}`)},
+					api.ContentOpaque{Model: "gpt-5.6-sol", Kind: "gpt.web_search_call", Data: json.RawMessage(`{"id":"ws_1","type":"web_search_call","status":"completed"}`)},
 					api.ContentText{Text: "carry on"},
 				),
 			}},
-			want: `[{"role":"user","content":[
-				{"type":"input_text","text":"[reasoning omitted]"},
-				{"type":"input_text","text":"[content omitted]"},
-				{"type":"input_text","text":"carry on"}]}]`,
+			want: `[{"role":"user","content":[{"type":"input_text","text":"carry on"}]}]`,
 		},
 	}
 
@@ -812,10 +796,66 @@ func TestEncodeInput(t *testing.T) {
 			if model == "" {
 				model = testModel
 			}
-			body := encodeBody(t, model, set, tc.req)
-			sameJSON(t, body["input"], tc.want)
+			req, want := paired(t, tc.req, tc.want)
+			body := encodeBody(t, model, set, req)
+			sameJSON(t, body["input"], want)
 		})
 	}
+}
+
+// paired completes a case written around one item: a call no later result
+// answers gets a result in a message of its own after the request, and a result
+// no earlier call made gets a call in a message of its own before it, with the
+// items they encode to around want.
+func paired(t *testing.T, req api.Request, want string) (api.Request, string) {
+	t.Helper()
+	var before, after api.Contents
+	var head, tail []any
+	for i, m := range req.Messages {
+		for j, c := range m.Content {
+			switch c := c.(type) {
+			case api.ContentToolUse:
+				answered := false
+				for k, n := range req.Messages[i:] {
+					for l, d := range n.Content {
+						r, is := d.(api.ContentToolResult)
+						answered = answered || is && r.ID == c.ID && (k > 0 || l > j)
+					}
+				}
+				if !answered {
+					after = append(after, api.ContentToolResult{ID: c.ID, Content: api.UserContents{api.ContentText{Text: "ok"}}})
+					tail = append(tail, map[string]any{"type": "function_call_output", "call_id": lib.CallID(c.ID), "output": []any{map[string]any{"type": "input_text", "text": "ok"}}})
+				}
+			case api.ContentToolResult:
+				called := false
+				for k, n := range req.Messages[:i+1] {
+					for l, d := range n.Content {
+						u, is := d.(api.ContentToolUse)
+						called = called || is && u.ID == c.ID && (k < i || l < j)
+					}
+				}
+				if !called {
+					before = append(before, api.ContentToolUse{ID: c.ID, Name: "t"})
+					head = append(head, map[string]any{"type": "function_call", "call_id": lib.CallID(c.ID), "name": "t", "arguments": "{}"})
+				}
+			}
+		}
+	}
+	if len(before) > 0 {
+		req.Messages = append([]api.Message{assistant(before...)}, req.Messages...)
+	}
+	if len(after) > 0 {
+		req.Messages = append(slices.Clone(req.Messages), user(after...))
+	}
+	var items []any
+	if err := json.Unmarshal([]byte(want), &items); err != nil {
+		t.Fatalf("bad want JSON: %v", err)
+	}
+	out, err := json.Marshal(append(append(append([]any{}, head...), items...), tail...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return req, string(out)
 }
 
 func TestEncodeTopLevel(t *testing.T) {
@@ -1245,20 +1285,28 @@ func TestModelLimits(t *testing.T) {
 func TestOpaqueKindsTheStreamEmitsReplay(t *testing.T) {
 	for _, kind := range []string{
 		"file_search_call", "web_search_call", "code_interpreter_call",
-		"image_generation_call", "mcp_call", "mcp_list_tools", "custom_tool_call",
+		"image_generation_call", "mcp_call", "mcp_list_tools", "custom_tool_call", "compaction",
 	} {
-		if !ownItem(json.RawMessage(`{"id":"x_1","type":"`+kind+`"}`), kind) {
-			t.Errorf("opaque kind %q the stream emits is not in the replay allowlist", kind)
+		item := `{"type":"` + kind + `"}`
+		body := encodeBody(t, testModel, defaultSettings(), api.Request{Messages: []api.Message{
+			assistant(api.ContentOpaque{Kind: providerName + "." + kind, Data: json.RawMessage(item)}),
+		}})
+		raw, _ := json.Marshal(body["input"])
+		if string(raw) != `[`+item+`]` {
+			t.Errorf("opaque kind %q the stream emits did not replay: %s", kind, raw)
 		}
 	}
 }
 
-func TestOpaqueItemWithoutIDIsForeign(t *testing.T) {
-	if ownItem(json.RawMessage(`{"type":"compaction","content":"summary"}`), "compaction") {
-		t.Fatal("a compaction block with no id passed as a Responses item")
-	}
-	if !ownItem(json.RawMessage(`{"id":"cmp_1","type":"compaction","encrypted_content":"x"}`), "compaction") {
-		t.Fatal("a compaction item with an id was refused")
+func TestOpaqueKindsOfOtherProvidersSendNothing(t *testing.T) {
+	for _, c := range []api.ContentOpaque{
+		{Kind: "compaction", Data: json.RawMessage(`{"id":"cmp_1","type":"compaction"}`)},
+		{Kind: "claude.compaction", Data: json.RawMessage(`{"type":"compaction"}`)},
+		{Kind: "gpt.compaction", Data: json.RawMessage(`{"type":"web_search_call"}`)},
+		{Kind: "gpt.unknown_call", Data: json.RawMessage(`{"type":"unknown_call"}`)},
+	} {
+		body := encodeBody(t, testModel, defaultSettings(), api.Request{Messages: []api.Message{assistant(c, api.ContentText{Text: "ok"})}})
+		sameJSON(t, body["input"], `[{"role":"assistant","content":[{"type":"output_text","text":"ok"}]}]`)
 	}
 }
 
@@ -1290,7 +1338,6 @@ func TestEncodeLogsOnlyAnUnknownTypeOnce(t *testing.T) {
 			{"type":"input_text","text":"[image omitted]"},
 			{"type":"input_text","text":"[content omitted]"}]},
 			{"role":"assistant","content":[
-			{"type":"output_text","text":"[reasoning omitted]"},
 			{"type":"output_text","text":"ok"}]}]`)
 	}
 	if counts[slog.LevelWarn] != 0 || counts[slog.LevelError] > 1 {
@@ -1376,13 +1423,43 @@ func TestStoredContentTheServiceRefusesIsANote(t *testing.T) {
 	}})
 	sameJSON(t, body["input"], `[
 		{"role":"user","content":[{"type":"input_text","text":"hi"}]},
-		{"role":"assistant","content":[{"type":"output_text","text":"[content omitted]"}]},
-		{"role":"user","content":[{"type":"input_text","text":"[content omitted]"},{"type":"input_text","text":"[content omitted]"}]}
+		{"type":"function_call","call_id":"call_1","name":"`+lib.CallName("")+`","arguments":"{}"},
+		{"type":"function_call_output","call_id":"call_1","output":[{"type":"input_text","text":"72F"}]},
+		{"role":"user","content":[{"type":"input_text","text":"[content omitted]"}]}
 	]`)
 }
 
 func TestEncodeRefusesARequestWithNoMessages(t *testing.T) {
 	if _, err := (&Provider{model: api.Model{Name: testModel}, set: defaultSettings()}).encode(api.Request{}); err == nil || !strings.Contains(err.Error(), "gpt: request has no messages") {
 		t.Fatalf("error %v, want a refusal naming the missing messages", err)
+	}
+}
+
+func TestCallsAndResultsPairByIDInInputOrder(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		msgs []api.Message
+		want string
+	}{
+		{"a result with no call before it is a note", []api.Message{
+			user(api.ContentToolResult{ID: "call_9", Content: api.UserContents{api.ContentText{Text: "x"}}}),
+		}, `[{"role":"user","content":[{"type":"input_text","text":"[content omitted]"}]}]`},
+		{"a call no later result answers is a note", []api.Message{
+			user(api.ContentText{Text: "go"}),
+			assistant(api.ContentToolUse{ID: "call_1", Name: "t"}),
+		}, `[{"role":"user","content":[{"type":"input_text","text":"go"}]},{"role":"assistant","content":[{"type":"output_text","text":"[content omitted]"}]}]`},
+		{"a result before its call in one message is a note, and the call stays unanswered", []api.Message{
+			user(api.ContentToolResult{ID: "call_1", Content: api.UserContents{api.ContentText{Text: "x"}}}, api.ContentToolUse{ID: "call_1", Name: "t"}),
+		}, `[{"role":"user","content":[{"type":"input_text","text":"[content omitted]"},{"type":"input_text","text":"[content omitted]"}]}]`},
+		{"a call in a user message answered two messages later is carried", []api.Message{
+			user(api.ContentText{Text: "go"}, api.ContentToolUse{ID: "call.1:x", Name: "functions.t"}),
+			assistant(api.ContentText{Text: "waiting"}),
+			user(api.ContentToolResult{ID: "call.1:x", Content: api.UserContents{api.ContentText{Text: "x"}}}),
+		}, `[{"role":"user","content":[{"type":"input_text","text":"go"}]},{"type":"function_call","call_id":"` + lib.CallID("call.1:x") + `","name":"functions_t","arguments":"{}"},` +
+			`{"role":"assistant","content":[{"type":"output_text","text":"waiting"}]},{"type":"function_call_output","call_id":"` + lib.CallID("call.1:x") + `","output":[{"type":"input_text","text":"x"}]}]`},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			sameJSON(t, encodeBody(t, testModel, defaultSettings(), api.Request{Messages: c.msgs})["input"], c.want)
+		})
 	}
 }

@@ -84,44 +84,42 @@ func (p *Provider) encode(req api.Request) (*request, error) {
 	}
 	w.GenerationConfig = gc
 
-	discarded := map[string]bool{}
-	for _, m := range req.Messages {
-		for _, c := range m.Content {
-			if r, ok := c.(api.ContentToolResult); ok && r.Error == api.ToolErrJSON {
-				discarded[r.ID] = true
-			}
-		}
-	}
-	names := map[string]string{}
-	noted := map[string]bool{}
-	for _, m := range req.Messages {
-		for _, c := range m.Content {
-			call, ok := c.(api.ContentToolUse)
-			if !ok {
-				continue
-			}
-			if m.Role != api.RoleAssistant || call.Name == "" || call.ID == "" || !discarded[call.ID] && !objectInput(call.Input) {
-				noted[call.ID] = true
-				continue
-			}
-			names[call.ID] = call.Name
-		}
-	}
-	answers := func(r api.ContentToolResult) bool {
-		_, ok := names[r.ID]
-		return r.ID != "" && !noted[r.ID] && ok
-	}
-
 	for i, m := range req.Messages {
 		switch m.Role {
 		case api.RoleUser:
 			var blocks []any
-			for _, c := range m.Content {
-				if r, ok := c.(api.ContentToolResult); ok && answers(r) {
-					w.Input = append(w.Input, resultStep(r, names[r.ID], i))
+			results := 0
+			noted := map[int]bool{}
+			for j, c := range m.Content {
+				r, ok := c.(api.ContentToolResult)
+				if !ok {
+					continue
 				}
+				var called *api.ContentToolUse
+				var by api.Role
+				for k := i; k >= 0 && called == nil; k-- {
+					content := req.Messages[k].Content
+					if k == i {
+						content = content[:j]
+					}
+					for l := len(content) - 1; l >= 0 && called == nil; l-- {
+						if u, is := content[l].(api.ContentToolUse); is && u.ID == r.ID {
+							called, by = &u, req.Messages[k].Role
+						}
+					}
+				}
+				switch {
+				case called == nil:
+					w.Input = append(w.Input, resultStep(r, lib.CallName(""), i))
+				case by == api.RoleAssistant:
+					w.Input = append(w.Input, resultStep(r, lib.CallName(called.Name), i))
+				default:
+					noted[j] = true
+					continue
+				}
+				results++
 			}
-			for _, c := range m.Content {
+			for j, c := range m.Content {
 				switch c := c.(type) {
 				case api.ContentText:
 					blocks = append(blocks, textBlock(c))
@@ -130,22 +128,19 @@ func (p *Provider) encode(req api.Request) (*request, error) {
 				case api.ContentDocument:
 					blocks = append(blocks, documentBlock(c))
 				case api.ContentToolResult:
-					if !answers(c) {
-						blocks = append(blocks, note(c, "the result answers no call this request carries"))
+					if noted[j] {
+						blocks = append(blocks, note(c, "the result answers a call written into a user message"))
 					}
 				case api.ContentToolUse:
 					blocks = append(blocks, note(c, "a call belongs to the model's turn"))
-				case api.ContentReasoning:
-					blocks = append(blocks, note(c, "reasoning belongs to the model's turn"))
-				case api.ContentOpaque:
-					blocks = append(blocks, note(c, "a step the service ran belongs to the model's turn"))
+				case api.ContentReasoning, api.ContentOpaque:
 				default:
 					blocks = append(blocks, textContent{Type: "text", Text: lib.Unknown(providerName, i, c)})
 				}
 			}
 			if len(blocks) > 0 {
 				w.Input = append(w.Input, userInput{Type: "user_input", Content: blocks})
-			} else if len(m.Content) == 0 {
+			} else if results == 0 {
 				w.Input = append(w.Input, userInput{Type: "user_input", Content: []any{textContent{Type: "text", Text: "[empty]"}}})
 			}
 		case api.RoleAssistant:
@@ -167,37 +162,41 @@ func (p *Provider) encode(req api.Request) (*request, error) {
 				case api.ContentDocument:
 					run = append(run, documentBlock(c))
 				case api.ContentReasoning:
-					if !ownThought(c.Meta) {
-						run = append(run, note(c, "the block carries no signature this service issued"))
+					data, own := lib.OwnMeta(c.Meta, providerName)
+					var th thought
+					if !own || json.Unmarshal(data, &th) != nil || th.Type != "thought" || th.Signature == "" {
 						continue
 					}
 					flush()
 					opened = opened || len(w.Input) == start
-					w.Input = append(w.Input, json.RawMessage(c.Meta))
+					w.Input = append(w.Input, data)
 				case api.ContentToolUse:
-					if c.Name == "" || c.ID == "" || noted[c.ID] {
-						run = append(run, note(c, "the call has no name or id, or its stored input is not a JSON object"))
-						continue
+					discarded := false
+					if i+1 < len(req.Messages) && req.Messages[i+1].Role == api.RoleUser {
+						for _, next := range req.Messages[i+1].Content {
+							r, is := next.(api.ContentToolResult)
+							discarded = discarded || is && r.ID == c.ID && r.Error == api.ToolErrJSON
+						}
 					}
-					args := c.Input
+					args := emptyObject
 					switch {
-					case discarded[c.ID]:
-						args = emptyObject
+					case discarded:
 					case bytes.Equal(c.Input, api.DiscardedArguments):
 						return nil, fmt.Errorf("gemini: tool call %q carries discarded arguments and no result answering it reports err_json", c.ID)
-					case len(c.Input) == 0:
-						args = emptyObject
+					default:
+						args = lib.ObjectInput(c.Input)
 					}
 					flush()
 					if !opened {
 						w.Input = slices.Insert(w.Input, start, any(thought{Type: "thought", Signature: skipSignature}))
 						opened = true
 					}
-					w.Input = append(w.Input, functionCall{Type: "function_call", ID: c.ID, Name: c.Name, Arguments: args})
+					w.Input = append(w.Input, functionCall{Type: "function_call", ID: lib.CallID(c.ID), Name: lib.CallName(c.Name), Arguments: args})
 					called = true
 				case api.ContentOpaque:
-					if !ownOpaque(c) {
-						run = append(run, note(c, "the step was issued by another provider"))
+					kind, own := strings.CutPrefix(c.Kind, opaquePrefix)
+					var head typeHead
+					if !own || kind == "" || json.Unmarshal(c.Data, &head) != nil || head.Type != kind {
 						continue
 					}
 					flush()
@@ -219,28 +218,6 @@ func (p *Provider) encode(req api.Request) (*request, error) {
 		}
 	}
 	return w, nil
-}
-
-func objectInput(in json.RawMessage) bool {
-	if len(in) == 0 || bytes.Equal(in, api.DiscardedArguments) {
-		return true
-	}
-	trimmed := bytes.TrimLeft(in, " \t\r\n")
-	return json.Valid(in) && len(trimmed) > 0 && trimmed[0] == '{'
-}
-
-func ownThought(meta json.RawMessage) bool {
-	var th thought
-	return json.Unmarshal(meta, &th) == nil && th.Type == "thought" && th.Signature != ""
-}
-
-func ownOpaque(c api.ContentOpaque) bool {
-	kind, ok := strings.CutPrefix(c.Kind, opaquePrefix)
-	if !ok || kind == "" {
-		return false
-	}
-	var head typeHead
-	return json.Unmarshal(c.Data, &head) == nil && head.Type == kind
 }
 
 func note(c api.Content, why string) textContent {
@@ -302,5 +279,5 @@ func resultStep(r api.ContentToolResult, name string, at int) functionResult {
 	if len(out) == 0 {
 		out = append(out, textContent{Type: "text", Text: lib.EmptyResult})
 	}
-	return functionResult{Type: "function_result", Name: name, CallID: r.ID, Result: out, IsError: r.Error != api.ToolOk}
+	return functionResult{Type: "function_result", Name: name, CallID: lib.CallID(r.ID), Result: out, IsError: r.Error != api.ToolOk}
 }

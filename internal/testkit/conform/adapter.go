@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"testing"
 
 	"neui.dev/api"
 )
@@ -185,4 +186,6 @@ type Adapter struct {
 	Unframed   bool
 	Undeclared bool
 	Live       Live
+	Messages   string
+	CrossCheck func(t *testing.T, body []byte)
 }

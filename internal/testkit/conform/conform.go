@@ -62,6 +62,7 @@ func Run(t *testing.T, a Adapter) {
 		{"RoundTrip", checkRoundTrip},
 		{"Errors", checkErrors},
 		{"Streams", checkStreams},
+		{"Cross", checkCross},
 	} {
 		t.Run(c.name, func(t *testing.T) { c.run(t, a, sch, srv, limits) })
 	}

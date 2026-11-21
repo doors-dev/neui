@@ -28,13 +28,7 @@ import (
 	"neui.dev/provider/lib"
 )
 
-// messageMeta is what this adapter stores on the first text block of an
-// assistant message. Phase labels a preamble before a tool call as distinct from
-// a final answer and the codex models want it preserved across replay; protocol
-// has no field for it. Model is which model made that claim, because a phase is
-// one model's label and no model is stamped on a text block.
 type messageMeta struct {
-	Model string `json:"model,omitempty"`
 	Phase string `json:"phase"`
 }
 
@@ -47,15 +41,6 @@ const (
 	kindReasoning
 	kindOpaque
 )
-
-// follows says an item of this kind is one the service pairs with the reasoning
-// item in front of it. A call the caller answers and a tool the service ran
-// itself are both items the thinking produced, and the refusal names the pair by
-// position rather than by kind, so a reasoning item in front of either is one
-// ReplayToolTurns sends.
-func (k itemKind) follows() bool {
-	return k == kindFunctionCall || k == kindOpaque
-}
 
 type inputItem struct {
 	kind itemKind
@@ -117,19 +102,7 @@ func (p *Provider) encode(req api.Request) (*requestBody, error) {
 	if set.cacheMode != "" || set.cacheTTL != "" {
 		b.PromptCacheOpts = &promptCacheConfig{Mode: set.cacheMode, TTL: set.cacheTTL}
 	}
-	in := &inputBuilder{set: set, model: model, results: map[string]api.ToolError{}, nameless: map[string]bool{}}
-	for _, m := range req.Messages {
-		for _, c := range m.Content {
-			switch c := c.(type) {
-			case api.ContentToolResult:
-				in.results[c.ID] = c.Error
-			case api.ContentToolUse:
-				if c.Name == "" {
-					in.nameless[c.ID] = true
-				}
-			}
-		}
-	}
+	in := &inputBuilder{set: set, msgs: req.Messages, carried: map[string]bool{}}
 	for i, m := range req.Messages {
 		var err error
 		switch m.Role {
@@ -223,11 +196,10 @@ func encodeToolChoice(c api.ToolChoice) any {
 }
 
 type inputBuilder struct {
-	set      settings
-	model    string
-	results  map[string]api.ToolError
-	nameless map[string]bool
-	items    []inputItem
+	set     settings
+	msgs    []api.Message
+	carried map[string]bool
+	items   []inputItem
 }
 
 func (b *inputBuilder) finish() []any {
@@ -238,22 +210,17 @@ func (b *inputBuilder) finish() []any {
 	return out
 }
 
-// user turns one user message into items, in the order the caller wrote them.
-// A tool call and its result are top level items rather than blocks inside a
-// message, but the input array is flat and takes them in any order that keeps a
-// result after its call, so the arrangement survives: text written before a
-// result stays before it.
-//
-// A block this role has nowhere to put becomes the note omitted returns, in the
-// place it held. Reasoning and an opaque payload both belong to an assistant
-// turn on this wire, and a type this version has no case for was written by a
-// later one and becomes the note unknown returns.
-//
-// An attachment the service refuses goes the same way, for the thread's sake
-// rather than the wire's: one with no bytes in it, an image of a type the
-// service does not take and a file with no media type. A user message is
-// stored and replayed, so one sent as a part would be refused again on every
-// later turn rather than on this one alone.
+func (b *inputBuilder) answer(at, block int, id string) (api.ToolError, bool) {
+	for i := at; i < len(b.msgs); i++ {
+		for j, c := range b.msgs[i].Content {
+			if r, is := c.(api.ContentToolResult); is && (i > at || j > block) && r.ID == id {
+				return r.Error, true
+			}
+		}
+	}
+	return api.ToolOk, false
+}
+
 func (b *inputBuilder) user(m api.Message, at int) error {
 	var blocks []any
 	flush := func() {
@@ -263,7 +230,7 @@ func (b *inputBuilder) user(m api.Message, at int) error {
 		b.items = append(b.items, inputItem{kind: kindMessage, v: inputMessage{Role: "user", Content: blocks}})
 		blocks = nil
 	}
-	for _, c := range m.Content {
+	for j, c := range m.Content {
 		switch c := c.(type) {
 		case api.ContentText:
 			blocks = append(blocks, inputText{Type: "input_text", Text: c.Text})
@@ -288,27 +255,24 @@ func (b *inputBuilder) user(m api.Message, at int) error {
 			}
 			blocks = append(blocks, documentBlock(c))
 		case api.ContentToolUse:
-			if c.Name == "" {
-				blocks = append(blocks, omitted(c, "a function_call with no name names no tool and is refused by the service, and the block is stored, so it would be refused again on every later turn of the thread"))
-				continue
-			}
-			flush()
-			call, err := callItem(c, b.results[c.ID])
+			call, err := b.call(c, at, j)
 			if err != nil {
 				return err
 			}
+			if t, noted := call.v.(inputText); noted {
+				blocks = append(blocks, t)
+				continue
+			}
+			flush()
 			b.items = append(b.items, call)
 		case api.ContentToolResult:
-			if c.ID == "" || b.nameless[c.ID] {
-				blocks = append(blocks, omitted(c, "a function_call_output with no call_id, or one answering a call that went out as a note, answers no call and is refused by the service, and the block is stored, so it would be refused again on every later turn of the thread"))
+			if !b.carried[c.ID] {
+				blocks = append(blocks, omitted(c, "a function_call_output has to follow a function_call with its call_id, and the service refuses one that does not on every later turn of the thread"))
 				continue
 			}
 			flush()
 			b.items = append(b.items, resultItem(c, at))
-		case api.ContentReasoning:
-			blocks = append(blocks, omitted(c, "a reasoning item is an item of its own and belongs to the assistant turn that produced it"))
-		case api.ContentOpaque:
-			blocks = append(blocks, omitted(c, "an item the service ran itself belongs to the assistant turn that produced it"))
+		case api.ContentReasoning, api.ContentOpaque:
 		default:
 			blocks = append(blocks, unknown(c, at))
 		}
@@ -329,44 +293,6 @@ func unknown(c api.Content, at int) inputText {
 	return inputText{Type: "input_text", Text: lib.Unknown(providerName, at, c)}
 }
 
-// assistant turns one assistant message into items, then applies the reasoning
-// replay policy to the run it just produced.
-//
-// A run of text blocks becomes one message carrying one input_text part per
-// block, so the boundaries the caller wrote survive and no text acquires a
-// separator the model never generated. A call, a result, a reasoning block or an
-// opaque payload ends the run, because each of those is a top level item and
-// cannot sit inside a message.
-//
-// A phase is a label on the message rather than content of its own, so it is
-// read off the text block that carries it and a change of phase ends the run:
-// the message being built claimed the phase of the block that opened it, and a
-// block claiming another one belongs to a message of its own. A phase written
-// for another model leaves nothing behind, because the label is all it was.
-//
-// An opaque payload is an output item of a kind protocol has no type for, and
-// the input array takes those back the way it takes a reasoning item, so the
-// bytes that arrived go out as they arrived. The fragments its block collected
-// are not spliced back in: the finished item carried the field they streamed
-// already whole, and they are only what it looked like on the way there.
-//
-// A stored reasoning block becomes an item when it has the service's own
-// encoding to send, or an id the service kept, and the note omitted returns
-// when it has neither, in the place it held: what is readable on it is a
-// summary the service wrote, and replaying that as the model's own words is the
-// fabrication reasoningReplay refuses. Nothing else in the run depends on the
-// block, so a block with nothing to send leaves nothing behind an item would
-// have to stand for.
-//
-// Models are not compared; OpenAI omits reasoning from another family itself.
-// Payloads another provider issued are dropped: ownItem accepts a reasoning
-// block's meta or an opaque payload only when it is an output item of this
-// API's own shape, and anything else leaves the note in its place. The one
-// capability refusal left — reasoning sent to a model that does not reason — is
-// what WithReasoningReplay(ReplayNever) is for.
-//
-// A tool result belongs to a user turn, but a Responses item has no role and the
-// model reads it the same either way, so it is carried rather than refused.
 func (b *inputBuilder) assistant(m api.Message, at int) error {
 	start := len(b.items)
 	var parts []any
@@ -388,47 +314,51 @@ func (b *inputBuilder) assistant(m api.Message, at int) error {
 		}
 		phase = ""
 	}
-	for _, c := range m.Content {
+	for j, c := range m.Content {
 		switch c := c.(type) {
 		case api.ContentText:
-			if p := b.phaseOf(c.Meta); p != phase {
+			var meta messageMeta
+			if data, own := lib.OwnMeta(c.Meta, providerName); own {
+				_ = json.Unmarshal(data, &meta)
+			}
+			if meta.Phase != "commentary" && meta.Phase != "final_answer" {
+				meta.Phase = ""
+			}
+			if meta.Phase != phase {
 				flush()
-				phase = p
+				phase = meta.Phase
 			}
 			parts = append(parts, inputText{Type: "input_text", Text: c.Text})
 		case api.ContentOpaque:
-			if !ownItem(c.Data, c.Kind) {
-				parts = append(parts, omitted(c, "the payload was issued by another provider"))
+			kind, own := strings.CutPrefix(c.Kind, providerName+".")
+			var item outputItem
+			if !own || !opaqueItemTypes[kind] || json.Unmarshal(c.Data, &item) != nil || item.Type != kind {
 				continue
 			}
 			flush()
 			b.items = append(b.items, inputItem{kind: kindOpaque, v: c.Data})
 		case api.ContentReasoning:
-			if len(c.Meta) > 0 && !ownItem(c.Meta, "reasoning") {
-				parts = append(parts, omitted(c, "the payload was issued by another provider"))
-				continue
-			}
-			item := reasoningReplay(c, b.set.store)
-			if item == nil {
-				parts = append(parts, omitted(c, "the block carries neither the service's encoding nor, with store off, an id the service kept"))
+			data, own := lib.OwnMeta(c.Meta, providerName)
+			var item outputItem
+			if !own || b.set.replay == ReplayNever || json.Unmarshal(data, &item) != nil || item.Type != "reasoning" || item.EncryptedContent == "" && !b.set.store {
 				continue
 			}
 			flush()
-			b.items = append(b.items, inputItem{kind: kindReasoning, v: item})
+			b.items = append(b.items, inputItem{kind: kindReasoning, v: data})
 		case api.ContentToolUse:
-			if c.Name == "" {
-				parts = append(parts, omitted(c, "a function_call with no name names no tool and is refused by the service, and the block is stored, so it would be refused again on every later turn of the thread"))
-				continue
-			}
-			flush()
-			call, err := callItem(c, b.results[c.ID])
+			call, err := b.call(c, at, j)
 			if err != nil {
 				return err
 			}
+			if t, noted := call.v.(inputText); noted {
+				parts = append(parts, t)
+				continue
+			}
+			flush()
 			b.items = append(b.items, call)
 		case api.ContentToolResult:
-			if c.ID == "" || b.nameless[c.ID] {
-				parts = append(parts, omitted(c, "a function_call_output with no call_id, or one answering a call that went out as a note, answers no call and is refused by the service, and the block is stored, so it would be refused again on every later turn of the thread"))
+			if !b.carried[c.ID] {
+				parts = append(parts, omitted(c, "a function_call_output has to follow a function_call with its call_id, and the service refuses one that does not on every later turn of the thread"))
 				continue
 			}
 			flush()
@@ -446,63 +376,25 @@ func (b *inputBuilder) assistant(m api.Message, at int) error {
 		}
 	}
 	flush()
-	b.applyReplayPolicy(start)
+	if !b.set.store {
+		return nil
+	}
+	run := b.items[start:]
+	out := b.items[:start]
+	for i, it := range run {
+		keep := it.kind != kindReasoning
+		for _, next := range run[i+1:] {
+			if keep || next.kind == kindReasoning {
+				break
+			}
+			keep = next.kind == kindFunctionCall || next.kind == kindOpaque
+		}
+		if keep {
+			out = append(out, it)
+		}
+	}
+	b.items = out
 	return nil
-}
-
-// phaseOf reads the phase a stored text block was labelled with, and nothing
-// when the label was written for another model: phase labels an assistant
-// message one particular model produced, and an empty claim is no claim rather
-// than a wildcard. The comparison is on the name exactly as configured.
-//
-// A block carrying meta this adapter did not write leaves both fields empty and
-// so claims nothing, which is what a block with no meta at all claims.
-//
-// Reasoning does not come through here. Nothing about a model decides whether a
-// reasoning item can be replayed; see the assistant loop.
-func (b *inputBuilder) phaseOf(meta json.RawMessage) string {
-	var m messageMeta
-	_ = json.Unmarshal(meta, &m)
-	if m.Model == "" || m.Model != b.model {
-		return ""
-	}
-	return m.Phase
-}
-
-// reasoningReplay is the input item for a stored reasoning block: the service's
-// own encoding of it, which is the whole reasoning item as it arrived, because
-// the seal covers those bytes and re-encoding a value is not the same as keeping
-// one. An item without encrypted_content goes back only when store is on, where
-// its id names a response the service kept; with store off that id names
-// nothing and the service refuses it.
-//
-// A block without one is not sent. What is readable on it is a summary the
-// service wrote, not the thinking it summarizes, and the service never signed
-// it, so an item rebuilt from it is a paraphrase presented as the model's own
-// reasoning with nothing to prove it. Sending it back is at best ignored and at
-// worst a rejection that costs the whole request, where dropping it costs that
-// one item and nothing else in the turn.
-func reasoningReplay(c api.ContentReasoning, store bool) any {
-	if len(c.Meta) == 0 {
-		return nil
-	}
-	var item outputItem
-	_ = json.Unmarshal(c.Meta, &item)
-	if item.EncryptedContent == "" && !store {
-		return nil
-	}
-	return c.Meta
-}
-
-func ownItem(raw json.RawMessage, kind string) bool {
-	var item outputItem
-	if json.Unmarshal(raw, &item) != nil || item.Type != kind || item.ID == "" {
-		return false
-	}
-	if kind == "reasoning" {
-		return strings.HasPrefix(item.ID, "rs_")
-	}
-	return opaqueItemTypes[kind]
 }
 
 var opaqueItemTypes = map[string]bool{
@@ -533,70 +425,11 @@ var opaqueItemTypes = map[string]bool{
 	"custom_tool_call_output": true,
 }
 
-// applyReplayPolicy decides which reasoning items in the run starting at start
-// go back, and decides nothing else. The unnamed branch is ReplayToolTurns,
-// which is ReplayMode's zero value.
-//
-// The pairing the service checks against us is one directional. It names a
-// reasoning item by the id on the item itself — "Item 'rs_…' of type 'reasoning'
-// was provided without its required following item" — so a reasoning item is
-// sent only when something follows it in the run, which is what the length test
-// in each arm is. The refusal in the other direction names the function_call by
-// its own id, and the function_call this adapter sends is {type, call_id, name,
-// arguments} and carries no id at all, so it names nothing that can be here.
-//
-// So nothing but a reasoning item is ever dropped. A call and the result
-// answering it are separate items in consecutive messages and this pass sees one
-// message, so dropping a call would strand its function_call_output in the run
-// after this one — "No tool call found for function call output with call_id …"
-// — which is a refusal traded for one that was never coming.
-//
-// The follower is a call the caller answers or a tool the service ran itself.
-// Both are items the thinking produced and the check reads the position rather
-// than the kind, so both pair the same way. Preamble or commentary messages
-// between a reasoning item and its call do not break the pairing: under
-// ReplayToolTurns a reasoning item goes back when a follower comes later in the
-// run before the next reasoning item.
-func (b *inputBuilder) applyReplayPolicy(start int) {
-	run := b.items[start:]
-	keep := make([]bool, len(run))
-	for i := range run {
-		keep[i] = true
-	}
-	for i, it := range run {
-		if it.kind != kindReasoning {
-			continue
-		}
-		switch b.set.replay {
-		case ReplayNever:
-			keep[i] = false
-		case ReplayAlways:
-			keep[i] = i+1 < len(run)
-		default:
-			keep[i] = false
-			for _, next := range run[i+1:] {
-				if next.kind == kindReasoning {
-					break
-				}
-				if next.kind.follows() {
-					keep[i] = true
-					break
-				}
-			}
-		}
-	}
-	out := b.items[:start]
-	for i, it := range run {
-		if keep[i] {
-			out = append(out, it)
-		}
-	}
-	b.items = out
-}
-
-// callItem is the input item for a stored tool call. arguments is schema
-// required and must be a string, so the empty object stands for both a call that
-// took no arguments and a call whose arguments never parsed and were discarded.
+// call is the input item for the stored tool call at block j of message at, or
+// the note in its place when no later result answers it. arguments is schema
+// required and must be a string, so the empty object stands for both a call
+// that took no arguments and a call whose arguments never parsed and were
+// discarded.
 //
 // The result answering the call decides which: where it reports
 // api.ToolErrJSON the arguments are gone and Input is not read at all, and what
@@ -604,20 +437,23 @@ func (b *inputBuilder) applyReplayPolicy(start int) {
 // as it is, and a call carrying api.DiscardedArguments with no such result is
 // refused rather than sent as an empty object, which would replay as a
 // legitimate call that takes no arguments.
-func callItem(c api.ContentToolUse, failure api.ToolError) (inputItem, error) {
-	args := "{}"
-	if failure != api.ToolErrJSON {
-		if bytes.Equal(c.Input, api.DiscardedArguments) {
-			return inputItem{}, fmt.Errorf("gpt: tool call %q carries discarded arguments and no result answering it reports err_json", c.ID)
-		}
-		if len(c.Input) > 0 {
-			args = string(c.Input)
-		}
+func (b *inputBuilder) call(c api.ContentToolUse, at, j int) (inputItem, error) {
+	failure, answered := b.answer(at, j, c.ID)
+	if failure != api.ToolErrJSON && bytes.Equal(c.Input, api.DiscardedArguments) {
+		return inputItem{}, fmt.Errorf("gpt: tool call %q carries discarded arguments and no result answering it reports err_json", c.ID)
 	}
+	if !answered {
+		return inputItem{v: omitted(c, "a function_call has to be answered by a function_call_output later in the input, and the service refuses one that is not on every later turn of the thread")}, nil
+	}
+	args := "{}"
+	if failure != api.ToolErrJSON && len(c.Input) > 0 {
+		args = string(c.Input)
+	}
+	b.carried[c.ID] = true
 	return inputItem{kind: kindFunctionCall, v: functionCall{
 		Type:      "function_call",
-		CallID:    c.ID,
-		Name:      c.Name,
+		CallID:    lib.CallID(c.ID),
+		Name:      lib.CallName(c.Name),
 		Arguments: args,
 	}}, nil
 }
@@ -625,7 +461,7 @@ func callItem(c api.ContentToolUse, failure api.ToolError) (inputItem, error) {
 func resultItem(c api.ContentToolResult, at int) inputItem {
 	return inputItem{kind: kindFunctionOutput, v: functionCallOutput{
 		Type:   "function_call_output",
-		CallID: c.ID,
+		CallID: lib.CallID(c.ID),
 		Output: resultOutput(c, at),
 	}}
 }

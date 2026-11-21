@@ -37,6 +37,7 @@ import (
 	"neui.dev/internal/testkit"
 	"neui.dev/internal/testkit/stack"
 	"neui.dev/provider/claude"
+	"neui.dev/provider/lib"
 )
 
 type wireBody struct {
@@ -101,7 +102,7 @@ func cacheThread(t *testing.T) []api.Request {
 	thinkAndCall := testkit.Events(
 		api.EventStart{ID: "r1", Model: "fake"},
 		api.EventThinking{Index: 0, Text: "I should call the probe twice."},
-		api.EventMeta{Index: 0, Data: json.RawMessage(`"c2lnbmF0dXJl"`)},
+		api.EventMeta{Index: 0, Data: lib.Meta("claude", json.RawMessage(`"c2lnbmF0dXJl"`))},
 		api.EventClose{Index: 0},
 		api.EventText{Index: 1, Text: "Checking."},
 		api.EventClose{Index: 1},

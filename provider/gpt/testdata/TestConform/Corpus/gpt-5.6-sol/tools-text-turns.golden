@@ -51,10 +51,6 @@
       "content": [
         {
           "type": "output_text",
-          "text": "[reasoning omitted]"
-        },
-        {
-          "type": "output_text",
           "text": "hello"
         }
       ]

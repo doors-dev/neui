@@ -25,6 +25,12 @@
 // prompt, which covers the tools before it, and the end of the last message.
 // WithCacheTTL sets how long entries live; WithoutCache turns caching off.
 //
+// Thinking is always adaptive: WithEffort sets how much the model thinks and
+// WithThinkingDisplay how its thinking streams back. Every request asks the
+// API, under the thinking-binding-controls-2026-08-01 beta, to drop a replayed
+// thinking block whose earlier conversation no longer matches instead of
+// refusing the request. A model without adaptive thinking cannot be served.
+//
 // The key comes from ANTHROPIC_API_KEY unless WithAPIKey sets it. A provider
 // serves one model with one set of options; build two for two settings. New
 // refuses an option it cannot apply and a setting the declared model does not
@@ -72,19 +78,9 @@ const (
 
 var errTooLarge = errors.New("claude: request too large")
 
-// ThinkingType is the thinking mode sent on the wire. The consts are the
-// documented values; the type does not validate, so a value a later API
-// release adds passes through unchanged.
-type ThinkingType string
-
-const (
-	ThinkingAdaptive ThinkingType = "adaptive" // the model decides how much to think; 4.6 and later
-	ThinkingEnabled  ThinkingType = "enabled"  // extended thinking with Thinking.Budget; before 4.7
-	ThinkingDisabled ThinkingType = "disabled" // no thinking, where the model allows it
-)
-
-// ThinkingDisplay is how thinking streams back. As with ThinkingType, the
-// const is the documented value and custom strings pass through.
+// ThinkingDisplay is how thinking streams back. The consts are the documented
+// values; the type does not validate, so a value a later API release adds
+// passes through unchanged.
 type ThinkingDisplay string
 
 // The documented display values.
@@ -96,36 +92,6 @@ const (
 	// signatures; the default on Claude 5 and later.
 	DisplayOmitted ThinkingDisplay = "omitted"
 )
-
-// Thinking is the thinking configuration sent verbatim. The zero value sends no
-// thinking field at all, which is not the same as disabling it: on the newest
-// models thinking is on by default.
-//
-// On a declared model New refuses what the docs refuse on every model: a
-// Budget outside extended thinking, a Budget under 1024 or not below
-// max_tokens (unless WithBeta adds interleaved-thinking-2025-05-14, under which
-// it may exceed it), and a Display with no Type or with ThinkingDisabled. It
-// also refuses the types that model rejects: enabled on Fable 5.1, Opus 5.5, Sonnet 5.5,
-// Haiku 5.5 and Sonnet 5; disabled on Fable 5.1, Opus 5.5 and Sonnet 5.5, and
-// on Haiku 5.5 at EffortXHigh or EffortMax; adaptive on Haiku 4.5. A model not
-// declared here is not checked.
-//
-// With adaptive thinking, each request also asks the API to drop a replayed
-// thinking block whose earlier conversation no longer matches, instead of
-// failing, under the thinking-binding-controls-2026-08-01 beta.
-type Thinking struct {
-	Type    ThinkingType    // adaptive, enabled or disabled; empty sends nothing
-	Budget  int             // budget_tokens, extended thinking only
-	Display ThinkingDisplay // summarized or omitted; empty leaves the model default
-}
-
-// summarized reports whether the thinking this configuration asks for is a
-// summary. The wire streams a summary and the thinking itself through the same
-// delta and says which nowhere, so the request is what decides how the adapter
-// reports it.
-func (t Thinking) summarized() bool {
-	return t.Display == DisplaySummarized
-}
 
 // Provider is one configured Anthropic endpoint. It is safe for concurrent use
 // and holds no per turn state.
@@ -139,7 +105,7 @@ type Provider struct {
 	client      *http.Client
 	maxToken    int
 	stopSeqs    []string
-	thinking    Thinking
+	display     ThinkingDisplay
 	effort      string
 	noCache     bool
 	cacheTTL    string
@@ -160,10 +126,8 @@ type Conf struct {
 // and is not checked; a missing or wrong key ends the turn with
 // api.CodeAccess. A nil option is skipped. New returns the error of the first
 // option that fails, and an error for an empty Model.Name. On a model this package
-// declares it also returns one for a configuration the API would refuse on
-// every request: the thinking settings Thinking lists, an effort the model
-// does not take, or a WithMaxTokens over its output ceiling. On any other
-// model nothing is checked.
+// declares it also returns one for a WithMaxTokens over its output ceiling. On
+// any other model nothing is checked.
 func New(conf Conf, opts ...Option) (*Provider, error) {
 	p := &Provider{
 		model:    conf.Model,
@@ -183,32 +147,8 @@ func New(conf Conf, opts ...Option) (*Provider, error) {
 	if p.model.Name == "" {
 		return nil, errors.New("claude: Conf.Model has no name")
 	}
-	if m, ok := declared[p.model.Name]; ok {
-		t := p.thinking
-		if t.Budget != 0 && t.Type != ThinkingEnabled {
-			return nil, fmt.Errorf("claude: a thinking budget is taken only with %s thinking, not %q", ThinkingEnabled, t.Type)
-		}
-		if t.Type == ThinkingEnabled && t.Budget < 1024 {
-			return nil, fmt.Errorf("claude: thinking budget %d is under the 1024 this API takes", t.Budget)
-		}
-		if t.Type == ThinkingEnabled && t.Budget >= p.maxToken && !slices.Contains(p.betas, "interleaved-thinking-2025-05-14") {
-			return nil, fmt.Errorf("claude: thinking budget %d is not below max tokens %d", t.Budget, p.maxToken)
-		}
-		if t.Display != "" && (t.Type == "" || t.Type == ThinkingDisabled) {
-			return nil, fmt.Errorf("claude: thinking display %q needs thinking that is on; set Thinking.Type", t.Display)
-		}
-		if p.maxToken > m.maxTokens {
-			return nil, fmt.Errorf("claude: max tokens %d is over the %d model %s returns", p.maxToken, m.maxTokens, p.model.Name)
-		}
-		if slices.Contains(m.refusedThinking, t.Type) {
-			return nil, fmt.Errorf("claude: model %s refuses %s thinking", p.model.Name, t.Type)
-		}
-		if p.effort != "" && !m.effort {
-			return nil, fmt.Errorf("claude: model %s takes no effort", p.model.Name)
-		}
-		if m.disabledUpToHigh && t.Type == ThinkingDisabled && (p.effort == string(EffortXHigh) || p.effort == string(EffortMax)) {
-			return nil, fmt.Errorf("claude: model %s refuses disabled thinking at effort %s; use %s or below", p.model.Name, p.effort, EffortHigh)
-		}
+	if m, ok := declared[p.model.Name]; ok && p.maxToken > m.maxTokens {
+		return nil, fmt.Errorf("claude: max tokens %d is over the %d model %s returns", p.maxToken, m.maxTokens, p.model.Name)
 	}
 	if !p.keyExplicit {
 		p.key = os.Getenv("ANTHROPIC_API_KEY")
@@ -284,8 +224,7 @@ func WithBeta(flags ...string) Option {
 
 // WithMaxTokens sets max_tokens, the response cap sent on every request; 0
 // keeps the default of 16384 and a negative value makes New fail. It caps
-// thinking too, which is on by default on the newest models, so raise it for
-// long answers. A turn that hits it ends with api.CodeCapped. New refuses a
+// thinking too, so raise it for long answers. A turn that hits it ends with api.CodeCapped. New refuses a
 // value over the output ceiling of a model this package declares; on any other
 // model one over its ceiling fails each turn with api.CodeInvalid.
 func WithMaxTokens(n int) Option {
@@ -313,15 +252,12 @@ func WithStopSequences(seqs ...string) Option {
 
 const bindingBeta = "thinking-binding-controls-2026-08-01"
 
-// WithThinking sets the thinking configuration; the zero value sends none and
-// leaves the model default. On a declared model New refuses the settings
-// Thinking lists. It is part of the cached prompt, so switching
-// providers with different settings mid thread starts a new cache prefix, and
-// mid tool use the API silently drops thinking for that request. Keep one
-// setting per thread.
-func WithThinking(t Thinking) Option {
+// WithThinkingDisplay sets how thinking streams back: DisplaySummarized as a
+// readable summary, DisplayOmitted as blocks with no text. Empty leaves the
+// model default.
+func WithThinkingDisplay(d ThinkingDisplay) Option {
 	return func(p *Provider) error {
-		p.thinking = t
+		p.display = d
 		return nil
 	}
 }
@@ -341,10 +277,10 @@ const (
 	EffortMax    Effort = "max"
 )
 
-// WithEffort sets output_config.effort; empty leaves the model default. New
-// refuses any effort on Haiku 4.5, which takes none; on a model not declared
-// here a level the model does not accept fails each turn with api.CodeInvalid.
-// Like the thinking configuration it is part of the cached prompt.
+// WithEffort sets output_config.effort, which sets how much the model thinks;
+// empty leaves the model default. On a model not declared here a level the
+// model does not accept fails each turn with api.CodeInvalid. It is part of the
+// cached prompt.
 func WithEffort(effort Effort) Option {
 	return func(p *Provider) error {
 		p.effort = string(effort)
@@ -420,7 +356,7 @@ func (p *Provider) Stream(ctx context.Context, req api.Request) <-chan api.Event
 	if err != nil {
 		return lib.Drain(api.EventErr{Code: api.CodeInvalid, Err: err})
 	}
-	return lib.Stream(ctx, p.client, httpReq, newConverter(p.model.Name, p.thinking.summarized(), sent, p.model.RequestBytes), p.transport)
+	return lib.Stream(ctx, p.client, httpReq, newConverter(p.model.Name, p.display == DisplaySummarized, sent, p.model.RequestBytes), p.transport)
 }
 
 // request encodes the turn. http.NewRequestWithContext cannot fail on what is
@@ -451,11 +387,9 @@ func (p *Provider) request(ctx context.Context, req api.Request) (*http.Request,
 		httpReq.Header.Set("x-api-key", p.key)
 	}
 	betas := p.betas
-	if p.thinking.Type == ThinkingAdaptive && !slices.Contains(betas, bindingBeta) {
+	if !slices.Contains(betas, bindingBeta) {
 		betas = append(slices.Clone(betas), bindingBeta)
 	}
-	if len(betas) > 0 {
-		httpReq.Header.Set("anthropic-beta", strings.Join(betas, ","))
-	}
+	httpReq.Header.Set("anthropic-beta", strings.Join(betas, ","))
 	return httpReq, sent, nil
 }

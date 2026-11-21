@@ -58,11 +58,12 @@ type thinking struct {
 // imagePart. The assistant form is documented as string or null and a turn
 // that only called tools has to send an explicit null, while system, user and
 // tool all require the key present. User and tool content is a part list only
-// when it carries an image.
+// when it carries an image. ReasoningContent is set on every assistant message
+// and on no other role.
 type message struct {
 	Role             string     `json:"role"`
 	Content          any        `json:"content"`
-	ReasoningContent string     `json:"reasoning_content,omitempty"`
+	ReasoningContent *string    `json:"reasoning_content,omitempty"`
 	ToolCalls        []toolCall `json:"tool_calls,omitempty"`
 	ToolCallID       string     `json:"tool_call_id,omitempty"`
 }
@@ -123,10 +124,11 @@ type namedToolFunction struct {
 // object, created, system_fingerprint and logprobs. choices[].index is read
 // because only the choice at index 0 is this turn's.
 //
-// Error, ErrorType and ErrorMsg are defensive. DeepSeek documents no in band
-// error frame on this endpoint at all, but the two shapes that circulate for
-// OpenAI compatible hosts cost three fields to recognize and mistaking one for
-// a content frame would end the turn as a completion.
+// Error is DeepSeek's in band failure: a generation that fails after the 200
+// ends with a chunk carrying error, usage and empty choices, and no [DONE]
+// follows. ErrorType and ErrorMsg are the other shape that circulates for
+// OpenAI compatible hosts; mistaking either for a content frame would end the
+// turn as a completion.
 type chunk struct {
 	ID        string          `json:"id"`
 	Model     string          `json:"model"`

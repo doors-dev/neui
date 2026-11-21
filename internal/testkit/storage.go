@@ -39,6 +39,7 @@ func MessageStorage(t *testing.T, open func(t *testing.T) api.MessageStorage) {
 		{"MissingThread", storageMissingThread},
 		{"SeqGuard", storageSeqGuard},
 		{"RoundLifecycle", storageRoundLifecycle},
+		{"RoundKeepsProviderBytes", storageRoundKeepsProviderBytes},
 		{"RoundResultReplaces", storageRoundResultReplaces},
 		{"RoundRange", storageRoundRange},
 		{"RoundRangeYieldsOutsideTheLock", storageRoundRangeYieldsOutsideTheLock},
@@ -343,6 +344,21 @@ func storageSeqGuard(t *testing.T, s api.MessageStorage) {
 	}
 	if _, _, err := s.RoundInput(ctx, "a", live, api.Input{Text: "still live"}); err != nil {
 		t.Fatalf("RoundInput with the seq returned by RecordAdd: %v", err)
+	}
+}
+
+func storageRoundKeepsProviderBytes(t *testing.T, s api.MessageStorage) {
+	th := createThread(t, s, "a")
+	id, seq := addInput(t, s, "a", th.Seq, "question")
+	response := api.Indexed[api.Content]{}
+	for i, c := range ProviderBlocks() {
+		response[i] = c
+	}
+	if _, err := s.RoundOk(context.Background(), "a", seq, id, api.EventUsage{}, response); err != nil {
+		t.Fatalf("RoundOk: %v", err)
+	}
+	if got := readRound(t, s, "a", id).Response; !reflect.DeepEqual(got, response) {
+		t.Fatalf("response round trip:\n got %+v\nwant %+v", got, response)
 	}
 }
 

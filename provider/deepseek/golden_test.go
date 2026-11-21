@@ -32,8 +32,8 @@ import (
 )
 
 const (
-	goldenRequestsHash = "45020b3f292585aaabdd40e84150334b18a6859499bf0d2533222561c24c7506"
-	goldenStreamsHash  = "6bd11aa8a7eb204ca52e6aa0e60ec2b1b8f77c4e6307c826b687e58001fdcdb5"
+	goldenRequestsHash = "c66c654752758432c990235cb42df1e55f3411439f01d5fa6ff9e4f234bd2e22"
+	goldenStreamsHash  = "72988ee87cf6319af69dfe435510829ba3ae9f504117448a596e6dfc2f3eea86"
 )
 
 func goldenBytes(r *rand.Rand, n int) []byte {
@@ -90,7 +90,12 @@ func goldenRequest(r *rand.Rand) api.Request {
 			case 0:
 				a = append(a, api.ContentText{Text: goldenPick(r, "the answer", "")})
 			case 1:
-				a = append(a, api.ContentReasoning{Model: goldenPick(r, "deepseek-v4-pro", "deepseek-flash", "other"), Thoughts: map[int]string{0: "first", 1: " then"}, Summary: goldenPick(r, api.Indexed[string](nil), map[int]string{0: "s"})})
+				model := goldenPick(r, "deepseek-v4-pro", "deepseek-flash", "other")
+				var meta json.RawMessage
+				if model != "other" {
+					meta = lib.Meta(providerName, nil)
+				}
+				a = append(a, api.ContentReasoning{Model: model, Thoughts: map[int]string{0: "first", 1: " then"}, Summary: goldenPick(r, api.Indexed[string](nil), map[int]string{0: "s"}), Meta: meta})
 			case 2:
 				a = append(a, api.ContentOpaque{Model: "x", Kind: "web_search_call", Data: json.RawMessage(`{"x":1}`)})
 			default:

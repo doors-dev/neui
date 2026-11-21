@@ -214,8 +214,10 @@ func (c *converter) delta(d *delta) error {
 	if d.ReasoningContent != "" {
 		if c.reasoning < 0 {
 			c.reasoning = c.alloc()
+			c.events = append(c.events, api.EventThinking{Index: c.reasoning, Text: d.ReasoningContent}, api.EventMeta{Index: c.reasoning, Data: lib.Meta(providerName, nil)})
+		} else {
+			c.events = append(c.events, api.EventThinking{Index: c.reasoning, Text: d.ReasoningContent})
 		}
-		c.events = append(c.events, api.EventThinking{Index: c.reasoning, Text: d.ReasoningContent})
 	}
 	if d.Content != "" {
 		if c.text < 0 {

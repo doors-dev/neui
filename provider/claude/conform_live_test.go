@@ -31,6 +31,10 @@ func TestConformLive(t *testing.T) {
 	conform.RunLive(t, conformAdapter())
 }
 
+func TestLiveCross(t *testing.T) {
+	conform.RunLiveCross(t, conformAdapter())
+}
+
 func TestLiveDeclaredInputs(t *testing.T) {
 	key := os.Getenv("ANTHROPIC_API_KEY")
 	if key == "" {
