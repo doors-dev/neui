@@ -95,9 +95,10 @@ type node struct {
 	Tools    int      `json:"tools,omitempty"`
 	Inputs   int      `json:"inputs,omitempty"`
 	Data     int      `json:"data,omitempty"`
+	Goes     []string `json:"goes,omitempty"`
 	Children []node   `json:"children,omitempty" description:"in name order"`
 	More     int      `json:"more,omitempty"`
-	_        struct{} `description:"more: how many of the space's children are not listed; call tree on it to go deeper, or sync it to see them all"`
+	_        struct{} `description:"goes: where a navigation space's links lead, as their descriptions. more: how many of the space's children are not listed; call tree on it to go deeper, or sync it to see them all"`
 }
 
 type report struct {

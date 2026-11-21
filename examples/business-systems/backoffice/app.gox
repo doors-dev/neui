@@ -144,6 +144,7 @@ elem sidebar() {
 	~>neui.Space{
 		Name: "navigation",
 		Desc: "Main menu, on every page: links to the dashboard, orders, customers and products",
+		Nav:  true,
 	} <aside class="sticky top-0 z-30 border-b border-stone-200 bg-white/90 backdrop-blur side:fixed side:inset-y-0 side:left-0 side:w-64 side:border-r side:border-b-0 side:bg-white">
 		<div class="flex h-full flex-col side:px-4 side:py-6">
 			~>neui.Use{Desc: "the shop logo: goes to the dashboard"} <a

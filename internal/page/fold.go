@@ -22,6 +22,7 @@ import (
 var groups = [3]string{"tools", "inputs", "data"}
 
 func (s *space) changes(before map[string][4]uint64, called string, light bool) []change {
+	called = strings.ReplaceAll(called, "/", ".")
 	var out []change
 	live := map[string]bool{}
 	var walk func(s *space)

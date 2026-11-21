@@ -48,13 +48,23 @@ type Space struct {
 	Name string
 	// Desc tells the agent what the region is and what it is for.
 	Desc string
+	// Nav marks the space as navigation, such as the main menu: the agent's
+	// page tree lists the descriptions of its links, so it sees where it can
+	// go without reading the space. Describe each link by what its
+	// destination offers.
+	Nav bool
 }
 
 // Proxy renders el inside the space. It fails when the enclosing render has
 // already ended.
 func (s Space) Proxy(cur gox.Cursor, el gox.Elem) error {
 	ctx := cur.Context()
-	ctx, err := instance.GetSpace(ctx).AddSpace(ctx, s.Name, s.Desc)
+	var err error
+	if s.Nav {
+		ctx, err = instance.GetSpace(ctx).AddNav(ctx, s.Name, s.Desc)
+	} else {
+		ctx, err = instance.GetSpace(ctx).AddSpace(ctx, s.Name, s.Desc)
+	}
 	if err != nil {
 		return err
 	}

@@ -43,7 +43,44 @@ func TestIslandPathIsCanonical(t *testing.T) {
 	}
 	for _, raw := range []string{"isl.", ".isl", "isl..x"} {
 		if _, _, err := p.Island(context.Background(), raw); !errors.Is(err, errSpaceNotFound) {
-			t.Fatalf("%q: got %v, want no such space", raw, err)
+			t.Fatalf("%q: got %v, want no space", raw, err)
+		}
+	}
+}
+
+func TestTreeListsWhereNavigationLeads(t *testing.T) {
+	links := inputs{list: []input{{Kind: kindLink, Desc: "the orders list"}, {Kind: kindButton, Desc: "log out"}, {Kind: kindLink, Desc: "the orders list"}, {Kind: kindLink, Desc: "the customers list"}}}
+	p := NewPage(context.Background())
+	p.space.children = []*space{
+		{root: p, name: "menu", path: "menu", nav: true, inputs: links},
+		{root: p, name: "recent", path: "recent", inputs: links},
+	}
+	got := p.space.tree(1, false)
+	if want := []string{"the orders list", "the customers list"}; !slices.Equal(got.Children[0].Goes, want) {
+		t.Fatalf("the navigation space goes %v, want %v", got.Children[0].Goes, want)
+	}
+	if got.Children[1].Goes != nil {
+		t.Fatalf("a plain space lists links %v", got.Children[1].Goes)
+	}
+}
+
+func TestSlashAndDotPathsAreTheSame(t *testing.T) {
+	p := tree("dashboard", "dashboard.report")
+	dot, err := p.space.find("dashboard.report", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	slash, err := p.space.find("dashboard/report", false)
+	if err != nil || slash != dot {
+		t.Fatalf("dashboard/report found %v (%v), want the space dashboard.report", slash, err)
+	}
+	for raw, want := range map[string]string{
+		"dashboard/missing": `no space "missing" under "dashboard": call tree to see the current spaces`,
+		"missing":           `no space "missing" at the page root: call tree to see the current spaces`,
+		"/dashboard":        `no space "" at the page root: call tree to see the current spaces`,
+	} {
+		if _, err := p.space.find(raw, false); !errors.Is(err, errSpaceNotFound) || err.Error() != want {
+			t.Fatalf("%q: got %v, want %s", raw, err, want)
 		}
 	}
 }

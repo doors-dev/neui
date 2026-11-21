@@ -46,7 +46,7 @@
           "type": "input_text"
         },
         {
-          "text": "space \"board\" under \"\": no such space: it was removed or renamed since you saw its path; call tree to see the current spaces",
+          "text": "no space \"board\" at the page root: call tree to see the current spaces",
           "type": "input_text"
         }
       ],

@@ -1140,8 +1140,8 @@ func TestPathWithEmptySegmentIsNoSpace(t *testing.T) {
 		t.Fatalf("the sync of cart answered %#v", results[0].Content)
 	}
 	for _, r := range results[1:] {
-		plain(t, r, `space "" under`)
-		refused(t, r, "no such space")
+		plain(t, r, `no space ""`)
+		refused(t, r, "no space ")
 	}
 }
 
@@ -1167,7 +1167,7 @@ func TestReopenedDialogActsWithoutRead(t *testing.T) {
 	if closed.Diff == nil || !closed.Diff.Removed {
 		t.Fatalf("the close answered %+v, want the dialog removed", closed)
 	}
-	refused(t, testkit.Results(p.Request(t, 5))[0], "no such space")
+	refused(t, testkit.Results(p.Request(t, 5))[0], "no space ")
 	r := testkit.Results(p.Request(t, 7))[0]
 	var again toolOutput
 	testkit.Decode(t, r, &again)

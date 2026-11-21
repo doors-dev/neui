@@ -280,11 +280,11 @@ The agent can help the user find their way around your app, offer features your 
 First, organize page regions into spaces. Spaces separate the functional areas of your app and help the agent understand the page:
 
 ```gox
-~>neui.Space{Name: "navigation", Desc: "main navigation menu"} <nav>...</nav>
+~>neui.Space{Name: "navigation", Desc: "main navigation menu", Nav: true} <nav>...</nav>
 ~>neui.Space{Name: "product", Desc: "product card"} <section>...</section>
 ```
 
-Describe a navigation link by what its destination offers, not only where it leads: `"go to the orders list: search, filter by status and dates, sort by any column"`. The agent chooses from what it can see from where it is, so a link that only names its target hides that page's features.
+Mark the main menu with `Nav: true`: the agent's page tree then lists its links' descriptions, so it sees where it can go from anywhere. Describe each link by what its destination offers, not only where it leads: `"go to the orders list: search, filter by status and dates, sort by any column"`.
 
 ### Inputs
 

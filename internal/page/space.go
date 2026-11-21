@@ -42,6 +42,7 @@ type space struct {
 	path     string
 	name     string
 	desc     string
+	nav      bool
 	tools    []*tool
 	data     []*data
 	island   island.Island
@@ -54,11 +55,15 @@ type space struct {
 }
 
 func (s Space) AddSpace(ctx context.Context, name string, desc string) (context.Context, error) {
-	return s.addSpace(ctx, name, desc, nil)
+	return s.addSpace(ctx, name, desc, nil, false)
+}
+
+func (s Space) AddNav(ctx context.Context, name string, desc string) (context.Context, error) {
+	return s.addSpace(ctx, name, desc, nil, true)
 }
 
 func (s Space) AddIsland(ctx context.Context, name string, desc string, island island.Island) (context.Context, error) {
-	ctx, err := s.addSpace(ctx, name, desc, island)
+	ctx, err := s.addSpace(ctx, name, desc, island, false)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +71,7 @@ func (s Space) AddIsland(ctx context.Context, name string, desc string, island i
 	return ctx, nil
 }
 
-func (s Space) addSpace(ctx context.Context, name string, desc string, island island.Island) (context.Context, error) {
+func (s Space) addSpace(ctx context.Context, name string, desc string, island island.Island, nav bool) (context.Context, error) {
 	if name == "" {
 		return nil, errors.New("space name is empty")
 	}
@@ -86,6 +91,7 @@ func (s Space) addSpace(ctx context.Context, name string, desc string, island is
 			return s.path + "." + name
 		}(),
 		desc:   desc,
+		nav:    nav,
 		island: island,
 		within: cmp.Or(island, s.within),
 	}
@@ -138,10 +144,13 @@ func (s *space) find(path string, light bool) (*space, error) {
 	if path == "" {
 		return s, nil
 	}
-	for _, name := range strings.Split(path, ".") {
+	for _, name := range strings.Split(strings.ReplaceAll(path, "/", "."), ".") {
 		index, ok := s.search(name)
 		if !ok || s.children[index].hidden(light) {
-			return nil, fmt.Errorf("space %q under %q: %w", name, s.path, errSpaceNotFound)
+			if s.path == "" {
+				return nil, fmt.Errorf("no space %q at the page root: %w", name, errSpaceNotFound)
+			}
+			return nil, fmt.Errorf("no space %q under %q: %w", name, s.path, errSpaceNotFound)
 		}
 		s = s.children[index]
 	}
@@ -335,6 +344,13 @@ func (s *space) tree(depth uint, light bool) node {
 		if !seen[e.hash] {
 			seen[e.hash] = true
 			out.Data++
+		}
+	}
+	if s.nav {
+		for _, in := range s.list {
+			if in.Kind == kindLink && !slices.Contains(out.Goes, in.Desc) {
+				out.Goes = append(out.Goes, in.Desc)
+			}
 		}
 	}
 	for _, c := range s.children {

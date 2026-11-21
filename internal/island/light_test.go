@@ -158,9 +158,9 @@ func TestLightModeHidesIslands(t *testing.T) {
 				if got := (lightNode{Children: root.Children}).names(""); !slices.Equal(got, []string{"panel"}) {
 					t.Fatalf("the root's children are %v, want the panel alone", got)
 				}
-				refused(t, result(3), "no such space")
-				refused(t, result(4), "no such space")
-				refused(t, result(5), "no such space")
+				refused(t, result(3), "no space ")
+				refused(t, result(4), "no space ")
+				refused(t, result(5), "no space ")
 				if len(marks) != 0 {
 					t.Fatal("an island's app function ran in light mode")
 				}

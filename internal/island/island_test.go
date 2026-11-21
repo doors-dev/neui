@@ -713,7 +713,7 @@ func TestIslandBeginRefusedAfterSpecChange(t *testing.T) {
 	c.Send("open the board")
 	events := c.Wait()
 	refused(t, testkit.Results(p.Request(t, 3))[0], "read island_spec again")
-	refused(t, testkit.Results(p.Request(t, 6))[0], "no such space")
+	refused(t, testkit.Results(p.Request(t, 6))[0], "no space ")
 	if slices.Contains(stack.Trace(events), "Tasks") {
 		t.Fatalf("a refused start reported a task: %v", stack.Trace(events))
 	}
@@ -882,8 +882,8 @@ func TestIslandUIEndEndsAppAsIslandEndDoes(t *testing.T) {
 		code    string
 		body    string
 	}{
-		{"notified with success", true, `ui.notify({kept: 1}); ui.notify("two"); ui.end()`, `{"ended":"the island's app ended: its script called ui.end()","notifications":[{"kept":1},"two"]}`},
-		{"silent with placeholder", false, `ui.end()`, `{"ended":"the island's app ended: its script called ui.end()"}`},
+		{"notified with success", true, `ui.notify({kept: 1}); ui.notify("two"); ui.end()`, `{"ended":"the island's app ended normally: its script called ui.end(). If you did not expect it now, the user most likely ended it, for example with one of the app's buttons","notifications":[{"kept":1},"two"]}`},
+		{"silent with placeholder", false, `ui.end()`, `{"ended":"the island's app ended normally: its script called ui.end(). If you did not expect it now, the user most likely ended it, for example with one of the app's buttons"}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			screens := make(chan string, 8)

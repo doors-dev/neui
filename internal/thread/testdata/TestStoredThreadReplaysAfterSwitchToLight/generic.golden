@@ -42,7 +42,7 @@
       ]
     },
     {
-      "content": "Error: space \"board\" under \"\": no such space: it was removed or renamed since you saw its path; call tree to see the current spaces",
+      "content": "Error: no space \"board\" at the page root: call tree to see the current spaces",
       "role": "tool",
       "tool_call_id": "call-page__island_begin"
     },

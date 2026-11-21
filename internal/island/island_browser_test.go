@@ -127,7 +127,7 @@ func TestIslandUIEndCarriesValuesSinceLastDraw(t *testing.T) {
 	c.Send("open the board")
 	c.Wait()
 	carries(t, recorded(t, c, p, `kind="notifications_list"`), `script="1"`, `>[1]</task_notify>`)
-	carries(t, recorded(t, c, p, "<task_result "), `>{"ended":"the island's app ended: its script called ui.end()","notifications":[2]}</task_result>`)
+	carries(t, recorded(t, c, p, "<task_result "), `>{"ended":"the island's app ended normally: its script called ui.end(). If you did not expect it now, the user most likely ended it, for example with one of the app's buttons","notifications":[2]}</task_result>`)
 }
 
 func pressSynced(t *testing.T, then func(input string) testkit.Turn) testkit.Turn {
