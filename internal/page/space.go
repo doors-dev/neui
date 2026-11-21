@@ -49,7 +49,6 @@ type space struct {
 	within   island.Island
 	digest   [4]uint64
 	plain    uint64
-	warned   bool
 	counts   [4]map[uint64]int
 	inputs
 }
@@ -160,10 +159,6 @@ func (s *space) find(path string, tier common.ModelTier) (*space, error) {
 func (s *space) hidden(tier common.ModelTier) bool {
 	if tier == common.TierArchitect || s.island == nil {
 		return false
-	}
-	if !s.warned {
-		s.warned = true
-		doors.Logger(s.ctx).Warn("page: island hidden below TierArchitect", "space", s.path)
 	}
 	return true
 }

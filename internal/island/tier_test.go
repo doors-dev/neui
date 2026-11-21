@@ -15,14 +15,10 @@
 package island_test
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"slices"
-	"strings"
-	"sync"
 	"testing"
 
 	"github.com/doors-dev/doors"
@@ -34,23 +30,6 @@ import (
 	"neui.dev/internal/testkit/stack"
 	"neui.dev/nekit"
 )
-
-type lockedLogs struct {
-	sync.Mutex
-	bytes.Buffer
-}
-
-func (l *lockedLogs) Write(p []byte) (int, error) {
-	l.Lock()
-	defer l.Unlock()
-	return l.Buffer.Write(p)
-}
-
-func (l *lockedLogs) String() string {
-	l.Lock()
-	defer l.Unlock()
-	return l.Buffer.String()
-}
 
 type spaceNode struct {
 	Name     string
@@ -72,8 +51,6 @@ func (n spaceNode) names(prefix string) []string {
 }
 
 func TestTiersBelowArchitectHideIslands(t *testing.T) {
-	logger := slog.Default()
-	t.Cleanup(func() { slog.SetDefault(logger) })
 	late := func(name string) gox.Elem {
 		return func(cur gox.Cursor) error {
 			return cur.Comp(neui.Island{
@@ -89,8 +66,6 @@ func TestTiersBelowArchitectHideIslands(t *testing.T) {
 	}
 	for _, tier := range []common.ModelTier{common.TierArchitect, common.TierAgent, common.TierAssistant} {
 		t.Run(fmt.Sprintf("tier=%d", tier), func(t *testing.T) {
-			logged := &lockedLogs{}
-			slog.SetDefault(slog.New(slog.NewTextHandler(logged, nil)))
 			shown := doors.NewSource(false)
 			marks := make(chan int, 1)
 			when := func(name string) gox.Elem {
@@ -170,11 +145,6 @@ func TestTiersBelowArchitectHideIslands(t *testing.T) {
 				if got := tree(8); !slices.Equal(got, []string{"panel"}) {
 					t.Fatalf("tree after opening shows %v, want the panel alone", got)
 				}
-				for _, space := range []string{"board", "panel.inner", "outer"} {
-					if n := strings.Count(logged.String(), "msg=\"page: island hidden below TierArchitect\" space="+space+"\n"); n != 1 {
-						t.Fatalf("the warning for %s was logged %d times, want once:\n%s", space, n, logged)
-					}
-				}
 				return
 			}
 			if got := tree(1); !slices.Equal(got, []string{"board*", "board.app", "board.screen", "panel"}) {
@@ -194,9 +164,6 @@ func TestTiersBelowArchitectHideIslands(t *testing.T) {
 			}
 			if got := tree(8); !slices.Equal(got, []string{"board*", "outer*", "panel"}) {
 				t.Fatalf("tree after opening shows %v, want both islands at the root", got)
-			}
-			if strings.Contains(logged.String(), "island hidden") {
-				t.Fatalf("TierArchitect logged an island-hidden warning:\n%s", logged)
 			}
 		})
 	}
