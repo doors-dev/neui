@@ -89,6 +89,11 @@ elem productsPage(path doors.Source[ProductsPath]) {
 					},
 				}
 				~(search.Bind(func(q string) gox.Elem {
+					return <>
+						~neui.Data{Text: "products matching the search", Object: len(shop.Products(q, ""))}
+					</>
+				}))
+				~(search.Bind(func(q string) gox.Elem {
 					return searchBar("products-search", "Search by name or SKU", q, "search products by name or SKU; applies on Enter or when the field loses focus", func(ctx context.Context, v string) {
 						path.Mutate(ctx, func(p ProductsPath) ProductsPath {
 							p.Search, p.Page = v, 0
@@ -120,7 +125,7 @@ elem productsTable(p ProductsPath) {
 	~~
 	~>neui.Space{Name: "table", Desc: "Products matching the search with price and stock, one page at a time; the column headers sort it"} <div>
 		~neui.Data{Text: "products shown in the table", Object: rows}
-		~neui.Data{Text: fmt.Sprintf("page %d of %d; %d products match", info.Page, info.Pages, info.Total)}
+		~neui.Data{Text: fmt.Sprintf("page %d of %d", info.Page, info.Pages)}
 		~(if len(all) == 0 {
 			~emptyState{
 				Icon: iconProducts,
@@ -158,9 +163,7 @@ elem productsTable(p ProductsPath) {
 					</tbody>
 				</table>
 			</div>
+			~pager{Info: info, Noun: "products", Model: p.withPage}
 		})
 	</div>
-	~(if len(all) > 0 {
-		~pager{Info: info, Noun: "products", Model: p.withPage}
-	})
 }

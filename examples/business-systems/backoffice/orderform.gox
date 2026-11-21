@@ -207,7 +207,7 @@ elem (e orderEditor) fields(s formState[orderForm], lines doors.Source[[]lineFor
 					}
 				</div>,
 			}
-			~>neui.Space{Name: "items", Desc: "Item rows of the form: a product and a quantity each, with buttons to add and remove rows"} ~card{
+			~card{
 				Title: "Items",
 				Desc: "Products and quantities. Stock is checked when you save.",
 				Flush: true,
@@ -344,11 +344,11 @@ elem (e orderEditor) lineRow(i int, l lineForm, errs fieldErrors, products []opt
 elem (e orderEditor) summary(ls []lineForm) {
 	~~
 	type row struct {
-		Name string
-		Qty int
-		Amount float64
+		Name string `json:"product"`
+		Qty int `json:"qty"`
+		Amount float64 `json:"amount"`
 	}
-	var rows []row
+	rows := []row{}
 	total := 0.0
 	for _, l := range ls {
 		pid, _ := strconv.Atoi(l.Product)
@@ -366,18 +366,21 @@ elem (e orderEditor) summary(ls []lineForm) {
 	}
 	~~
 	~neui.Data{Text: "order total for the items picked so far, USD", Object: round(total)}
-	~(if len(rows) == 0 {
-		<p class="text-sm text-stone-500">Pick products to see the total.</p>
-	} else {
-		<ul class="space-y-2 text-sm">
-			~(for _, r := range rows {
-				<li class="flex justify-between gap-3">
-					<span class="text-stone-600">~(r.Qty, " × ", r.Name)</span>
-					<span class="text-stone-900 tabular-nums">~(money(r.Amount))</span>
-				</li>
-			})
-		</ul>
-	})
+	~>neui.Space{Name: "summary", Desc: "Items picked so far, each with its quantity and amount"} <div>
+		~neui.Data{Text: "items picked so far, amounts in USD", Object: rows}
+		~(if len(rows) == 0 {
+			<p class="text-sm text-stone-500">Pick products to see the total.</p>
+		} else {
+			<ul class="space-y-2 text-sm">
+				~(for _, r := range rows {
+					<li class="flex justify-between gap-3">
+						<span class="text-stone-600">~(r.Qty, " × ", r.Name)</span>
+						<span class="text-stone-900 tabular-nums">~(money(r.Amount))</span>
+					</li>
+				})
+			</ul>
+		})
+	</div>
 	<div class="mt-4 flex items-baseline justify-between border-t border-stone-100 pt-4">
 		<span class="text-sm font-medium text-stone-600">Total</span>
 		<span class="text-xl font-semibold text-stone-900 tabular-nums">~(money(total))</span>

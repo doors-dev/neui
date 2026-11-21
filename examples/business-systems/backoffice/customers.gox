@@ -89,6 +89,11 @@ elem customersPage(path doors.Source[CustomersPath]) {
 					},
 				}
 				~(search.Bind(func(q string) gox.Elem {
+					return <>
+						~neui.Data{Text: "customers matching the search", Object: len(shop.Customers(q, ""))}
+					</>
+				}))
+				~(search.Bind(func(q string) gox.Elem {
 					return searchBar("customers-search", "Search by name, email, company or phone", q, "search customers by name, email, company or phone; applies on Enter or when the field loses focus", func(ctx context.Context, v string) {
 						path.Mutate(ctx, func(p CustomersPath) CustomersPath {
 							p.Search, p.Page = v, 0
@@ -144,7 +149,7 @@ elem customersTable(p CustomersPath) {
 	~~
 	~>neui.Space{Name: "table", Desc: "Customers matching the search, one page at a time; the column headers sort it"} <div>
 		~neui.Data{Text: "customers shown in the table, with their order count and paid total", Object: rows}
-		~neui.Data{Text: fmt.Sprintf("page %d of %d; %d customers match", info.Page, info.Pages, info.Total)}
+		~neui.Data{Text: fmt.Sprintf("page %d of %d", info.Page, info.Pages)}
 		~(if len(all) == 0 {
 			~emptyState{
 				Icon: iconCustomers,
@@ -187,11 +192,9 @@ elem customersTable(p CustomersPath) {
 					</tbody>
 				</table>
 			</div>
+			~pager{Info: info, Noun: "customers", Model: p.withPage}
 		})
 	</div>
-	~(if len(all) > 0 {
-		~pager{Info: info, Noun: "customers", Model: p.withPage}
-	})
 }
 
 elem avatar(name string) {

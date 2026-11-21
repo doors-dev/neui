@@ -138,6 +138,19 @@ func productsPage(path doors.Source[ProductsPath]) gox.Elem {
 				}); if __e != nil { return }
 //line products.gox:91
 							__e = __c.Any(search.Bind(func(q string) gox.Elem {
+					return gox.Elem(func(__c gox.Cursor) (__e error) {
+						ctx := __c.Context(); _ = ctx
+						__e = __c.InitContainer(); if __e != nil { return }
+						{
+//line products.gox:93
+							__e = __c.Any(neui.Data{Text: "products matching the search", Object: len(shop.Products(q, ""))}); if __e != nil { return }
+						}
+						__e = __c.Close(); if __e != nil { return }
+//line products.gox:94
+					return })
+				})); if __e != nil { return }
+//line products.gox:96
+							__e = __c.Any(search.Bind(func(q string) gox.Elem {
 					return searchBar("products-search", "Search by name or SKU", q, "search products by name or SKU; applies on Enter or when the field loses focus", func(ctx context.Context, v string) {
 						path.Mutate(ctx, func(p ProductsPath) ProductsPath {
 							p.Search, p.Page = v, 0
@@ -148,10 +161,10 @@ func productsPage(path doors.Source[ProductsPath]) gox.Elem {
 						}
 						__e = __c.Close(); if __e != nil { return }
 					return })); if __e != nil { return }
-//line products.gox:100
+//line products.gox:105
 					__e = (new(doors.Door)).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 						ctx := __c.Context(); _ = ctx
-//line products.gox:100
+//line products.gox:105
 						__e = __c.Any(func() any {
 				_, _ = shop.version.Effect(ctx)
 				p, ok := path.Effect(ctx)
@@ -167,14 +180,14 @@ func productsPage(path doors.Source[ProductsPath]) gox.Elem {
 			__e = __c.Close(); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
-//line products.gox:110
+//line products.gox:115
 }
 
-//line products.gox:112
+//line products.gox:117
 func productsTable(p ProductsPath) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line products.gox:114
+//line products.gox:119
 		all := shop.Products(p.Search, p.Sort)
 	rows, info := paginate(all, p.Page, pageSize)
 	sort := p.Sort
@@ -182,19 +195,19 @@ func productsTable(p ProductsPath) gox.Elem {
 		sort = "name"
 	}
 
-//line products.gox:121
+//line products.gox:126
 		__e = (neui.Space{Name: "table", Desc: "Products matching the search with price and stock, one page at a time; the column headers sort it"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
 			__e = __c.Init("div"); if __e != nil { return }
 			{
 				__e = __c.Submit(); if __e != nil { return }
-//line products.gox:122
+//line products.gox:127
 				__e = __c.Any(neui.Data{Text: "products shown in the table", Object: rows}); if __e != nil { return }
-//line products.gox:123
-				__e = __c.Any(neui.Data{Text: fmt.Sprintf("page %d of %d; %d products match", info.Page, info.Pages, info.Total)}); if __e != nil { return }
-//line products.gox:124
+//line products.gox:128
+				__e = __c.Any(neui.Data{Text: fmt.Sprintf("page %d of %d", info.Page, info.Pages)}); if __e != nil { return }
+//line products.gox:129
 				if len(all) == 0 {
-//line products.gox:125
+//line products.gox:130
 					__e = __c.Any(emptyState{
 				Icon: iconProducts,
 				Title: "No products found",
@@ -203,14 +216,14 @@ func productsTable(p ProductsPath) gox.Elem {
 					ctx := __c.Context(); _ = ctx
 					__e = __c.InitContainer(); if __e != nil { return }
 					{
-//line products.gox:130
+//line products.gox:135
 						__e = (neui.Use{Desc: "clear the search"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 							ctx := __c.Context(); _ = ctx
 							__e = __c.Init("a"); if __e != nil { return }
 							{
-//line products.gox:130
+//line products.gox:135
 								__e = __c.Modify(doors.ALink{Model: ProductsPath{}, Batch: true}); if __e != nil { return }
-//line products.gox:130
+//line products.gox:135
 								__e = __c.Set("class", btnSecondary); if __e != nil { return }
 								__e = __c.Submit(); if __e != nil { return }
 								__e = __c.Text("Clear search"); if __e != nil { return }
@@ -219,18 +232,18 @@ func productsTable(p ProductsPath) gox.Elem {
 						return })); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
-//line products.gox:131
+//line products.gox:136
 				return }),
 			}); if __e != nil { return }
 				} else  {
 					__e = __c.Init("div"); if __e != nil { return }
 					{
-//line products.gox:134
+//line products.gox:139
 						__e = __c.Set("class", "overflow-x-auto"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 						__e = __c.Init("table"); if __e != nil { return }
 						{
-//line products.gox:135
+//line products.gox:140
 							__e = __c.Set("class", tableClass); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.Init("thead"); if __e != nil { return }
@@ -239,13 +252,13 @@ func productsTable(p ProductsPath) gox.Elem {
 								__e = __c.Init("tr"); if __e != nil { return }
 								{
 									__e = __c.Submit(); if __e != nil { return }
-//line products.gox:138
+//line products.gox:143
 									__e = __c.Any(sortHeader{Label: "Product", Key: "name", First: "name", Current: sort, Model: p.withSort}); if __e != nil { return }
-//line products.gox:139
+//line products.gox:144
 									__e = __c.Any(sortHeader{Label: "SKU", Key: "sku", First: "sku", Current: sort, Class: "hidden @xl:table-cell", Model: p.withSort}); if __e != nil { return }
-//line products.gox:140
+//line products.gox:145
 									__e = __c.Any(sortHeader{Label: "Price", Key: "price", First: "-price", Current: sort, Right: true, Model: p.withSort}); if __e != nil { return }
-//line products.gox:141
+//line products.gox:146
 									__e = __c.Any(sortHeader{Label: "Stock", Key: "stock", First: "stock", Current: sort, Right: true, Model: p.withSort}); if __e != nil { return }
 								}
 								__e = __c.Close(); if __e != nil { return }
@@ -254,39 +267,39 @@ func productsTable(p ProductsPath) gox.Elem {
 							__e = __c.Init("tbody"); if __e != nil { return }
 							{
 								__e = __c.Submit(); if __e != nil { return }
-//line products.gox:145
+//line products.gox:150
 								for _, it := range rows {
 									__e = __c.Init("tr"); if __e != nil { return }
 									{
-//line products.gox:146
+//line products.gox:151
 										__e = __c.Set("class", rowClass); if __e != nil { return }
 										__e = __c.Submit(); if __e != nil { return }
 										__e = __c.Init("td"); if __e != nil { return }
 										{
-//line products.gox:147
+//line products.gox:152
 											__e = __c.Set("class", tdClass); if __e != nil { return }
 											__e = __c.Submit(); if __e != nil { return }
-//line products.gox:148
+//line products.gox:153
 											__e = (neui.Use{Desc: "open product " + it.Name + " to edit it"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 												ctx := __c.Context(); _ = ctx
 												__e = __c.Init("a"); if __e != nil { return }
 												{
-//line products.gox:148
+//line products.gox:153
 													__e = __c.Modify(doors.ALink{Model: ProductPath{ID: it.ID}, Batch: true, After: scrollTop}); if __e != nil { return }
-//line products.gox:148
+//line products.gox:153
 													__e = __c.Set("class", "font-medium text-stone-900 hover:underline"); if __e != nil { return }
 													__e = __c.Submit(); if __e != nil { return }
-//line products.gox:149
+//line products.gox:154
 													__e = __c.Any(it.Name); if __e != nil { return }
 												}
 												__e = __c.Close(); if __e != nil { return }
 											return })); if __e != nil { return }
 											__e = __c.Init("p"); if __e != nil { return }
 											{
-//line products.gox:151
+//line products.gox:156
 												__e = __c.Set("class", "text-xs text-stone-500 @xl:hidden"); if __e != nil { return }
 												__e = __c.Submit(); if __e != nil { return }
-//line products.gox:151
+//line products.gox:156
 												__e = __c.Any(it.SKU); if __e != nil { return }
 											}
 											__e = __c.Close(); if __e != nil { return }
@@ -294,28 +307,28 @@ func productsTable(p ProductsPath) gox.Elem {
 										__e = __c.Close(); if __e != nil { return }
 										__e = __c.Init("td"); if __e != nil { return }
 										{
-//line products.gox:153
+//line products.gox:158
 											__e = __c.Set("class", tdClass.Add("hidden font-mono text-xs text-stone-500 @xl:table-cell")); if __e != nil { return }
 											__e = __c.Submit(); if __e != nil { return }
-//line products.gox:153
+//line products.gox:158
 											__e = __c.Any(it.SKU); if __e != nil { return }
 										}
 										__e = __c.Close(); if __e != nil { return }
 										__e = __c.Init("td"); if __e != nil { return }
 										{
-//line products.gox:154
+//line products.gox:159
 											__e = __c.Set("class", tdClass.Add("text-right tabular-nums")); if __e != nil { return }
 											__e = __c.Submit(); if __e != nil { return }
-//line products.gox:154
+//line products.gox:159
 											__e = __c.Any(money(it.Price)); if __e != nil { return }
 										}
 										__e = __c.Close(); if __e != nil { return }
 										__e = __c.Init("td"); if __e != nil { return }
 										{
-//line products.gox:155
+//line products.gox:160
 											__e = __c.Set("class", tdClass.Add("text-right")); if __e != nil { return }
 											__e = __c.Submit(); if __e != nil { return }
-//line products.gox:155
+//line products.gox:160
 											__e = __c.Any(stockBadge(it.Stock)); if __e != nil { return }
 										}
 										__e = __c.Close(); if __e != nil { return }
@@ -328,15 +341,12 @@ func productsTable(p ProductsPath) gox.Elem {
 						__e = __c.Close(); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
+//line products.gox:166
+					__e = __c.Any(pager{Info: info, Noun: "products", Model: p.withPage}); if __e != nil { return }
 				}
 			}
 			__e = __c.Close(); if __e != nil { return }
 		return })); if __e != nil { return }
-//line products.gox:163
-		if len(all) > 0 {
-//line products.gox:164
-			__e = __c.Any(pager{Info: info, Noun: "products", Model: p.withPage}); if __e != nil { return }
-		}
 	return })
-//line products.gox:166
+//line products.gox:169
 }

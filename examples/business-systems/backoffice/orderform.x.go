@@ -310,10 +310,7 @@ func (e orderEditor) fields(s formState[orderForm], lines doors.Source[[]lineFor
 				return }),
 			}); if __e != nil { return }
 //line orderform.gox:210
-				__e = (neui.Space{Name: "items", Desc: "Item rows of the form: a product and a quantity each, with buttons to add and remove rows"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
-					ctx := __c.Context(); _ = ctx
-//line orderform.gox:210
-					__e = __c.Any(card{
+				__e = __c.Any(card{
 				Title: "Items",
 				Desc: "Products and quantities. Stock is checked when you save.",
 				Flush: true,
@@ -381,7 +378,6 @@ func (e orderEditor) fields(s formState[orderForm], lines doors.Source[[]lineFor
 //line orderform.gox:232
 				return }),
 			}); if __e != nil { return }
-				return })); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 			__e = __c.Init("div"); if __e != nil { return }
@@ -644,11 +640,11 @@ func (e orderEditor) summary(ls []lineForm) gox.Elem {
 		ctx := __c.Context(); _ = ctx
 //line orderform.gox:346
 		type row struct {
-		Name string
-		Qty int
-		Amount float64
+		Name string `json:"product"`
+		Qty int `json:"qty"`
+		Amount float64 `json:"amount"`
 	}
-	var rows []row
+	rows := []row{}
 	total := 0.0
 	for _, l := range ls {
 		pid, _ := strconv.Atoi(l.Product)
@@ -668,60 +664,71 @@ func (e orderEditor) summary(ls []lineForm) gox.Elem {
 //line orderform.gox:368
 		__e = __c.Any(neui.Data{Text: "order total for the items picked so far, USD", Object: round(total)}); if __e != nil { return }
 //line orderform.gox:369
-		if len(rows) == 0 {
-			__e = __c.Init("p"); if __e != nil { return }
+		__e = (neui.Space{Name: "summary", Desc: "Items picked so far, each with its quantity and amount"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+			ctx := __c.Context(); _ = ctx
+			__e = __c.Init("div"); if __e != nil { return }
 			{
+				__e = __c.Submit(); if __e != nil { return }
 //line orderform.gox:370
-				__e = __c.Set("class", "text-sm text-stone-500"); if __e != nil { return }
-				__e = __c.Submit(); if __e != nil { return }
-				__e = __c.Text("Pick products to see the total."); if __e != nil { return }
-			}
-			__e = __c.Close(); if __e != nil { return }
-		} else  {
-			__e = __c.Init("ul"); if __e != nil { return }
-			{
+				__e = __c.Any(neui.Data{Text: "items picked so far, amounts in USD", Object: rows}); if __e != nil { return }
+//line orderform.gox:371
+				if len(rows) == 0 {
+					__e = __c.Init("p"); if __e != nil { return }
+					{
 //line orderform.gox:372
-				__e = __c.Set("class", "space-y-2 text-sm"); if __e != nil { return }
-				__e = __c.Submit(); if __e != nil { return }
-//line orderform.gox:373
-				for _, r := range rows {
-					__e = __c.Init("li"); if __e != nil { return }
+						__e = __c.Set("class", "text-sm text-stone-500"); if __e != nil { return }
+						__e = __c.Submit(); if __e != nil { return }
+						__e = __c.Text("Pick products to see the total."); if __e != nil { return }
+					}
+					__e = __c.Close(); if __e != nil { return }
+				} else  {
+					__e = __c.Init("ul"); if __e != nil { return }
 					{
 //line orderform.gox:374
-						__e = __c.Set("class", "flex justify-between gap-3"); if __e != nil { return }
+						__e = __c.Set("class", "space-y-2 text-sm"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-						__e = __c.Init("span"); if __e != nil { return }
-						{
 //line orderform.gox:375
-							__e = __c.Set("class", "text-stone-600"); if __e != nil { return }
-							__e = __c.Submit(); if __e != nil { return }
-//line orderform.gox:375
-							__e = __c.Many(r.Qty, " × ", r.Name); if __e != nil { return }
-						}
-						__e = __c.Close(); if __e != nil { return }
-						__e = __c.Init("span"); if __e != nil { return }
-						{
+						for _, r := range rows {
+							__e = __c.Init("li"); if __e != nil { return }
+							{
 //line orderform.gox:376
-							__e = __c.Set("class", "text-stone-900 tabular-nums"); if __e != nil { return }
-							__e = __c.Submit(); if __e != nil { return }
-//line orderform.gox:376
-							__e = __c.Any(money(r.Amount)); if __e != nil { return }
+								__e = __c.Set("class", "flex justify-between gap-3"); if __e != nil { return }
+								__e = __c.Submit(); if __e != nil { return }
+								__e = __c.Init("span"); if __e != nil { return }
+								{
+//line orderform.gox:377
+									__e = __c.Set("class", "text-stone-600"); if __e != nil { return }
+									__e = __c.Submit(); if __e != nil { return }
+//line orderform.gox:377
+									__e = __c.Many(r.Qty, " × ", r.Name); if __e != nil { return }
+								}
+								__e = __c.Close(); if __e != nil { return }
+								__e = __c.Init("span"); if __e != nil { return }
+								{
+//line orderform.gox:378
+									__e = __c.Set("class", "text-stone-900 tabular-nums"); if __e != nil { return }
+									__e = __c.Submit(); if __e != nil { return }
+//line orderform.gox:378
+									__e = __c.Any(money(r.Amount)); if __e != nil { return }
+								}
+								__e = __c.Close(); if __e != nil { return }
+							}
+							__e = __c.Close(); if __e != nil { return }
 						}
-						__e = __c.Close(); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
 				}
 			}
 			__e = __c.Close(); if __e != nil { return }
-		}
+		return })); if __e != nil { return }
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line orderform.gox:381
+//line orderform.gox:384
 			__e = __c.Set("class", "mt-4 flex items-baseline justify-between border-t border-stone-100 pt-4"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Init("span"); if __e != nil { return }
 			{
-//line orderform.gox:382
+//line orderform.gox:385
 				__e = __c.Set("class", "text-sm font-medium text-stone-600"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 				__e = __c.Text("Total"); if __e != nil { return }
@@ -729,15 +736,15 @@ func (e orderEditor) summary(ls []lineForm) gox.Elem {
 			__e = __c.Close(); if __e != nil { return }
 			__e = __c.Init("span"); if __e != nil { return }
 			{
-//line orderform.gox:383
+//line orderform.gox:386
 				__e = __c.Set("class", "text-xl font-semibold text-stone-900 tabular-nums"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line orderform.gox:383
+//line orderform.gox:386
 				__e = __c.Any(money(total)); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line orderform.gox:385
+//line orderform.gox:388
 }

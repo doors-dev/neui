@@ -156,6 +156,13 @@ elem orderFilters(path doors.Source[OrdersPath]) {
 				return ordersToolOutput{Shown: shown, Page: info}, nil
 			},
 		}
+		~(doors.DeriveBeam(path, func(p OrdersPath) int {
+			return len(shop.Orders(p.query()))
+		}).Bind(func(n int) gox.Elem {
+			return <>
+				~neui.Data{Text: "orders matching the filters", Object: n}
+			</>
+		}))
 		<div class="relative flex-1 @4xl:min-w-56">
 			<label for="orders-search" class="sr-only">Search orders</label>
 			<span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-stone-400">
@@ -303,7 +310,7 @@ elem ordersTable(p OrdersPath) {
 		Desc: "Orders matching the filters, one page at a time; the column headers sort it",
 	} <div>
 		~neui.Data{Text: "orders shown in the table", Object: rows}
-		~neui.Data{Text: fmt.Sprintf("page %d of %d; %d orders match the filters", info.Page, info.Pages, info.Total)}
+		~neui.Data{Text: fmt.Sprintf("page %d of %d", info.Page, info.Pages)}
 		~(if len(all) == 0 {
 			~emptyState{
 				Icon: iconSearch,
@@ -333,11 +340,9 @@ elem ordersTable(p OrdersPath) {
 					</tbody>
 				</table>
 			</div>
+			~pager{Info: info, Noun: "orders", Model: p.withPage}
 		})
 	</div>
-	~(if len(all) > 0 {
-		~pager{Info: info, Noun: "orders", Model: p.withPage}
-	})
 }
 
 elem orderRow(o order, due bool) {
