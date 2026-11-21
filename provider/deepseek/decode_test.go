@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -863,6 +864,31 @@ func TestStreamInBandErrorKeepsTheDeltaItRodeWith(t *testing.T) {
 		`text 0 "half a sen"`,
 		"err network",
 	)
+}
+
+// The head of the stream is a recorded Flash turn; the tail is the generation
+// failure guides/web_tools documents: the last chunk carries error and usage
+// with empty choices, and no [DONE] follows.
+func TestStreamGenerationFailureReportsItsUsage(t *testing.T) {
+	data, err := os.ReadFile("testdata/streams/flash-generation-failure.sse")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := serveModel(t, "deepseek-flash", stringHandler(string(data)))
+	events := collect(t, p, turn("hi"))
+	conform.CheckUnframed(t, events)
+	got := conform.DescribeAll(events)
+	if len(got) < 3 || got[len(got)-2] != "usage in=199 out=5 rsn=4 cr=384 cw=0" {
+		t.Fatalf("the failed turn's usage is not reported before its end:\n%v", got)
+	}
+	end, ok := events[len(events)-1].(api.EventErr)
+	var apiErr *APIError
+	if !ok || end.Code != api.CodeNetwork || !errors.As(end.Err, &apiErr) || apiErr.Type != "api_error" || !strings.HasPrefix(apiErr.Message, "The model failed") {
+		t.Fatalf("ended with %s, want err network carrying the api_error", got[len(got)-1])
+	}
+	if text := fold(t, events); len(text) != 2 || text[1].(api.ContentText).Text != "Tokyo (capital of Japan" {
+		t.Fatalf("streamed content %+v, want the reasoning and the text before the failure", text)
+	}
 }
 
 // A frame that does not parse is a stream that stopped making sense, which is

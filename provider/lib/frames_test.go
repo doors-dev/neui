@@ -28,9 +28,9 @@ import (
 
 	"neui.dev/api"
 	"neui.dev/provider/claude"
-	"neui.dev/provider/compat"
 	"neui.dev/provider/deepseek"
 	"neui.dev/provider/gemini"
+	"neui.dev/provider/generic"
 	"neui.dev/provider/gpt"
 )
 
@@ -250,7 +250,7 @@ func geminiCorpus() []corpusCase {
 	}
 }
 
-func compatCorpus() []corpusCase {
+func genericCorpus() []corpusCase {
 	chunk := func(delta, finish string) string {
 		return sseFrame("", `{"id":"gen-1","object":"chat.completion.chunk","created":1,"model":"qwen/qwen3.8-27b","provider":"Wafer","choices":[{"index":0,"delta":`+delta+`,"finish_reason":`+finish+`,"native_finish_reason":`+finish+`}]}`)
 	}
@@ -275,9 +275,9 @@ func compatCorpus() []corpusCase {
 	failed := chunk(`{"role":"assistant","content":"half"}`, "null") +
 		sseFrame("", `{"id":"gen-1","object":"chat.completion.chunk","created":1,"model":"qwen/qwen3.8-27b","provider":"Wafer","error":{"code":502,"message":"Provider disconnected <retry>","metadata":{"error_type":"provider_unavailable"}},"choices":[{"index":0,"delta":{"content":""},"finish_reason":"error"}]}`)
 	return []corpusCase{
-		{name: "compat/rich", body: rich, want: "c66d3463d927c4071242390cdac86dfa34883eda295189c1b616fd7ee9e714b7"},
-		{name: "compat/capped", body: capped, want: "06cd47217a90b1151ffb50105d0545b638bd2ac7b54e6ca55c71819ab50662f0"},
-		{name: "compat/error", body: failed, want: "d21794e6bc89f9406dc0dc13828f96a3d4d8bee0a7adf3d455dff11aa1ef63ae"},
+		{name: "generic/rich", body: rich, want: "e3926b73fc7832c6fe72a66df8a272212a8ccae035a260746eedbd0f32c1539f"},
+		{name: "generic/capped", body: capped, want: "22d19996cbf14f4e75efe5dff39f295bef23d17f4fe9851a43e9ee4af78206c3"},
+		{name: "generic/error", body: failed, want: "8215468c1c65e0c53919444a4381d7925b2efb2de3533999e8c131da83cf59f0"},
 	}
 }
 
@@ -331,8 +331,8 @@ func corpusProvider(t *testing.T, name, url string) streamer {
 		p, err = deepseek.New(deepseek.Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, deepseek.WithAPIKey("k"), deepseek.WithBaseURL(url))
 	case "gemini":
 		p, err = gemini.New(gemini.Conf{Model: api.Model{Name: "gemini-4-hydrogen"}}, gemini.WithAPIKey("k"), gemini.WithBaseURL(url))
-	case "compat":
-		p, err = compat.New(compat.Conf{Model: api.Model{Name: "qwen/qwen3.8-27b"}, BaseURL: url}, compat.WithAPIKey("k"))
+	case "generic":
+		p, err = generic.New(generic.Conf{Model: api.Model{Name: "qwen/qwen3.8-27b"}, BaseURL: url}, generic.WithAPIKey("k"))
 	}
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -341,7 +341,7 @@ func corpusProvider(t *testing.T, name, url string) streamer {
 }
 
 func corpus() []corpusCase {
-	return append(append(append(append(claudeCorpus(), gptCorpus()...), deepseekCorpus()...), geminiCorpus()...), compatCorpus()...)
+	return append(append(append(append(claudeCorpus(), gptCorpus()...), deepseekCorpus()...), geminiCorpus()...), genericCorpus()...)
 }
 
 func runCorpus(t *testing.T, c corpusCase, late bool) []api.Event {

@@ -51,11 +51,16 @@ type unzipResult struct {
 
 func zipTool(ctx context.Context, arg zipArg) (Entry, error) {
 	fs := common.GetController(ctx).FS()
-	dst := path.Clean(arg.Dst)
-	out, err := fs.Create(dst)
+	out, err := fs.Create(arg.Dst)
 	if err != nil {
 		return Entry{}, err
 	}
+	created, err := fs.Stat(ctx, arg.Dst)
+	if err != nil {
+		out.Close()
+		return Entry{}, errors.Join(err, fs.Remove(context.WithoutCancel(ctx), arg.Dst))
+	}
+	dst := created.Name
 	zw := zip.NewWriter(out)
 	added := map[string]bool{}
 	err = func() error {

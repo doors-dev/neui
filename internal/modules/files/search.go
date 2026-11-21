@@ -94,6 +94,7 @@ func grepTool(ctx context.Context, arg grepArg) (grepResult, error) {
 		}
 		return !res.Truncated, nil
 	}
+	skip := 0
 	if arg.Path != "" {
 		e, err := fs.Stat(ctx, arg.Path)
 		if err != nil {
@@ -103,10 +104,9 @@ func grepTool(ctx context.Context, arg grepArg) (grepResult, error) {
 			_, err := scan(e.Name, path.Base(e.Name))
 			return res, err
 		}
-	}
-	skip := 0
-	if root := path.Clean(arg.Path); root != "." {
-		skip = len(root) + 1
+		if e.Name != "." {
+			skip = len(e.Name) + 1
+		}
 	}
 	if _, err := walkFiles(ctx, fs, arg.Path, false, func(e api.FSEntry) (bool, error) {
 		return scan(e.Name, e.Name[skip:])
@@ -166,8 +166,14 @@ func globTool(ctx context.Context, arg globArg) (globResult, error) {
 		return globResult{}, err
 	}
 	skip := 0
-	if root := path.Clean(arg.Path); root != "." {
-		skip = len(root) + 1
+	if arg.Path != "" {
+		e, err := fs.Stat(ctx, arg.Path)
+		if err != nil {
+			return globResult{}, err
+		}
+		if e.Name != "." {
+			skip = len(e.Name) + 1
+		}
 	}
 	res := globResult{Paths: []string{}}
 	_, err = walkFiles(ctx, fs, arg.Path, true, func(e api.FSEntry) (bool, error) {

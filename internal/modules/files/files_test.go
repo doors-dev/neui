@@ -25,6 +25,7 @@ import (
 	"image/gif"
 	"image/png"
 	"io"
+	"slices"
 	"strings"
 	"testing"
 
@@ -872,5 +873,73 @@ func TestReadFromScriptIsTheText(t *testing.T) {
 	}
 	if _, err := call([]any{`{"path":"a.txt","offset":9}`}); err == nil {
 		t.Fatal("a script read past the end succeeded")
+	}
+}
+
+func TestToolsTakeRootedAndFileURLPaths(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	fs, store := c.FS(), c.Store()
+	write(t, fs, "sub/one.txt", "needle")
+	write(t, fs, "sub/notes.txt", "needle")
+	putFile(t, store, api.OriginAgent, "out.txt", "needle")
+	for _, root := range []string{"sub", "/sub", "file:///sub", "file:///sub/"} {
+		res, err := globTool(c.Ctx(), globArg{Pattern: "o*", Path: root})
+		if err != nil || !slices.Equal(res.Paths, []string{"sub/one.txt"}) {
+			t.Errorf("glob o* in %q: %+v, %v", root, res, err)
+		}
+		gres, err := grepTool(c.Ctx(), grepArg{Pattern: "needle", Path: root, Glob: "o*"})
+		if err != nil || len(gres.Matches) != 1 || gres.Matches[0].Path != "sub/one.txt" {
+			t.Errorf("grep o* in %q: %+v, %v", root, gres, err)
+		}
+	}
+	for _, root := range []string{"agent_uploads", "/agent_uploads", "file:///agent_uploads", "file:///agent_uploads/"} {
+		res, err := globTool(c.Ctx(), globArg{Pattern: "o*", Path: root})
+		if err != nil || !slices.Equal(res.Paths, []string{"agent_uploads/out.txt"}) {
+			t.Errorf("glob o* in %q: %+v, %v", root, res, err)
+		}
+		gres, err := grepTool(c.Ctx(), grepArg{Pattern: "needle", Path: root, Glob: "o*"})
+		if err != nil || len(gres.Matches) != 1 || gres.Matches[0].Path != "agent_uploads/out.txt" {
+			t.Errorf("grep o* in %q: %+v, %v", root, gres, err)
+		}
+	}
+	for _, root := range []string{"/", "file:///"} {
+		res, err := globTool(c.Ctx(), globArg{Pattern: "sub/o*", Path: root})
+		if err != nil || !slices.Equal(res.Paths, []string{"sub/one.txt"}) {
+			t.Errorf("glob sub/o* in %q: %+v, %v", root, res, err)
+		}
+	}
+	for _, dst := range []string{"/z.zip", "file:///z.zip"} {
+		e, err := zipTool(c.Ctx(), zipArg{Paths: []string{"."}, Dst: dst})
+		if err != nil || e.Path != "z.zip" {
+			t.Fatalf("zip to %q: %+v, %v", dst, e, err)
+		}
+		if names := zipNames(t, fs, "z.zip"); !slices.Equal(names, []string{"sub/notes.txt", "sub/one.txt"}) {
+			t.Fatalf("zip to %q holds %v", dst, names)
+		}
+	}
+	if _, err := zipTool(c.Ctx(), zipArg{Paths: []string{"sub"}, Dst: "file:///agent_uploads/z.zip"}); !errors.Is(err, api.ErrReadOnly) {
+		t.Fatalf("zip into agent_uploads by file URL: %v", err)
+	}
+	res, err := unzipTool(c.Ctx(), unzipArg{Src: "file:///z.zip", Dst: "file:///out"})
+	if err != nil || res.Count != 2 {
+		t.Fatalf("unzip: %+v, %v", res, err)
+	}
+	rc, err := fs.ReadAll(c.Ctx(), "out/sub/one.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := io.ReadAll(rc)
+	rc.Close()
+	if string(got) != "needle" {
+		t.Fatalf("unzipped %q", got)
+	}
+	entries, err := fs.ReadDir(c.Ctx(), ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name, "file:") {
+			t.Fatalf("the workspace root holds %q", e.Name)
+		}
 	}
 }

@@ -32,7 +32,7 @@ func ProviderBlocks() api.Contents {
 		api.ContentReasoning{Model: "deepseek-flash", Thoughts: api.Indexed[string]{0: "deepseek ", 1: "thinks"}, Meta: json.RawMessage(`{"provider":"deepseek"}`)},
 		api.ContentReasoning{Model: "gemini-4-hydrogen", Meta: json.RawMessage(`{"provider":"gemini","data":{"type":"thought","signature":"EoMNCoANAWkU+/=="}}`)},
 		api.ContentOpaque{Model: "gemini-4-hydrogen", Kind: "gemini.google_search_call", Data: json.RawMessage(`{"type":"google_search_call","id":"gs_1","arguments":{"queries":["cats"]},"signature":"c2ln"}`)},
-		api.ContentReasoning{Model: "qwen3.8-27b", Thoughts: api.Indexed[string]{0: "compat thinks"}, Meta: json.RawMessage(`{"provider":"compat","data":"reasoning_content"}`)},
+		api.ContentReasoning{Model: "qwen3.8-27b", Thoughts: api.Indexed[string]{0: "generic thinks"}, Meta: json.RawMessage(`{"provider":"generic","data":"reasoning_content"}`)},
 		api.ContentToolUse{ID: "call.1:x", Name: "functions.lookup", Input: json.RawMessage(`{"z":1,"a":[2]}`)},
 	}
 }

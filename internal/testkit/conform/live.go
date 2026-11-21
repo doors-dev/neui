@@ -201,6 +201,37 @@ func liveGenerate(t *testing.T, a Adapter, key string) {
 		events, _ = turn(t, m, cheap, req)
 		ended(t, events)
 	})
+	t.Run("texts-apart", func(t *testing.T) {
+		req := api.Request{Tools: tools(), Messages: []api.Message{user(text("Call the lookup tool with q set to cat. Do not answer before calling it."))}}
+		events, content := turn(t, m, cheap, req)
+		ended(t, events)
+		var results []api.Content
+		for _, c := range content {
+			if u, ok := c.(api.ContentToolUse); ok {
+				results = append(results, result(u.ID, api.ToolOk, text("Item 1 of 8"), text("workspace unchanged")))
+			}
+		}
+		if len(results) == 0 {
+			t.Skip("the model answered without calling the tool")
+		}
+		results = append(results, text("Quote the tool result exactly as you received it, character for character, between <q> and </q>."))
+		req.Messages = append(req.Messages, api.Message{Role: api.RoleAssistant, Content: content}, api.Message{Role: api.RoleUser, Content: results})
+		events, content = turn(t, m, cheap, req)
+		ended(t, events)
+		var answer strings.Builder
+		for _, c := range content {
+			if c, ok := c.(api.ContentText); ok {
+				answer.WriteString(c.Text)
+			}
+		}
+		switch {
+		case strings.Contains(answer.String(), "8workspace"):
+			t.Errorf("the two texts of one result reached the model glued: %q", answer.String())
+		case !strings.Contains(answer.String(), "workspace"):
+			t.Skipf("the model did not quote the result: %q", answer.String())
+		}
+		t.Logf("quoted %q", answer.String())
+	})
 	t.Run("invalid", func(t *testing.T) {
 		bad := api.Model{Name: "no-such-model-conform"}
 		events, _ := turn(t, bad, cheap, entry(t, m.Name, "text"))

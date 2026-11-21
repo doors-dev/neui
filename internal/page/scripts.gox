@@ -21,7 +21,7 @@ elem element(id string) {
 		const id = $data("id")
 		const outcome = (...reports) => {
 			const ok = reports.reduce((n, r) => n + r.ok, 0)
-			const failed = reports.reduce((n, r) => n + r.failed, 0)
+			const failed = reports.reduce((n, r) => n + r.failed.length, 0)
 			const canceled = reports.reduce((n, r) => n + r.canceled, 0)
 			if (ok === 0 && failed > 0 && canceled > 0) {
 				throw new Error("its server handlers failed or were canceled")
@@ -114,10 +114,13 @@ elem element(id string) {
 					)
 					return outcome(report)
 				}
-				case "focus":
-					el.focus({ preventScroll: true })
+				case "focus": {
+					const trigger = new EventTarget()
+					trigger.addEventListener("focus", () => el.focus({ preventScroll: true }))
+					await $sys.emit(trigger, new Event("focus"))
 					el.scrollIntoView({ behavior: "smooth", block: "nearest" })
 					return {}
+				}
 				case "read": {
 					const disabled = refused || el.getAttribute("aria-disabled") === "true"
 					const label =
@@ -249,7 +252,7 @@ elem radioGroup(id string) {
 		const id = $data("id")
 		const outcome = (...reports) => {
 			const ok = reports.reduce((n, r) => n + r.ok, 0)
-			const failed = reports.reduce((n, r) => n + r.failed, 0)
+			const failed = reports.reduce((n, r) => n + r.failed.length, 0)
 			const canceled = reports.reduce((n, r) => n + r.canceled, 0)
 			if (ok === 0 && failed > 0 && canceled > 0) {
 				throw new Error("its server handlers failed or were canceled")
@@ -328,7 +331,9 @@ elem radioGroup(id string) {
 			switch (action) {
 				case "focus": {
 					const el = els.find((el) => el.checked) || els[0]
-					el.focus({ preventScroll: true })
+					const trigger = new EventTarget()
+					trigger.addEventListener("focus", () => el.focus({ preventScroll: true }))
+					await $sys.emit(trigger, new Event("focus"))
 					el.scrollIntoView({ behavior: "smooth", block: "nearest" })
 					return {}
 				}

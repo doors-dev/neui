@@ -194,7 +194,7 @@ func TestImageMimeChecked(t *testing.T) {
 	}
 	for _, mime := range []string{"", "image/bmp", "application/pdf"} {
 		got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), user(api.ContentImage{Data: []byte{1}, Mime: mime}))
-		want := `{"role":"user","content":[{"type":"text","text":"[image omitted]"},{"type":"text","text":"what is it"}]}`
+		want := `{"role":"user","content":[{"type":"text","text":"[image omitted]\n"},{"type":"text","text":"what is it"}]}`
 		if !strings.Contains(string(got["messages"]), want) {
 			t.Fatalf("mime %q: messages =\n%s\nwant to contain\n%s", mime, got["messages"], want)
 		}
@@ -218,7 +218,7 @@ func TestImageMimeChecked(t *testing.T) {
 		},
 	})
 	msgs := string(got["messages"])
-	want := `"content":[{"type":"text","text":"[image omitted]"},{"type":"text","text":"[image omitted]"},{"type":"image","source":{"type":"base64","media_type":"image/png","data":"AQ=="}}]`
+	want := `"content":[{"type":"text","text":"[image omitted]\n"},{"type":"text","text":"[image omitted]"},{"type":"image","source":{"type":"base64","media_type":"image/png","data":"AQ=="}}]`
 	if !strings.Contains(msgs, want) {
 		t.Fatalf("messages =\n%s\nwant to contain\n%s", msgs, want)
 	}
@@ -268,7 +268,7 @@ func TestStoredContentTheAPIRefusesIsANote(t *testing.T) {
 				api.ContentReasoning{Meta: lib.Meta(providerName, json.RawMessage(`"sig"`))},
 				api.ContentOpaque{Kind: "claude.server_tool_use", Data: json.RawMessage(`{"type":"server_tool_use","id":"srvtoolu_1"}`)},
 			}},
-			`{"role":"user","content":[{"type":"text","text":"hi"},{"type":"text","text":"[content omitted]"}]}`,
+			`{"role":"user","content":[{"type":"text","text":"hi\n"},{"type":"text","text":"[content omitted]"}]}`,
 		},
 		"message with no blocks": {
 			api.Message{Role: api.RoleAssistant},
@@ -286,7 +286,7 @@ func TestStoredContentTheAPIRefusesIsANote(t *testing.T) {
 			api.ContentToolResult{ID: "toolu_1", Content: api.UserContents{api.ContentText{Text: "72F"}}},
 		}},
 	}})
-	if strings.Contains(string(got["messages"]), "tool_result") || string(got["messages"]) != `[{"role":"user","content":[{"type":"text","text":"[content omitted]"},{"type":"text","text":"[content omitted]"}]}]` {
+	if strings.Contains(string(got["messages"]), "tool_result") || string(got["messages"]) != `[{"role":"user","content":[{"type":"text","text":"[content omitted]\n"},{"type":"text","text":"[content omitted]"}]}]` {
 		t.Errorf("the result answering a call in a user message was sent:\n%s", got["messages"])
 	}
 }
@@ -347,7 +347,7 @@ func TestToolResultsGoFirstInAUserMessage(t *testing.T) {
 	want := `{"role":"user","content":[` +
 		`{"type":"tool_result","tool_use_id":"a","content":[{"type":"text","text":"a"}],"is_error":false},` +
 		`{"type":"tool_result","tool_use_id":"b","content":[{"type":"text","text":"b"}],"is_error":false},` +
-		`{"type":"text","text":"before"},` +
+		`{"type":"text","text":"before\n"},` +
 		`{"cache_control":{"type":"ephemeral"},"type":"text","text":"between"}]}`
 	if !strings.Contains(string(got["messages"]), want) {
 		t.Fatalf("messages =\n%s\nwant to contain\n%s", got["messages"], want)
@@ -572,14 +572,14 @@ func TestEmptyAttachmentIsANote(t *testing.T) {
 	msgs := string(got["messages"])
 	for _, want := range []string{
 		`{"role":"user","content":[` +
-			`{"type":"text","text":"[image omitted]"},` +
-			`{"type":"text","text":"[image omitted]"},` +
-			`{"type":"text","text":"[document omitted]"},` +
-			`{"type":"text","text":"[document omitted]"},` +
+			`{"type":"text","text":"[image omitted]\n"},` +
+			`{"type":"text","text":"[image omitted]\n"},` +
+			`{"type":"text","text":"[document omitted]\n"},` +
+			`{"type":"text","text":"[document omitted]\n"},` +
 			`{"type":"text","text":"what is it"}]}`,
 		`{"type":"tool_result","tool_use_id":"toolu_1","content":[` +
-			`{"type":"text","text":"[image omitted]"},` +
-			`{"type":"text","text":"[document omitted]"},` +
+			`{"type":"text","text":"[image omitted]\n"},` +
+			`{"type":"text","text":"[document omitted]\n"},` +
 			`{"type":"text","text":"the report"}],"is_error":false}`,
 	} {
 		if !strings.Contains(msgs, want) {
@@ -626,12 +626,12 @@ func TestEmptyTextIsANote(t *testing.T) {
 	msgs := string(got["messages"])
 	for _, want := range []string{
 		`{"role":"user","content":[` +
-			`{"type":"text","text":"[content omitted]"},` +
-			`{"type":"text","text":"[content omitted]"},` +
+			`{"type":"text","text":"[content omitted]\n"},` +
+			`{"type":"text","text":"[content omitted]\n"},` +
 			`{"type":"text","text":"what is it"}]}`,
 		`{"type":"text","text":"[content omitted]"}]}`,
 		`{"type":"tool_result","tool_use_id":"toolu_1","content":[` +
-			`{"type":"text","text":"[content omitted]"},` +
+			`{"type":"text","text":"[content omitted]\n"},` +
 			`{"type":"text","text":"72F"}],"is_error":false}`,
 		`{"type":"tool_result","tool_use_id":"toolu_2","content":[` +
 			`{"type":"text","text":"(the tool returned no output)"}],"is_error":false}`,
@@ -1227,7 +1227,7 @@ func TestDocumentsInAMessage(t *testing.T) {
 		p := mustNew(t, Conf{Model: api.Model{Name: testModel}})
 		first := mustEncode(t, p, user(c))
 		second := mustEncode(t, p, user(c))
-		want := `{"role":"user","content":[{"type":"text","text":"[document omitted]"},{"type":"text","text":"read it"}]}`
+		want := `{"role":"user","content":[{"type":"text","text":"[document omitted]\n"},{"type":"text","text":"read it"}]}`
 		if !strings.Contains(string(first["messages"]), want) {
 			t.Fatalf("%s: messages =\n%s\nwant to contain\n%s", c.Mime, first["messages"], want)
 		}
@@ -1276,7 +1276,7 @@ func TestEncodeLogsOnlyAnUnknownTypeOnce(t *testing.T) {
 	for range 2 {
 		got := mustEncode(t, p, req)
 		for _, want := range []string{
-			`{"role":"user","content":[{"type":"text","text":"[image omitted]"},{"type":"text","text":"[content omitted]"}]}`,
+			`{"role":"user","content":[{"type":"text","text":"[image omitted]\n"},{"type":"text","text":"[content omitted]"}]}`,
 			`"content":[{"type":"text","text":"(the tool returned no output)"}]`,
 		} {
 			if !strings.Contains(string(got["messages"]), want) {

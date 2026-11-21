@@ -23,9 +23,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-rod/rod/lib/proto"
 	"neui.dev/api"
 	"neui.dev/internal/testkit"
 	"neui.dev/internal/testkit/stack"
+	"neui.dev/internal/thread"
 )
 
 func state(t *testing.T, c *stack.Chat) api.InstanceState {
@@ -115,5 +117,40 @@ func TestThreadNewSwitchesChat(t *testing.T) {
 	}
 	if n := len(p.Request(t, 1).Messages); n != 1 {
 		t.Fatalf("the new chat's first request carries %d messages, want only its own", n)
+	}
+}
+
+func TestRoundsPassTheGateOnABrowserPage(t *testing.T) {
+	thread.Backpressure.Store(true)
+	t.Cleanup(func() { thread.Backpressure.Store(false) })
+	p := testkit.NewProvider(api.Model{}, testkit.Say("one"), testkit.Say("two"), testkit.Say("three"))
+	c := stack.Browser(t, stack.Host{Provider: p})
+	if _, err := (proto.DebuggerEnable{}).Call(c.Page); err != nil {
+		t.Fatal(err)
+	}
+	if err := (proto.DebuggerPause{}).Call(c.Page); err != nil {
+		t.Fatal(err)
+	}
+	c.Send("first")
+	if trace := stack.Trace(c.Wait()); trace[len(trace)-1] != "RoundEnd(ok,final)" {
+		t.Fatalf("the first round traced %v, want it ended ok", trace)
+	}
+	c.Send("second")
+	time.Sleep(500 * time.Millisecond)
+	if n := len(p.Requests()); n != 1 {
+		t.Fatalf("the provider got %d requests while the paused page could not take the first round's time call, want the second round held at the gate", n)
+	}
+	if err := (proto.DebuggerResume{}).Call(c.Page); err != nil {
+		t.Fatal(err)
+	}
+	if trace := stack.Trace(c.Wait()); trace[len(trace)-1] != "RoundEnd(ok,final)" {
+		t.Fatalf("the second round traced %v after the page resumed, want it ended ok", trace)
+	}
+	c.Send("third")
+	if trace := stack.Trace(c.Wait()); trace[len(trace)-1] != "RoundEnd(ok,final)" {
+		t.Fatalf("the third round traced %v, want it ended ok", trace)
+	}
+	if n := len(p.Requests()); n != 3 {
+		t.Fatalf("the provider got %d requests, want one per round", n)
 	}
 }

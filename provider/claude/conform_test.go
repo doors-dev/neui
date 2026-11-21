@@ -156,6 +156,7 @@ func conformAdapter() conform.Adapter {
 			Auth: func(r *http.Request, key string) {
 				r.Header.Set("x-api-key", key)
 				r.Header.Set("anthropic-version", defaultVersion)
+				r.Header.Set("anthropic-beta", bindingBeta)
 			},
 		},
 	}

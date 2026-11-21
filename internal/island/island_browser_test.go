@@ -488,7 +488,7 @@ func TestIslandClickReturnsWhenThePartEndsWithoutADraw(t *testing.T) {
 	carries(t, lastText(p.Request(t, 4)), `<task_notify `, `script="1"`, `[{"id":1,"output":"v1"}]`)
 }
 
-const actionNote = `note="the part stopped at this error while handling the user&#39;s action in last_action, which was not carried out; any parts queued behind it were dropped, listed in dropped; the app runs on: send the fix with island_append, and in it carry out that action or ask the user to redo it"`
+const actionNote = `note="the part threw this error while handling last_action, the action its last ui.draw() returned; what it did before the error, app calls included, stays done; any parts queued behind it were dropped, listed in dropped; the app runs on: send the fix with island_append, and in it finish that action without repeating what is done, or ask the user to redo it"`
 
 const plainErrorNote = `note="the part stopped at this error and any parts queued behind it were dropped, listed in dropped; the app runs on: send what should still run with island_append"`
 

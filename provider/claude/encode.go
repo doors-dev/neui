@@ -172,6 +172,11 @@ func (p *Provider) encodeMessages(msgs []api.Message) ([]message, error) {
 			if mark != nil {
 				markable = mark
 			}
+			if _, is := block.(*textBlock); is && m.Role == api.RoleUser && len(blocks) > 0 {
+				if prev, is := blocks[len(blocks)-1].(*textBlock); is && !strings.HasSuffix(prev.Text, "\n") {
+					prev.Text += "\n"
+				}
+			}
 			blocks = append(blocks, block)
 		}
 		if len(results) > 0 {
@@ -391,6 +396,11 @@ func encodeToolResult(c api.ContentToolResult) (*toolResultBlock, error) {
 			}
 		default:
 			block, _, _ = omitted(rc, "a result on this API takes text, images and documents and carries nothing else")
+		}
+		if _, is := block.(*textBlock); is && len(content) > 0 {
+			if prev, is := content[len(content)-1].(*textBlock); is && !strings.HasSuffix(prev.Text, "\n") {
+				prev.Text += "\n"
+			}
 		}
 		content = append(content, block)
 	}

@@ -68,6 +68,37 @@ func TestFetchSaveAsStreamsToWorkspace(t *testing.T) {
 	}
 }
 
+func TestFetchSaveAsTakesAFileURL(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	fs, ctx := c.FS(), c.Ctx()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "page")
+	}))
+	defer srv.Close()
+	m := Module(Config{HTTPClient: srv.Client()})(ctx)
+	tool, _ := m.Get("fetch")
+	if _, err := tool.Agent(ctx, json.RawMessage(fmt.Sprintf(`{"url":%q,"saveAs":"file:///saved/page.html"}`, srv.URL))); err != nil {
+		t.Fatal(err)
+	}
+	rc, err := fs.ReadAll(ctx, "saved/page.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rc.Close()
+	if b, _ := io.ReadAll(rc); string(b) != "page" {
+		t.Fatalf("saved %q", b)
+	}
+	entries, err := fs.ReadDir(ctx, ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name, "file:") {
+			t.Fatalf("the workspace root holds %q", e.Name)
+		}
+	}
+}
+
 func TestFetchSaveAsOverTheCapKeepsNothing(t *testing.T) {
 	c := testkit.NewController(t, testkit.Setup{})
 	fs, ctx := c.FS(), c.Ctx()

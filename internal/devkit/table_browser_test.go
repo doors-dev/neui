@@ -250,7 +250,7 @@ const cardJS = `() => {
 	const checks = {
 		card: borders(card) === "1px,1px,1px,1px",
 		box: borders(box) === "0px,0px,0px,0px" && style(box).borderTopLeftRadius === "0px" && r(box).left === c.left + 1 && r(box).right === c.right - 1,
-		search: head === card.firstElementChild && head.contains(search) && r(search).left === c.left + 13 && r(search).top === c.top + 13 && r(box).top >= r(search).bottom,
+		search: r(head).top === c.top + 1 && head.contains(search) && r(search).left === c.left + 13 && r(search).top === c.top + 13 && r(box).top >= r(search).bottom,
 		head: borders(head) === "0px,0px,0px,0px" && style(head).backgroundColor === "rgba(0, 0, 0, 0)",
 		foot: borders(foot) === "1px,0px,0px,0px" && style(foot).backgroundColor !== "rgba(0, 0, 0, 0)" && r(foot).left === c.left + 1 && r(foot).right === c.right - 1 && r(foot).bottom === c.bottom - 1 && r(foot).top >= r(box).bottom,
 		status: r(card.querySelector(".neisland-table-status")).left === c.left + 13,

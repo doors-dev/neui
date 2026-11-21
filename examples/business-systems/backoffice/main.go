@@ -17,6 +17,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"log"
 	"net/http"
 	"os"
@@ -29,9 +30,9 @@ import (
 	"neui.dev/api"
 	"neui.dev/nekit"
 	"neui.dev/provider/claude"
-	"neui.dev/provider/compat"
 	"neui.dev/provider/deepseek"
 	"neui.dev/provider/gemini"
+	"neui.dev/provider/generic"
 	"neui.dev/provider/gpt"
 )
 
@@ -50,8 +51,15 @@ func main() {
 		if name == "" {
 			name = "local"
 		}
-		provider, err = compat.New(compat.Conf{Model: api.Model{Name: name, Context: window, Inputs: api.ModalityText}, BaseURL: os.Getenv("LOCAL_LLM_URL")},
-			compat.WithAPIKey(os.Getenv("LOCAL_LLM_KEY")))
+		opts := []generic.Option{generic.WithAPIKey(os.Getenv("LOCAL_LLM_KEY"))}
+		if v := os.Getenv("LOCAL_LLM_BODY"); v != "" {
+			var body map[string]any
+			if err = json.Unmarshal([]byte(v), &body); err != nil {
+				log.Fatalf("LOCAL_LLM_BODY: %v", err)
+			}
+			opts = append(opts, generic.WithExtraBody(body))
+		}
+		provider, err = generic.New(generic.Conf{Model: api.Model{Name: name, Context: window, Inputs: api.ModalityText}, BaseURL: os.Getenv("LOCAL_LLM_URL")}, opts...)
 	case os.Getenv("DEEPSEEK_API_KEY") != "":
 		provider, err = deepseek.New(deepseek.Conf{Model: deepseek.Flash})
 	case os.Getenv("OPENAI_API_KEY") != "":

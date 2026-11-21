@@ -519,6 +519,57 @@ func TestUploadsDirThroughFileMethods(t *testing.T) {
 	}
 }
 
+func TestRootedAndFileURLPathsReachTheSameFile(t *testing.T) {
+	w, store := newTestFS(t)
+	ctx := context.Background()
+	putUpload(t, store, "my notes.txt", "text/plain", "user")
+	putAgentFile(t, store, "out.txt", "text/plain", "agent")
+	writeFile(t, w, "local.txt", "local")
+	for name, want := range map[string]string{
+		"user_uploads/my notes.txt":           "user",
+		"/user_uploads/my notes.txt":          "user",
+		"file:///user_uploads/my notes.txt":   "user",
+		"file:///user_uploads/my%20notes.txt": "user",
+		"agent_uploads/out.txt":               "agent",
+		"/agent_uploads/out.txt":              "agent",
+		"file:///agent_uploads/out.txt":       "agent",
+		"file:/agent_uploads/out.txt":         "agent",
+		"/local.txt":                          "local",
+		"file:///local.txt":                   "local",
+		"file:/local.txt":                     "local",
+	} {
+		if got := readAll(t, w, name); got != want {
+			t.Errorf("ReadAll(%q) = %q, want %q", name, got, want)
+		}
+		if e, err := w.Stat(ctx, name); err != nil || strings.HasPrefix(e.Name, "/") || strings.Contains(e.Name, "file:") {
+			t.Errorf("Stat(%q) = %+v, %v", name, e, err)
+		}
+	}
+	for _, name := range []string{"/agent_uploads", "file:///agent_uploads/"} {
+		entries, err := w.ReadDir(ctx, name)
+		if err != nil || len(entries) != 1 || entries[0].Name != "agent_uploads/out.txt" {
+			t.Errorf("ReadDir(%q) = %+v, %v", name, entries, err)
+		}
+	}
+	for _, name := range []string{"/", "file:///", "file:/"} {
+		if entries, err := w.ReadDir(ctx, name); err != nil || len(entries) != 3 {
+			t.Errorf("ReadDir(%q) = %+v, %v", name, entries, err)
+		}
+	}
+	if err := w.Copy(ctx, "file:///user_uploads/my%20notes.txt", "/agent_uploads/copy.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if got := readAll(t, w, "agent_uploads/copy.txt"); got != "user" {
+		t.Fatalf("copy: %q", got)
+	}
+	if _, err := w.Create("file:///user_uploads/new.txt"); !errors.Is(err, api.ErrReadOnly) {
+		t.Fatalf("Create in user_uploads by file URL: %v", err)
+	}
+	if _, err := w.ReadAll(ctx, "/"+w.temp+"/x"); !errors.Is(err, api.ErrReserved) {
+		t.Fatalf("rooted temp path: %v", err)
+	}
+}
+
 func TestUploadNameWithSeparators(t *testing.T) {
 	w, store := newTestFS(t)
 	e, err := w.UserUpload(context.Background(), "a/b.txt", strings.NewReader("nested"))

@@ -32,7 +32,7 @@ import (
 	"neui.dev/provider/lib"
 )
 
-var providers = []string{"claude", "gpt", "deepseek", "gemini", "compat"}
+var providers = []string{"claude", "gpt", "deepseek", "gemini", "generic"}
 
 type turn struct {
 	Name    string      `json:"name"`

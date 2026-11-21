@@ -1,0 +1,6 @@
+[
+{"role":"user","content":[{"type":"text","text":"What is the weather in Paris and in Tokyo right now? Call get_weather once per city, both in one turn, then answer in one sentence."}]},
+{"role":"assistant","content":[{"type":"tool_use","id":"toolu_01GQk3asx99Tu8BrYeVAjHhH","name":"get_weather","input":{"city":"Paris"}},{"type":"tool_use","id":"toolu_01KB7cqx3xrqyDyKrjqAWJvq","name":"get_weather","input":{"city":"Tokyo"}}]},
+{"role":"user","content":[{"type":"tool_result","toolUseId":"toolu_01GQk3asx99Tu8BrYeVAjHhH","content":[{"type":"text","text":"{\"city\":\"Paris\",\"temp_c\":14,\"conditions\":\"light rain\",\"wind_kph\":18}"}],"error":""},{"type":"tool_result","toolUseId":"toolu_01KB7cqx3xrqyDyKrjqAWJvq","content":[{"type":"text","text":"{\"city\":\"Tokyo\",\"temp_c\":21,\"conditions\":\"clear\",\"wind_kph\":7}"}],"error":""}]},
+{"role":"assistant","content":[{"type":"text","text":"Right now Paris is 14°C with light rain and 18 km/h winds, while Tokyo is 21°C and clear with 7 km/h winds."}]}
+]

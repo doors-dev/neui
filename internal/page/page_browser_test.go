@@ -825,6 +825,30 @@ func TestAgentClicksCanBeCanceled(t *testing.T) {
 	}
 }
 
+func TestFailedHandlersAreReported(t *testing.T) {
+	p := steps(t,
+		step{tool: "page__click", input: "breaks"},
+		step{tool: "page__click", input: "breaks"},
+		step{tool: "page__write", input: "the name", value: "Bo"},
+		step{tool: "page__write", input: "the name", value: "Al"},
+	)
+	c := stack.Browser(t, stack.Host{Provider: p, Page: space(
+		exposed("breaks", html("button", "Break", doors.AClick{On: func(context.Context, doors.RequestPointer) bool { return true }})),
+		exposed("the name", html("input", "",
+			doors.AInput{On: func(context.Context, doors.RequestInput) bool { return false }},
+			doors.AChange{On: func(context.Context, doors.RequestChange) bool { return true }},
+		)),
+	)})
+	c.Send("try the controls twice")
+	c.Wait()
+	expect(t, answers(t, p, 4),
+		`{"handled":true,"diff":{}}`,
+		failed("its server handlers failed"),
+		`{"handled":true,"diff":{}}`,
+		`{"handled":true,"note":"some of its server handlers failed","diff":{}}`,
+	)
+}
+
 func TestReadFallsBackToAriaLabel(t *testing.T) {
 	p := steps(t,
 		step{tool: "page__read", input: "the query"},

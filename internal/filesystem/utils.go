@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"mime"
 	"net/http"
+	"net/url"
 	"path"
 	"strings"
 
@@ -36,7 +37,16 @@ var (
 )
 
 func (w *workFS) resolveUpload(name string) (clean string, dir *uploadsDir, fileName string, err error) {
-	name = path.Clean(name)
+	if rest, ok := strings.CutPrefix(name, "file:"); ok && strings.HasPrefix(rest, "/") {
+		name = rest
+		if unescaped, err := url.PathUnescape(rest); err == nil {
+			name = unescaped
+		}
+	}
+	name = strings.TrimPrefix(path.Clean(name), "/")
+	if name == "" {
+		name = "."
+	}
 	lower, temp := strings.ToLower(name), strings.ToLower(w.temp)
 	if lower == temp || strings.HasPrefix(lower, temp+"/") {
 		return name, nil, "", fmt.Errorf("%q: %w", name, api.ErrReserved)
