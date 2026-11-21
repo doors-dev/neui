@@ -145,7 +145,11 @@ func TestParams(t *testing.T) {
 		{"anyOf branch", `ui.form({ fields: [{ type: "text", label: "Name" }, { type: "list", label: "Tags", key: "tags" }] })`,
 			[]string{"line 1, column 84: TypeError: ui.form params at '/fields/1': additional properties 'key' not allowed"}},
 		{"no branch", `ui.form({ fields: [{ type: "date" }] })`,
-			[]string{"line 1, column 20: TypeError: ui.form params at '/fields/0': matches none of the allowed shapes"}},
+			[]string{"line 1, column 28: TypeError: ui.form params at '/fields/0/type': value must be one of 'text', 'list'"}},
+		{"no branch for the type", `ui.form({ fields: ["text"] })`,
+			[]string{"line 1, column 20: TypeError: ui.form params at '/fields/0': got string, want object"}},
+		{"no branch for a typed field", `ui.form({ fields: [{ type: 5, label: "Name" }] })`,
+			[]string{"line 1, column 28: TypeError: ui.form params at '/fields/0/type': value must be one of 'text', 'list'"}},
 		{"patch", "var n = ui.markdown({ text: \"a\" })\nn.update({ style: \"loud\" })",
 			[]string{"line 2, column 19: TypeError: ui.markdown patch at '/style': value must be one of 'plain', 'note'"}},
 		{"no patch", "var n = ui.markdown({ text: \"a\" })\nn.update()",
@@ -180,8 +184,16 @@ ui.markdown({ text: "a", size: undef })`, nil},
 	}
 }
 
+func rooted(t *testing.T, env precheck.Env) precheck.Globals {
+	t.Helper()
+	got, globals := check(t, env, precheck.Globals{}, "ui.root.set(ui.markdown({ text: \"a\" }))")
+	expect(t, got)
+	return globals
+}
+
 func TestAppAndDraw(t *testing.T) {
 	env := testEnv(t)
+	globals := rooted(t, env)
 	for _, c := range []struct {
 		name string
 		code string
@@ -199,7 +211,7 @@ func TestAppAndDraw(t *testing.T) {
 			[]string{"line 1, column 19: TypeError: ids: ui.draw() returns only id and output; read the control's field as output.ids"}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			got, _ := check(t, env, precheck.Globals{}, c.code)
+			got, _ := check(t, env, globals, c.code)
 			expect(t, got, c.want...)
 		})
 	}
@@ -295,11 +307,12 @@ func TestNeverGuess(t *testing.T) {
 
 func TestAfterEndlessCall(t *testing.T) {
 	env := testEnv(t)
-	got, globals := check(t, env, precheck.Globals{}, `var x = ui.slot()
+	start := rooted(t, env)
+	got, globals := check(t, env, start, `var x = ui.slot()
 function loop() {
   while (true) {
     var action = ui.draw()
-    if (action.id === 1) continue
+    if (action.output) continue
   }
 }
 loop()
@@ -316,10 +329,10 @@ function after() {}`)
 	expect(t, got)
 	got, _ = check(t, env, globals, "loop = function () {}\nloop()\nx.update({})")
 	expect(t, got, "line 3, column 1: TypeError: x.update: a slot has no update; update is for views and controls: to change what a slot shows, set it again")
-	got, globals = check(t, env, precheck.Globals{}, `var y = ui.slot()
+	got, globals = check(t, env, start, `var y = ui.slot()
 function work() {
   while (true) {
-    if (ui.draw().id === 2) return
+    if (ui.draw().output) return
   }
 }
 work()
@@ -327,9 +340,9 @@ y = ui.button({})`)
 	expect(t, got)
 	got, _ = check(t, env, globals, "y.update({})\ny.set()")
 	expect(t, got)
-	got, _ = check(t, env, precheck.Globals{}, "var z = ui.slot()\nui.end()\nz = ui.button({})\nz.update({})")
+	got, _ = check(t, env, start, "var z = ui.slot()\nui.end()\nz = ui.button({})\nz.update({})")
 	expect(t, got)
-	got, globals = check(t, env, precheck.Globals{}, "var w = ui.slot()\nfunction loop() { while (true) ui.draw() }\nfunction start() { loop() }\nstart()\nw.update({})")
+	got, globals = check(t, env, start, "var w = ui.slot()\nfunction loop() { while (true) ui.draw() }\nfunction start() { loop() }\nstart()\nw.update({})")
 	expect(t, got)
 	_, globals = check(t, env, globals, "loop = function () {}")
 	_, globals = check(t, env, globals, "start()\nw = ui.button({})")
@@ -339,7 +352,7 @@ y = ui.button({})`)
 		"function* ticks() { while (true) { yield ui.draw(1000) } }\nticks()\nlater = 1",
 		"async function poll() { while (true) { await null; ui.draw(1000) } }\npoll()\nlater = 1",
 	} {
-		got, globals = check(t, env, precheck.Globals{}, code)
+		got, globals = check(t, env, start, code)
 		expect(t, got)
 		got, _ = check(t, env, globals, "console.log(later)")
 		expect(t, got)
@@ -368,4 +381,117 @@ func TestPositions(t *testing.T) {
 		"line 1, column 17: TypeError: missing is not defined: no part declared it, and the script has no such tool or built-in",
 		"line 2, column 2: TypeError: other is not defined: no part declared it, and the script has no such tool or built-in",
 	)
+}
+
+func TestEmptyScreen(t *testing.T) {
+	env := testEnv(t)
+	empty := "TypeError: %s: the screen is empty, as no part sets ui.root: set it to what the user should see, such as ui.root.set(form), before you draw"
+	for _, c := range []struct {
+		name string
+		code string
+		want []string
+	}{
+		{"draw", "var b = ui.button({})\nvar action = ui.draw()", []string{"line 2, column 14: " + strings.ReplaceAll(empty, "%s", "ui.draw()")}},
+		{"timer draw", "ui.draw(500)", []string{"line 1, column 1: " + strings.ReplaceAll(empty, "%s", "ui.draw(500)")}},
+		{"in a called loop, once", "function loop() { while (true) { ui.draw(); ui.draw() } }\nloop()", []string{"line 1, column 34: " + strings.ReplaceAll(empty, "%s", "ui.draw()")}},
+		{"uncalled", "function loop() { while (true) ui.draw() }", nil},
+		{"root set after", "function loop() { while (true) ui.draw() }\nui.root.set(ui.button({}))\nloop()", nil},
+		{"root set in a method", "var screen = { show: function () { ui.root.set(ui.button({})) } }\nscreen.show()\nui.draw()", nil},
+		{"root through a variable", "var u = ui\nu.root.set(ui.button({}))\nui.draw()", nil},
+		{"ui handed on", "function show(target) { target.root.set(target.button({})) }\nshow(ui)\nui.draw()", nil},
+		{"root by a computed key", "var k = \"root\"\nui[k].set(ui.button({}))\nui.draw()", nil},
+		{"ui in an object", "var o = { ui }\no.ui.root.set(ui.button({}))\nui.draw()", nil},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			got, _ := check(t, env, precheck.Globals{}, c.code)
+			expect(t, got, c.want...)
+		})
+	}
+	_, first := check(t, env, precheck.Globals{}, "var b = ui.button({})\nui.root.set(b)")
+	got, _ := check(t, env, first, "ui.draw()")
+	expect(t, got)
+	_, first = check(t, env, precheck.Globals{}, "var b = ui.button({})")
+	got, _ = check(t, env, first, "ui.draw()")
+	expect(t, got, "line 1, column 1: "+strings.ReplaceAll(empty, "%s", "ui.draw()"))
+}
+
+func TestDrawIDComparedWithLiteral(t *testing.T) {
+	env := testEnv(t)
+	globals := rooted(t, env)
+	literal := "TypeError: %s: a control's id is a number set when it is created, never a literal such as %s: compare it with that control, such as form.id, kept in a variable the loop can reach"
+	message := func(at, id, lit string) string {
+		return at + ": " + strings.Replace(strings.Replace(literal, "%s", id, 1), "%s", lit, 1)
+	}
+	for _, c := range []struct {
+		name string
+		code string
+		want []string
+	}{
+		{"string", "var action = ui.draw()\nif (action.id === \"submit\") {}", []string{message("line 2, column 5", "action.id", `"submit"`)}},
+		{"reversed and loose", "var action = ui.draw()\nif (\"save\" == action.id) {}", []string{message("line 2, column 5", "action.id", `"save"`)}},
+		{"number in a variable", "var id = ui.draw().id\nif (id !== 3) {}", []string{message("line 2, column 5", "id", "3")}},
+		{"template", "if (ui.draw().id === `save`) {}", []string{message("line 1, column 5", "ui.draw().id", "`save`")}},
+		{"switch", "switch (ui.draw().id) {\ncase \"save\":\n  break\ncase 2:\n  break\ndefault:\n}", []string{message("line 2, column 6", "ui.draw().id", `"save"`), message("line 4, column 6", "ui.draw().id", "2")}},
+		{"control id", "var b = ui.button({})\nvar action = ui.draw()\nif (action.id === b.id) {}\nswitch (action.id) { case b.id: }", nil},
+		{"null", "var action = ui.draw()\nif (action.id === null) {}", nil},
+		{"id written", "var action = ui.draw()\nvar row = {}\nrow.id = \"save\"\nif (action.id === \"save\") {}", nil},
+		{"reassigned", "var id = ui.draw().id\nid = \"save\"\nif (id === \"save\") {}", nil},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			got, _ := check(t, env, globals, c.code)
+			expect(t, got, c.want...)
+		})
+	}
+}
+
+func TestOutputFields(t *testing.T) {
+	env := testEnv(t)
+	set := func(name string, output string) {
+		w := env.Widgets[name]
+		w.Output = compile(t, output)
+		env.Widgets[name] = w
+	}
+	set("form", `{"type":"object","properties":{"data":{"type":"object","additionalProperties":{}},"submit":{"type":"string"}},"required":["data","submit"]}`)
+	set("table", `{"type":"object","properties":{"row":{"type":"string"},"value":{"type":"string"},"rows":{"type":"array"}}}`)
+	set("button", `{"type":"string"}`)
+	globals := rooted(t, env)
+	missing := "TypeError: %s: no control's output has %s; the outputs have only data, row, rows, submit, value"
+	message := func(at, label, name string) string {
+		return at + ": " + strings.Replace(strings.Replace(missing, "%s", label, 1), "%s", name, 1)
+	}
+	for _, c := range []struct {
+		name string
+		code string
+		want []string
+	}{
+		{"unknown field", "var action = ui.draw()\nvar qty = action.output.new_qty", []string{message("line 2, column 11", "action.output.new_qty", "new_qty")}},
+		{"bracket", "var action = ui.draw()\naction.output[\"new qty\"]", []string{message("line 2, column 1", `action.output["new qty"]`, "new qty")}},
+		{"destructured", "var { data, qty } = ui.draw().output", []string{message("line 1, column 13", "qty", "qty")}},
+		{"nested pattern", "var { id, output: { submit, qty } } = ui.draw()", []string{message("line 1, column 29", "qty", "qty")}},
+		{"through a variable", "var { output } = ui.draw()\noutput.qty", []string{message("line 2, column 1", "output.qty", "qty")}},
+		{"known fields", "var action = ui.draw()\nvar d = action.output.data, s = action.output.submit, r = action.output.rows\nvar q = action.output.data.new_qty", nil},
+		{"string members", "var action = ui.draw()\nif (action.output.length > 0) action.output.toLowerCase()", nil},
+		{"object members", "var action = ui.draw()\naction.output.hasOwnProperty(\"data\")", nil},
+		{"guarded", "var action = ui.draw()\nif (typeof action.output.qty === \"number\") {}", nil},
+		{"written", "var action = ui.draw()\nvar o = {}\no.qty = 1\naction.output.qty", nil},
+		{"computed write", "var action = ui.draw()\nvar k = \"note\"\naction.output[k] = 1\nui.notify(action.output.note)", nil},
+		{"index", "var action = ui.draw()\naction.output[\"0\"]", nil},
+		{"not an index", "var action = ui.draw()\naction.output[\"01\"]", []string{message("line 2, column 1", `action.output["01"]`, "01")}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			got, _ := check(t, env, globals, c.code)
+			expect(t, got, c.want...)
+		})
+	}
+	set("button", `{"type":"object","properties":{"value":{"type":"string"}}}`)
+	got, _ := check(t, env, globals, "var action = ui.draw()\naction.output[\"0\"]")
+	expect(t, got, message("line 2, column 1", `action.output["0"]`, "0"))
+	set("table", `{"type":"object","additionalProperties":{}}`)
+	got, _ = check(t, env, globals, "ui.draw().output.anything")
+	expect(t, got)
+	set("table", `{"description":"any JSON value"}`)
+	got, _ = check(t, env, globals, "ui.draw().output.anything")
+	expect(t, got)
+	got, _ = check(t, testEnv(t), rooted(t, testEnv(t)), "ui.draw().output.anything")
+	expect(t, got)
 }

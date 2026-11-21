@@ -343,7 +343,7 @@ func TestAgentSeesTheFormAsSpacesOfInputsAndErrors(t *testing.T) {
 	)
 	expect(t, "form data", datas(root.Data),
 		`name validation error: "field is required"`,
-		`submit blocked: "form is not completed or contains errors"`,
+		`submit blocked: "form is not completed or contains errors; Skip still submits"`,
 	)
 	expect(t, "form children", children(root.Children),
 		"address (Address)", "contacts (Contact)", "docs (Docs)", "person (Person)", "tags (Tags)", "trip (Trip)")
@@ -477,6 +477,25 @@ func TestAgentSeesTheFormAsSpacesOfInputsAndErrors(t *testing.T) {
 	for _, want := range []string{`"name":"Ada"`, `"address":{"city":"abc"}`, `"tags":["a","b"]`, `"contacts":[{"email":"a@b.co"}]`, `"person":[{"value":1,"label":"Ada"}]`, `"trip":{"from":"x","to":"y"}`} {
 		if !strings.Contains(notice, want) {
 			t.Fatalf("the submit notification %q lacks %s", notice, want)
+		}
+	}
+}
+
+func TestAgentSeesWhichButtonsStillSubmitWhileBlocked(t *testing.T) {
+	for _, c := range []struct {
+		submits string
+		want    string
+	}{
+		{`{text: "Save", value: "save"}, {text: "Skip", value: "skip", novalidate: true}, {text: "Reject", value: "reject", novalidate: true}`, "Skip and Reject still submit"},
+		{`{text: "Skip", value: "skip", novalidate: true}, {text: "Save", value: "save"}, {text: "Reject", value: "reject", novalidate: true}, {text: "Later", value: "later", novalidate: true}`, "Skip, Reject and Later still submit"},
+	} {
+		a := open(t, `{fields: [{type: "text", label: "Name", name: "name", required: true}], submits: [`+c.submits+`]}`)
+		expect(t, "form data", datas(a.sync(formPath)[0].Data),
+			`name validation error: "field is required"`,
+			`submit blocked: "form is not completed or contains errors; `+c.want+`"`,
+		)
+		if shown := a.c.Page.MustElement(".neisland-form-help").MustText(); shown != "form is not completed or contains errors" {
+			t.Fatalf("the user sees %q under the buttons, want the plain message", shown)
 		}
 	}
 }

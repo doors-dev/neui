@@ -694,6 +694,40 @@ func TestRejectedRoundRefusesTheWaitingResults(t *testing.T) {
 	}
 }
 
+func TestFailedRoundKeepsItsCause(t *testing.T) {
+	for _, c := range []struct {
+		code  api.ErrCode
+		cause error
+		want  string
+	}{
+		{api.CodeUnknown, errors.New("stub: http 520: origin error"), "unknown: stub: http 520: origin error"},
+		{api.CodeInvalid, errors.New("stub: rejected"), "invalid: stub: rejected"},
+		{api.CodeNetwork, nil, "network"},
+	} {
+		t.Run(string(c.code), func(t *testing.T) {
+			s := local.NewMessageStorage()
+			p := testkit.NewProvider(api.Model{Name: "stub"}, testkit.Events(api.EventErr{Code: c.code, Err: c.cause}), testkit.Say("again"))
+			chat := stack.Headless(t, stack.Host{Provider: p, Options: []common.Option{common.OptionMessageStorage(s)}})
+			chat.Send("go")
+			expectTrace(t, chat.Wait(), "ThreadCreated", "RoundStart", "RoundEnd(error,"+string(c.code)+",final)")
+			stored, err := s.RoundAfter(context.Background(), chat.State().ID, api.NoRoundID, 10)
+			if err != nil || len(stored) != 1 {
+				t.Fatalf("RoundAfter: %d rounds, %v", len(stored), err)
+			}
+			if stored[0].State != api.RoundError || stored[0].Error != c.want {
+				t.Fatalf("the failed round is stored as %s %q, want an error %q", stored[0].State, stored[0].Error, c.want)
+			}
+			err = chat.Do(thread.Link.Retry)
+			if (err == nil) != (c.code != api.CodeInvalid) {
+				t.Fatalf("retry after a %s round answered %v", c.code, err)
+			}
+			if err == nil {
+				chat.Wait()
+			}
+		})
+	}
+}
+
 func TestOversizedInputIsRefusedWhereItIsSubmitted(t *testing.T) {
 	const limit = 400
 	ctx := context.Background()

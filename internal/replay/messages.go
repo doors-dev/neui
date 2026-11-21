@@ -18,6 +18,7 @@ import (
 	"errors"
 	"math"
 	"slices"
+	"strings"
 
 	"neui.dev/api"
 )
@@ -335,7 +336,8 @@ func (s *messages) unstashRecords() []api.Record {
 }
 
 func refuses(state api.RoundState, err string) bool {
-	return state == api.RoundRefuse || state == api.RoundError && (err == string(api.CodeInvalid) || err == string(api.CodeTooLarge))
+	code, _, _ := strings.Cut(err, ":")
+	return state == api.RoundRefuse || state == api.RoundError && (code == string(api.CodeInvalid) || code == string(api.CodeTooLarge))
 }
 
 func (s *messages) refuseResults() {

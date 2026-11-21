@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
@@ -28,11 +29,10 @@ import (
 )
 
 // New builds a form widget for Library.Control: the user fills the
-// fields and presses one of the submit buttons, which sends
-// {"data": values, "submit": button value} to the script waiting in
-// ui.draw(). Files upload into the island dir as they are picked; a file
-// field's value is their workspace paths.
-func New(ctx context.Context, p Params, submit func(ctx context.Context, s map[string]any) bool) (api.Widget[Patch], error) {
+// fields and presses one of the submit buttons, which sends a Submit to
+// the script waiting in ui.draw(). Files upload into the island dir as
+// they are picked; a file field's value is their workspace paths.
+func New(ctx context.Context, p Params, submit func(ctx context.Context, s Submit) bool) (api.Widget[Patch], error) {
 	if len(p.Submits) == 0 {
 		p.Submits = []submitParams{{Text: "Submit"}}
 	}
@@ -130,7 +130,7 @@ type widget struct {
 	fields []fieldWidget
 	errors doors.Beam[errorKind]
 	locked doors.Setter
-	submit func(ctx context.Context, s map[string]any) bool
+	submit func(ctx context.Context, s Submit) bool
 }
 
 func (f *widget) Update(context.Context, Patch) {
@@ -154,9 +154,9 @@ func (f *widget) onSubmit(ctx context.Context, r doors.RequestRawForm) {
 		f.root.mu.Unlock()
 		return
 	}
-	data := f.group.collect()
+	data, _ := f.group.collect().(map[string]any)
 	f.root.mu.Unlock()
-	f.submit(ctx, map[string]any{"data": data, "submit": choice.Value})
+	f.submit(ctx, Submit{Data: data, Submit: choice.Value})
 }
 
 elem (f *widget) Main() {
@@ -166,6 +166,20 @@ elem (f *widget) Main() {
 		doors.Call(ctx, f.locked.Set("disabled", errs != errorsNone))
 		return false
 	})
+	var skips []string
+	for _, s := range f.params.Submits {
+		if s.Novalidate {
+			skips = append(skips, s.Text)
+		}
+	}
+	blocked := "form is not completed or contains errors"
+	switch len(skips) {
+	case 0:
+	case 1:
+		blocked += "; " + skips[0] + " still submits"
+	default:
+		blocked += "; " + strings.Join(skips[:len(skips)-1], ", ") + " and " + skips[len(skips)-1] + " still submit"
+	}
 	~~
 	<form
 		(doors.ARawSubmit{
@@ -210,7 +224,7 @@ elem (f *widget) Main() {
 			~(f.errors.Bind(elem(errs errorKind) {
 				~(if errs != errorsNone {
 					<p class="neisland-form-help" id=(f.id + "-s")>form is not completed or contains errors</p>
-					~(neui.Data{Text: "submit blocked", Object: "form is not completed or contains errors"})
+					~(neui.Data{Text: "submit blocked", Object: blocked})
 				})
 			}))
 		</div>

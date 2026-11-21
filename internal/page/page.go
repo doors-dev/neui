@@ -432,6 +432,10 @@ func (m *module) act[T any](ctx context.Context, path string, find func(s *space
 		return permit[T]{}, err
 	}
 	old, ok := m.snaps[s.path]
+	if s.app && (!ok || old.digest != s.digest) {
+		old, ok = s.snapshot(), true
+		m.store(s, old)
+	}
 	if ok && old.digest == s.digest {
 		item, err := find(s)
 		if err != nil {

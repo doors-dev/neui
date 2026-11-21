@@ -17,6 +17,8 @@ package thread
 import (
 	"context"
 	"errors"
+	"fmt"
+
 	"github.com/doors-dev/doors"
 
 	"neui.dev/api"
@@ -238,7 +240,7 @@ func (s *threadRound) ok(code api.OkCode, content api.Indexed[api.Content], usag
 		round := s.round
 		round.State = api.RoundOk
 		round.Response = content
-		s.thread.switchStateCompact(round, "", usage, content)
+		s.thread.switchStateCompact(round, "", nil, usage, content)
 		return
 	}
 	round, err := s.thread.switchStateRound()
@@ -250,6 +252,10 @@ func (s *threadRound) ok(code api.OkCode, content api.Indexed[api.Content], usag
 }
 
 func (s *threadRound) err(code api.ErrCode, cause error, content api.Indexed[api.Content], usage api.EventUsage) {
+	reason := errors.New(string(code))
+	if cause != nil {
+		reason = fmt.Errorf("%s: %w", code, cause)
+	}
 	switch code {
 	case api.CodeAccess,
 		api.CodeBusy,
@@ -260,7 +266,7 @@ func (s *threadRound) err(code api.ErrCode, cause error, content api.Indexed[api
 		if code != api.CodeCapped {
 			doors.Logger(s.thread.link.backend.Context()).Error("thread: turn failed", "thread", s.thread.id, "code", code, "err", cause)
 		}
-		if err := s.thread.replay.RoundError(errors.New(string(code)), usage, content); err != nil {
+		if err := s.thread.replay.RoundError(reason, usage, content); err != nil {
 			s.thread.criticalErr(nil, err)
 			return
 		}
@@ -268,17 +274,17 @@ func (s *threadRound) err(code api.ErrCode, cause error, content api.Indexed[api
 	case api.CodeContextLength, api.CodeTooLarge:
 		if held := s.thread.compaction.held; held != nil {
 			s.thread.compaction.held = nil
-			s.thread.switchStateCompact(s.round, code, usage, content).on(*held)
+			s.thread.switchStateCompact(s.round, code, reason, usage, content).on(*held)
 			return
 		}
 		if _, err := s.thread.compact(true); err != nil {
 			doors.Logger(s.thread.link.backend.Context()).Error("thread: compaction", "thread", s.thread.id, "err", err)
 		}
 		if s.thread.compaction.isActive() {
-			s.thread.switchStateCompact(s.round, code, usage, content)
+			s.thread.switchStateCompact(s.round, code, reason, usage, content)
 			return
 		}
-		if err := s.thread.replay.RoundError(errors.New(string(code)), usage, content); err != nil {
+		if err := s.thread.replay.RoundError(reason, usage, content); err != nil {
 			s.thread.criticalErr(nil, err)
 			return
 		}

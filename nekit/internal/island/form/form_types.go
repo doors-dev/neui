@@ -340,6 +340,12 @@ type Patch struct {
 	_ struct{} `additionalProperties:"false" description:"a form takes no patches: to change one, create a new form"`
 }
 
+// Submit is what a form hands the script waiting in ui.draw().
+type Submit struct {
+	Data   map[string]any `json:"data" required:"true" nullable:"false" description:"each filled field's value under its name"`
+	Submit string         `json:"submit" required:"true" description:"value of the submit button the user pressed"`
+}
+
 // Params is what a script passes to ui.form.
 type Params struct {
 	_       struct{}       `additionalProperties:"false"`

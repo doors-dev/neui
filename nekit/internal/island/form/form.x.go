@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
@@ -31,11 +32,10 @@ import (
 )
 
 // New builds a form widget for Library.Control: the user fills the
-// fields and presses one of the submit buttons, which sends
-// {"data": values, "submit": button value} to the script waiting in
-// ui.draw(). Files upload into the island dir as they are picked; a file
-// field's value is their workspace paths.
-func New(ctx context.Context, p Params, submit func(ctx context.Context, s map[string]any) bool) (api.Widget[Patch], error) {
+// fields and presses one of the submit buttons, which sends a Submit to
+// the script waiting in ui.draw(). Files upload into the island dir as
+// they are picked; a file field's value is their workspace paths.
+func New(ctx context.Context, p Params, submit func(ctx context.Context, s Submit) bool) (api.Widget[Patch], error) {
 	if len(p.Submits) == 0 {
 		p.Submits = []submitParams{{Text: "Submit"}}
 	}
@@ -133,7 +133,7 @@ type widget struct {
 	fields []fieldWidget
 	errors doors.Beam[errorKind]
 	locked doors.Setter
-	submit func(ctx context.Context, s map[string]any) bool
+	submit func(ctx context.Context, s Submit) bool
 }
 
 func (f *widget) Update(context.Context, Patch) {
@@ -157,9 +157,9 @@ func (f *widget) onSubmit(ctx context.Context, r doors.RequestRawForm) {
 		f.root.mu.Unlock()
 		return
 	}
-	data := f.group.collect()
+	data, _ := f.group.collect().(map[string]any)
 	f.root.mu.Unlock()
-	f.submit(ctx, map[string]any{"data": data, "submit": choice.Value})
+	f.submit(ctx, Submit{Data: data, Submit: choice.Value})
 }
 
 //line form.gox:162
@@ -172,10 +172,24 @@ func (f *widget) Main() gox.Elem {
 		doors.Call(ctx, f.locked.Set("disabled", errs != errorsNone))
 		return false
 	})
+	var skips []string
+	for _, s := range f.params.Submits {
+		if s.Novalidate {
+			skips = append(skips, s.Text)
+		}
+	}
+	blocked := "form is not completed or contains errors"
+	switch len(skips) {
+	case 0:
+	case 1:
+		blocked += "; " + skips[0] + " still submits"
+	default:
+		blocked += "; " + strings.Join(skips[:len(skips)-1], ", ") + " and " + skips[len(skips)-1] + " still submit"
+	}
 
 		__e = __c.Init("form"); if __e != nil { return }
 		{
-//line form.gox:171
+//line form.gox:185
 			__e = __c.Modify(doors.ARawSubmit{
 			Scope: scope,
 			Indicator: pending.FormIndicator(ctx),
@@ -184,128 +198,128 @@ func (f *widget) Main() gox.Elem {
 				return false
 			},
 		}); if __e != nil { return }
-//line form.gox:179
+//line form.gox:193
 			__e = __c.Set("class", "neisland-form neisland-form-framed"); if __e != nil { return }
 			__e = __c.Set("novalidate", true); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line form.gox:181
+//line form.gox:195
 			for _, field := range f.fields {
-//line form.gox:182
+//line form.gox:196
 				__e = __c.Any(field); if __e != nil { return }
 			}
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line form.gox:184
+//line form.gox:198
 				__e = __c.Set("class", "neisland-form-actions neisland-form-actions-band"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line form.gox:185
+//line form.gox:199
 				for _, s := range f.params.Submits {
-//line form.gox:186
+//line form.gox:200
 					if s.Novalidate {
-//line form.gox:187
+//line form.gox:201
 						__e = (neui.Use{Desc: s.Text}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 							ctx := __c.Context(); _ = ctx
 							__e = __c.Init("button"); if __e != nil { return }
 							{
-//line form.gox:188
+//line form.gox:202
 								__e = __c.Set("type", "submit"); if __e != nil { return }
-//line form.gox:189
+//line form.gox:203
 								__e = __c.Set("class", "neisland-button neisland-button-md neisland-button-" + s.Style); if __e != nil { return }
-//line form.gox:190
+//line form.gox:204
 								__e = __c.Set("name", f.id); if __e != nil { return }
-//line form.gox:191
+//line form.gox:205
 								__e = __c.Set("value", s.Value); if __e != nil { return }
-//line form.gox:192
+//line form.gox:206
 								__e = __c.Set("data-neui", "submit"); if __e != nil { return }
 								__e = __c.Set("formnovalidate", true); if __e != nil { return }
 								__e = __c.Submit(); if __e != nil { return }
-//line form.gox:194
+//line form.gox:208
 								__e = __c.Any(s.Text); if __e != nil { return }
 							}
 							__e = __c.Close(); if __e != nil { return }
 						return })); if __e != nil { return }
 					} else  {
-//line form.gox:197
+//line form.gox:211
 						__e = (neui.Use{Desc: s.Text}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 							ctx := __c.Context(); _ = ctx
 							__e = __c.Init("button"); if __e != nil { return }
 							{
-//line form.gox:198
+//line form.gox:212
 								__e = __c.Modify(&f.locked); if __e != nil { return }
-//line form.gox:199
+//line form.gox:213
 								__e = __c.Set("type", "submit"); if __e != nil { return }
-//line form.gox:200
+//line form.gox:214
 								__e = __c.Set("class", "neisland-button neisland-button-md neisland-button-" + s.Style); if __e != nil { return }
-//line form.gox:201
+//line form.gox:215
 								__e = __c.Set("name", f.id); if __e != nil { return }
-//line form.gox:202
+//line form.gox:216
 								__e = __c.Set("value", s.Value); if __e != nil { return }
-//line form.gox:203
+//line form.gox:217
 								__e = __c.Set("data-neui", "submit"); if __e != nil { return }
-//line form.gox:204
+//line form.gox:218
 								__e = __c.Set("disabled", errs != errorsNone); if __e != nil { return }
-//line form.gox:205
+//line form.gox:219
 								__e = __c.Set("aria-describedby", f.id + "-s"); if __e != nil { return }
 								__e = __c.Submit(); if __e != nil { return }
-//line form.gox:206
+//line form.gox:220
 								__e = __c.Any(s.Text); if __e != nil { return }
 							}
 							__e = __c.Close(); if __e != nil { return }
 						return })); if __e != nil { return }
 					}
 				}
-//line form.gox:210
+//line form.gox:224
 				__e = __c.Any(f.errors.Bind(func(errs errorKind) gox.Elem {
 				return gox.Elem(func(__c gox.Cursor) (__e error) {
 					ctx := __c.Context(); _ = ctx
-//line form.gox:211
+//line form.gox:225
 					if errs != errorsNone {
 						__e = __c.Init("p"); if __e != nil { return }
 						{
-//line form.gox:212
+//line form.gox:226
 							__e = __c.Set("class", "neisland-form-help"); if __e != nil { return }
-//line form.gox:212
+//line form.gox:226
 							__e = __c.Set("id", f.id + "-s"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
 							__e = __c.Text("form is not completed or contains errors"); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
-//line form.gox:213
-						__e = __c.Any(neui.Data{Text: "submit blocked", Object: "form is not completed or contains errors"}); if __e != nil { return }
+//line form.gox:227
+						__e = __c.Any(neui.Data{Text: "submit blocked", Object: blocked}); if __e != nil { return }
 					}
 				return })
-//line form.gox:215
+//line form.gox:229
 			})); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line form.gox:218
+//line form.gox:232
 }
 
 func shownErr(err error) bool {
 	return err != nil && !errors.Is(err, errRequired) && !errors.Is(err, errUploading)
 }
 
-//line form.gox:224
+//line form.gox:238
 func errorData(name string, err doors.Beam[error]) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line form.gox:225
+//line form.gox:239
 		__e = __c.Any(err.Bind(func(err error) gox.Elem {
 		return gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
-//line form.gox:226
+//line form.gox:240
 			if err != nil {
-//line form.gox:227
+//line form.gox:241
 				__e = __c.Any(neui.Data{Text: name + " validation error", Object: err.Error()}); if __e != nil { return }
 			}
 		return })
-//line form.gox:229
+//line form.gox:243
 	})); if __e != nil { return }
 	return })
-//line form.gox:230
+//line form.gox:244
 }
 
 func aria(b bool) any {

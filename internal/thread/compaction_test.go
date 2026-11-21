@@ -171,7 +171,7 @@ func TestStopDuringACompactionAfterToolsEndsTheTurn(t *testing.T) {
 	held.State = api.RoundOk
 	held.Results = maps.Clone(results)
 	th.pending = true
-	state := th.switchStateCompact(held, "", api.EventUsage{}, held.Response)
+	state := th.switchStateCompact(held, "", nil, api.EventUsage{}, held.Response)
 	events()
 	op := NewOperation(context.Background())
 	state.on(commandStop{link: th.link, Operation: op})
@@ -218,7 +218,7 @@ func TestStopDuringACompactionAfterAnOkRoundEndsTheTurn(t *testing.T) {
 	held.State = api.RoundOk
 	th.pending = true
 	th.input = api.Input{Text: "queued"}
-	state := th.switchStateCompact(held, "", api.EventUsage{Input: 900}, held.Response)
+	state := th.switchStateCompact(held, "", nil, api.EventUsage{Input: 900}, held.Response)
 	events()
 	op := NewOperation(context.Background())
 	state.on(commandStop{link: th.link, Operation: op})
@@ -259,7 +259,7 @@ func TestNotAppliedCompactionReleasesThePendingInput(t *testing.T) {
 	if _, err := th.compact(false); err != nil {
 		t.Fatalf("compact: %v", err)
 	}
-	state := th.switchStateCompact(round, api.CodeContextLength, api.EventUsage{}, nil)
+	state := th.switchStateCompact(round, api.CodeContextLength, errors.New(string(api.CodeContextLength)), api.EventUsage{}, nil)
 	th.pending = true
 	th.input = api.Input{Text: "queued"}
 	events()
@@ -439,7 +439,7 @@ func TestOneRoundCompactionTooLongIsCompactionFailed(t *testing.T) {
 	if _, err := th.compact(true); err != nil || !th.compaction.isActive() {
 		t.Fatalf("compact: %v", err)
 	}
-	state := th.switchStateCompact(round, api.CodeContextLength, api.EventUsage{}, nil)
+	state := th.switchStateCompact(round, api.CodeContextLength, errors.New(string(api.CodeContextLength)), api.EventUsage{}, nil)
 	th.pending = true
 	events()
 	ch := th.link.ch
@@ -501,8 +501,8 @@ func TestTooLargeRoundStartsACompaction(t *testing.T) {
 		if _, ok := th.state.(threadWait); !ok || th.link == nil {
 			t.Fatalf("the thread is in %T with link %v, want idle and linked", th.state, th.link != nil)
 		}
-		if s := stored(t, th, round); s.State != api.RoundError || s.Error != string(api.CodeTooLarge) {
-			t.Fatalf("the round is stored as %s %q, want an error with too_large", s.State, s.Error)
+		if s := stored(t, th, round); s.State != api.RoundError || s.Error != "too_large: request_too_large" {
+			t.Fatalf("the round is stored as %s %q, want an error with too_large and its cause", s.State, s.Error)
 		}
 		end := slices.IndexFunc(events, func(e api.ChatEvent) bool {
 			end, ok := e.(api.ChatEventRoundEnd)

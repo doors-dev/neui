@@ -616,6 +616,40 @@ func TestIslandBeginSyntaxErrorRefused(t *testing.T) {
 	}
 }
 
+func TestIslandBeginRefusesWhatPrecheckFinds(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		code string
+		want []string
+	}{
+		{"empty screen", "var f = ui.form({ fields: [{ type: \"text\", label: \"Name\", name: \"name\" }] })\nvar action = ui.draw()",
+			[]string{"line 2, column 14: TypeError: ui.draw(): the screen is empty, as no part sets ui.root"}},
+		{"id literal and output field", "var f = ui.form({ fields: [{ type: \"number\", label: \"Qty\", name: \"new_qty\" }] })\nui.root.set(f)\nvar action = ui.draw()\nif (action.id === \"submit\") ui.notify(action.output.new_qty)",
+			[]string{
+				"line 4, column 5: TypeError: action.id: a control's id is a number set when it is created, never a literal such as \"submit\": compare it with that control, such as form.id",
+				"line 4, column 39: TypeError: action.output.new_qty: no control's output has new_qty; the outputs have only data, row, rows, submit, value",
+			}},
+		{"field type", "ui.root.set(ui.form({ fields: [{ type: \"hidden\", name: \"id\" }] }))",
+			[]string{"ui.form params at '/fields/0/type': value must be one of 'text', 'email', 'tel', 'url', 'password', 'number', 'range', 'date', 'time', 'datetime-local', 'month', 'week', 'textarea', 'select', 'search', 'checkbox', 'file', 'group', 'list', 'series'"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			p := testkit.NewProvider(api.Model{},
+				testkit.Call("page__island_spec", map[string]any{"path": "board"}),
+				revised(t, func(revision string) testkit.Turn {
+					return start(revision, c.code)
+				}),
+				testkit.Say("done"),
+			)
+			chat := stack.Page(t, stack.Host{Provider: p, Page: fullBoard()})
+			chat.Send("open the board")
+			chat.Wait()
+			for _, want := range c.want {
+				refused(t, testkit.Results(p.Request(t, 2))[0], want)
+			}
+		})
+	}
+}
+
 func TestIslandBeginRefusedAfterSpecChange(t *testing.T) {
 	mode := doors.NewSource(0)
 	page := func(cur gox.Cursor) error {
@@ -735,6 +769,31 @@ func TestIslandAppFunctionIsATool(t *testing.T) {
 	if out.Output != 7 || <-marks != 7 {
 		t.Fatalf("the agent's mark returned %d, want the island's app function to run as a tool of its space", out.Output)
 	}
+}
+
+func TestIslandAppFunctionNeedsNoRead(t *testing.T) {
+	marks := make(chan int, 2)
+	p := testkit.NewProvider(api.Model{},
+		testkit.Call("page__tool", map[string]any{"path": "board.app", "tool": "mark", "arg": map[string]any{"N": 7}}),
+		testkit.Call("page__tool", map[string]any{"path": "board.app", "tool": "mark", "arg": map[string]any{"N": 8}}),
+		testkit.Call("page__tool", map[string]any{"path": "board", "tool": "anything", "arg": map[string]any{}}),
+		testkit.Say("marked"),
+	)
+	page := func(cur gox.Cursor) error { return cur.Any(board(marks, nil)) }
+	c := stack.Page(t, stack.Host{Provider: p, Page: page})
+	c.Send("mark 7 and 8")
+	c.Wait()
+	for i, want := range []int{7, 8} {
+		var out struct {
+			Output int
+			Diff   map[string]any
+		}
+		testkit.Decode(t, testkit.Results(p.Request(t, i+1))[0], &out)
+		if out.Output != want || <-marks != want || len(out.Diff) != 0 {
+			t.Fatalf("call %d on the unread app space answered %d with diff %v, want %d run with no diff", i+1, out.Output, out.Diff, want)
+		}
+	}
+	refused(t, testkit.Results(p.Request(t, 3))[0], "this space has not been read")
 }
 
 func endBoard(held chan<- struct{}, screens chan<- string, success bool) gox.Elem {

@@ -81,6 +81,38 @@ func TestIslandDrawReturnsAfterTimeout(t *testing.T) {
 	carries(t, lastText(p.Request(t, 3)), `<task_notify `, `kind="notifications_list"`, `script="1"`, `[{"drawn":null}]`)
 }
 
+func TestIslandDrawNotesWhatTheScreenLacks(t *testing.T) {
+	const empty = `note="the screen is empty: ui.root holds no view or control, so the user sees nothing while the part waits in this ui.draw(); send a part that sets ui.root with island_interrupt, or end the app with island_end"`
+	const idle = `note="the screen has no control, so the part waits in this ui.draw() until you send the next part with island_interrupt or end the app with island_end"`
+	for _, c := range []struct {
+		name string
+		code string
+		want string
+	}{
+		{"empty root", "ui.root.set()\nui.draw()", empty},
+		{"layout with an empty slot", "ui.root.set(ui.column({}, ui.slot()))\nui.draw()", empty},
+		{"views only", "ui.root.set(ui.column({}, ui.markdown({ text: \"hi\" })))\nui.draw()", idle},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			p := testkit.NewProvider(api.Model{},
+				testkit.Call("page__island_spec", map[string]any{"path": "board"}),
+				revised(t, func(revision string) testkit.Turn {
+					return start(revision, c.code)
+				}),
+				testkit.Say("started"),
+				testkit.Say("noted"),
+			)
+			chat := stack.Browser(t, stack.Host{Provider: p, Page: fullBoard()})
+			chat.Send("open the board")
+			chat.Wait()
+			record := recorded(t, chat, p, `kind="notifications_list"`)
+			if !strings.Contains(record, c.want) {
+				t.Fatalf("the draw's record is %q, want %s", record, c.want)
+			}
+		})
+	}
+}
+
 func TestIslandUIEndCarriesValuesSinceLastDraw(t *testing.T) {
 	p := testkit.NewProvider(api.Model{},
 		testkit.Call("page__island_spec", map[string]any{"path": "board"}),

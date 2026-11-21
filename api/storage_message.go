@@ -85,7 +85,7 @@ const (
 	// streaming; not replayed, has a retry option.
 	RoundAbort = RoundState("abort")
 	// RoundError marks a round that hit a network or other error; skipped
-	// on replay, has retry. One whose Error is "invalid" or "too_large"
+	// on replay, has retry. One whose Error code is "invalid" or "too_large"
 	// (CodeInvalid, CodeTooLarge) is treated like RoundRefuse: the tool
 	// results it answered reach the model only as a note that they were
 	// omitted, and it cannot be retried; Rewind it instead.
@@ -102,7 +102,7 @@ type Round struct {
 	// written before storage recorded it.
 	Created  time.Time                    `json:"created"`
 	Input    Input                        `json:"input"`    // what the user sent
-	Error    string                       `json:"error"`    // the ErrCode when State is RoundError; see RoundError
+	Error    string                       `json:"error"`    // the ErrCode when State is RoundError, then ": " and the provider's error when known; see RoundError
 	Usage    EventUsage                   `json:"usage"`    // last usage the provider reported
 	Response Indexed[Content]             `json:"response"` // the model's blocks, by stream Index
 	Results  map[string]ContentToolResult `json:"results"`  // tool results by tool call id

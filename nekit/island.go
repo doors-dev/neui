@@ -40,6 +40,9 @@ type IslandFormParams = form.Params
 // IslandFormPatch is the form's update: it takes none.
 type IslandFormPatch = form.Patch
 
+// IslandFormSubmit is what a form hands the script waiting in ui.draw().
+type IslandFormSubmit = form.Submit
+
 // IslandTableParams is what a script passes to ui.table.
 type IslandTableParams = table.Params
 
@@ -70,7 +73,7 @@ func NewIslandMarkdown(ctx context.Context, p IslandMarkdownParams) (api.Widget[
 }
 
 // NewIslandForm builds a form control, for Library.Control.
-func NewIslandForm(ctx context.Context, p IslandFormParams, submit func(ctx context.Context, s map[string]any) bool) (api.Widget[IslandFormPatch], error) {
+func NewIslandForm(ctx context.Context, p IslandFormParams, submit func(ctx context.Context, s IslandFormSubmit) bool) (api.Widget[IslandFormPatch], error) {
 	return form.New(ctx, p, submit)
 }
 

@@ -386,7 +386,7 @@ func (r *run) run() {
 				if logErr := js.Log(r.fs, r.log, "ERROR", err.Error()); logErr != nil {
 					slog.Error("island: script log write failed", "log", r.log, "err", logErr)
 				}
-				r.state.FlushNotifications(false)
+				r.state.FlushNotifications("")
 				err = fmt.Errorf("script %d: %w", eval.script, err)
 				r.endErr = err
 				r.cancel(err)
@@ -395,7 +395,7 @@ func (r *run) run() {
 				if logErr := js.Log(r.fs, r.log, "ERROR", err.Error()); logErr != nil {
 					slog.Error("island: script log write failed", "log", r.log, "err", logErr)
 				}
-				r.state.FlushNotifications(false)
+				r.state.FlushNotifications("")
 				r.mu.Lock()
 				dropped := make([]uint, 0, r.queue.Len())
 				for r.queue.Len() > 0 {
@@ -413,7 +413,7 @@ func (r *run) run() {
 				data, _ := json.Marshal(err.Error())
 				r.task.Notify(data, meta)
 			case err == nil:
-				r.state.FlushNotifications(false)
+				r.state.FlushNotifications("")
 			}
 			if r.island.entered.Load() > 0 {
 				r.state.Release()
@@ -473,10 +473,10 @@ func (r *run) interrupt() {
 	(*libquickjs.TJSContext)(unsafe.Pointer(vmCtx)).Finterrupt_counter = 1
 }
 
-func (r *run) Notify(script uint, data json.RawMessage, idle bool) {
+func (r *run) Notify(script uint, data json.RawMessage, note string) {
 	meta := map[string]any{"script": script, "kind": "notifications_list"}
-	if idle {
-		meta["note"] = idleNote
+	if note != "" {
+		meta["note"] = note
 	}
 	r.task.Notify(data, meta)
 }

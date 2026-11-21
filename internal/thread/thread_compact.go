@@ -15,8 +15,6 @@
 package thread
 
 import (
-	"errors"
-
 	"neui.dev/api"
 )
 
@@ -24,6 +22,7 @@ type threadCompact struct {
 	thread  *thread
 	round   api.Round
 	failed  api.ErrCode
+	reason  error
 	usage   api.EventUsage
 	content api.Indexed[api.Content]
 }
@@ -126,7 +125,7 @@ func (s *threadCompact) on(cmd any) {
 			return
 		}
 		if !applied {
-			if err := s.thread.replay.RoundError(errors.New(string(s.failed)), s.usage, s.content); err != nil {
+			if err := s.thread.replay.RoundError(s.reason, s.usage, s.content); err != nil {
 				s.thread.criticalErr(nil, err)
 				return
 			}

@@ -48,6 +48,8 @@ type Env struct {
 type Widget struct {
 	Params *jsonschema.Schema
 	Patch  *jsonschema.Schema
+	// Output is a control's output schema; nil for a view.
+	Output *jsonschema.Schema
 }
 
 // Globals is what the accepted parts of one script left in its global scope.
@@ -57,6 +59,7 @@ type Globals struct {
 	written map[string]bool
 	open    bool
 	loose   bool
+	rooted  bool
 }
 
 // Finding is one reason to refuse a part.
@@ -78,7 +81,7 @@ func (f Finding) Error() string {
 func Check(code string, env Env, globals Globals) ([]Finding, Globals) {
 	prog, err := parser.ParseFile(nil, "", code, parser.IgnoreRegExpErrors, parser.WithDisableSourceMaps)
 	if err != nil {
-		return nil, Globals{written: globals.written, open: true, loose: true}
+		return nil, Globals{written: globals.written, open: true, loose: true, rooted: true}
 	}
 	a := &analyzer{
 		env:     env,
@@ -94,6 +97,48 @@ func Check(code string, env Env, globals Globals) ([]Finding, Globals) {
 	for name, v := range globals.values {
 		a.global.vars[name] = &binding{value: v}
 	}
+	open := false
+	for _, w := range env.Widgets {
+		o := w.Output
+		for o != nil && o.Ref != nil {
+			o = o.Ref
+		}
+		if o == nil {
+			continue
+		}
+		if a.outputs == nil {
+			a.outputs = map[string]bool{}
+		}
+		if o.Types == nil || o.Types.IsEmpty() || len(o.AllOf)+len(o.AnyOf)+len(o.OneOf)+len(o.PatternProperties) > 0 {
+			open = true
+			continue
+		}
+		for _, t := range o.Types.ToStrings() {
+			if t != "object" {
+				a.indexed = a.indexed || t == "string" || t == "array"
+				for _, name := range strings.Fields(typeMembers[t]) {
+					a.outputs[name] = true
+				}
+				continue
+			}
+			switch extra := o.AdditionalProperties.(type) {
+			case bool:
+				open = open || extra
+			case *jsonschema.Schema:
+				open = true
+			}
+			for name := range o.Properties {
+				if !slices.Contains(a.fields, name) {
+					a.fields = append(a.fields, name)
+				}
+				a.outputs[name] = true
+			}
+		}
+	}
+	if open {
+		a.outputs = nil
+	}
+	slices.Sort(a.fields)
 	a.declare(a.global, prog.Body)
 	converged := false
 	for range maxPasses {
@@ -111,6 +156,7 @@ func Check(code string, env Env, globals Globals) ([]Finding, Globals) {
 		written: maps.Clone(globals.written),
 		open:    globals.open || a.open || a.blind || !converged,
 		loose:   globals.loose || a.loose || a.blind || !converged,
+		rooted:  globals.rooted || a.rooted || a.open || a.loose || a.blind || !converged,
 	}
 	if out.written == nil {
 		out.written = map[string]bool{}
@@ -145,6 +191,8 @@ const (
 	widgetKind
 	layoutKind
 	drawKind
+	idKind
+	outputKind
 	funcKind
 )
 
@@ -220,6 +268,13 @@ var objectMembers = map[string]bool{
 	"__lookupSetter__":     true,
 }
 
+var typeMembers = map[string]string{
+	"string":  "length at charAt charCodeAt codePointAt concat endsWith includes indexOf isWellFormed lastIndexOf localeCompare match matchAll normalize padEnd padStart repeat replace replaceAll search slice split startsWith substr substring toLocaleLowerCase toLocaleUpperCase toLowerCase toUpperCase toWellFormed trim trimEnd trimLeft trimRight trimStart anchor big blink bold fixed fontcolor fontsize italics link small strike sub sup",
+	"number":  "toExponential toFixed toPrecision",
+	"integer": "toExponential toFixed toPrecision",
+	"array":   "length at concat copyWithin entries every fill filter find findIndex findLast findLastIndex flat flatMap forEach includes indexOf join keys lastIndexOf map pop push reduce reduceRight reverse shift slice some sort splice toReversed toSorted toSpliced unshift values with",
+}
+
 var uiMembers = map[string]bool{"root": true, "slot": true, "draw": true, "notify": true, "end": true}
 
 var extenders = map[string]map[string]bool{
@@ -244,8 +299,13 @@ type analyzer struct {
 	open     bool
 	loose    bool
 	blind    bool
+	rooted   bool
+	drew     bool
 	changed  bool
 	final    bool
+	outputs  map[string]bool
+	indexed  bool
+	fields   []string
 	findings []Finding
 }
 
@@ -621,7 +681,7 @@ func (a *analyzer) statement(st ast.Statement, s *scope) {
 			a.block(st.Finally, st.Finally.List, s)
 		}
 	case *ast.SwitchStatement:
-		a.expr(st.Discriminant, s)
+		d := a.expr(st.Discriminant, s)
 		ss := a.scopeOf(st, s, func(ss *scope) {
 			for _, c := range st.Body {
 				a.lexical(ss, c.Consequent)
@@ -629,6 +689,7 @@ func (a *analyzer) statement(st ast.Statement, s *scope) {
 		})
 		for _, c := range st.Body {
 			a.expr(c.Test, ss)
+			a.compareID(d, st.Discriminant, c.Test, c.Test)
 			for _, x := range c.Consequent {
 				a.statement(x, ss)
 			}
@@ -814,6 +875,9 @@ func (a *analyzer) object(left ast.Expression, s *scope) value {
 	if _, this := left.(*ast.ThisExpression); this || a.isGlobal(left, s) {
 		return value{kind: anyKind}
 	}
+	if id, ok := left.(*ast.Identifier); ok {
+		return a.ident(id, s, false)
+	}
 	return a.expr(left, s)
 }
 
@@ -850,7 +914,7 @@ func (a *analyzer) assign(target ast.Expression, v value, s *scope) {
 		}
 		lv := a.object(left, s)
 		if !ok {
-			if lv.kind == slotKind || lv.kind == widgetKind || lv.kind == layoutKind || lv.kind == drawKind {
+			if lv.kind == slotKind || lv.kind == widgetKind || lv.kind == layoutKind || lv.kind == drawKind || lv.kind == outputKind {
 				a.flag(&a.loose)
 			}
 			return
@@ -860,26 +924,31 @@ func (a *analyzer) assign(target ast.Expression, v value, s *scope) {
 			a.changed = true
 		}
 	case *ast.ObjectPattern:
-		if v.kind != drawKind {
+		if v.kind != drawKind && v.kind != outputKind {
 			v = value{kind: anyKind}
 		}
 		for _, p := range t.Properties {
 			switch p := p.(type) {
 			case *ast.PropertyShort:
-				a.access(p, "", v, p.Name.Name.String())
+				name := p.Name.Name.String()
+				a.access(p, "", v, name)
 				if p.Initializer != nil {
 					a.expr(p.Initializer, s)
 				}
-				a.assign(&p.Name, value{kind: anyKind}, s)
+				a.assign(&p.Name, a.field(v, name), s)
 			case *ast.PropertyKeyed:
+				name := ""
 				if p.Computed {
 					a.expr(p.Key, s)
 				} else if key, ok := p.Key.(*ast.StringLiteral); ok {
-					a.access(p, "", v, key.Value.String())
+					name = key.Value.String()
 				} else if key, ok := p.Key.(*ast.Identifier); ok {
-					a.access(p, "", v, key.Name.String())
+					name = key.Name.String()
 				}
-				a.assign(p.Value, value{kind: anyKind}, s)
+				if name != "" {
+					a.access(p, "", v, name)
+				}
+				a.assign(p.Value, a.field(v, name), s)
 			}
 		}
 		if t.Rest != nil {
@@ -958,7 +1027,48 @@ func (a *analyzer) access(n ast.Node, left string, v value, name string) {
 			field = fmt.Sprintf(outputIndex, left, strconv.Quote(name))
 		}
 		a.report(n, drawMemberMessage, label, strings.TrimPrefix(field, "."))
+	case outputKind:
+		if a.outputs == nil || a.outputs[name] {
+			return
+		}
+		if i, err := strconv.ParseUint(name, 10, 32); a.indexed && err == nil && strconv.FormatUint(i, 10) == name {
+			return
+		}
+		if len(a.fields) == 0 {
+			a.report(n, outputMemberMessage, label, name)
+			return
+		}
+		a.report(n, outputMemberMessage+outputFieldsMessage, label, name, strings.Join(a.fields, ", "))
 	}
+}
+
+func (a *analyzer) field(v value, name string) value {
+	switch {
+	case v.kind == uiKind && name == "root":
+		a.flag(&a.rooted)
+		return value{kind: slotKind}
+	case v.kind == drawKind && name == "id":
+		return value{kind: idKind}
+	case v.kind == drawKind && name == "output":
+		return value{kind: outputKind}
+	}
+	return value{kind: anyKind}
+}
+
+func (a *analyzer) compareID(v value, id ast.Expression, other ast.Expression, at ast.Node) {
+	if v.kind != idKind || a.loose || a.prior.loose || a.written["id"] || a.prior.written["id"] {
+		return
+	}
+	switch o := other.(type) {
+	case *ast.StringLiteral, *ast.NumberLiteral:
+	case *ast.TemplateLiteral:
+		if o.Tag != nil || len(o.Expressions) > 0 {
+			return
+		}
+	default:
+		return
+	}
+	a.report(at, idLiteralMessage, cmp.Or(a.text(id), "id"), cmp.Or(a.text(other), "this one"))
 }
 
 func (a *analyzer) ident(id *ast.Identifier, s *scope, guarded bool) value {
@@ -1002,7 +1112,9 @@ func (a *analyzer) read(e ast.Expression, s *scope, guarded bool) value {
 	left, name, ok := member(e)
 	if !ok {
 		if b, isBracket := e.(*ast.BracketExpression); isBracket {
-			a.object(b.Left, s)
+			if a.object(b.Left, s).kind == uiKind {
+				a.flag(&a.rooted)
+			}
 			a.expr(b.Member, s)
 		}
 		return value{kind: anyKind}
@@ -1014,15 +1126,12 @@ func (a *analyzer) read(e ast.Expression, s *scope, guarded bool) value {
 			a.probed[name] = true
 			a.changed = true
 		}
-	case drawKind:
+	case drawKind, outputKind:
 		if !guarded {
 			a.access(e, a.text(left), lv, name)
 		}
 	}
-	if lv.kind == uiKind && name == "root" {
-		return value{kind: slotKind}
-	}
-	return value{kind: anyKind}
+	return a.field(lv, name)
 }
 
 func (a *analyzer) call(c *ast.CallExpression, s *scope) value {
@@ -1069,6 +1178,10 @@ func (a *analyzer) call(c *ast.CallExpression, s *scope) value {
 		case "slot":
 			return value{kind: slotKind}
 		case "draw":
+			if a.final && !a.drew && a.running() && !a.prior.rooted && !a.rooted && !a.open && !a.loose {
+				a.drew = true
+				a.report(c, emptyScreenMessage, cmp.Or(a.text(c), "ui.draw()"))
+			}
 			return value{kind: drawKind}
 		case "notify", "end":
 			return value{}
@@ -1099,7 +1212,11 @@ func (a *analyzer) expr(e ast.Expression, s *scope) value {
 	case nil:
 		return value{}
 	case *ast.Identifier:
-		return a.ident(e, s, false)
+		v := a.ident(e, s, false)
+		if v.kind == uiKind {
+			a.flag(&a.rooted)
+		}
+		return v
 	case *ast.NullLiteral:
 		return value{}
 	case *ast.DotExpression, *ast.BracketExpression:
@@ -1143,6 +1260,9 @@ func (a *analyzer) expr(e ast.Expression, s *scope) value {
 		switch e.Operator {
 		case token.LOGICAL_OR, token.LOGICAL_AND, token.COALESCE:
 			return join(l, r)
+		case token.STRICT_EQUAL, token.EQUAL, token.STRICT_NOT_EQUAL, token.NOT_EQUAL:
+			a.compareID(l, e.Left, e.Right, e)
+			a.compareID(r, e.Right, e.Left, e)
 		}
 	case *ast.UnaryExpression:
 		switch e.Operator {
@@ -1184,7 +1304,9 @@ func (a *analyzer) expr(e ast.Expression, s *scope) value {
 				}
 				a.expr(p.Value, s)
 			case *ast.PropertyShort:
-				a.ident(&p.Name, s, false)
+				if a.ident(&p.Name, s, false).kind == uiKind {
+					a.flag(&a.rooted)
+				}
 			case *ast.SpreadElement:
 				a.expr(p.Expression, s)
 			}

@@ -40,7 +40,7 @@ type Run interface {
 	ResumeTurn()
 	IslandContext() context.Context
 	Library() Library
-	Notify(script uint, data json.RawMessage, idle bool)
+	Notify(script uint, data json.RawMessage, note string)
 	Note(note string)
 	Script() uint
 	NotificationsCap() int
@@ -384,7 +384,11 @@ func (s *state) toolDraw(ctx context.Context, ms int) (*Result, error) {
 	prevStash := s.stash
 	s.stash = nil
 	s.mu.Unlock()
-	s.send(prevStash, !handover && ms <= 0 && !s.hasControl())
+	note := ""
+	if !handover && ms <= 0 {
+		note = s.waitNote()
+	}
+	s.send(prevStash, note)
 	if handover {
 		s.run.AckHandover()
 		return &Result{Interrupt: true}, nil
@@ -489,7 +493,8 @@ func (s *state) ArmHandover() {
 	close(hook)
 }
 
-func (s *state) hasControl() bool {
+func (s *state) waitNote() string {
+	note := emptyNote
 	seen := map[*slot]bool{}
 	stack := []*slot{&s.root}
 	for len(stack) > 0 {
@@ -501,12 +506,13 @@ func (s *state) hasControl() bool {
 		seen[next] = true
 		for _, w := range next.widgets {
 			if w.widget.IsControl() {
-				return true
+				return ""
 			}
+			note = idleNote
 		}
 		stack = append(stack, next.slots...)
 	}
-	return false
+	return note
 }
 
 func (s *state) TakeNotifications() json.RawMessage {
@@ -520,18 +526,18 @@ func (s *state) TakeNotifications() json.RawMessage {
 	return data
 }
 
-func (s *state) FlushNotifications(idle bool) {
+func (s *state) FlushNotifications(note string) {
 	data := s.TakeNotifications()
-	if data == nil && !idle {
+	if data == nil && note == "" {
 		return
 	}
 	if data == nil {
 		data = json.RawMessage(`[]`)
 	}
-	s.run.Notify(s.run.Script(), data, idle)
+	s.run.Notify(s.run.Script(), data, note)
 }
 
-func (s *state) send(prevStash *submit, idle bool) {
+func (s *state) send(prevStash *submit, note string) {
 	applied := make(chan struct{})
 	s.applied = applied
 	doors.OnBatch(s.run.IslandContext(), func(context.Context) {
@@ -551,7 +557,7 @@ func (s *state) send(prevStash *submit, idle bool) {
 			f(ctx)
 		}
 	})
-	s.FlushNotifications(idle)
+	s.FlushNotifications(note)
 }
 
 const (

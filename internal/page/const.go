@@ -75,7 +75,7 @@ Open one when it serves the user better than chat or direct page calls do:
 
 Don't open one when a script alone does the job and you have the js module; for example, when bulk work on the page needs nothing from the user, such as the same steps over many rows.
 
-An island's app functions are also tools of its app child space: for a single change, call one directly instead of starting an app, or call them from a js script when you have that module and the task needs no UI.
+An island's app functions are also tools of its app child space, which calls reach without a read: call one directly for a single change instead of starting an app, and to read records the page shows a page at a time instead of paging through them; call them from a js script when you have that module and the task needs no UI.
 
 Before your first app, read island_guide: it teaches how to write one. Before starting an app in an island, read its spec with island_spec: it lists the views, controls, layouts, app functions and tools the app can use; use only what it lists, and read the schemas of the items you use with island_spec_schema.`
 

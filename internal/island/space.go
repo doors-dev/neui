@@ -24,6 +24,7 @@ import (
 type Space interface {
 	AddData(ctx context.Context, text string, object any) error
 	AddSpace(ctx context.Context, name string, desc string) (context.Context, error)
+	AddIslandApp(ctx context.Context, name string, desc string) (context.Context, error)
 	AddTool(ctx context.Context, t common.Tool) error
 }
 

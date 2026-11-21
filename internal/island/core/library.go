@@ -283,7 +283,11 @@ func (w widgetFactory[I, U, O]) spec() (string, []specSchema) {
 }
 
 func (w widgetFactory[I, U, O]) precheck() precheck.Widget {
-	return precheck.Widget{Params: w.inputSchema.Schema, Patch: w.updateSchema.Schema}
+	p := precheck.Widget{Params: w.inputSchema.Schema, Patch: w.updateSchema.Schema}
+	if w.outputSchema != nil {
+		p.Output = w.outputSchema.Schema
+	}
+	return p
 }
 
 type anyLayoutFactory interface {

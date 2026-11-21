@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -272,6 +273,51 @@ func (a *analyzer) explain(l *literal, e *jsonschema.ValidationError, what strin
 			if len(picked) == 1 && l.real(picked[0]) {
 				a.explain(l, picked[0], what, fallback)
 				return
+			}
+			if len(picked) == 0 {
+				typeLoc := append(slices.Clip(loc), "type")
+				values := &kind.Enum{}
+				types := &kind.Type{}
+				var collect func(e *jsonschema.ValidationError)
+				collect = func(e *jsonschema.ValidationError) {
+					var want []any
+					switch k := e.ErrorKind.(type) {
+					case *kind.Const:
+						want = []any{k.Want}
+					case *kind.Enum:
+						want = k.Want
+					case *kind.Type:
+						if slices.Equal(e.InstanceLocation, loc) {
+							types.Got = k.Got
+							for _, t := range k.Want {
+								if !slices.Contains(types.Want, t) {
+									types.Want = append(types.Want, t)
+								}
+							}
+						}
+					}
+					if slices.Equal(e.InstanceLocation, typeLoc) {
+						for _, v := range want {
+							if !slices.ContainsFunc(values.Want, func(w any) bool { return reflect.DeepEqual(w, v) }) {
+								values.Want = append(values.Want, v)
+							}
+						}
+					}
+					for _, c := range e.Causes {
+						collect(c)
+					}
+				}
+				for _, c := range e.Causes {
+					collect(c)
+				}
+				if len(values.Want) > 0 {
+					a.report(where(l.node(typeLoc)), schemaMessage, what+pointer(typeLoc), values.LocalizedString(printer))
+					return
+				}
+				if len(types.Want) > 0 {
+					a.report(where(l.node(loc)), schemaMessage, what+pointer(loc), types.LocalizedString(printer))
+					return
+				}
 			}
 			a.report(where(l.node(loc)), schemaMessage, what+pointer(loc), shapesMessage)
 			return

@@ -21,7 +21,9 @@ import (
 	"testing"
 
 	"github.com/doors-dev/gox"
+	"modernc.org/quickjs"
 	"neui.dev/api"
+	"neui.dev/internal/precheck"
 	"neui.dev/internal/testkit"
 )
 
@@ -75,5 +77,53 @@ func TestPrecheckRefusesPart(t *testing.T) {
 	}
 	if old.queue.Len() != 2 || old.scripts != 2 {
 		t.Fatalf("got %d parts, %d scripts, want 2 and 2", old.queue.Len(), old.scripts)
+	}
+}
+
+func outputEnv[O any](t *testing.T) precheck.Env {
+	t.Helper()
+	lib := NewLibrary()
+	if err := lib.Control("pick", "", func(context.Context, precheckNote, func(context.Context, O) bool) (api.Widget[precheckNote], error) {
+		return nil, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	env, err := scriptEnv(context.Background(), lib)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return env
+}
+
+func TestPrecheckKnowsTheMembersOfPrimitiveOutputs(t *testing.T) {
+	vm, err := quickjs.NewVM()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer vm.Close()
+	for _, c := range []struct {
+		proto string
+		env   precheck.Env
+	}{
+		{"String.prototype", outputEnv[string](t)},
+		{"Number.prototype", outputEnv[float64](t)},
+		{"Number.prototype", outputEnv[int](t)},
+		{"Boolean.prototype", outputEnv[bool](t)},
+		{"Array.prototype", outputEnv[[]string](t)},
+	} {
+		names, err := vm.Eval(`Object.getOwnPropertyNames(`+c.proto+`).join(" ")`, quickjs.EvalGlobal)
+		if err != nil {
+			t.Fatal(err)
+		}
+		code := "ui.root.set(ui.pick({ text: \"a\" }))\nvar a = ui.draw()\n"
+		for _, name := range strings.Fields(names.(string)) {
+			code += "a.output." + name + "\n"
+		}
+		if findings, _ := precheck.Check(code, c.env, precheck.Globals{}); len(findings) != 0 {
+			t.Fatalf("an output of %s refused its own members: %v", c.proto, findings)
+		}
+		if findings, _ := precheck.Check(code+"a.output.nope", c.env, precheck.Globals{}); len(findings) != 1 {
+			t.Fatalf("an output of %s let a.output.nope pass: %v", c.proto, findings)
+		}
 	}
 }
