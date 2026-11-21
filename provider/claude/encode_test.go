@@ -170,7 +170,7 @@ func TestThinkingIsAlwaysAdaptiveWithDropBlock(t *testing.T) {
 }
 
 func TestForcedToolChoiceRefusedByModel(t *testing.T) {
-	for _, model := range []string{"claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5-1"} {
+	for _, model := range []string{"claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5-1", "claude-fable-5-2"} {
 		for _, choice := range []api.ToolChoice{api.ToolChoiceAny, api.ToolChoice("f")} {
 			mustFail(t, mustNew(t, Conf{Model: api.Model{Name: model}}), api.Request{ToolChoice: choice, Messages: []api.Message{userText("hi")}}, "refuses tool choice")
 		}
@@ -1114,12 +1114,12 @@ func TestName(t *testing.T) {
 // Model reads back as configured: a listed model with its window, a caller's
 // literal as written, where zero is unknown rather than a window of zero.
 func TestDeclaredModels(t *testing.T) {
-	for _, m := range []api.Model{Fable51, Opus55, Sonnet55, Haiku55, Sonnet5} {
+	for _, m := range []api.Model{Fable52, Fable51, Opus55, Sonnet55, Haiku55, Sonnet5} {
 		if m.Context != 1_000_000 || m.ImagePixels != 4784*28*28 || m.ImageSide != 2576 || m.ImagesPerRequest != 600 {
 			t.Errorf("%s: %+v, want the 1M window, the high resolution tier and 600 images", m.Name, m)
 		}
 	}
-	for _, m := range []api.Model{Fable51, Opus55, Sonnet55, Haiku55, Sonnet5} {
+	for _, m := range []api.Model{Fable52, Fable51, Opus55, Sonnet55, Haiku55, Sonnet5} {
 		if m.RequestBytes != 32_000_000 || m.ImageBytes != 10_000_000*3/4 {
 			t.Errorf("%s: request %d, image %d bytes, want 32 MB and the raw size of 10 MB base64", m.Name, m.RequestBytes, m.ImageBytes)
 		}
@@ -1141,7 +1141,7 @@ func TestNewRefusesInvalidSettings(t *testing.T) {
 		t.Errorf("WithMaxTokens(0) left %d, want the default %d", got, defaultMaxTokens)
 	}
 
-	for _, m := range []api.Model{Fable51, Opus55, Sonnet55, Haiku55, Sonnet5} {
+	for _, m := range []api.Model{Fable52, Fable51, Opus55, Sonnet55, Haiku55, Sonnet5} {
 		mustNew(t, Conf{Model: m}, WithEffort(EffortMax), WithMaxTokens(128_000), WithThinkingDisplay(DisplaySummarized))
 		mustRefuse(t, Conf{Model: m}, "over the 128000", WithMaxTokens(128_001))
 	}

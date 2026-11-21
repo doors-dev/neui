@@ -192,6 +192,24 @@
       "role": "assistant",
       "content": [
         {
+          "type": "text",
+          "text": "[empty]"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "thanks"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
           "type": "thinking",
           "thinking": "claude weighs it 1.",
           "signature": "c2lnbmF0dXJlIDEgb2YgY2xhdWRlIGZvciB0aGUgY3Jvc3MgY29ycHVz"

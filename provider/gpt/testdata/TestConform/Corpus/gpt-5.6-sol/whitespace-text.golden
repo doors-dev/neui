@@ -14,7 +14,7 @@
       "content": [
         {
           "type": "input_text",
-          "text": "hi"
+          "text": "hi\n"
         },
         {
           "type": "input_text",

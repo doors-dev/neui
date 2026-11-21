@@ -138,11 +138,12 @@ type Block struct {
 }
 
 const (
-	KindText     = "text"
-	KindThinking = "thinking"
-	KindSummary  = "summary"
-	KindTool     = "tool"
-	KindOpaque   = "opaque"
+	KindText       = "text"
+	KindThinking   = "thinking"
+	KindSummary    = "summary"
+	KindTool       = "tool"
+	KindOpaque     = "opaque"
+	KindServerTool = "server_tool"
 )
 
 type Script struct {
@@ -188,4 +189,5 @@ type Adapter struct {
 	Live       Live
 	Messages   string
 	CrossCheck func(t *testing.T, body []byte)
+	Skipped    func(r api.ContentReasoning) bool
 }

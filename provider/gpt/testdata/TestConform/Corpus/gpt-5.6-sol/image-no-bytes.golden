@@ -14,7 +14,7 @@
       "content": [
         {
           "type": "input_text",
-          "text": "describe"
+          "text": "describe\n"
         },
         {
           "type": "input_text",

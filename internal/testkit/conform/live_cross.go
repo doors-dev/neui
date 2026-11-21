@@ -96,7 +96,7 @@ func RunLiveCross(t *testing.T, a Adapter) {
 		}
 		return results
 	}
-	own := []api.Message{user(text("What is the weather in Paris and in Tokyo right now? Call get_weather once per city, both in one turn, then answer in one sentence."))}
+	own := []api.Message{user(text("What is the weather in Paris and in Tokyo right now? Call get_weather once per city, both in one turn, then answer in one sentence that also gives the difference of the two temperatures in Fahrenheit and how many primes lie below the sum of the two wind speeds."))}
 	t.Run("own", func(t *testing.T) {
 		for range 3 {
 			content, _ := send(t, own)
@@ -149,45 +149,19 @@ func RunLiveCross(t *testing.T, a Adapter) {
 			}
 			history = thread(first...)
 		}
+		earlier, current, back := replayShapes(history, own)
 		t.Run(name+"/history", func(t *testing.T) {
-			msgs := history[:len(history):len(history)]
-			if msgs[len(msgs)-1].Role == api.RoleUser {
-				msgs = append(msgs, assistant(text("Noted.")))
-			}
-			send(t, append(msgs, user(text("Thanks. In one line: what did you find?"))))
+			send(t, earlier)
 		})
 		t.Run(name+"/current", func(t *testing.T) {
-			last := -1
-			for i, msg := range history {
-				for _, c := range msg.Content {
-					if _, ok := c.(api.ContentToolUse); ok && msg.Role == api.RoleAssistant && i+1 < len(history) {
-						last = i
-					}
-				}
-			}
-			if last < 0 {
+			if current == nil {
 				t.Skip("the history makes no call")
 			}
-			send(t, history[:last+2])
+			send(t, current)
 		})
-		var spoken api.Message
-		for _, msg := range history {
-			if msg.Role != api.RoleAssistant {
-				continue
-			}
-			calls := false
-			for _, c := range msg.Content {
-				_, call := c.(api.ContentToolUse)
-				calls = calls || call
-			}
-			if !calls {
-				spoken = msg
-			}
-		}
-		if spoken.Role == "" {
+		if back == nil {
 			continue
 		}
-		back := append(own[:len(own):len(own)], user(text("Another assistant answered the next question.")), spoken, user(text("Summarise this conversation in one line.")))
 		t.Run(name+"/switch-back", func(t *testing.T) {
 			_, with := send(t, back)
 			if measured {
@@ -199,9 +173,14 @@ func RunLiveCross(t *testing.T, a Adapter) {
 			for i, msg := range back {
 				stripped[i] = api.Message{Role: msg.Role}
 				for _, c := range msg.Content {
-					if r, ok := c.(api.ContentReasoning); ok {
-						if _, mine := lib.OwnMeta(r.Meta, a.Name); mine {
+					switch c := c.(type) {
+					case api.ContentReasoning:
+						if _, mine := lib.OwnMeta(c.Meta, a.Name); mine {
 							found = true
+							continue
+						}
+					case api.ContentOpaque:
+						if strings.HasPrefix(c.Kind, a.Name+".") {
 							continue
 						}
 					}
@@ -209,8 +188,7 @@ func RunLiveCross(t *testing.T, a Adapter) {
 				}
 			}
 			if !found {
-				t.Logf("the own loop carries no reasoning of %s, so there is nothing to see read", a.Name)
-				return
+				t.Fatalf("the own loop carries no reasoning of %s, so the switch back cannot show it read", a.Name)
 			}
 			_, without := send(t, stripped)
 			total := func(u api.EventUsage) int { return u.Input + u.CacheRead + u.CacheWrite }

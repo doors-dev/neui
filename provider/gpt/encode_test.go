@@ -122,6 +122,40 @@ func TestEncodeInput(t *testing.T) {
 				{"type":"input_file","filename":"document.pdf","file_data":"data:application/pdf;base64,JVBERg=="}]}]`,
 		},
 		{
+			name: "a document goes as input_file only for a type the service takes, other UTF-8 text as input_text, the rest as a note",
+			req: api.Request{Messages: []api.Message{user(
+				api.ContentDocument{Data: []byte("plain"), Mime: "text/plain; charset=utf-8"},
+				api.ContentDocument{Data: []byte("fn main() {}"), Mime: " Text/X-Rust "},
+				api.ContentDocument{Data: []byte("<a/>"), Mime: "application/xml"},
+				api.ContentDocument{Data: []byte("class A {}"), Mime: "text/x-java", Name: "A.java"},
+				api.ContentDocument{Data: []byte{0xff}, Mime: "text/x-java"},
+				api.ContentDocument{Data: []byte("PK"), Mime: "application/zip", Name: "a.zip"},
+				api.ContentDocument{Data: []byte("plain"), Mime: "application/octet-stream", Name: "a.txt"},
+				api.ContentDocument{Data: []byte("plain")},
+			)}},
+			want: `[{"role":"user","content":[
+				{"type":"input_file","filename":"document.txt","file_data":"data:text/plain;base64,cGxhaW4="},
+				{"type":"input_file","filename":"document.rs","file_data":"data:text/x-rust;base64,Zm4gbWFpbigpIHt9"},
+				{"type":"input_text","text":"<a/>\n"},
+				{"type":"input_text","text":"class A {}\n"},
+				{"type":"input_text","text":"[document omitted]\n"},
+				{"type":"input_text","text":"[document omitted]\n"},
+				{"type":"input_text","text":"[document omitted]\n"},
+				{"type":"input_text","text":"[document omitted]"}]}]`,
+		},
+		{
+			name: "a result document of a type the service refuses leaves a note in the result",
+			req: api.Request{Messages: []api.Message{
+				user(api.ContentToolResult{ID: "call_a", Content: api.UserContents{
+					api.ContentDocument{Data: []byte("PK"), Mime: "application/zip", Name: "a.zip"},
+					api.ContentDocument{Data: []byte("PK"), Mime: string(api.DocumentDOCX), Name: "a.docx"},
+				}}),
+			}},
+			want: `[{"type":"function_call_output","call_id":"call_a","output":[
+				{"type":"input_text","text":"[document omitted]"},
+				{"type":"input_file","filename":"a.docx","file_data":"data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,UEs="}]}]`,
+		},
+		{
 			// The service refuses a part whose data URL carries nothing, and a
 			// user message is stored and replayed, so one stored block sent as a
 			// part would be refused on every later turn of the thread rather than
@@ -137,10 +171,10 @@ func TestEncodeInput(t *testing.T) {
 				api.ContentText{Text: "what is it"},
 			)}},
 			want: `[{"role":"user","content":[
-				{"type":"input_text","text":"[image omitted]"},
-				{"type":"input_text","text":"[image omitted]"},
-				{"type":"input_text","text":"[document omitted]"},
-				{"type":"input_text","text":"[document omitted]"},
+				{"type":"input_text","text":"[image omitted]\n"},
+				{"type":"input_text","text":"[image omitted]\n"},
+				{"type":"input_text","text":"[document omitted]\n"},
+				{"type":"input_text","text":"[document omitted]\n"},
 				{"type":"input_text","text":"what is it"}]}]`,
 		},
 		{
@@ -153,8 +187,8 @@ func TestEncodeInput(t *testing.T) {
 				}}),
 			}},
 			want: `[{"type":"function_call_output","call_id":"call_a","output":[
-				{"type":"input_text","text":"[image omitted]"},
-				{"type":"input_text","text":"[document omitted]"},
+				{"type":"input_text","text":"[image omitted]\n"},
+				{"type":"input_text","text":"[document omitted]\n"},
 				{"type":"input_text","text":"here"}]}]`,
 		},
 		{
@@ -167,8 +201,8 @@ func TestEncodeInput(t *testing.T) {
 				}}),
 			}},
 			want: `[{"type":"function_call_output","call_id":"call_a","output":[
-				{"type":"input_text","text":"[image omitted]"},
-				{"type":"input_text","text":"[document omitted]"},
+				{"type":"input_text","text":"[image omitted]\n"},
+				{"type":"input_text","text":"[document omitted]\n"},
 				{"type":"input_text","text":"here"}]}]`,
 		},
 		{
@@ -257,11 +291,11 @@ func TestEncodeInput(t *testing.T) {
 				}),
 			}},
 			want: `[{"type":"function_call_output","call_id":"call_a","output":[
-				{"type":"input_text","text":"Error:"},
+				{"type":"input_text","text":"Error:\n"},
 				{"type":"input_text","text":"boom"}]}]`,
 		},
 		{
-			name: "two text blocks in a tool result stay two parts",
+			name: "two text blocks in a tool result stay two parts, the first ending in a newline so the model does not read them glued",
 			req: api.Request{Messages: []api.Message{
 				user(api.ContentToolResult{ID: "call_a", Content: api.UserContents{
 					api.ContentText{Text: "first"},
@@ -269,7 +303,7 @@ func TestEncodeInput(t *testing.T) {
 				}}),
 			}},
 			want: `[{"type":"function_call_output","call_id":"call_a","output":[
-				{"type":"input_text","text":"first"},
+				{"type":"input_text","text":"first\n"},
 				{"type":"input_text","text":"second"}]}]`,
 		},
 		{
@@ -298,7 +332,7 @@ func TestEncodeInput(t *testing.T) {
 				}}),
 			}},
 			want: `[{"type":"function_call_output","call_id":"call_a","output":[
-				{"type":"input_text","text":"here"},
+				{"type":"input_text","text":"here\n"},
 				{"type":"input_text","text":"[content omitted]"}]}]`,
 		},
 		{
@@ -315,7 +349,7 @@ func TestEncodeInput(t *testing.T) {
 			}},
 			want: `[{"type":"function_call","call_id":"call_a","name":"search","arguments":"{}"},
 				{"type":"function_call_output","call_id":"call_a","output":[
-					{"type":"input_text","text":"Error:"},
+					{"type":"input_text","text":"Error:\n"},
 					{"type":"input_text","text":"tool call arguments were not valid JSON, the call was not made, reissue it with complete arguments: {\"q"}]}]`,
 		},
 		{
@@ -729,8 +763,8 @@ func TestEncodeInput(t *testing.T) {
 				),
 			}},
 			want: `[{"role":"user","content":[
-				{"type":"input_text","text":"[image omitted]"},
-				{"type":"input_text","text":"[document omitted]"},
+				{"type":"input_text","text":"[image omitted]\n"},
+				{"type":"input_text","text":"[document omitted]\n"},
 				{"type":"input_text","text":"here"}]}]`,
 		},
 		{
@@ -1335,7 +1369,7 @@ func TestEncodeLogsOnlyAnUnknownTypeOnce(t *testing.T) {
 	for range 2 {
 		body := encodeBody(t, testModel, defaultSettings(), req)
 		sameJSON(t, body["input"], `[{"role":"user","content":[
-			{"type":"input_text","text":"[image omitted]"},
+			{"type":"input_text","text":"[image omitted]\n"},
 			{"type":"input_text","text":"[content omitted]"}]},
 			{"role":"assistant","content":[
 			{"type":"output_text","text":"ok"}]}]`)
@@ -1450,7 +1484,7 @@ func TestCallsAndResultsPairByIDInInputOrder(t *testing.T) {
 		}, `[{"role":"user","content":[{"type":"input_text","text":"go"}]},{"role":"assistant","content":[{"type":"output_text","text":"[content omitted]"}]}]`},
 		{"a result before its call in one message is a note, and the call stays unanswered", []api.Message{
 			user(api.ContentToolResult{ID: "call_1", Content: api.UserContents{api.ContentText{Text: "x"}}}, api.ContentToolUse{ID: "call_1", Name: "t"}),
-		}, `[{"role":"user","content":[{"type":"input_text","text":"[content omitted]"},{"type":"input_text","text":"[content omitted]"}]}]`},
+		}, `[{"role":"user","content":[{"type":"input_text","text":"[content omitted]\n"},{"type":"input_text","text":"[content omitted]"}]}]`},
 		{"a call in a user message answered two messages later is carried", []api.Message{
 			user(api.ContentText{Text: "go"}, api.ContentToolUse{ID: "call.1:x", Name: "functions.t"}),
 			assistant(api.ContentText{Text: "waiting"}),

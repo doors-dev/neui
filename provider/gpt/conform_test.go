@@ -23,6 +23,7 @@ import (
 
 	"neui.dev/api"
 	"neui.dev/internal/testkit/conform"
+	"neui.dev/provider/lib"
 )
 
 const (
@@ -137,6 +138,11 @@ func conformAdapter() conform.Adapter {
 				}
 			}
 		},
+		Skipped: func(r api.ContentReasoning) bool {
+			var item outputItem
+			data, _ := lib.OwnMeta(r.Meta, providerName)
+			return json.Unmarshal(data, &item) == nil && item.EncryptedContent == ""
+		},
 		Signed:   true,
 		Sampling: true,
 		Errors:   gptErrors(),
@@ -184,7 +190,7 @@ func conformAdapter() conform.Adapter {
 			},
 			{Entry: "image-no-mime", Carry: map[string]any{"/input/0/content/1/type": "input_text"}, Source: docVision},
 			{Entry: "tool-result-image-bad-mime", Carry: map[string]any{"/input/2/output/0/type": "input_text"}, Source: docVision},
-			{Entry: "tool-error", Carry: map[string]any{"/input/2/output/0/text": "Error:"}, Source: docCreate},
+			{Entry: "tool-error", Carry: map[string]any{"/input/2/output/0/text": "Error:\n"}, Source: docCreate},
 			{Entry: "tool-discarded-arguments", Carry: map[string]any{"/input/1/arguments": "{}"}, Source: docCreate},
 		},
 		Live: conform.Live{

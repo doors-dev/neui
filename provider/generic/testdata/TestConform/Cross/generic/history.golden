@@ -99,6 +99,15 @@
     },
     {
       "role": "assistant",
+      "content": "[empty]",
+      "reasoning": "generic weighs it 3."
+    },
+    {
+      "role": "user",
+      "content": "thanks"
+    },
+    {
+      "role": "assistant",
       "content": "ok"
     },
     {

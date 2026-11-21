@@ -6,7 +6,7 @@
     {
       "content": [
         {
-          "text": "run it",
+          "text": "run it\n",
           "type": "input_text"
         },
         {
@@ -42,7 +42,7 @@
       "call_id": "call-page__island_begin",
       "output": [
         {
-          "text": "Error:",
+          "text": "Error:\n",
           "type": "input_text"
         },
         {

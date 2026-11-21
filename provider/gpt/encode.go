@@ -227,6 +227,7 @@ func (b *inputBuilder) user(m api.Message, at int) error {
 		if len(blocks) == 0 {
 			return
 		}
+		apart(blocks)
 		b.items = append(b.items, inputItem{kind: kindMessage, v: inputMessage{Role: "user", Content: blocks}})
 		blocks = nil
 	}
@@ -245,14 +246,6 @@ func (b *inputBuilder) user(m api.Message, at int) error {
 			}
 			blocks = append(blocks, imageBlock(c))
 		case api.ContentDocument:
-			if len(c.Data) == 0 {
-				blocks = append(blocks, omitted(c, "a file part with no bytes in it is refused by the service, and the block is stored, so it would be refused again on every later turn of the thread"))
-				continue
-			}
-			if strings.TrimSpace(c.Mime) == "" {
-				blocks = append(blocks, omitted(c, "a file part with no media type is refused by the service, and the block is stored, so it would be refused again on every later turn of the thread"))
-				continue
-			}
 			blocks = append(blocks, documentBlock(c))
 		case api.ContentToolUse:
 			call, err := b.call(c, at, j)
@@ -509,14 +502,6 @@ func resultOutput(c api.ContentToolResult, at int) any {
 			}
 			blocks = append(blocks, imageBlock(rc))
 		case api.ContentDocument:
-			if len(rc.Data) == 0 {
-				blocks = append(blocks, omitted(rc, "a file part with no bytes in it is refused by the service, and the result is stored, so it would be refused again on every later turn of the thread"))
-				continue
-			}
-			if strings.TrimSpace(rc.Mime) == "" {
-				blocks = append(blocks, omitted(rc, "a file part with no media type is refused by the service, and the result is stored, so it would be refused again on every later turn of the thread"))
-				continue
-			}
 			blocks = append(blocks, documentBlock(rc))
 		default:
 			blocks = append(blocks, unknown(rc, at))
@@ -525,7 +510,19 @@ func resultOutput(c api.ContentToolResult, at int) any {
 	if len(blocks) == 0 {
 		blocks = append(blocks, inputText{Type: "input_text", Text: lib.EmptyResult})
 	}
+	apart(blocks)
 	return blocks
+}
+
+func apart(blocks []any) {
+	for i := 1; i < len(blocks); i++ {
+		_, text := blocks[i].(inputText)
+		prev, after := blocks[i-1].(inputText)
+		if text && after && !strings.HasSuffix(prev.Text, "\n") {
+			prev.Text += "\n"
+			blocks[i-1] = prev
+		}
+	}
 }
 
 func imageBlock(c api.ContentImage) inputImage {
@@ -533,37 +530,47 @@ func imageBlock(c api.ContentImage) inputImage {
 	return inputImage{Type: "input_image", ImageURL: dataURL(mime, c.Data), Detail: "high"}
 }
 
-// documentExtensions maps the media types worth guessing a filename for. The
-// accepted list runs to dozens of text and code types and the service reads the
-// extension, so a document that arrived without a name gets one that matches
-// what it is.
-var documentExtensions = map[string]string{
+var fileTypes = map[string]string{
 	"application/pdf":          ".pdf",
-	"application/json":         ".json",
-	"text/plain":               ".txt",
-	"text/markdown":            ".md",
-	"text/csv":                 ".csv",
-	"text/html":                ".html",
-	"text/xml":                 ".xml",
-	"application/xml":          ".xml",
-	"application/yaml":         ".yaml",
-	"text/x-python":            ".py",
-	"text/x-go":                ".go",
 	"application/rtf":          ".rtf",
 	"application/msword":       ".doc",
 	"application/vnd.ms-excel": ".xls",
 	"application/vnd.openxmlformats-officedocument.wordprocessingml.document":   ".docx",
 	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":         ".xlsx",
 	"application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
+	"application/vnd.oasis.opendocument.text":                                   ".odt",
+	"application/json": ".json",
+	"application/yaml": ".yaml",
+	"text/plain":       ".txt",
+	"text/markdown":    ".md",
+	"text/csv":         ".csv",
+	"text/tsv":         ".tsv",
+	"text/html":        ".html",
+	"text/xml":         ".xml",
+	"text/x-python":    ".py",
+	"text/x-go":        ".go",
+	"text/x-rust":      ".rs",
 }
 
-func documentBlock(c api.ContentDocument) inputFile {
-	mime := strings.ToLower(strings.TrimSpace(c.Mime))
-	name := c.Name
-	if name == "" {
-		name = "document" + documentExtensions[mime]
+func documentBlock(c api.ContentDocument) any {
+	base, _, _ := strings.Cut(c.Mime, ";")
+	mime := strings.ToLower(strings.TrimSpace(base))
+	ext, file := fileTypes[mime]
+	switch {
+	case len(c.Data) == 0:
+		return omitted(c, "a file part with no bytes in it is refused by the service, and the block is stored, so it would be refused again on every later turn of the thread")
+	case file:
+		name := c.Name
+		if name == "" {
+			name = "document" + ext
+		}
+		return inputFile{Type: "input_file", Filename: name, FileData: dataURL(mime, c.Data)}
+	case !strings.HasPrefix(mime, "text/") && mime != "application/xml":
+		return omitted(c, fmt.Sprintf("the service refuses a file of type %q with a 400, and the block is stored, so it would be refused again on every later turn of the thread", c.Mime))
+	case !utf8.Valid(c.Data):
+		return omitted(c, "a text type the service takes no file of goes as text, and a JSON string cannot carry bytes that are not UTF-8")
 	}
-	return inputFile{Type: "input_file", Filename: name, FileData: dataURL(mime, c.Data)}
+	return inputText{Type: "input_text", Text: string(c.Data)}
 }
 
 // dataURL is the form every current example uses for both image_url and

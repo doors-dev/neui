@@ -236,6 +236,70 @@
       "role": "assistant",
       "content": [
         {
+          "caller": {
+            "type": "direct"
+          },
+          "id": "srvtoolu_01",
+          "input": {
+            "query": "cats near the river"
+          },
+          "name": "web_search",
+          "type": "server_tool_use"
+        },
+        {
+          "caller": {
+            "type": "direct"
+          },
+          "content": [
+            {
+              "encrypted_content": "ZW5j",
+              "page_age": null,
+              "title": "Example",
+              "type": "web_search_result",
+              "url": "https://example.com/"
+            }
+          ],
+          "tool_use_id": "srvtoolu_01",
+          "type": "web_search_tool_result"
+        },
+        {
+          "type": "text",
+          "text": "Found it nearby."
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "thanks"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "thinking",
+          "thinking": "claude weighs it 3.",
+          "signature": "c2lnbmF0dXJlIDMgb2YgY2xhdWRlIGZvciB0aGUgY3Jvc3MgY29ycHVz"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "thanks"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
           "type": "thinking",
           "thinking": "claude weighs it 1.",
           "signature": "c2lnbmF0dXJlIDEgb2YgY2xhdWRlIGZvciB0aGUgY3Jvc3MgY29ycHVz"

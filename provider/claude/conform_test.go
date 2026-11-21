@@ -40,7 +40,7 @@ func TestConform(t *testing.T) {
 
 func conformAdapter() conform.Adapter {
 	ceiling := map[string]int{}
-	for _, m := range []api.Model{Fable51, Opus55, Sonnet55, Haiku55, Sonnet5} {
+	for _, m := range []api.Model{Fable51, Fable52, Opus55, Sonnet55, Haiku55, Sonnet5} {
 		ceiling[m.Name] = 128_000
 	}
 	overCeiling := func(model string) func(conform.Params) bool {
@@ -50,7 +50,7 @@ func conformAdapter() conform.Adapter {
 		Carry:  map[string]any{"/thinking": map[string]any{"type": "adaptive", "block_binding": map[string]any{"prefix_mismatch_behavior": "drop_block"}}},
 		Source: docBinding,
 	}}
-	for _, m := range []string{"opus-5-5", "sonnet-5-5", "fable-5-1"} {
+	for _, m := range []string{"opus-5-5", "sonnet-5-5", "fable-5-1", "fable-5-2"} {
 		rules = append(rules, conform.Rule{
 			Model:  m,
 			When:   conform.Params.Forced,
@@ -92,7 +92,7 @@ func conformAdapter() conform.Adapter {
 	)
 	return conform.Adapter{
 		Name:   providerName,
-		Models: []api.Model{Fable51, Opus55, Sonnet55, Haiku55, Sonnet5},
+		Models: []api.Model{Fable51, Fable52, Opus55, Sonnet55, Haiku55, Sonnet5},
 		New: func(base string, m api.Model, p conform.Params) (api.Provider, error) {
 			key := p.Key
 			if key == "" {
@@ -200,6 +200,10 @@ func renderClaude(m api.Model, s conform.Script) (string, bool) {
 			stop = "tool_use"
 			start(map[string]any{"type": "tool_use", "id": blk.ID, "name": blk.Name, "input": map[string]any{}, "caller": map[string]any{"type": "direct"}})
 			delta(map[string]any{"type": "input_json_delta", "partial_json": blk.Args})
+		case conform.KindServerTool:
+			start(map[string]any{"type": "server_tool_use", "id": blk.ID, "name": blk.Name, "input": map[string]any{}, "caller": map[string]any{"type": "direct"}})
+			delta(map[string]any{"type": "input_json_delta", "partial_json": blk.Args[:len(blk.Args)/2]})
+			delta(map[string]any{"type": "input_json_delta", "partial_json": blk.Args[len(blk.Args)/2:]})
 		case conform.KindOpaque:
 			start(map[string]any{"type": "web_search_tool_result", "tool_use_id": "srvtoolu_01", "caller": map[string]any{"type": "direct"}, "content": []any{
 				map[string]any{"type": "web_search_result", "url": "https://example.com/", "title": "Example", "encrypted_content": "ZW5j", "page_age": nil},

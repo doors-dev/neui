@@ -105,6 +105,24 @@
     },
     {
       "role": "assistant",
+      "content": "Found it nearby.",
+      "reasoning_content": ""
+    },
+    {
+      "role": "user",
+      "content": "thanks"
+    },
+    {
+      "role": "assistant",
+      "content": "[empty]",
+      "reasoning_content": ""
+    },
+    {
+      "role": "user",
+      "content": "thanks"
+    },
+    {
+      "role": "assistant",
       "content": "ok",
       "reasoning_content": ""
     },

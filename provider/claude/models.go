@@ -16,13 +16,13 @@ package claude
 
 import "neui.dev/api"
 
-// The current Claude lineup and the legacy Sonnet 5, ready to pass as
-// Conf.Model, with the limits the models overview, the vision guide and the API
-// overview publish for the Anthropic API
+// The current Claude lineup, Fable 5.1 and the legacy Sonnet 5, ready to pass
+// as Conf.Model, with the limits the models overview, the vision guide and the
+// API overview publish for the Anthropic API
 // (https://platform.claude.com/docs/en/about-claude/models/overview, read
-// 2026-11-06). Fable 5.1, Opus 5.5, Sonnet 5.5 and Haiku 5.5 are current;
-// Sonnet 5 is legacy and still served. Every id is a pinned snapshot, and every
-// model here takes adaptive thinking.
+// 2026-11-21). Fable 5.2, Opus 5.5, Sonnet 5.5 and Haiku 5.5 are current;
+// Fable 5.1 and Sonnet 5 are earlier models, still served. Every id is a pinned
+// snapshot, and every model here takes adaptive thinking.
 //
 // ImageSide and ImagePixels are the vision guide's tier for Claude 4.7 and
 // later, a 2576 px long edge. ImageBytes is the raw size of
@@ -32,6 +32,7 @@ import "neui.dev/api"
 // this package supports. For a model not listed, build an api.Model with its id
 // and limits; New then checks none of its settings.
 var (
+	Fable52  = api.Model{Name: "claude-fable-5-2", Context: 1_000_000, ImagePixels: 4784 * 28 * 28, ImageSide: 2576, ImageBytes: 7_500_000, ImagesPerRequest: 600, RequestBytes: 32_000_000, Inputs: inputs}
 	Fable51  = api.Model{Name: "claude-fable-5-1", Context: 1_000_000, ImagePixels: 4784 * 28 * 28, ImageSide: 2576, ImageBytes: 7_500_000, ImagesPerRequest: 600, RequestBytes: 32_000_000, Inputs: inputs}
 	Opus55   = api.Model{Name: "claude-opus-5-5", Context: 1_000_000, ImagePixels: 4784 * 28 * 28, ImageSide: 2576, ImageBytes: 7_500_000, ImagesPerRequest: 600, RequestBytes: 32_000_000, Inputs: inputs}
 	Sonnet55 = api.Model{Name: "claude-sonnet-5-5", Context: 1_000_000, ImagePixels: 4784 * 28 * 28, ImageSide: 2576, ImageBytes: 7_500_000, ImagesPerRequest: 600, RequestBytes: 32_000_000, Inputs: inputs}
@@ -47,6 +48,7 @@ type rules struct {
 }
 
 var declared = map[string]rules{
+	Fable52.Name:  {maxTokens: 128_000, refusesForcedTool: true},
 	Fable51.Name:  {maxTokens: 128_000, refusesForcedTool: true},
 	Opus55.Name:   {maxTokens: 128_000, refusesForcedTool: true},
 	Sonnet55.Name: {maxTokens: 128_000, refusesForcedTool: true},

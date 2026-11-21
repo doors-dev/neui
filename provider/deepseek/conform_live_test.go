@@ -55,13 +55,20 @@ func TestLiveV4ProReadsNoImages(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	var last api.Event
+	var usage api.EventUsage
 	for e := range p.Stream(ctx, api.Request{Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{
 		api.ContentText{Text: "What colour is this square? One word."},
 		api.ContentImage{Data: shot.Bytes(), Mime: "image/png"},
 	}}}}) {
+		if u, ok := e.(api.EventUsage); ok {
+			usage = u
+		}
 		last = e
 	}
-	if e, ok := last.(api.EventErr); !ok || e.Code != api.CodeInvalid {
-		t.Fatalf("an image sent to %s ended %v, want EventErr %s: if it reads images now, declare ModalityImage", V4Pro.Name, last, api.CodeInvalid)
+	if _, ok := last.(api.EventOk); !ok {
+		t.Fatalf("an image sent to %s ended %v, want EventOk with the image dropped", V4Pro.Name, last)
+	}
+	if read := usage.Input + usage.CacheRead + usage.CacheWrite; read >= 50 {
+		t.Fatalf("an image sent to %s billed %d input tokens, want under 50: if it reads images now, declare ModalityImage", V4Pro.Name, read)
 	}
 }

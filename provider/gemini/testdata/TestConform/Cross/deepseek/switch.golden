@@ -170,6 +170,24 @@
       ]
     },
     {
+      "type": "model_output",
+      "content": [
+        {
+          "type": "text",
+          "text": "[empty]"
+        }
+      ]
+    },
+    {
+      "type": "user_input",
+      "content": [
+        {
+          "type": "text",
+          "text": "thanks"
+        }
+      ]
+    },
+    {
       "type": "thought",
       "signature": "c2lnbmF0dXJlIDEgb2YgZ2VtaW5pIGZvciB0aGUgY3Jvc3MgY29ycHVz"
     },

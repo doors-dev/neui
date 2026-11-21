@@ -97,6 +97,7 @@ func conformAdapter() conform.Adapter {
 		Render:     renderGeneric,
 		Messages:   "/messages",
 		CrossCheck: conform.CheckChatPairs,
+		Skipped:    func(r api.ContentReasoning) bool { return r.Model != "qwen3.8-27b" },
 		Errors:     genericErrors(),
 		Unframed:   true,
 		Sampling:   true,

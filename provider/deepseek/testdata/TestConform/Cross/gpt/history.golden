@@ -105,6 +105,24 @@
     },
     {
       "role": "assistant",
+      "content": "Summed up.",
+      "reasoning_content": ""
+    },
+    {
+      "role": "user",
+      "content": "thanks"
+    },
+    {
+      "role": "assistant",
+      "content": "[empty]",
+      "reasoning_content": ""
+    },
+    {
+      "role": "user",
+      "content": "thanks"
+    },
+    {
+      "role": "assistant",
       "content": "ok",
       "reasoning_content": ""
     },

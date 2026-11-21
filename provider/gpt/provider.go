@@ -68,9 +68,9 @@ const (
 	// in its message. Default.
 	ReplayAll ReplayMode = iota
 	// ReplayNever sends no reasoning items back; tool calls and results still
-	// travel. Use it for a model or gateway that rejects reasoning input
-	// ("Reasoning input items can only be provided to a reasoning or computer
-	// use model"). It costs quality on tool loops.
+	// travel. Use it for a gateway that refuses reasoning input items; OpenAI
+	// models that do not read them drop them unbilled. It costs quality on tool
+	// loops.
 	ReplayNever
 )
 

@@ -57,6 +57,9 @@ func crossScripts(name string) []Script {
 		{Name: "opaque-text", Blocks: []Block{{Kind: KindOpaque}, {Kind: KindText, Text: "Found it."}}},
 		{Name: "text-call", Blocks: []Block{{Kind: KindText, Text: "Checking."}, {Kind: KindTool, ID: id(1), Name: "lookup", Args: `{"q":"dog"}`}}},
 		{Name: "reasoning-calls", Blocks: []Block{thought(2), {Kind: KindTool, ID: id(2), Name: "lookup", Args: `{"q":"cat"}`}, {Kind: KindTool, ID: id(3), Name: "clock", Args: `{}`}}},
+		{Name: "server-tool-text", Blocks: []Block{{Kind: KindServerTool, ID: "srvtoolu_01", Name: "web_search", Args: `{"query":"cats near the river"}`}, {Kind: KindOpaque}, {Kind: KindText, Text: "Found it nearby."}}},
+		{Name: "summary-text", Blocks: []Block{{Kind: KindSummary, Text: name + " sums it up unsealed."}, {Kind: KindText, Text: "Summed up."}}},
+		{Name: "thought-only", Blocks: []Block{thought(3)}},
 	}
 }
 
@@ -123,6 +126,35 @@ func thread(turns ...turn) []api.Message {
 	return msgs
 }
 
+func replayShapes(history, own []api.Message) (earlier, current, back []api.Message) {
+	earlier = history[:len(history):len(history)]
+	if earlier[len(earlier)-1].Role == api.RoleUser {
+		earlier = append(earlier, assistant(text("Noted.")))
+	}
+	earlier = append(earlier, user(text("Thanks. In one line: what did you find?")))
+	var spoken api.Message
+	for i, msg := range history {
+		if msg.Role != api.RoleAssistant {
+			continue
+		}
+		calls := false
+		for _, c := range msg.Content {
+			_, call := c.(api.ContentToolUse)
+			calls = calls || call
+		}
+		if calls && i+1 < len(history) {
+			current = history[:i+2]
+		}
+		if !calls {
+			spoken = msg
+		}
+	}
+	if spoken.Role != "" {
+		back = append(own[:len(own):len(own)], user(text("Another assistant answered the next question.")), spoken, user(text("Summarise this conversation in one line.")))
+	}
+	return earlier, current, back
+}
+
 func checkCross(t *testing.T, a Adapter, sch *schemas, srv *server, _ limitsFile) {
 	m := a.Models[0]
 	own := issue(t, a, srv, m)
@@ -141,8 +173,8 @@ func checkCross(t *testing.T, a Adapter, sch *schemas, srv *server, _ limitsFile
 							owners = append(owners, p)
 						}
 					}
-					if len(owners) != 1 || owners[0] != a.Name {
-						t.Errorf("%s: reasoning with Meta %s is owned by %v, want %s alone", tr.Name, c.Meta, owners, a.Name)
+					if len(c.Meta) == 0 && len(owners) != 0 || len(c.Meta) != 0 && (len(owners) != 1 || owners[0] != a.Name) {
+						t.Errorf("%s: reasoning with Meta %s is owned by %v, want %s alone, or nobody without Meta", tr.Name, c.Meta, owners, a.Name)
 					}
 				case api.ContentOpaque:
 					if !strings.HasPrefix(c.Kind, a.Name+".") {
@@ -189,7 +221,10 @@ func checkCross(t *testing.T, a Adapter, sch *schemas, srv *server, _ limitsFile
 			}
 		}
 		history := append(thread(firstModel...), assistant(text("ok")), user(text("next")))
-		current := thread(firstModel...)
+		_, current, _ := replayShapes(thread(firstModel...), nil)
+		if current == nil {
+			t.Fatalf("%s issued no call turn", name)
+		}
 		switched := append(thread(append([]turn{mine("reasoning-calls")}, firstModel...)...), mine("reasoning-text").Message, user(text("again")))
 		for _, c := range []struct {
 			name string
@@ -205,6 +240,38 @@ func checkCross(t *testing.T, a Adapter, sch *schemas, srv *server, _ limitsFile
 				}
 				pretty.WriteByte('\n')
 				testkit.Golden(t, pretty.Bytes())
+			})
+		}
+	}
+	recorded, err := filepath.Glob(filepath.Join(crossDir(), "live", "*.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range recorded {
+		name := strings.TrimSuffix(filepath.Base(file), ".json")
+		data, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var history []api.Message
+		if err := json.Unmarshal(data, &history); err != nil {
+			t.Fatalf("live/%s.json: %v", name, err)
+		}
+		earlier, current, back := replayShapes(history, thread(own...))
+		if name == a.Name {
+			back = nil
+		}
+		for _, c := range []struct {
+			name string
+			msgs []api.Message
+		}{{"history", earlier}, {"current", current}, {"switch-back", back}} {
+			if c.msgs == nil {
+				continue
+			}
+			t.Run("Live/"+name+"/"+c.name, func(t *testing.T) {
+				body := crossSend(t, a, sch, srv, c.msgs)
+				crossAssert(t, a, body, c.msgs)
+				crossStable(t, a, sch, srv, c.msgs)
 			})
 		}
 	}
@@ -275,7 +342,7 @@ func crossAssert(t *testing.T, a Adapter, body []byte, msgs []api.Message) {
 				_ = json.Unmarshal(c.Meta, &meta)
 				said := strings.Join(append(c.Thoughts.Ordered(), c.Summary.Ordered()...), "")
 				data, own := lib.OwnMeta(c.Meta, a.Name)
-				if !own || msg.Role == api.RoleUser {
+				if !own || msg.Role == api.RoleUser || a.Skipped != nil && a.Skipped(c) {
 					if len(meta.Data) >= 24 && bytes.Contains(body, meta.Data) {
 						t.Errorf("foreign reasoning payload %s went out", meta.Data)
 					}
@@ -290,8 +357,13 @@ func crossAssert(t *testing.T, a Adapter, body []byte, msgs []api.Message) {
 				}
 			case api.ContentOpaque:
 				ownKind := strings.HasPrefix(c.Kind, a.Name+".") && msg.Role == api.RoleAssistant
-				if len(c.Data) >= 8 && bytes.Contains(body, c.Data) != ownKind {
-					t.Errorf("opaque %s %s: sent %v, own %v", c.Kind, c.Data, !ownKind, ownKind)
+				joined := []byte(strings.Join(c.Deltas, ""))
+				sent := bytes.Contains(body, c.Data) || len(joined) > 0 && bytes.Contains(body, joined)
+				if len(c.Data) >= 8 && sent != ownKind {
+					t.Errorf("opaque %s %s %s: sent %v, own %v", c.Kind, c.Data, joined, sent, ownKind)
+				}
+				if ownKind && len(joined) > 0 && !bytes.Contains(body, joined) {
+					t.Errorf("opaque %s went out without its fragments %s", c.Kind, joined)
 				}
 			case api.ContentToolUse:
 				if msg.Role != api.RoleAssistant {

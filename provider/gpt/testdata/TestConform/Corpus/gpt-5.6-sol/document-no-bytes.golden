@@ -14,7 +14,7 @@
       "content": [
         {
           "type": "input_text",
-          "text": "summarize"
+          "text": "summarize\n"
         },
         {
           "type": "input_text",

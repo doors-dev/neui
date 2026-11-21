@@ -177,6 +177,45 @@
       "content": [
         {
           "type": "output_text",
+          "text": "Summed up."
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "input_text",
+          "text": "thanks"
+        }
+      ]
+    },
+    {
+      "content": [
+        {
+          "text": "gpt weighs it 3.",
+          "type": "reasoning_text"
+        }
+      ],
+      "encrypted_content": "c2lnbmF0dXJlIDMgb2YgZ3B0IGZvciB0aGUgY3Jvc3MgY29ycHVz",
+      "id": "rs_0",
+      "summary": [],
+      "type": "reasoning"
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "input_text",
+          "text": "thanks"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
           "text": "ok"
         }
       ]

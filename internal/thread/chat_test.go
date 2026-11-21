@@ -422,6 +422,55 @@ func TestMediaBudgetNotesAResultOverIt(t *testing.T) {
 	}
 }
 
+func TestReconnectAfterAMediaCutSendsTheSameRounds(t *testing.T) {
+	model := api.Model{Name: "stub", Context: 10_000, ImagesPerRequest: 4}
+	images := func(req api.Request) int {
+		n := 0
+		for _, m := range req.Messages {
+			for _, block := range m.Content {
+				if r, ok := block.(api.ContentToolResult); ok {
+					for _, c := range r.Content {
+						if _, ok := c.(api.ContentImage); ok {
+							n++
+						}
+					}
+				}
+			}
+		}
+		return n
+	}
+	run := func(reconnect bool) api.Request {
+		var ran atomic.Int64
+		var turns []testkit.Turn
+		for i := range 6 {
+			id := fmt.Sprintf("c%d", i)
+			turns = append(turns, testkit.Events(api.EventStart{ID: id, Model: "stub"}, api.EventTool{Index: 0, ID: id, Name: "probe__run", Args: `{"size":2000}`}, api.EventClose{Index: 0}, api.EventOk{Code: api.CodeTurn}))
+		}
+		p := testkit.NewProvider(model, append(turns, testkit.Say("done"), testkit.Say("next"))...)
+		c := stack.Headless(t, stack.Host{Provider: p, Config: mediaConfig, Options: []common.Option{mediaProbe(t, &ran)}})
+		c.Send("call")
+		c.Wait()
+		if reconnect {
+			c.Switch(mediaProbe(t, &ran))
+		}
+		c.Send("next")
+		c.Wait()
+		if got := len(p.Requests()); got != 8 {
+			t.Fatalf("%d requests, want 8", got)
+		}
+		return p.Request(t, 7)
+	}
+	stayed, reconnected := run(false), run(true)
+	if n := images(stayed); n == 0 || n >= 6 {
+		t.Fatalf("the last request carries %d of the 6 images, want a cut that keeps some", n)
+	}
+	s, _ := json.Marshal(stayed.Messages)
+	r, _ := json.Marshal(reconnected.Messages)
+	if string(s) != string(r) {
+		t.Fatalf("after a reconnect the rounds go out as\n%s\nwant what the session that stayed sends\n%s", r, s)
+	}
+}
+
 func TestMediaNoteCountsTowardTheTextBudget(t *testing.T) {
 	const media = 30000
 	note := replay.OmittedMediaNote(media)

@@ -10,6 +10,7 @@
     "inputs": "https://platform.claude.com/docs/en/build-with-claude/pdf-support"
   },
   "models": {
+    "claude-fable-5-2": {"context": 1000000, "imagePixels": 3750656, "imageBytes": 10000000, "imageEncoding": "base64", "imagesPerRequest": 600, "requestBytes": 128000000, "inputs": ["text", "image", "document"], "maxOutput": 128000, "note": "high-resolution tier: 4784 visual tokens of 28x28 px"},
     "claude-fable-5-1": {"context": 1000000, "imagePixels": 3750656, "imageBytes": 10000000, "imageEncoding": "base64", "imagesPerRequest": 600, "requestBytes": 128000000, "inputs": ["text", "image", "document"], "maxOutput": 128000, "note": "high-resolution tier: 4784 visual tokens of 28x28 px"},
     "claude-opus-5-5": {"context": 1000000, "imagePixels": 3750656, "imageBytes": 10000000, "imageEncoding": "base64", "imagesPerRequest": 600, "requestBytes": 128000000, "inputs": ["text", "image", "document"], "maxOutput": 128000},
     "claude-sonnet-5-5": {"context": 1000000, "imagePixels": 3750656, "imageBytes": 10000000, "imageEncoding": "base64", "imagesPerRequest": 600, "requestBytes": 128000000, "inputs": ["text", "image", "document"], "maxOutput": 128000},

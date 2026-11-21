@@ -58,7 +58,7 @@
       "output": [
         {
           "type": "input_text",
-          "text": "Error:"
+          "text": "Error:\n"
         },
         {
           "type": "input_text",

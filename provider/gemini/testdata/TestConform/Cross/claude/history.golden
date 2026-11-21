@@ -152,6 +152,42 @@
       "content": [
         {
           "type": "text",
+          "text": "Found it nearby."
+        }
+      ]
+    },
+    {
+      "type": "user_input",
+      "content": [
+        {
+          "type": "text",
+          "text": "thanks"
+        }
+      ]
+    },
+    {
+      "type": "model_output",
+      "content": [
+        {
+          "type": "text",
+          "text": "[empty]"
+        }
+      ]
+    },
+    {
+      "type": "user_input",
+      "content": [
+        {
+          "type": "text",
+          "text": "thanks"
+        }
+      ]
+    },
+    {
+      "type": "model_output",
+      "content": [
+        {
+          "type": "text",
           "text": "ok"
         }
       ]

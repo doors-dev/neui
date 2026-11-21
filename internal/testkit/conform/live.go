@@ -18,6 +18,7 @@ package conform
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"flag"
@@ -34,6 +35,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"neui.dev/api"
 	"neui.dev/internal/thread/response"
@@ -141,7 +143,15 @@ func liveGenerate(t *testing.T, a Adapter, key string) {
 	turn := func(t *testing.T, m api.Model, p Params, req api.Request) ([]api.Event, []api.Content) {
 		t.Helper()
 		name = strings.NewReplacer("/", "-", " ", "-").Replace(t.Name())
-		events := collect(t, a.build(t, base, m, p), req)
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		var events []api.Event
+		for e := range a.build(t, base, m, p).Stream(ctx, req) {
+			events = append(events, e)
+		}
+		if ctx.Err() != nil {
+			t.Fatalf("the turn did not end within 2 minutes: %v", DescribeAll(events))
+		}
 		if a.Unframed {
 			CheckUnframed(t, events)
 		} else {
