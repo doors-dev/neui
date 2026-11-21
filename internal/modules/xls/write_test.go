@@ -348,7 +348,7 @@ func TestWriteConcurrent(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: fmt.Sprintf("F%d", i+1), Rows: [][]any{{float64(i)}}}, false)
+			_, err := writeTool(ctx, writeArg{Path: []string{"book.xlsx", "/book.xlsx", "file:///book.xlsx"}[i%3], Sheet: "Data", Cell: fmt.Sprintf("F%d", i+1), Rows: [][]any{{float64(i)}}}, false)
 			errs <- err
 		}()
 	}

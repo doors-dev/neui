@@ -38,10 +38,6 @@ import (
 // The one refusal is a call whose arguments were discarded with no failed
 // result answering it.
 //
-// Reasoning goes back only from a block whose Meta names this provider, as
-// reasoning_content, which every assistant message carries, empty when it has
-// none. Anything else of reasoning, and every opaque payload, sends nothing.
-//
 // thinking always goes out, since it is the field that decides when
 // reasoning_effort is present too, and a disabled thinking never carries an
 // effort. Temperature and top_p go out as set: New refused them where a
@@ -257,7 +253,7 @@ func toolResult(c api.ContentToolResult) message {
 		case api.ContentDocument:
 			parts = append(parts, document(rc))
 		default:
-			parts = append(parts, note(rc, "a DeepSeek tool result carries text and images only"))
+			parts = append(parts, note(rc, "a DeepSeek tool result carries text, images and text documents only"))
 		}
 	}
 	if len(parts) == 0 && c.Error == api.ToolOk {

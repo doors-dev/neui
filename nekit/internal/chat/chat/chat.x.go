@@ -310,7 +310,7 @@ func (c *chat) Update(ctx context.Context, e api.ChatEvent) {
 				b.Block = "text"
 				return b
 			})
-			if e.Round.Input.Len() != 0 {
+			if e.InputTaken {
 				c.composer.FlushInput(ctx)
 			}
 			c.list.RoundStart(ctx, e.Round, e.Truncate)

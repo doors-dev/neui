@@ -68,8 +68,8 @@ func (p *Provider) encode(req api.Request) (*request, error) {
 }
 
 // encodeToolChoice maps the choice onto this API's, and on a declared model
-// whose rules say so refuses forcing a tool, which the API refuses on every
-// request there. A model not declared here is sent the choice as it is.
+// whose rules say so refuses forcing a tool. A model not declared here is sent
+// the choice as it is.
 func (p *Provider) encodeToolChoice(choice api.ToolChoice) (*toolChoice, error) {
 	var tc *toolChoice
 	if name, forced := choice.Tool(); forced {

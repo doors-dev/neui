@@ -41,7 +41,7 @@ import (
 	"neui.dev/internal/thread/response"
 )
 
-var record = flag.Bool("record", false, "save the live streams to testdata/streams, scrubbed, as level one fixtures")
+var record = flag.Bool("record", false, "save the live streams to testdata/streams, scrubbed, as level one fixtures, and the cross histories RunLiveCross replays to conform's testdata/cross/live/<adapter>.json")
 
 func RunLive(t *testing.T, a Adapter) {
 	key := os.Getenv(a.Live.Env)

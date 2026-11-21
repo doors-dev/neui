@@ -115,7 +115,7 @@ func conformAdapter() conform.Adapter {
 		},
 		Live: conform.Live{
 			Env:    "OPENROUTER_API_KEY",
-			Model:  api.Model{Name: "qwen/qwen3.8-27b", Context: 1_024_000, ImagesPerRequest: 8},
+			Model:  api.Model{Name: "qwen/qwen3.8-27b", Context: 1_024_000, Inputs: api.Modalities{api.ModalityImage}, ImagesPerRequest: 8},
 			Params: conform.Params{MaxTokens: 1024, Effort: conform.EffortLow},
 			Base:   "https://openrouter.ai/api/v1",
 			Auth: func(r *http.Request, key string) {

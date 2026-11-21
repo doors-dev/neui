@@ -68,6 +68,7 @@ func RunLiveCross(t *testing.T, a Adapter) {
 			if e.Code != api.CodeCapped {
 				t.Fatalf("turn failed: %s", Describe(e))
 			}
+			t.Logf("the turn stopped at the %d-token cap of Live.Params.MaxTokens", p.MaxTokens)
 		default:
 			t.Fatalf("turn ended with no terminal event: %v", DescribeAll(events))
 		}

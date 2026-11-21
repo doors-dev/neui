@@ -24,7 +24,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"unicode/utf8"
 
 	"github.com/doors-dev/doors"
 
@@ -120,7 +119,7 @@ func (l *link) useTools(roundID api.RoundID, tools []api.ContentToolUse) (<-chan
 	mediaBudget := replay.RoundMediaBudget(config)
 	asText := func(c api.Content) bool {
 		d, ok := c.(api.ContentDocument)
-		return ok && !model.Inputs.Has(api.ModalityDocument) && api.DocumentMime(strings.ToLower(strings.TrimSpace(d.Mime))).IsText() && utf8.Valid(d.Data)
+		return ok && !model.Inputs.Has(api.ModalityDocument) && replay.TextDocument(d)
 	}
 	go func() {
 		defer close(ch)

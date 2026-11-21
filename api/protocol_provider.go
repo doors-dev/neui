@@ -98,32 +98,28 @@ type Model struct {
 	// CodeTooLarge. Zero means unknown, and the body is sent without a size
 	// check.
 	RequestBytes int `json:"requestBytes"`
-	// Inputs lists the kinds the model reads; text is always read. On replay,
-	// an image it leaves out becomes a note. A document it leaves out goes as
-	// plain text if its type is a text type and its bytes are UTF-8, and
-	// becomes a note otherwise. Nil or empty means unknown: every image and
-	// document goes to the adapter, which sends what its API carries.
+	// Inputs lists what the model reads besides text: ModalityImage,
+	// ModalityDocument or both. Empty means text only. On replay, an image it
+	// leaves out becomes a note. A document it leaves out goes as its text
+	// when its type is a text type and its bytes are non-empty UTF-8, and
+	// becomes a note otherwise.
 	Inputs Modalities `json:"inputs"`
 }
 
-// Modalities lists input kinds, such as Modalities{ModalityText,
-// ModalityImage}. In JSON it is an array of names: ["text","image"].
+// Modalities lists the input kinds a model reads besides text, such as
+// Modalities{ModalityImage}. In JSON it is an array of names: ["image"].
 type Modalities []Modality
 
-// Has reports whether m holds k. Every value holds ModalityText, and an empty
-// one holds every kind.
+// Has reports whether m holds k.
 func (m Modalities) Has(k Modality) bool {
-	return len(m) == 0 || k == ModalityText || slices.Contains(m, k)
+	return slices.Contains(m, k)
 }
 
-// Modality is one input kind.
+// Modality is one input kind besides text.
 type Modality string
 
 // The input kinds.
 const (
-	// ModalityText is text, which every model reads.
-	// Modalities{ModalityText} declares a model that reads text only.
-	ModalityText Modality = "text"
 	// ModalityImage is a ContentImage.
 	ModalityImage Modality = "image"
 	// ModalityDocument is a ContentDocument in the API's own document form,
@@ -138,9 +134,9 @@ func (k *Modality) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	switch Modality(s) {
-	case ModalityText, ModalityImage, ModalityDocument:
+	case ModalityImage, ModalityDocument:
 		*k = Modality(s)
 		return nil
 	}
-	return fmt.Errorf("input kind %q is not text, image or document", s)
+	return fmt.Errorf("input kind %q is not image or document", s)
 }

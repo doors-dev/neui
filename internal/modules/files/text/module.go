@@ -21,13 +21,13 @@ import (
 	"fmt"
 	"io"
 	"math/rand/v2"
-	"path"
 	"regexp"
 	"strings"
 	"sync"
 
 	"neui.dev/api"
 	"neui.dev/internal/common"
+	"neui.dev/internal/filesystem"
 	"neui.dev/internal/tools"
 )
 
@@ -111,7 +111,7 @@ func lock(fs api.FS, name string) (func(), error) {
 	if err != nil {
 		return nil, err
 	}
-	key := tmp + "\x00" + path.Clean(name)
+	key := tmp + "\x00" + filesystem.ResolveName(name)
 	locksMu.Lock()
 	l := locks[key]
 	if l == nil {

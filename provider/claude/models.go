@@ -32,15 +32,13 @@ import "neui.dev/api"
 // this package supports. For a model not listed, build an api.Model with its id
 // and limits; New then checks none of its settings.
 var (
-	Fable52  = api.Model{Name: "claude-fable-5-2", Context: 1_000_000, ImagePixels: 4784 * 28 * 28, ImageSide: 2576, ImageBytes: 7_500_000, ImagesPerRequest: 600, RequestBytes: 32_000_000, Inputs: inputs}
-	Fable51  = api.Model{Name: "claude-fable-5-1", Context: 1_000_000, ImagePixels: 4784 * 28 * 28, ImageSide: 2576, ImageBytes: 7_500_000, ImagesPerRequest: 600, RequestBytes: 32_000_000, Inputs: inputs}
-	Opus55   = api.Model{Name: "claude-opus-5-5", Context: 1_000_000, ImagePixels: 4784 * 28 * 28, ImageSide: 2576, ImageBytes: 7_500_000, ImagesPerRequest: 600, RequestBytes: 32_000_000, Inputs: inputs}
-	Sonnet55 = api.Model{Name: "claude-sonnet-5-5", Context: 1_000_000, ImagePixels: 4784 * 28 * 28, ImageSide: 2576, ImageBytes: 7_500_000, ImagesPerRequest: 600, RequestBytes: 32_000_000, Inputs: inputs}
-	Haiku55  = api.Model{Name: "claude-haiku-5-5", Context: 1_000_000, ImagePixels: 4784 * 28 * 28, ImageSide: 2576, ImageBytes: 7_500_000, ImagesPerRequest: 600, RequestBytes: 32_000_000, Inputs: inputs}
-	Sonnet5  = api.Model{Name: "claude-sonnet-5", Context: 1_000_000, ImagePixels: 4784 * 28 * 28, ImageSide: 2576, ImageBytes: 7_500_000, ImagesPerRequest: 600, RequestBytes: 32_000_000, Inputs: inputs}
+	Fable52  = api.Model{Name: "claude-fable-5-2", Context: 1_000_000, ImagePixels: 4784 * 28 * 28, ImageSide: 2576, ImageBytes: 7_500_000, ImagesPerRequest: 600, RequestBytes: 32_000_000, Inputs: api.Modalities{api.ModalityImage, api.ModalityDocument}}
+	Fable51  = api.Model{Name: "claude-fable-5-1", Context: 1_000_000, ImagePixels: 4784 * 28 * 28, ImageSide: 2576, ImageBytes: 7_500_000, ImagesPerRequest: 600, RequestBytes: 32_000_000, Inputs: api.Modalities{api.ModalityImage, api.ModalityDocument}}
+	Opus55   = api.Model{Name: "claude-opus-5-5", Context: 1_000_000, ImagePixels: 4784 * 28 * 28, ImageSide: 2576, ImageBytes: 7_500_000, ImagesPerRequest: 600, RequestBytes: 32_000_000, Inputs: api.Modalities{api.ModalityImage, api.ModalityDocument}}
+	Sonnet55 = api.Model{Name: "claude-sonnet-5-5", Context: 1_000_000, ImagePixels: 4784 * 28 * 28, ImageSide: 2576, ImageBytes: 7_500_000, ImagesPerRequest: 600, RequestBytes: 32_000_000, Inputs: api.Modalities{api.ModalityImage, api.ModalityDocument}}
+	Haiku55  = api.Model{Name: "claude-haiku-5-5", Context: 1_000_000, ImagePixels: 4784 * 28 * 28, ImageSide: 2576, ImageBytes: 7_500_000, ImagesPerRequest: 600, RequestBytes: 32_000_000, Inputs: api.Modalities{api.ModalityImage, api.ModalityDocument}}
+	Sonnet5  = api.Model{Name: "claude-sonnet-5", Context: 1_000_000, ImagePixels: 4784 * 28 * 28, ImageSide: 2576, ImageBytes: 7_500_000, ImagesPerRequest: 600, RequestBytes: 32_000_000, Inputs: api.Modalities{api.ModalityImage, api.ModalityDocument}}
 )
-
-var inputs = api.Modalities{api.ModalityText, api.ModalityImage, api.ModalityDocument}
 
 type rules struct {
 	maxTokens         int

@@ -23,6 +23,7 @@ import (
 	"log/slog"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -582,6 +583,7 @@ func TestClearLogQuotaIsNotARuntimeFailure(t *testing.T) {
 }
 
 func TestLightModeAddsNoModule(t *testing.T) {
+	lightLogged = sync.Once{}
 	var logged strings.Builder
 	restore := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
@@ -592,7 +594,7 @@ func TestLightModeAddsNoModule(t *testing.T) {
 			t.Fatalf("light mode added the js module %s", m.Name())
 		}
 	}
-	if n := strings.Count(logged.String(), "js: module not added in light mode"); n > 1 {
+	if n := strings.Count(logged.String(), "js: module not added in light mode"); n != 1 {
 		t.Fatalf("the error was logged %d times, want once per process", n)
 	}
 	if Module(context.Background()) == nil {

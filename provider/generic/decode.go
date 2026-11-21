@@ -32,8 +32,8 @@ const (
 )
 
 var (
-	metaReasoning        = json.RawMessage(`{"provider":"generic","data":"reasoning"}`)
-	metaReasoningContent = json.RawMessage(`{"provider":"generic","data":"reasoning_content"}`)
+	metaReasoning        = lib.Meta(providerName, json.RawMessage(`"reasoning"`))
+	metaReasoningContent = lib.Meta(providerName, json.RawMessage(`"reasoning_content"`))
 )
 
 type converter struct {

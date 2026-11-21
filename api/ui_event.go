@@ -70,6 +70,10 @@ type ChatEventRoundStart struct {
 	// an empty response), it names the round the new one replaces: drop it
 	// and every round after it from the view.
 	Truncate RoundID
+	// InputTaken is true when the round took the input the user sent or
+	// queued; a view clears its composer on it. It is false when the thread
+	// sends a round again on its own, and after Retry and Rewind.
+	InputTaken bool
 	// Usage is ChatState.Usage after this event: after a Rewind, the usage of
 	// the history that remains; otherwise the value already reported.
 	Usage EventUsage

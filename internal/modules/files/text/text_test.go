@@ -488,11 +488,11 @@ func TestConcurrentEditsOnOnePathSerialize(t *testing.T) {
 	fs := c.FS()
 	ctx := c.Ctx()
 	raw(t, fs, "a.txt", "end\n")
-	const n = 20
+	const n = 30
 	errs := make(chan error, n)
-	for range n {
+	for i := range n {
 		go func() {
-			_, err := insertTool(ctx, insertArg{Path: "a.txt", Line: 0, Text: "line\n"})
+			_, err := insertTool(ctx, insertArg{Path: []string{"a.txt", "/a.txt", "file:///a.txt"}[i%3], Line: 0, Text: "line\n"})
 			errs <- err
 		}()
 	}

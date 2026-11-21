@@ -21,10 +21,9 @@ import "neui.dev/api"
 // (https://aistudio.google.com/docs/models/gemini-4-hydrogen and its siblings),
 // the token guide (https://aistudio.google.com/docs/tokens#context-window), the
 // thinking guide (https://aistudio.google.com/docs/thinking#token-limits), the
-// image guide (https://aistudio.google.com/docs/image-understanding#file-limit),
-// the file input guide
-// (https://aistudio.google.com/docs/file-input-methods#method-comparison) and
-// the changelog (https://aistudio.google.com/docs/changelog#01-08-2026).
+// image guide (https://aistudio.google.com/docs/image-understanding#file-limit)
+// and the file input guide
+// (https://aistudio.google.com/docs/file-input-methods#method-comparison).
 //
 // The Gemini 4 models share one 1,048,576-token window between input,
 // thinking and output. 3.8 Flash and 3.5 Flash-Lite take 1,048,576 input
@@ -37,12 +36,12 @@ import "neui.dev/api"
 // For a model not listed, build an api.Model with its id and limits; New then
 // checks none of its settings.
 var (
-	Hydrogen4   = api.Model{Name: "gemini-4-hydrogen", Context: contextGemini4, ImagesPerRequest: imagesPerRequest, RequestBytes: requestBytes, Inputs: inputs}
-	Neon4       = api.Model{Name: "gemini-4-neon", Context: contextGemini4, ImagesPerRequest: imagesPerRequest, RequestBytes: requestBytes, Inputs: inputs}
-	Carbon4     = api.Model{Name: "gemini-4-carbon", Context: contextGemini4, ImagesPerRequest: imagesPerRequest, RequestBytes: requestBytes, Inputs: inputs}
-	Argon4      = api.Model{Name: "gemini-4-argon", Context: contextGemini4, ImagesPerRequest: imagesPerRequest, RequestBytes: requestBytes, Inputs: inputs}
-	Flash38     = api.Model{Name: "gemini-3.8-flash", Context: contextGemini3, ImagesPerRequest: imagesPerRequest, RequestBytes: requestBytes, Inputs: inputs}
-	FlashLite35 = api.Model{Name: "gemini-3.5-flash-lite", Context: contextGemini3, ImagesPerRequest: imagesPerRequest, RequestBytes: requestBytes, Inputs: inputs}
+	Hydrogen4   = api.Model{Name: "gemini-4-hydrogen", Context: contextGemini4, ImagesPerRequest: imagesPerRequest, RequestBytes: requestBytes, Inputs: api.Modalities{api.ModalityImage, api.ModalityDocument}}
+	Neon4       = api.Model{Name: "gemini-4-neon", Context: contextGemini4, ImagesPerRequest: imagesPerRequest, RequestBytes: requestBytes, Inputs: api.Modalities{api.ModalityImage, api.ModalityDocument}}
+	Carbon4     = api.Model{Name: "gemini-4-carbon", Context: contextGemini4, ImagesPerRequest: imagesPerRequest, RequestBytes: requestBytes, Inputs: api.Modalities{api.ModalityImage, api.ModalityDocument}}
+	Argon4      = api.Model{Name: "gemini-4-argon", Context: contextGemini4, ImagesPerRequest: imagesPerRequest, RequestBytes: requestBytes, Inputs: api.Modalities{api.ModalityImage, api.ModalityDocument}}
+	Flash38     = api.Model{Name: "gemini-3.8-flash", Context: contextGemini3, ImagesPerRequest: imagesPerRequest, RequestBytes: requestBytes, Inputs: api.Modalities{api.ModalityImage, api.ModalityDocument}}
+	FlashLite35 = api.Model{Name: "gemini-3.5-flash-lite", Context: contextGemini3, ImagesPerRequest: imagesPerRequest, RequestBytes: requestBytes, Inputs: api.Modalities{api.ModalityImage, api.ModalityDocument}}
 )
 
 const (
@@ -52,8 +51,6 @@ const (
 	imagesPerRequest = 3_600
 	requestBytes     = 100_000_000
 )
-
-var inputs = api.Modalities{api.ModalityText, api.ModalityImage, api.ModalityDocument}
 
 type rules struct {
 	maxTokens int

@@ -23,10 +23,14 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
 	"neui.dev/api"
+	"neui.dev/nekit/internal/chat/chat/composer/controller"
+	"neui.dev/nekit/internal/chat/chat/list"
+	"neui.dev/nekit/internal/chat/params"
 )
 
 func TestClosedKindOf(t *testing.T) {
@@ -75,5 +79,52 @@ func TestTooLongChatShowsItsOwnCard(t *testing.T) {
 	}
 	if strings.Contains(page, "Something went wrong") {
 		t.Fatalf("the card for a failed compaction shows the generic error: %s", page)
+	}
+}
+
+type draftThread struct {
+	api.ChatThread
+}
+
+func (draftThread) Config() api.ThreadConfig { return api.ThreadConfig{ReplayItemShare: 0.1} }
+
+func (draftThread) Model() api.Model { return api.Model{Context: 10_000} }
+
+func (draftThread) Input(context.Context, api.Input) error { return nil }
+
+func TestRoundStartClearsTheComposerOnlyWhenTheRoundTookTheInput(t *testing.T) {
+	drafts := make(chan [2]string, 1)
+	app := doors.NewApp(func(ctx context.Context, r doors.Request) gox.Elem {
+		composer := controller.New(draftThread{}, api.ChatInput{}, true, api.EventUsage{}, nil, false, false, nil)
+		c := &chat{
+			thread:   draftThread{},
+			composer: composer,
+			list:     list.New(params.Params{}, nil, draftThread{}, composer, "t", nil, api.NoRoundID, func(context.Context, error) {}),
+			badge:    doors.NewSource(Badge{}),
+		}
+		composer.UpdateInputText(ctx, "typed during the resend")
+		c.Update(ctx, api.ChatEventRoundStart{Round: api.Round{ID: 2, Input: api.Input{Text: "hi"}}, Truncate: 1})
+		resent := composer.Input().Get().Input.Text
+		c.Update(ctx, api.ChatEventRoundStart{Round: api.Round{ID: 3, Input: api.Input{Text: "typed during the resend"}}, Truncate: api.NoRoundID, InputTaken: true})
+		drafts <- [2]string{resent, composer.Input().Get().Input.Text}
+		return c.body(failed)
+	})
+	srv := httptest.NewServer(app)
+	defer srv.Close()
+	res, err := srv.Client().Get(srv.URL)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	res.Body.Close()
+	select {
+	case d := <-drafts:
+		if d[0] != "typed during the resend" {
+			t.Fatalf("a resend of the user's round left the composer with %q, want the draft typed meanwhile", d[0])
+		}
+		if d[1] != "" {
+			t.Fatalf("a round that took the sent input left the composer with %q, want it cleared", d[1])
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the page never rendered")
 	}
 }

@@ -77,7 +77,8 @@ type Tool[I any, O any] struct {
 	// next step.
 	Desc string
 	// Handler runs the call with the input decoded from JSON into I; the
-	// input and output schemas the agent sees come from I and O. On a direct
+	// input schema the agent sees comes from I, and what it sees of O is as
+	// Desc says. On a direct
 	// agent call to a module tool, a string or fmt.Stringer result reaches
 	// the agent as text, an api content value as itself and anything else as
 	// JSON; a script gets the result as JSON, and so does the agent from a

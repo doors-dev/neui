@@ -28,6 +28,7 @@ import (
 
 	"github.com/xuri/excelize/v2"
 	"neui.dev/api"
+	"neui.dev/internal/filesystem"
 )
 
 type pathLock struct {
@@ -88,7 +89,7 @@ func openWrite(ctx context.Context, fs api.FS, name string, create bool) (*excel
 	if err != nil {
 		return nil, false, nil, err
 	}
-	key := tmp + "\x00" + path.Clean(name)
+	key := tmp + "\x00" + filesystem.ResolveName(name)
 	locksMu.Lock()
 	l := locks[key]
 	if l == nil {

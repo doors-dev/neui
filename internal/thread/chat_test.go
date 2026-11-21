@@ -354,7 +354,7 @@ func mediaProbe(t *testing.T, ran *atomic.Int64) common.Option {
 	})
 }
 
-var mediaModel = api.Model{Name: "stub", Context: 10_000}
+var mediaModel = api.Model{Name: "stub", Context: 10_000, Inputs: api.Modalities{api.ModalityImage, api.ModalityDocument}}
 
 var mediaConfig = api.ThreadConfig{ThreadMemoryLimit: 200_000, ReplayMediaShare: 0.2}
 
@@ -423,7 +423,7 @@ func TestMediaBudgetNotesAResultOverIt(t *testing.T) {
 }
 
 func TestReconnectAfterAMediaCutSendsTheSameRounds(t *testing.T) {
-	model := api.Model{Name: "stub", Context: 10_000, ImagesPerRequest: 4}
+	model := api.Model{Name: "stub", Context: 10_000, ImagesPerRequest: 4, Inputs: api.Modalities{api.ModalityImage, api.ModalityDocument}}
 	images := func(req api.Request) int {
 		n := 0
 		for _, m := range req.Messages {
@@ -510,8 +510,8 @@ func TestMediaNoteCountsTowardTheTextBudget(t *testing.T) {
 }
 
 func TestTextDocumentIsTextForAModelWithoutDocuments(t *testing.T) {
-	textOnly := api.Model{Name: "stub", Context: 1000, Inputs: api.Modalities{api.ModalityText}}
-	reading := api.Model{Name: "stub", Context: 1000, Inputs: api.Modalities{api.ModalityText, api.ModalityDocument}}
+	textOnly := api.Model{Name: "stub", Context: 1000}
+	reading := api.Model{Name: "stub", Context: 1000, Inputs: api.Modalities{api.ModalityDocument}}
 	ok := api.ContentText{Text: "ok"}
 	doc := func(size int, mime string) api.ContentDocument {
 		return api.ContentDocument{Data: []byte(strings.Repeat("x", size)), Mime: mime, Name: "a.txt"}
@@ -1094,7 +1094,7 @@ func TestBytePressureBlocksTheRoundWhileTokensAlsoOverflow(t *testing.T) {
 		api.EventUsage{Input: 900},
 		api.EventOk{Code: api.CodeTurn},
 	)
-	p := testkit.NewProvider(api.Model{Name: "stub", Context: 1000}, testkit.Say(half), testkit.Say(half), call, testkit.Say("after"))
+	p := testkit.NewProvider(api.Model{Name: "stub", Context: 1000, Inputs: api.Modalities{api.ModalityImage, api.ModalityDocument}}, testkit.Say(half), testkit.Say(half), call, testkit.Say("after"))
 	p.OnCompaction(held(compacted, testkit.Say("the summary")))
 	c := stack.Headless(t, stack.Host{
 		Provider: p,
@@ -1255,5 +1255,69 @@ func TestTaskNotifiesThenOkArriveInOrder(t *testing.T) {
 	}
 	if !strings.HasPrefix(records[2], "<task_result") {
 		t.Fatalf("the last record is %q, want the task_result", records[2])
+	}
+}
+
+func TestRoundStartTakesTheInputOnlyFromSendAndTheQueue(t *testing.T) {
+	release := make(chan struct{})
+	failed := testkit.Events(api.EventStart{ID: "down", Model: "fake"}, api.EventErr{Code: api.CodeNetwork, Err: errors.New("reset")})
+	tooLong := testkit.Events(api.EventStart{ID: "long", Model: "fake"}, api.EventErr{Code: api.CodeContextLength, Err: errors.New("prompt is too long")})
+	p := testkit.NewProvider(api.Model{},
+		emptyTurn(api.EventUsage{Input: 1}), testkit.Say("one"),
+		testkit.Call("probe__run", map[string]any{}), testkit.Say("ran"),
+		held(release, testkit.Say("busy")), testkit.Say("queued"),
+		failed, testkit.Say("retried"),
+		testkit.Say("rewound"),
+		tooLong, testkit.Say("after the summary"),
+	)
+	p.OnCompaction(testkit.Say("the summary"))
+	c := stack.Headless(t, stack.Host{
+		Provider: p,
+		Config:   api.ThreadConfig{ThreadMemoryLimit: -1, CompactionPreserve: 0.25},
+		Options:  []common.Option{probe(t, func(context.Context, json.RawMessage) (any, error) { return "ok", nil })},
+	})
+	var starts []api.ChatEventRoundStart
+	collect := func(events []api.ChatEvent) {
+		for _, e := range events {
+			if s, ok := e.(api.ChatEventRoundStart); ok {
+				starts = append(starts, s)
+			}
+		}
+	}
+	c.Send("one")
+	collect(c.Wait())
+	c.Send("tools")
+	collect(c.Wait())
+	c.Send("busy")
+	c.Send("queued")
+	close(release)
+	collect(c.Wait())
+	collect(c.Wait())
+	c.Send("fails")
+	collect(c.Wait())
+	c.Retry()
+	collect(c.Wait())
+	c.Rewind(starts[len(starts)-1].Round.ID, "instead")
+	collect(c.Wait())
+	c.Send("too long")
+	collect(c.Wait())
+	want := []struct {
+		input string
+		taken bool
+	}{
+		{"one", true}, {"one", false},
+		{"tools", true}, {"", false},
+		{"busy", true}, {"queued", true},
+		{"fails", true}, {"fails", false},
+		{"instead", false},
+		{"too long", true}, {"too long", false},
+	}
+	if len(starts) != len(want) {
+		t.Fatalf("%d rounds started, want %d: %+v", len(starts), len(want), starts)
+	}
+	for i, w := range want {
+		if s := starts[i]; s.Round.Input.Text != w.input || s.InputTaken != w.taken {
+			t.Errorf("round start %d carries input %q and InputTaken %v, want %q and %v", i, s.Round.Input.Text, s.InputTaken, w.input, w.taken)
+		}
 	}
 }

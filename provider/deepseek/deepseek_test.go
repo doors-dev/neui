@@ -223,7 +223,7 @@ func TestModel(t *testing.T) {
 	}
 	unknown := api.Model{Name: "my-flash-proxy"}
 	if got := mustNew(t, Conf{Model: unknown}, WithAPIKey("k")).Model(); got.Inputs != nil {
-		t.Fatalf("an unknown id reads back Inputs %v, want nil, which sends every kind", got.Inputs)
+		t.Fatalf("an unknown id reads back Inputs %v, want nil, which is text only", got.Inputs)
 	}
 }
 
@@ -359,8 +359,8 @@ func TestModelDeclarations(t *testing.T) {
 	if V4Pro.ImagePixels != 0 || V4Pro.ImageSide != 0 || V4Pro.ImageBytes != 0 || V4Pro.ImagesPerRequest != 0 {
 		t.Errorf("V4Pro declares image capacity it has no path for: %+v", V4Pro)
 	}
-	if !slices.Equal(Flash.Inputs, api.Modalities{api.ModalityText, api.ModalityImage}) || !slices.Equal(V4Pro.Inputs, api.Modalities{api.ModalityText}) {
-		t.Errorf("Flash reads %v and V4Pro reads %v, want text and images, and text", Flash.Inputs, V4Pro.Inputs)
+	if !slices.Equal(Flash.Inputs, api.Modalities{api.ModalityImage}) || V4Pro.Inputs != nil {
+		t.Errorf("Flash reads %v and V4Pro reads %v besides text, want images, and nothing", Flash.Inputs, V4Pro.Inputs)
 	}
 }
 

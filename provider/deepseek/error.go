@@ -143,10 +143,8 @@ func statusCode(status int) api.ErrCode {
 	return api.CodeUnknown
 }
 
-// inbandError recognizes DeepSeek's error frame, an error object on the last
-// chunk of a generation that failed after the 200, and the other shape that
-// circulates for OpenAI compatible hosts. A frame carrying one must not be
-// folded into content and must not end the turn as a completion.
+// inbandError recognizes the two error frame shapes that circulate for OpenAI
+// compatible hosts.
 func inbandError(c *chunk) (api.Event, bool) {
 	e := &APIError{Provider: providerName}
 	switch {
@@ -183,10 +181,9 @@ func inbandError(c *chunk) (api.Event, bool) {
 // fixes are opposite: compacting the conversation is the only thing that helps
 // and it is the one condition here a caller can act on without a person.
 //
-// api_error is DeepSeek's own: the model failed to finish the reply, and the
-// same request may be sent again. An unrecognized code is api.CodeUnknown and
-// never a guess at transport: a code nobody here knows says nothing about
-// whether the stream was cut, the request was wrong or the account is empty.
+// An unrecognized code is api.CodeUnknown and never a guess at transport: a
+// code nobody here knows says nothing about whether the stream was cut, the
+// request was wrong or the account is empty.
 func streamErrorCode(code string) api.ErrCode {
 	switch code {
 	case "context_length_exceeded":

@@ -369,12 +369,12 @@ func (ContentToolResult) contentType() string {
 // EventThinking; read them in order with Ordered. A provider that does not
 // index parts fills key 0. Any of Summary, Thoughts and Meta may be empty.
 //
-// Where a provider signs or seals reasoning, Meta is what is replayed, byte for
-// byte, and the text never is. An adapter replays a block only when its Meta
-// names that adapter's provider and, for an adapter that requires it, Model
-// names the model of the request; then it may use any of the block. Any other
-// block is skipped whole, with nothing sent in its place. Nothing upstream
-// strips them.
+// Where a provider signs or seals reasoning, the signature or sealed payload is
+// the data in Meta and goes back unchanged. An adapter replays a block only
+// when its Meta names that adapter's provider and, for an adapter that
+// requires it, Model names the model of the request; then it may use any of
+// the block. Any other block is skipped whole, with nothing sent in its place.
+// Nothing upstream strips them.
 type ContentReasoning struct {
 	// Model is the model the provider was configured with, as EventStart.Model
 	// reports. The generic adapter replays the block only to a request for
@@ -383,7 +383,7 @@ type ContentReasoning struct {
 	Model    string          `json:"model"`
 	Summary  Indexed[string] `json:"summary"`        // paraphrase written by the service
 	Thoughts Indexed[string] `json:"thoughts"`       // thinking as the model generated it
-	Meta     json.RawMessage `json:"meta,omitempty"` // signature or sealed payload, replayed as is
+	Meta     json.RawMessage `json:"meta,omitempty"` // issuing adapter's data, such as a signature or sealed payload
 }
 
 // MarshalJSON encodes c with its "type" tag.
@@ -410,7 +410,7 @@ func (ContentReasoning) contentType() string {
 type ContentOpaque struct {
 	Model  string          `json:"model"`  // configured model, as on ContentReasoning
 	Kind   string          `json:"kind"`   // issuing adapter's Name, a dot, and its name for the payload
-	Data   json.RawMessage `json:"data"`   // bytes as the API sent them, which it may have signed
+	Data   json.RawMessage `json:"data"`   // issuing adapter's payload, such as an item as the API sent it, which it may have signed
 	Deltas []string        `json:"deltas"` // streamed fragments of a field inside Data, put back by the adapter
 }
 

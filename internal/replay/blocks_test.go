@@ -28,7 +28,7 @@ import (
 
 func TestProviderBlocksReplayByteIdentical(t *testing.T) {
 	blocks := testkit.ProviderBlocks()
-	model := api.Model{ImagesPerRequest: 6}
+	model := api.Model{ImagesPerRequest: 6, Inputs: api.Modalities{api.ModalityImage, api.ModalityDocument}}
 	s := local.NewMessageStorage()
 	r := NewReplay(context.Background(), "a", s, api.ThreadConfig{ThreadMemoryLimit: -1, ReplayItemShare: 0.25, CompactionPreserve: 0.25}, model)
 	mustCreate(t, r)
@@ -61,7 +61,7 @@ func TestProviderBlocksReplayByteIdentical(t *testing.T) {
 				t.Fatalf("an assistant message replays its blocks as\n%+v\nwant\n%+v", got, blocks)
 			}
 		}
-		if seen != rounds && (rounds >= 0 || seen == 0) {
+		if seen != rounds {
 			t.Fatalf("%d assistant messages carry the blocks, want %d", seen, rounds)
 		}
 	}
@@ -108,6 +108,9 @@ func TestProviderBlocksReplayByteIdentical(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Rewind: %v", err)
 		}
-		check(t, messages, -1)
+		check(t, messages, 4)
+		if r.messages.compaction.IsValid() {
+			t.Fatalf("a rewind into the rounds the compaction kept still replays its summary")
+		}
 	})
 }

@@ -364,9 +364,8 @@ func (c *converter) item(oi int) *block {
 //
 // Everything else is an item this protocol has no type for — a tool the service
 // ran itself, a call whose input is freeform text, whatever ships next — which
-// is what an opaque block is for. Kind is the item's type as the service spells
-// it after "gpt.", and Data is the item as it stands, which the finished item
-// replaces.
+// is what an opaque block is for. Data is the item as it stands, which the
+// finished item replaces.
 //
 // The item's type is what every later frame at its output_index is checked
 // against. A call_id is what a tool result is matched by, so a function call

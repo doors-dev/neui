@@ -45,13 +45,14 @@ type ThreadConfig struct {
 	// budget is kept whole, and once either budget is reached the calls after
 	// it are answered without running. A result whose text is over the budget
 	// is replaced by a note giving its size. For a model that reads no
-	// documents (Model.Inputs), a text document with UTF-8 bytes counts as
-	// text, not media.
+	// documents (Model.Inputs), a text document with non-empty UTF-8 bytes
+	// counts as text, not media.
 	// Records: a round takes the waiting records in arrival order while their
 	// bodies add up to at most the budget, the rest wait for the next round,
 	// and a first record over it alone is cut to it and taken by itself. On
-	// replay each result's text, each document sent as text, each record's
-	// body and the input's text are cut to the budget, keeping head and tail;
+	// replay each result's text, together with the documents it sends as
+	// text, each record's body and the input's text are cut to the budget,
+	// keeping head and tail;
 	// an input is over it only when the budget shrank after it was sent, as
 	// after a switch to a smaller model. Half of it bounds the values an
 	// island script queues with ui.notify between draws. A non-positive value
@@ -59,8 +60,9 @@ type ThreadConfig struct {
 	ReplayItemShare float32
 	// ReplayMediaShare sets the media budget of a round's tool results:
 	// ReplayMediaShare * ThreadMemoryLimit / 2 bytes of images and documents,
-	// counted raw (none when ThreadMemoryLimit is negative). A result whose
-	// media would take the round over it keeps its text and its images and
+	// counted raw (none when ThreadMemoryLimit is negative); a document that
+	// counts as text (see ReplayItemShare) is not media. A result whose media
+	// would take the round over it keeps its text and its images and
 	// documents are replaced by one note giving their size, so a round never
 	// holds more media than the budget. The files module refuses an image or
 	// document bigger than the budget. A non-positive value takes the

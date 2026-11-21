@@ -342,9 +342,9 @@ func checkInputs(t *testing.T, a Adapter, _ *schemas, srv *server, _ limitsFile)
 		want   []string
 		lost   []string
 	}{
-		{"text", api.Modalities{api.ModalityText}, []string{noImage, noPDF, "a,b\n1,2\n"}, []string{shotData, pdfData}},
-		{"text-image", api.Modalities{api.ModalityText, api.ModalityImage}, []string{shotData, noPDF, "a,b\n1,2\n"}, []string{noImage, pdfData}},
-		{"unknown", nil, []string{shotData}, []string{noImage, noPDF}},
+		{"text", nil, []string{noImage, noPDF, "a,b\n1,2\n"}, []string{shotData, pdfData}},
+		{"image", api.Modalities{api.ModalityImage}, []string{shotData, noPDF, "a,b\n1,2\n"}, []string{noImage, pdfData}},
+		{"image-document", api.Modalities{api.ModalityImage, api.ModalityDocument}, []string{shotData}, []string{noImage, noPDF}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := a.Models[0]

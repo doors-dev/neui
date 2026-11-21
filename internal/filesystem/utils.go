@@ -36,7 +36,7 @@ var (
 	uploadsDirs  = []*uploadsDir{userUploads, agentUploads}
 )
 
-func (w *workFS) resolveUpload(name string) (clean string, dir *uploadsDir, fileName string, err error) {
+func ResolveName(name string) string {
 	if rest, ok := strings.CutPrefix(name, "file:"); ok && strings.HasPrefix(rest, "/") {
 		name = rest
 		if unescaped, err := url.PathUnescape(rest); err == nil {
@@ -47,6 +47,11 @@ func (w *workFS) resolveUpload(name string) (clean string, dir *uploadsDir, file
 	if name == "" {
 		name = "."
 	}
+	return name
+}
+
+func (w *workFS) resolveUpload(name string) (clean string, dir *uploadsDir, fileName string, err error) {
+	name = ResolveName(name)
 	lower, temp := strings.ToLower(name), strings.ToLower(w.temp)
 	if lower == temp || strings.HasPrefix(lower, temp+"/") {
 		return name, nil, "", fmt.Errorf("%q: %w", name, api.ErrReserved)

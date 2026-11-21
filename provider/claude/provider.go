@@ -71,8 +71,8 @@ const (
 	// ceiling any current model has, because a value over a model's ceiling is a
 	// 400 while a value under it only truncates, and truncation comes back as
 	// CodeCapped naming its own fix where a 400 is just a failed turn. It also
-	// caps thinking, which is on by default on the newest models, so callers who
-	// want long answers raise it.
+	// caps thinking, which is always on, so callers who want long answers raise
+	// it.
 	defaultMaxTokens = 16384
 )
 

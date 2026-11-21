@@ -23,8 +23,8 @@ import (
 
 // CallID returns the id an adapter sends for a stored tool call and for the
 // result answering it. An id of 1 to 64 letters, digits, underscores and
-// hyphens, which every provider takes, goes as it is; any other id, the empty
-// one included, maps to an id of that form, the same one every time.
+// hyphens goes as it is; any other id, the empty one included, maps to an id
+// of that form, the same one every time.
 func CallID(id string) string {
 	if portable(id) {
 		return id

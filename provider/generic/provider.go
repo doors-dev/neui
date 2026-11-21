@@ -21,7 +21,7 @@
 // takes precedence over WithProvider if any:
 //
 //	p, err := generic.New(generic.Conf{
-//		Model:   api.Model{Name: "qwen3.8-27b", Context: 131_072, Inputs: api.Modalities{api.ModalityText}},
+//		Model:   api.Model{Name: "qwen3.8-27b", Context: 131_072},
 //		BaseURL: "http://127.0.0.1:8080/v1",
 //	}, generic.WithEffort(generic.EffortLow))
 //
@@ -45,12 +45,11 @@
 // arrives without an index, as from Gemini's OpenAI-compatible endpoint, is
 // one whole call.
 //
-// Images go as data URLs in user messages and tool results. Set Model.Inputs
-// to what the server's model reads: a thread replays a note in place of each
-// image for a model without api.ModalityImage, and with Inputs empty every
-// image goes, which a server whose model reads none refuses. A document of a
-// text type goes as its text when its bytes are UTF-8, and any other document
-// gets a short note.
+// Images go as data URLs in user messages and tool results. For a vision
+// model, declare api.ModalityImage in Model.Inputs; without it a thread
+// replays a note in place of each image. A document of a text type goes as
+// its text when its bytes are UTF-8, and any other document gets a short
+// note.
 //
 // Most servers cache prompt prefixes on their own: keep the tools, system
 // prompt and history stable between turns. For those that cache only at

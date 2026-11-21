@@ -40,7 +40,7 @@ type Provider struct {
 
 func NewProvider(model api.Model, turns ...Turn) *Provider {
 	if reflect.ValueOf(model).IsZero() {
-		model = api.Model{Name: "fake", Context: 1 << 30, RequestBytes: 1 << 40}
+		model = api.Model{Name: "fake", Context: 1 << 30, RequestBytes: 1 << 40, Inputs: api.Modalities{api.ModalityImage, api.ModalityDocument}}
 	}
 	return &Provider{model: model, turns: turns}
 }

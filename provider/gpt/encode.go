@@ -359,7 +359,8 @@ func (b *inputBuilder) assistant(m api.Message, at int) error {
 		case api.ContentImage:
 			parts = append(parts, omitted(c, "the Responses API has no attachment part for the assistant role"))
 		case api.ContentDocument:
-			if len(c.Data) == 0 || !api.DocumentMime(strings.ToLower(strings.TrimSpace(c.Mime))).IsText() || !utf8.Valid(c.Data) {
+			base, _, _ := strings.Cut(c.Mime, ";")
+			if len(c.Data) == 0 || !api.DocumentMime(strings.ToLower(strings.TrimSpace(base))).IsText() || !utf8.Valid(c.Data) {
 				parts = append(parts, omitted(c, "the Responses API has no attachment part for the assistant role, so only a text document whose bytes are UTF-8 goes there, as text"))
 				continue
 			}
@@ -418,11 +419,9 @@ var opaqueItemTypes = map[string]bool{
 	"custom_tool_call_output": true,
 }
 
-// call is the input item for the stored tool call at block j of message at, or
-// the note in its place when no later result answers it. arguments is schema
-// required and must be a string, so the empty object stands for both a call
-// that took no arguments and a call whose arguments never parsed and were
-// discarded.
+// call is the input item for a stored tool call. arguments is schema required
+// and must be a string, so the empty object stands for both a call that took no
+// arguments and a call whose arguments never parsed and were discarded.
 //
 // The result answering the call decides which: where it reports
 // api.ToolErrJSON the arguments are gone and Input is not read at all, and what
@@ -555,6 +554,9 @@ var fileTypes = map[string]string{
 func documentBlock(c api.ContentDocument) any {
 	base, _, _ := strings.Cut(c.Mime, ";")
 	mime := strings.ToLower(strings.TrimSpace(base))
+	if mime == "application/xml" {
+		mime = string(api.DocumentXML)
+	}
 	ext, file := fileTypes[mime]
 	switch {
 	case len(c.Data) == 0:
@@ -565,7 +567,7 @@ func documentBlock(c api.ContentDocument) any {
 			name = "document" + ext
 		}
 		return inputFile{Type: "input_file", Filename: name, FileData: dataURL(mime, c.Data)}
-	case !strings.HasPrefix(mime, "text/") && mime != "application/xml":
+	case !strings.HasPrefix(mime, "text/"):
 		return omitted(c, fmt.Sprintf("the service refuses a file of type %q with a 400, and the block is stored, so it would be refused again on every later turn of the thread", c.Mime))
 	case !utf8.Valid(c.Data):
 		return omitted(c, "a text type the service takes no file of goes as text, and a JSON string cannot carry bytes that are not UTF-8")

@@ -441,9 +441,10 @@ func (t *thread) connect(backend *common.Backend, page page.Page, load bool, met
 
 }
 
-func (t *thread) switchStateRound() (api.Round, error) {
+func (t *thread) switchStateRound() (api.Round, bool, error) {
 	input := api.Input{}
-	if t.pending {
+	taken := t.pending
+	if taken {
 		input = t.input
 		input.Note = ""
 		t.input = api.Input{}
@@ -452,14 +453,14 @@ func (t *thread) switchStateRound() (api.Round, error) {
 	t.commitAttachments(input)
 	created, err := t.replay.Create()
 	if err != nil {
-		return api.Round{}, err
+		return api.Round{}, taken, err
 	}
 	if created {
 		t.link.send(newMessageEvent(nil, api.ChatEventThreadCreated{}))
 	}
 	round, replay, err := t.replay.RoundInit(input)
 	if err != nil {
-		return api.Round{}, err
+		return api.Round{}, taken, err
 	}
 	if input.Len() != 0 {
 		if err := t.sweepDrafts(); err != nil {
@@ -467,7 +468,7 @@ func (t *thread) switchStateRound() (api.Round, error) {
 		}
 	}
 	t.switchStateRoundReplay(round, replay)
-	return round, nil
+	return round, taken, nil
 }
 
 func (t *thread) switchStateRoundReplay(round api.Round, replay []api.Message) *threadRound {

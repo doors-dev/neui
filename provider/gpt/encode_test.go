@@ -122,11 +122,12 @@ func TestEncodeInput(t *testing.T) {
 				{"type":"input_file","filename":"document.pdf","file_data":"data:application/pdf;base64,JVBERg=="}]}]`,
 		},
 		{
-			name: "a document goes as input_file only for a type the service takes, other UTF-8 text as input_text, the rest as a note",
+			name: "a document goes as input_file only for a type the service takes, application/xml as text/xml, other UTF-8 text as input_text, the rest as a note",
 			req: api.Request{Messages: []api.Message{user(
 				api.ContentDocument{Data: []byte("plain"), Mime: "text/plain; charset=utf-8"},
 				api.ContentDocument{Data: []byte("fn main() {}"), Mime: " Text/X-Rust "},
 				api.ContentDocument{Data: []byte("<a/>"), Mime: "application/xml"},
+				api.ContentDocument{Data: []byte("<b/>"), Mime: "Application/XML; charset=utf-8", Name: "b.xml"},
 				api.ContentDocument{Data: []byte("class A {}"), Mime: "text/x-java", Name: "A.java"},
 				api.ContentDocument{Data: []byte{0xff}, Mime: "text/x-java"},
 				api.ContentDocument{Data: []byte("PK"), Mime: "application/zip", Name: "a.zip"},
@@ -136,7 +137,8 @@ func TestEncodeInput(t *testing.T) {
 			want: `[{"role":"user","content":[
 				{"type":"input_file","filename":"document.txt","file_data":"data:text/plain;base64,cGxhaW4="},
 				{"type":"input_file","filename":"document.rs","file_data":"data:text/x-rust;base64,Zm4gbWFpbigpIHt9"},
-				{"type":"input_text","text":"<a/>\n"},
+				{"type":"input_file","filename":"document.xml","file_data":"data:text/xml;base64,PGEvPg=="},
+				{"type":"input_file","filename":"b.xml","file_data":"data:text/xml;base64,PGIvPg=="},
 				{"type":"input_text","text":"class A {}\n"},
 				{"type":"input_text","text":"[document omitted]\n"},
 				{"type":"input_text","text":"[document omitted]\n"},
@@ -217,10 +219,11 @@ func TestEncodeInput(t *testing.T) {
 				{"role":"user","content":[{"type":"input_text","text":"again"}]}]`,
 		},
 		{
-			name: "an assistant text document goes as output_text and any other attachment leaves a note",
+			name: "an assistant text document goes as output_text, MIME parameters aside, and any other attachment leaves a note",
 			req: api.Request{Messages: []api.Message{
 				assistant(
 					api.ContentDocument{Data: []byte("plain words"), Mime: " Text/Plain "},
+					api.ContentDocument{Data: []byte("# notes"), Mime: "text/markdown; charset=utf-8"},
 					api.ContentDocument{Data: []byte(`{"a":1}`), Mime: string(api.DocumentJSON)},
 					api.ContentDocument{Data: []byte("%PDF"), Mime: string(api.DocumentPDF)},
 					api.ContentDocument{Data: []byte{0xff, 0xfe}, Mime: string(api.DocumentText)},
@@ -230,6 +233,7 @@ func TestEncodeInput(t *testing.T) {
 			}},
 			want: `[{"role":"assistant","content":[
 					{"type":"output_text","text":"plain words"},
+					{"type":"output_text","text":"# notes"},
 					{"type":"output_text","text":"{\"a\":1}"},
 					{"type":"output_text","text":"[document omitted]"},
 					{"type":"output_text","text":"[document omitted]"},

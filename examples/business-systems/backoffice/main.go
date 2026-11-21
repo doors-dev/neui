@@ -59,7 +59,7 @@ func main() {
 			}
 			opts = append(opts, generic.WithExtraBody(body))
 		}
-		provider, err = generic.New(generic.Conf{Model: api.Model{Name: name, Context: window, Inputs: api.Modalities{api.ModalityText}}, BaseURL: os.Getenv("LOCAL_LLM_URL")}, opts...)
+		provider, err = generic.New(generic.Conf{Model: api.Model{Name: name, Context: window}, BaseURL: os.Getenv("LOCAL_LLM_URL")}, opts...)
 	case os.Getenv("DEEPSEEK_API_KEY") != "":
 		provider, err = deepseek.New(deepseek.Conf{Model: deepseek.Flash})
 	case os.Getenv("OPENAI_API_KEY") != "":

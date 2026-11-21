@@ -26,11 +26,12 @@ import (
 
 type fakeThread struct {
 	api.ChatThread
-	context int
-	sent    []api.Input
-	rewound []api.Input
-	inputs  []api.Input
-	stops   int
+	context   int
+	sent      []api.Input
+	rewound   []api.Input
+	rewindErr error
+	inputs    []api.Input
+	stops     int
 }
 
 const inputLimit = 1000
@@ -53,7 +54,7 @@ func (f *fakeThread) Send(ctx context.Context, input api.Input) error {
 
 func (f *fakeThread) Rewind(ctx context.Context, round api.RoundID, input api.Input) error {
 	f.rewound = append(f.rewound, input)
-	return nil
+	return f.rewindErr
 }
 
 func (f *fakeThread) Input(ctx context.Context, input api.Input) error {
@@ -316,5 +317,25 @@ func TestEscapeStopsAndCancelsTasksOnlyFromTheComposer(t *testing.T) {
 	idle.Escape(ctx, true)
 	if canceled != 1 {
 		t.Fatalf("Escape in the composer: want the task cancelled once, got %d", canceled)
+	}
+}
+
+func TestRewindLeavesEditModeOnceTheThreadTakesIt(t *testing.T) {
+	ctx := context.Background()
+	thread := &fakeThread{rewindErr: api.ErrInputTooLarge}
+	c := newTestController(thread)
+	c.UpdateInputText(ctx, "draft")
+	c.InitRewind(ctx, 2, api.Input{Text: "edit"})
+	c.Send(ctx)
+	if s := c.Input().Get(); !s.Rewind || s.Input.Text != "edit" {
+		t.Fatalf("a refused rewind left the composer at %+v, want the edit still open", s)
+	}
+	thread.rewindErr = nil
+	c.Send(ctx)
+	if len(thread.rewound) != 2 || thread.rewound[1].Text != "edit" {
+		t.Fatalf("the thread was asked to rewind with %+v, want the edit twice", thread.rewound)
+	}
+	if s := c.Input().Get(); s.Rewind || s.Input.Text != "draft" {
+		t.Fatalf("a taken rewind left the composer at %+v, want the edit closed and the draft back", s)
 	}
 }

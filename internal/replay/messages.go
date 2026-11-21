@@ -66,14 +66,14 @@ func (s *messages) pendingContent(input api.Input) []api.Content {
 	records := s.pendingRecords()
 	content := make([]api.Content, 0, len(s.resultStash)+len(records)+input.Len())
 	for _, res := range s.resultStash {
-		content = append(content, capText(res, budget))
+		content = append(content, capText(documentsAsText(res, s.model), budget))
 	}
 	for _, rec := range records {
 		content = append(content, recordContent(rec, budget))
 	}
 	input.Text = trimText(api.ContentText{Text: input.Text}, budget).Text
 	content = append(content, input.Content()...)
-	return omitOversizedMedia(content, s.model, budget)
+	return omitOversizedMedia(content, s.model)
 }
 
 func (s *messages) replay(input api.Input) ([]api.Message, error) {
@@ -179,7 +179,7 @@ func (s *messages) appendRound(r api.Round) {
 	budget := RoundItemBudget(s.config, s.model)
 	userContent := make([]api.Content, 0, len(s.resultStash)+len(r.PinnedRecords)+r.Input.Len()+1)
 	for _, res := range s.resultStash {
-		userContent = append(userContent, capText(res, budget))
+		userContent = append(userContent, capText(documentsAsText(res, s.model), budget))
 	}
 	s.resultStash = nil
 	opening := s.first == api.NoRoundID && !s.compaction.IsValid() && r.Input.Len() != 0
@@ -206,7 +206,7 @@ func (s *messages) appendRound(r api.Round) {
 			s.resultStash = append(s.resultStash, call.LostResult())
 		}
 	}
-	user := s.cut(omitOversizedMedia(userContent, s.model, budget))
+	user := s.cut(omitOversizedMedia(userContent, s.model))
 	if opening {
 		user = append(user, api.ContentText{Text: nameInstruction})
 	}

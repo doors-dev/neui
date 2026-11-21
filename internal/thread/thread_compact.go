@@ -117,12 +117,12 @@ func (s *threadCompact) on(cmd any) {
 				s.thread.switchStateWait()
 				return
 			}
-			round, err := s.thread.switchStateRound()
+			round, taken, err := s.thread.switchStateRound()
 			if err != nil {
 				s.thread.criticalErr(nil, err)
 				return
 			}
-			s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundStart{Round: round, Truncate: api.NoRoundID, Usage: s.thread.replay.Usage(), CanCompact: s.thread.canCompact()}))
+			s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundStart{Round: round, Truncate: api.NoRoundID, InputTaken: taken, Usage: s.thread.replay.Usage(), CanCompact: s.thread.canCompact()}))
 			return
 		}
 		if !applied {

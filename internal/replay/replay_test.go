@@ -301,7 +301,7 @@ func TestPDFPagesChargeImageBudget(t *testing.T) {
 		t.Fatalf("an unreadable PDF charges %d images, want 0", got)
 	}
 
-	r := NewReplay(context.Background(), "a", local.NewMessageStorage(), api.ThreadConfig{}, api.Model{ImagesPerRequest: 4})
+	r := NewReplay(context.Background(), "a", local.NewMessageStorage(), api.ThreadConfig{}, api.Model{ImagesPerRequest: 4, Inputs: api.Modalities{api.ModalityImage, api.ModalityDocument}})
 	mustCreate(t, r)
 	toolRound(t, r, "pdf", "start", doc)
 	toolRound(t, r, "shot", "", api.ContentImage{Data: make([]byte, 64), Mime: "image/png"})
@@ -950,7 +950,7 @@ func TestNoteBodyCannotCloseItsOwnElement(t *testing.T) {
 
 func TestByteOverflowOutranksTokenOverflow(t *testing.T) {
 	config := api.ThreadConfig{ThreadMemoryLimit: 60_000, CompactionTrigger: 0.5, CompactionPreserve: 0.25}
-	model := api.Model{Context: 1000}
+	model := api.Model{Context: 1000, Inputs: api.Modalities{api.ModalityImage}}
 	r := NewReplay(context.Background(), "a", local.NewMessageStorage(), config, model)
 	mustCreate(t, r)
 	for _, name := range []string{"one", "two"} {
@@ -1009,7 +1009,7 @@ func TestCompactionInstructionHasMarker(t *testing.T) {
 
 func TestImageBytesCountsRawBytes(t *testing.T) {
 	const limit = 1000
-	model := api.Model{ImageBytes: limit}
+	model := api.Model{ImageBytes: limit, Inputs: api.Modalities{api.ModalityImage}}
 	at := api.ContentImage{Data: make([]byte, limit), Mime: "image/png"}
 	if reason := imageReason(at, model); reason != "" {
 		t.Fatalf("a %d byte image on a model taking %d raw bytes was refused: %s", limit, limit, reason)
@@ -1018,7 +1018,7 @@ func TestImageBytesCountsRawBytes(t *testing.T) {
 	if reason := imageReason(over, model); reason == "" {
 		t.Fatalf("a %d byte image on a model taking %d raw bytes went through", limit+1, limit)
 	}
-	if reason := imageReason(over, api.Model{}); reason != "" {
+	if reason := imageReason(over, api.Model{Inputs: api.Modalities{api.ModalityImage}}); reason != "" {
 		t.Fatalf("an image was refused on a model with no declared limits: %s", reason)
 	}
 }
@@ -1035,7 +1035,7 @@ func pdfThread(t *testing.T, s api.MessageStorage) {
 }
 
 func TestStoredPDFPagesAreCountedOnce(t *testing.T) {
-	model := api.Model{ImagesPerRequest: 11}
+	model := api.Model{ImagesPerRequest: 11, Inputs: api.Modalities{api.ModalityImage, api.ModalityDocument}}
 	reference := local.NewMessageStorage()
 	pdfThread(t, reference)
 	cached := local.NewMessageStorage()
@@ -1107,7 +1107,7 @@ func TestStoredPDFPagesAreCountedOnce(t *testing.T) {
 }
 
 func BenchmarkReplayOverStoredPDFs(b *testing.B) {
-	s := newMessages(api.Compaction{}, unboundedConfig, api.Model{ImagesPerRequest: 1 << 20})
+	s := newMessages(api.Compaction{}, unboundedConfig, api.Model{ImagesPerRequest: 1 << 20, Inputs: api.Modalities{api.ModalityImage, api.ModalityDocument}})
 	doc := api.ContentDocument{Data: pdfDoc(50), Mime: string(api.DocumentPDF), Name: "report.pdf"}
 	for i := range 21 {
 		id := fmt.Sprintf("call %d", i)
@@ -1251,7 +1251,7 @@ func matchesLoad(t *testing.T, s api.MessageStorage, r Replay) {
 }
 
 func TestImageCountCutStepsToSixtyPercent(t *testing.T) {
-	model := api.Model{ImagesPerRequest: 10}
+	model := api.Model{ImagesPerRequest: 10, Inputs: api.Modalities{api.ModalityImage, api.ModalityDocument}}
 	r := NewReplay(context.Background(), "a", local.NewMessageStorage(), unboundedConfig, model)
 	mustCreate(t, r)
 	toolRound(t, r, "c0", "start", shots("c0", 2)...)
@@ -1301,7 +1301,7 @@ func TestImageCountCutStepsToSixtyPercent(t *testing.T) {
 }
 
 func TestPendingContentOverTheCapCutsItsOldestItems(t *testing.T) {
-	model := api.Model{ImagesPerRequest: 4}
+	model := api.Model{ImagesPerRequest: 4, Inputs: api.Modalities{api.ModalityImage, api.ModalityDocument}}
 	s := local.NewMessageStorage()
 	r := NewReplay(context.Background(), "a", s, unboundedConfig, model)
 	mustCreate(t, r)
@@ -1339,7 +1339,7 @@ func TestPendingContentOverTheCapCutsItsOldestItems(t *testing.T) {
 }
 
 func TestLoadRebuildsTheImageCut(t *testing.T) {
-	model := api.Model{ImagesPerRequest: 6}
+	model := api.Model{ImagesPerRequest: 6, Inputs: api.Modalities{api.ModalityImage, api.ModalityDocument}}
 	s := local.NewMessageStorage()
 	r := NewReplay(context.Background(), "a", s, unboundedConfig, model)
 	mustCreate(t, r)
@@ -1393,7 +1393,7 @@ func TestLoadRebuildsTheImageCut(t *testing.T) {
 }
 
 func TestRewindRebuildsTheImageCut(t *testing.T) {
-	model := api.Model{ImagesPerRequest: 6}
+	model := api.Model{ImagesPerRequest: 6, Inputs: api.Modalities{api.ModalityImage, api.ModalityDocument}}
 	s := local.NewMessageStorage()
 	r := NewReplay(context.Background(), "a", s, unboundedConfig, model)
 	mustCreate(t, r)
@@ -1415,7 +1415,7 @@ func TestRewindRebuildsTheImageCut(t *testing.T) {
 }
 
 func TestCompactionRequestStaysUnderTheImageCap(t *testing.T) {
-	model := api.Model{ImagesPerRequest: 6}
+	model := api.Model{ImagesPerRequest: 6, Inputs: api.Modalities{api.ModalityImage, api.ModalityDocument}}
 	s := local.NewMessageStorage()
 	r := NewReplay(context.Background(), "a", s, api.ThreadConfig{ThreadMemoryLimit: -1, ReplayItemShare: 0.25, CompactionPreserve: 0.25}, model)
 	mustCreate(t, r)
@@ -1460,7 +1460,7 @@ func TestRejectedRoundRefusesItsResultsAcrossAReload(t *testing.T) {
 	} {
 		t.Run(c.reason, func(t *testing.T) {
 			s := local.NewMessageStorage()
-			r := NewReplay(context.Background(), "a", s, unboundedConfig, api.Model{})
+			r := NewReplay(context.Background(), "a", s, unboundedConfig, api.Model{Inputs: api.Modalities{api.ModalityImage, api.ModalityDocument}})
 			mustCreate(t, r)
 			toolRound(t, r, "shot", "start", api.ContentText{Text: said}, api.ContentImage{Data: make([]byte, 1024), Mime: "image/png"})
 			if _, _, err := r.RoundInit(api.Input{}); err != nil {
@@ -1477,7 +1477,7 @@ func TestRejectedRoundRefusesItsResultsAcrossAReload(t *testing.T) {
 				t.Fatalf("a %s round is retriable %v, want %v", c.reason, r.IsRetriable(), !c.refused)
 			}
 			matchesLoad(t, s, r)
-			loaded := NewReplay(context.Background(), "a", s, unboundedConfig, api.Model{})
+			loaded := NewReplay(context.Background(), "a", s, unboundedConfig, api.Model{Inputs: api.Modalities{api.ModalityImage, api.ModalityDocument}})
 			if err := loaded.Load(); err != nil {
 				t.Fatalf("Load: %v", err)
 			}
@@ -1507,7 +1507,7 @@ func TestRejectedRoundRefusesItsResultsAcrossAReload(t *testing.T) {
 
 func TestRetryReplaysWhatALoadReplays(t *testing.T) {
 	s := local.NewMessageStorage()
-	r := NewReplay(context.Background(), "a", s, unboundedConfig, api.Model{ImagesPerRequest: 2})
+	r := NewReplay(context.Background(), "a", s, unboundedConfig, api.Model{ImagesPerRequest: 2, Inputs: api.Modalities{api.ModalityImage, api.ModalityDocument}})
 	mustCreate(t, r)
 	toolRound(t, r, "c0", "start", shots("c0", 2)...)
 	toolRound(t, r, "shot", "", api.ContentImage{Data: make([]byte, 1024), Mime: "image/png"})
@@ -1529,7 +1529,7 @@ func TestRetryReplaysWhatALoadReplays(t *testing.T) {
 func TestMediaOverEightyPercentIsCutToHalf(t *testing.T) {
 	const limit, image = 100_000, 30_000
 	s := local.NewMessageStorage()
-	r := NewReplay(context.Background(), "a", s, budgetConfig(limit), api.Model{})
+	r := NewReplay(context.Background(), "a", s, budgetConfig(limit), api.Model{Inputs: api.Modalities{api.ModalityImage, api.ModalityDocument}})
 	mustCreate(t, r)
 	for i, name := range []string{"c0", "c1", "c2"} {
 		text := ""
@@ -1564,7 +1564,7 @@ func TestMediaOverEightyPercentIsCutToHalf(t *testing.T) {
 
 func TestTextNeverCutsMedia(t *testing.T) {
 	const limit, image = 100_000, 30_000
-	r := NewReplay(context.Background(), "a", local.NewMessageStorage(), budgetConfig(limit), api.Model{})
+	r := NewReplay(context.Background(), "a", local.NewMessageStorage(), budgetConfig(limit), api.Model{Inputs: api.Modalities{api.ModalityImage, api.ModalityDocument}})
 	mustCreate(t, r)
 	toolRound(t, r, "c0", "start", api.ContentImage{Data: make([]byte, image), Mime: "image/png"})
 	toolRound(t, r, "c1", "", api.ContentText{Text: strings.Repeat("x", 80_000)})
@@ -1590,7 +1590,7 @@ func TestTextNeverCutsMedia(t *testing.T) {
 }
 
 func TestCompactionReloadsTheImageCut(t *testing.T) {
-	model := api.Model{ImagesPerRequest: 6}
+	model := api.Model{ImagesPerRequest: 6, Inputs: api.Modalities{api.ModalityImage, api.ModalityDocument}}
 	s := local.NewMessageStorage()
 	r := NewReplay(context.Background(), "a", s, api.ThreadConfig{ThreadMemoryLimit: -1, ReplayItemShare: 0.25, CompactionPreserve: 0.9}, model)
 	mustCreate(t, r)
@@ -1629,7 +1629,6 @@ func TestCompactionReloadsTheImageCut(t *testing.T) {
 
 func TestWithheldKindsBecomeNotes(t *testing.T) {
 	const (
-		text     = api.ModalityText
 		image    = api.ModalityImage
 		document = api.ModalityDocument
 	)
@@ -1649,13 +1648,11 @@ func TestWithheldKindsBecomeNotes(t *testing.T) {
 		inputs api.Modalities
 		want   api.UserContents
 	}{
-		{"unknown", nil, sent},
-		{"empty", api.Modalities{}, sent},
-		{"every kind", api.Modalities{text, image, document}, sent},
-		{"text only", api.Modalities{text}, api.UserContents{noImage, noPDF, csvText, noLatin, noEmpty}},
-		{"no images", api.Modalities{text, document}, api.UserContents{noImage, pdf, csv, latin, empty}},
-		{"no images, text implied", api.Modalities{document}, api.UserContents{noImage, pdf, csv, latin, empty}},
-		{"no documents", api.Modalities{text, image}, api.UserContents{png, noPDF, csvText, noLatin, noEmpty}},
+		{"text only", nil, api.UserContents{noImage, noPDF, csvText, noLatin, noEmpty}},
+		{"empty", api.Modalities{}, api.UserContents{noImage, noPDF, csvText, noLatin, noEmpty}},
+		{"every kind", api.Modalities{image, document}, sent},
+		{"no images", api.Modalities{document}, api.UserContents{noImage, pdf, csv, latin, empty}},
+		{"no documents", api.Modalities{image}, api.UserContents{png, noPDF, csvText, noLatin, noEmpty}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			model := api.Model{Inputs: tc.inputs}
@@ -1663,7 +1660,7 @@ func TestWithheldKindsBecomeNotes(t *testing.T) {
 			for i, block := range tc.want {
 				wantMessage[i] = block
 			}
-			g, _ := json.Marshal(omitOversizedMedia([]api.Content{png, pdf, csv, latin, empty}, model, RoundItemBudget(unboundedConfig, model)))
+			g, _ := json.Marshal(omitOversizedMedia([]api.Content{png, pdf, csv, latin, empty}, model))
 			w, _ := json.Marshal(wantMessage)
 			if !bytes.Equal(g, w) {
 				t.Fatalf("a user message replays as\n%s\nwant\n%s", g, w)
@@ -1702,8 +1699,8 @@ func TestUnreadPDFChargesNoPages(t *testing.T) {
 		inputs api.Modalities
 		cut    bool
 	}{
-		{api.Modalities{api.ModalityText, api.ModalityImage}, false},
-		{api.Modalities{api.ModalityText, api.ModalityImage, api.ModalityDocument}, true},
+		{api.Modalities{api.ModalityImage}, false},
+		{api.Modalities{api.ModalityImage, api.ModalityDocument}, true},
 	} {
 		s := local.NewMessageStorage()
 		r := NewReplay(context.Background(), "a", s, unboundedConfig, api.Model{ImagesPerRequest: 4, Inputs: tc.inputs})
@@ -1729,14 +1726,14 @@ func TestSwitchToAReadingModelReplaysTheMedia(t *testing.T) {
 	png := api.ContentImage{Data: []byte("img"), Mime: "image/png"}
 	pdf := api.ContentDocument{Data: pdfDoc(1), Mime: string(api.DocumentPDF), Name: "a.pdf"}
 	s := local.NewMessageStorage()
-	r := NewReplay(context.Background(), "a", s, unboundedConfig, api.Model{Inputs: api.Modalities{api.ModalityText}})
+	r := NewReplay(context.Background(), "a", s, unboundedConfig, api.Model{})
 	mustCreate(t, r)
 	toolRound(t, r, "first", "start", png, pdf)
 	toolRound(t, r, "second", "", api.ContentText{Text: "done"})
 	if _, messages, err := r.RoundInit(api.Input{}); err != nil || requestImages(messages) != 0 {
 		t.Fatalf("the text-only model is sent %d images (err %v), want none", requestImages(messages), err)
 	}
-	reading := NewReplay(context.Background(), "a", s, unboundedConfig, api.Model{Inputs: api.Modalities{api.ModalityText, api.ModalityImage, api.ModalityDocument}})
+	reading := NewReplay(context.Background(), "a", s, unboundedConfig, api.Model{Inputs: api.Modalities{api.ModalityImage, api.ModalityDocument}})
 	if err := reading.Load(); err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -1747,29 +1744,34 @@ func TestSwitchToAReadingModelReplaysTheMedia(t *testing.T) {
 	}
 }
 
-func TestSwitchToATextOnlyModelCutsAStoredTextDocument(t *testing.T) {
+func TestSwitchToATextOnlyModelCutsStoredTextDocumentsWithTheirResult(t *testing.T) {
 	var lines strings.Builder
 	for i := range 400 {
 		fmt.Fprintf(&lines, "line %d\n", i)
 	}
+	said := api.ContentText{Text: "read two files"}
 	text := api.ContentDocument{Data: []byte(lines.String()), Mime: string(api.DocumentMarkdown), Name: "a.md"}
+	other := api.ContentDocument{Data: []byte(lines.String()), Mime: string(api.DocumentText), Name: "b.txt"}
 	pdf := api.ContentDocument{Data: pdfDoc(1), Mime: string(api.DocumentPDF), Name: "a.pdf"}
 	noPDF := api.ContentText{Text: fmt.Sprintf(`<nodocument name="a.pdf" mime="application/pdf" bytes=%d reason="this model reads no documents of type application/pdf"/>`, len(pdf.Data))}
+	stored := api.UserContents{said, text, pdf, other}
 	s := local.NewMessageStorage()
-	r := NewReplay(context.Background(), "a", s, unboundedConfig, api.Model{Context: 1000, Inputs: api.Modalities{api.ModalityText, api.ModalityDocument}})
+	r := NewReplay(context.Background(), "a", s, unboundedConfig, api.Model{Context: 1000, Inputs: api.Modalities{api.ModalityDocument}})
 	mustCreate(t, r)
-	toolRound(t, r, "first", "start", text, pdf)
-	toolRound(t, r, "second", "", text, pdf)
+	toolRound(t, r, "first", "start", stored...)
+	toolRound(t, r, "second", "", stored...)
 	g, _ := json.Marshal(r.messages.rounds[1].user)
-	w, _ := json.Marshal([]api.Content{api.ContentToolResult{ID: "first", Content: api.UserContents{text, pdf}}})
+	w, _ := json.Marshal([]api.Content{api.ContentToolResult{ID: "first", Content: stored}})
 	if !bytes.Equal(g, w) {
 		t.Fatalf("the document-reading model replays the stored result as\n%s\nwant\n%s", g, w)
 	}
-	model := api.Model{Context: 1000, Inputs: api.Modalities{api.ModalityText}}
+	model := api.Model{Context: 1000}
 	budget := RoundItemBudget(unboundedConfig, model)
-	cut := trimText(api.ContentText{Text: string(text.Data)}, budget)
-	if len(text.Data) <= budget || !strings.HasPrefix(cut.Text, "line 0\n") || !strings.HasSuffix(cut.Text, "line 399\n") || !strings.Contains(cut.Text, "<truncated>") {
-		t.Fatalf("a %d-byte document cut to %d bytes reads %q, want its head and tail around the cut mark", len(text.Data), budget, cut.Text)
+	shared := capText(api.ContentToolResult{Content: api.UserContents{said, api.ContentText{Text: string(text.Data)}, pdf, api.ContentText{Text: string(other.Data)}}}, budget).Content
+	cut := shared[1].(api.ContentText)
+	alone := trimText(api.ContentText{Text: string(text.Data)}, budget)
+	if shared[0].(api.ContentText).Text != said.Text || !strings.HasPrefix(cut.Text, "line 0\n") || !strings.HasSuffix(cut.Text, "line 399\n") || !strings.Contains(cut.Text, "<truncated>") || len(cut.Text) >= len(alone.Text) {
+		t.Fatalf("a %d-byte document beside another and a short text, cut to a %d-byte budget, reads %q, want its head and tail around the cut mark, shorter than the %d bytes it gets alone", len(text.Data), budget, cut.Text, len(alone.Text))
 	}
 	textOnly := NewReplay(context.Background(), "a", s, unboundedConfig, model)
 	if err := textOnly.Load(); err != nil {
@@ -1788,7 +1790,7 @@ func TestSwitchToATextOnlyModelCutsAStoredTextDocument(t *testing.T) {
 		{"the pending results", messages[4].Content[0], "second"},
 	} {
 		g, _ := json.Marshal(at.got)
-		w, _ := json.Marshal(api.ContentToolResult{ID: at.id, Content: api.UserContents{cut, noPDF}})
+		w, _ := json.Marshal(api.ContentToolResult{ID: at.id, Content: api.UserContents{said, cut, noPDF, shared[3]}})
 		if !bytes.Equal(g, w) {
 			t.Fatalf("after a switch to a text-only model %s replays as\n%s\nwant\n%s", at.where, g, w)
 		}
@@ -1798,7 +1800,7 @@ func TestSwitchToATextOnlyModelCutsAStoredTextDocument(t *testing.T) {
 		t.Fatalf("RoundOk: %v", err)
 	}
 	matchesLoad(t, s, textOnly)
-	whole, _ := json.Marshal(api.UserContents{text, pdf})
+	whole, _ := json.Marshal(stored)
 	for round, err := range s.RoundRange(context.Background(), "a", api.NoRoundID, api.NoRoundID) {
 		if err != nil {
 			t.Fatalf("RoundRange: %v", err)
@@ -1808,5 +1810,24 @@ func TestSwitchToATextOnlyModelCutsAStoredTextDocument(t *testing.T) {
 				t.Fatalf("round %d stores its result as\n%s\nwant the documents whole", round.ID, g)
 			}
 		}
+	}
+}
+
+func TestEmptyTurnLooksNoFurtherBackThanTheTurnsInput(t *testing.T) {
+	r := NewReplay(context.Background(), "a", local.NewMessageStorage(), unboundedConfig, api.Model{})
+	mustCreate(t, r)
+	if _, _, err := r.RoundInit(api.Input{Text: "first"}); err != nil {
+		t.Fatalf("RoundInit: %v", err)
+	}
+	if _, err := r.RoundOk(api.EventUsage{Input: 10}, api.Indexed[api.Content]{0: api.ContentText{Text: "hello"}}); err != nil {
+		t.Fatalf("RoundOk: %v", err)
+	}
+	toolRound(t, r, "call", "second")
+	if _, _, err := r.RoundInit(api.Input{}); err != nil {
+		t.Fatalf("RoundInit: %v", err)
+	}
+	empty, err := r.IsEmptyTurn(api.Indexed[api.Content]{0: api.ContentText{Text: " "}})
+	if err != nil || !empty {
+		t.Fatalf("a blank answer after the tool round of the turn that sent %q reads empty %v (%v), want true: the earlier turn's text is not this turn's", "second", empty, err)
 	}
 }

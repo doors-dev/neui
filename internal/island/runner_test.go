@@ -587,12 +587,19 @@ func TestReportWidget(t *testing.T) {
 	Report(context.WithValue(ctx, common.KeyIslandWidget, common.IslandWidget{Name: "table", ID: 4}), errors.New("query failed"))
 	Report(context.Background(), errors.New("no island"))
 	notes := task.WaitNotes(t, 2)
-	var data map[string]any
-	if err := json.Unmarshal(notes[0].Data, &data); err != nil {
-		t.Fatal(err)
+	widgets := map[string]map[string]any{}
+	for _, n := range notes {
+		var data map[string]any
+		if err := json.Unmarshal(n.Data, &data); err != nil {
+			t.Fatal(err)
+		}
+		if n.Meta["kind"] != "widget_error" || n.Meta["note"] != widgetErrorNote || data["error"] != "query failed" {
+			t.Fatalf("note: %v %v", n.Meta, data)
+		}
+		widgets[fmt.Sprint(data["widget"])] = data
 	}
-	if notes[0].Meta["kind"] != "widget_error" || notes[0].Meta["note"] != widgetErrorNote || data["widget"] != "form" || data["id"] != float64(3) || data["error"] != "query failed" {
-		t.Fatalf("note: %v %v", notes[0].Meta, data)
+	if form, table := widgets["form"], widgets["table"]; form["id"] != float64(3) || table["id"] != float64(4) {
+		t.Fatalf("the notes name %v, want form #3 and table #4", widgets)
 	}
 	if n := reported(r); n != 2 {
 		t.Fatalf("%d reports, want 2", n)

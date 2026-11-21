@@ -241,12 +241,12 @@ func (s *threadRound) ok(code api.OkCode, content api.Indexed[api.Content], usag
 		s.thread.switchStateCompact(round, "", usage, content)
 		return
 	}
-	round, err := s.thread.switchStateRound()
+	round, taken, err := s.thread.switchStateRound()
 	if err != nil {
 		s.thread.criticalErr(nil, err)
 		return
 	}
-	s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundStart{Round: round, Truncate: api.NoRoundID, Usage: s.thread.replay.Usage(), CanCompact: s.thread.canCompact()}))
+	s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundStart{Round: round, Truncate: api.NoRoundID, InputTaken: taken, Usage: s.thread.replay.Usage(), CanCompact: s.thread.canCompact()}))
 }
 
 func (s *threadRound) err(code api.ErrCode, cause error, content api.Indexed[api.Content], usage api.EventUsage) {

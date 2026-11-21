@@ -435,7 +435,9 @@ func (s Controller) Send(ctx context.Context) {
 		if state.textBytes + state.attachBytes > s.inputLimit {
 			return
 		}
-		s.thread.Rewind(ctx, state.rewind.round, state.rewind.input)
+		if s.thread.Rewind(ctx, state.rewind.round, state.rewind.input) == nil {
+			s.CancelRewind(ctx)
+		}
 		return
 	}
 	if state.input.Len() == 0 || state.pending || state.textBytes + state.attachBytes > s.inputLimit {

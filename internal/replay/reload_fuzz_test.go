@@ -358,7 +358,7 @@ func (f *fuzzRun) step() {
 }
 
 func TestSessionMatchesLoadUnderRandomRounds(t *testing.T) {
-	inputs := []api.Modalities{nil, {api.ModalityText}, {api.ModalityText, api.ModalityImage}, {api.ModalityDocument}}
+	inputs := []api.Modalities{{api.ModalityImage, api.ModalityDocument}, nil, {api.ModalityImage}, {api.ModalityDocument}}
 	for seed := range uint64(300) {
 		t.Run(fmt.Sprint(seed), func(t *testing.T) {
 			rng := rand.New(rand.NewPCG(seed, 7))
