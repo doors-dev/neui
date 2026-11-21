@@ -183,9 +183,6 @@ func (c *converter) Convert(f lib.Frame) ([]api.Event, bool) {
 				}
 			}
 		case "function_call":
-			if a := bytes.TrimSpace(c.body.Arguments); len(a) > 0 && a[0] != '{' && string(a) != "null" {
-				return c.fail(fmt.Errorf("gemini: step.start %d with arguments that are not an object", at))
-			}
 			s.kind = kindCall
 			s.idx = c.take()
 			id := c.body.ID

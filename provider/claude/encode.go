@@ -116,7 +116,7 @@ func encodeSchema(schema any) (json.RawMessage, error) {
 	if schema == nil {
 		return json.RawMessage(`{"type":"object","properties":{}}`), nil
 	}
-	return json.Marshal(schema)
+	return lib.MarshalRaw(schema)
 }
 
 func (p *Provider) encodeSystem(system string) ([]textBlock, error) {

@@ -371,8 +371,6 @@ func TestBrokenKnownFramesFail(t *testing.T) {
 		{"delta without a type", []string{created, `{"index":0,"step":{"type":"thought"},"event_type":"step.start"}`, `{"index":0,"delta":{},"event_type":"step.delta"}`}, "gemini: step.delta 0 without a delta type"},
 		{"text delta on a call", []string{created, `{"index":0,"step":{"id":"a","type":"function_call","name":"n"},"event_type":"step.start"}`, `{"index":0,"delta":{"text":"x","type":"text"},"event_type":"step.delta"}`}, "gemini: text delta on a function_call step at 0"},
 		{"signature on model output", []string{created, `{"index":0,"step":{"type":"model_output"},"event_type":"step.start"}`, `{"index":0,"delta":{"signature":"x","type":"thought_signature"},"event_type":"step.delta"}`}, "gemini: thought_signature delta on a model_output step at 0"},
-		{"start arguments as a string", []string{created, `{"index":0,"step":{"id":"a","type":"function_call","name":"n","arguments":"{\"x\":1}"},"event_type":"step.start"}`}, "gemini: step.start 0 with arguments that are not an object"},
-		{"start arguments as an array", []string{created, `{"index":0,"step":{"id":"a","type":"function_call","name":"n","arguments":[1]},"event_type":"step.start"}`}, "gemini: step.start 0 with arguments that are not an object"},
 		{"arguments as an object", []string{created, `{"index":0,"step":{"id":"a","type":"function_call","name":"n"},"event_type":"step.start"}`, `{"index":0,"delta":{"arguments":{"a":1},"type":"arguments_delta"},"event_type":"step.delta"}`}, "gemini: stream frame did not parse"},
 		{"missing event_type", []string{created, `{"index":0}`}, `gemini: "" frame without an event_type`},
 		{"unparseable", []string{created, `{"event_type":`}, "gemini: stream frame did not parse"},

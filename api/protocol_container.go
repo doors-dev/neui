@@ -80,8 +80,8 @@ func (i Image) ContentType() string {
 
 var _ Container = Image{}
 
-// ImageMime is an image type the Claude and GPT adapters both accept. The
-// Gemini adapter takes all four in messages and tool results.
+// ImageMime is an image type every built-in adapter accepts for a model that
+// takes images.
 type ImageMime string
 
 // The accepted image types.
