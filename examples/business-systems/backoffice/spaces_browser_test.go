@@ -141,7 +141,7 @@ func TestFilterKeepsTheListPageRead(t *testing.T) {
 	drive(t, customersPage(doors.NewSource(CustomersPath{})),
 		syncStep("customers"),
 		syncStep("customers.search"),
-		writeStep("customers.search", "search customers by name, email, company or phone; applies on Enter or when the field loses focus", "Grace"),
+		writeStep("customers.search", "search customers by name, email, company or phone", "Grace"),
 		clickStep("customers", "open the form to add a new customer"),
 	)
 	drive(t, ordersPage(doors.NewSource(OrdersPath{})),

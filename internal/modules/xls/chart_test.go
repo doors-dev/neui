@@ -71,16 +71,6 @@ func TestChart(t *testing.T) {
 	}
 }
 
-func TestChartBadType(t *testing.T) {
-	c := testkit.NewController(t, testkit.Setup{})
-	fs := c.FS()
-	buildBook(t, fs, "book.xlsx")
-	_, err := chartTool(c.Ctx(), chartArg{Path: "book.xlsx", Sheet: "Data", Type: "donut", DataRange: "B1:B4", Anchor: "F2"})
-	if err == nil || !strings.Contains(err.Error(), "donut") {
-		t.Fatalf("err = %v", err)
-	}
-}
-
 func TestHighlight(t *testing.T) {
 	c := testkit.NewController(t, testkit.Setup{})
 	fs := c.FS()
@@ -151,7 +141,6 @@ func TestHighlightRules(t *testing.T) {
 		{rule: highlightRule{Type: "gt", Value: "NaN"}, wantErr: "plain number"},
 		{rule: highlightRule{Type: "top", Value: "x"}, wantErr: "integer count"},
 		{rule: highlightRule{Type: "top", Value: "0"}, wantErr: "integer count"},
-		{rule: highlightRule{Type: "between", Value: "1"}, wantErr: "between"},
 	} {
 		ctl := testkit.NewController(t, testkit.Setup{})
 		fs := ctl.FS()

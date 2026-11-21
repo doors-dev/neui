@@ -121,7 +121,7 @@ func productsPage(path doors.Source[ProductsPath]) gox.Elem {
 //line products.gox:74
 							__e = __c.Any(neui.Tool[productsToolInput, productsToolOutput]{
 					Name: "search_products",
-					Desc: "Set the search, sort and page of the products table the user sees; an empty field clears it",
+					Desc: "Set the search, sort and page of the products table the user sees",
 					Handler: func(ctx context.Context, in productsToolInput) (productsToolOutput, error) {
 						next := ProductsPath{Search: in.Search, Sort: in.Sort, Page: in.Page}
 						if err := checkSort(next.Sort, "name", "sku", "price", "stock"); err != nil {
@@ -151,7 +151,7 @@ func productsPage(path doors.Source[ProductsPath]) gox.Elem {
 				})); if __e != nil { return }
 //line products.gox:96
 							__e = __c.Any(search.Bind(func(q string) gox.Elem {
-					return searchBar("products-search", "Search by name or SKU", q, "search products by name or SKU; applies on Enter or when the field loses focus", func(ctx context.Context, v string) {
+					return searchBar("products-search", "Search by name or SKU", q, "search products by name or SKU", func(ctx context.Context, v string) {
 						path.Mutate(ctx, func(p ProductsPath) ProductsPath {
 							p.Search, p.Page = v, 0
 							return p

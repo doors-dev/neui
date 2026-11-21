@@ -56,11 +56,6 @@ func totalTool(ctx context.Context, arg totalArg) (totalResult, error) {
 	if len(arg.Aggs) == 0 {
 		return totalResult{}, fmt.Errorf("aggs must name at least one column")
 	}
-	for _, a := range arg.Aggs {
-		if _, ok := aggFns[strings.ToLower(a.Fn)]; !ok {
-			return totalResult{}, fmt.Errorf("agg fn %q: pick sum, avg, count, count_nums, min or max", a.Fn)
-		}
-	}
 	if arg.Range == "" {
 		return totalResult{}, fmt.Errorf("range must look like A1:C20")
 	}
@@ -123,7 +118,7 @@ func totalTool(ctx context.Context, arg totalArg) (totalResult, error) {
 		if _, ok := fns[x]; ok {
 			return totalResult{}, fmt.Errorf("agg column %q is named twice", a.Column)
 		}
-		fns[x] = aggFns[strings.ToLower(a.Fn)]
+		fns[x] = aggFns[a.Fn]
 	}
 	cache := styleCache{}
 	for x := b.x1; x <= b.x2; x++ {

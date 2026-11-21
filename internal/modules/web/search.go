@@ -25,9 +25,9 @@ import (
 )
 
 func searchDesc(tier common.ModelTier) string {
-	desc := `Search the web. Results are links with short extracts, not whole pages: read one with web__fetch. When the results miss, ask again with different words rather than for more results; an empty result does not mean no such page exists. The search engine may ignore domains and recent.`
+	desc := `Search the web. Results are links with short extracts, not whole pages: read one with web__fetch. When the results miss, ask again with different words rather than for more results; an empty result does not mean no such page exists.`
 	if tier != common.TierAssistant {
-		desc += ` Not accessible from a script.`
+		desc += ` Not accessible from scripts.`
 	}
 	return desc
 }
@@ -54,8 +54,8 @@ type Result struct {
 type SearchArg struct {
 	Query   string   `json:"query" required:"true" description:"words, not a URL; include the year when you want recent material"`
 	Num     uint     `json:"num" description:"default 8, at most 20"`
-	Domains []string `json:"domains" description:"hostnames to restrict results to, like go.dev"`
-	Recent  string   `json:"recent" enum:"day,week,month,year" description:"only pages published within it, counted back from now"`
+	Domains []string `json:"domains" description:"hostnames to restrict results to, like go.dev; the search engine may ignore it"`
+	Recent  string   `json:"recent" enum:"day,week,month,year" description:"only pages published within it, counted back from now; the search engine may ignore it"`
 }
 
 func (m *module) search(ctx context.Context, arg SearchArg) ([]Result, error) {

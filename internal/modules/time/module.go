@@ -34,9 +34,9 @@ const maxDelay = 24 * time.Hour
 
 var errCancelled = errors.New("cancelled by time__cancel")
 
-const moduleDesc = `The clock: read the date and time here, never assume them. time__client reads the user's browser clock, the one to quote when talking to the user; time__now reads the server's, for anything the server timestamps. They differ in offset and may differ in wall time.`
-const nowDesc = `Current time of the server.`
-const clientDesc = `Current time of the user's browser.`
+const moduleDesc = `The clock: read the date and time here, never assume them. The server's clock and the user's browser clock may differ in offset and in wall time.`
+const nowDesc = `Current time of the server, for anything the server timestamps.`
+const clientDesc = `Current time of the user's browser, the one to quote when talking to the user.`
 
 func timerDesc(tier common.ModelTier) string {
 	desc := `Wait until a moment, to continue work then, not to pause the conversation. Pass exactly one of afterMs and at. A wait of up to 10 s returns when the moment arrives; a longer one returns at once, deferred. One deferred timer at a time; short waits always work.`
@@ -154,7 +154,7 @@ func (m *module) timer(ctx context.Context, arg TimerArg) (TimerResult, error) {
 		return TimerResult{}, errors.New("pass exactly one of afterMs or at")
 	}
 	if arg.After > uint(maxDelay.Milliseconds()) {
-		return TimerResult{}, fmt.Errorf("at most %s from now", maxDelay)
+		return TimerResult{}, fmt.Errorf("a timer waits at most %d hours from now", int(maxDelay/time.Hour))
 	}
 	now := time.Now()
 	fires := now.Add(time.Duration(arg.After) * time.Millisecond)
@@ -172,7 +172,7 @@ func (m *module) timer(ctx context.Context, arg TimerArg) (TimerResult, error) {
 		return TimerResult{}, errors.New("that moment has already passed")
 	}
 	if delay > maxDelay {
-		return TimerResult{}, fmt.Errorf("at most %s from now", maxDelay)
+		return TimerResult{}, fmt.Errorf("a timer waits at most %d hours from now", int(maxDelay/time.Hour))
 	}
 	if delay <= syncAfter || tools.FromJS(ctx) {
 		if deadline, ok := ctx.Deadline(); ok && tools.FromJS(ctx) && fires.After(deadline) {

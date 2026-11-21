@@ -1893,6 +1893,65 @@ func TestSpacesMovedBetweenDoorsStayCurrent(t *testing.T) {
 	}
 }
 
+func TestSpaceDescFallsBackWhenItsPartLeaves(t *testing.T) {
+	first, third := doors.NewSource(true), doors.NewSource(true)
+	part := func(on doors.Source[bool], desc string) gox.Elem {
+		return on.Bind(func(on bool) gox.Elem {
+			return func(cur gox.Cursor) error {
+				if !on {
+					return nil
+				}
+				return (neui.Space{Name: "orders", Desc: desc}).Proxy(cur, func(gox.Cursor) error { return nil })
+			}
+		})
+	}
+	hide := func(name string, on doors.Source[bool]) neui.Tool[struct{}, string] {
+		return neui.Tool[struct{}, string]{Name: name, Desc: name, Handler: func(ctx context.Context, _ struct{}) (string, error) {
+			on.Mutate(ctx, func(bool) bool { return false })
+			return name, nil
+		}}
+	}
+	page := func(cur gox.Cursor) error {
+		for _, el := range []any{
+			hide("hide_first", first),
+			hide("hide_third", third),
+			part(first, "the first"),
+			part(doors.NewSource(true), ""),
+			part(third, "the third"),
+		} {
+			if err := cur.Any(el); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	p := testkit.NewProvider(api.Model{},
+		round(call("tree", "page__tree", map[string]any{}), call("root", "page__sync", map[string]any{"path": ""})),
+		testkit.Call("page__tool", map[string]any{"path": "", "tool": "hide_third", "arg": map[string]any{}}),
+		testkit.Call("page__tree", map[string]any{}),
+		testkit.Call("page__tool", map[string]any{"path": "", "tool": "hide_first", "arg": map[string]any{}}),
+		testkit.Call("page__tree", map[string]any{}),
+		testkit.Say("done"),
+	)
+	c := stack.Page(t, stack.Host{Provider: p, Page: page})
+	c.Send("hide the described parts")
+	c.Wait()
+	var got []string
+	for _, i := range []int{1, 3, 5} {
+		var tree json.RawMessage
+		testkit.Decode(t, testkit.Results(p.Request(t, i))[0], &tree)
+		got = append(got, string(tree))
+	}
+	want := []string{
+		`{"name":"","desc":"","tools":2,"children":[{"name":"orders","desc":"the third"}]}`,
+		`{"name":"","desc":"","tools":2,"children":[{"name":"orders","desc":"the first"}]}`,
+		`{"name":"","desc":"","tools":2,"children":[{"name":"orders","desc":""}]}`,
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("tree answered\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
 func TestSpaceRulesHoldAcrossParts(t *testing.T) {
 	logged := &logs{}
 	logger := slog.Default()

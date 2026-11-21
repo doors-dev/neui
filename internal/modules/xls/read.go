@@ -30,7 +30,7 @@ const profileSampleRows = 5
 const sheetsDesc = `List a workbook's sheets with row and column counts, tables, merged ranges and the autofilter.`
 const profileDesc = `Profile a sheet or range: its header row, per-column types, data row count and a sample.`
 
-const readDesc = `Read cell values from a sheet. A merged cell shows its value in its top-left cell only.`
+const readDesc = `Read cell values from a sheet.`
 
 const findDesc = `Find cells whose value contains a substring.`
 
@@ -82,7 +82,7 @@ type assistantReadArg struct {
 }
 
 type readResult struct {
-	_          struct{}   `description:"a page of the range's rows from offset; truncated: more rows remain, call again with offset set to nextOffset"`
+	_          struct{}   `description:"a page of the range's rows from offset, a merged cell's value in its top-left cell only; truncated: more rows remain, call again with offset set to nextOffset"`
 	Rows       [][]string `json:"rows"`
 	NextOffset uint       `json:"nextOffset"`
 	Truncated  bool       `json:"truncated,omitempty"`

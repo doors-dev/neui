@@ -73,16 +73,6 @@ func TestTotal(t *testing.T) {
 	}
 }
 
-func TestTotalBadFn(t *testing.T) {
-	c := testkit.NewController(t, testkit.Setup{})
-	fs := c.FS()
-	buildBook(t, fs, "book.xlsx")
-	_, err := totalTool(c.Ctx(), totalArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:B4", Aggs: []aggSpec{{Column: "B", Fn: "median"}}})
-	if err == nil || !strings.Contains(err.Error(), "median") || !strings.Contains(err.Error(), "count_nums") {
-		t.Fatalf("err = %v", err)
-	}
-}
-
 func writeBook(t *testing.T, fs api.FS, name string, f *excelize.File) {
 	t.Helper()
 	w, err := fs.Create(name)

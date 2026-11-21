@@ -24,7 +24,7 @@ import (
 const moduleName = "page"
 
 func moduleDesc(tier common.ModelTier) string {
-	desc := `Your access to the live page the user has open: use it to help the user operate the application — navigate, fill inputs, press buttons, call the tools the page exposes, or focus an element to point the user at it. Start from what the application already offers: when its pages have the view or form the task needs, such as a filtered and sorted list or an edit form, do it there, so the user sees it happen. `
+	desc := `Your access to the live page the user has open: use it to help the user operate the application — navigate, fill inputs, press buttons, call the tools the page exposes, or focus an element. Start from what the application already offers: when its pages have the view or form the task needs, such as a filtered and sorted list or an edit form, do it there, so the user sees it happen. `
 	if tier == common.TierDeveloper {
 		desc += `Open an island or call an island's app functions only for what the pages do not offer. `
 	}
@@ -39,9 +39,9 @@ func moduleDesc(tier common.ModelTier) string {
 	}
 	desc += `set, most often comes from them, so check what they did and build on it instead of redoing or undoing it. `
 	if tier != common.TierAssistant {
-		desc += `In a script, a refused or failed page call throws, and its e.value holds what its error carries: diff, space, or the failed call's result. `
+		desc += `In a script, a write, click, focus or tool call that fails on the page throws with its result, diff and changes included, in e.value. `
 	}
-	desc += `You are part of this page, and to the user you see what they see: reading it, and its spaces, paths, syncs, rerenders and refused calls, are your plumbing, invisible to them. Don't announce looking at the page or what you find on it, such as "I'll look at the page first" or "I see there are tools": read it and act. Report outcomes in page terms: what was filled, pressed or changed.`
+	desc += `Spaces, paths, page tools, syncs, rerenders and refused calls are your plumbing, invisible to the user: report outcomes in page terms, such as what was filled, pressed or changed.`
 	if tier == common.TierDeveloper {
 		desc += "\n\n" + islandsDesc
 	}
@@ -75,7 +75,7 @@ const inputNotFoundMessage = "no such input in the space: sync its path to see t
 const islandGuideName = "island_guide"
 const islandGuideDesc = `Read the guide to writing an island's app. It is the same for every island: read it once, and again only if it is no longer in the conversation. Not accessible from scripts.`
 const islandSpecName = "island_spec"
-const islandSpecDesc = `Read an island's spec: a catalog of the views, controls, layouts and app functions its app can use, the tools its script has, and where its logs and files go. A long spec comes in pages, and each page's head says how to read the rest. It seldom changes: reuse what you read until island_begin refuses its revision. Not accessible from scripts.`
+const islandSpecDesc = `Read an island's spec: a catalog of the views, controls, layouts and app functions its app can use, the tools its script has, and where its logs and files go. A long spec comes in pages, and each page's head says how to read the rest. It seldom changes: reuse what you read until island_begin or island_spec_schema refuses its revision. Not accessible from scripts.`
 const islandNotFoundMessage = "this space is not an island: call tree to see which spaces are islands"
 const islandSpecPageMessage = "no such page of the spec"
 const islandSpecItemMessage = "one item of the spec is larger than a page can hold, so the spec cannot be read and no app can start in this island"
@@ -105,7 +105,7 @@ Open one when it serves the user better than chat or direct page calls do:
 
 Don't open one when a script alone does the job and you have the js module; for example, when bulk work on the page needs nothing from the user.
 
-An island's app functions are also tools of its app child space: call one directly for a single change instead of starting an app, and to read records the page shows a page at a time instead of paging through them; call them from a js script when you have that module and the task needs no UI.
+An island's app functions are also tools of its app child space: call one directly for a single change instead of starting an app, or to read records the page shows a page at a time instead of paging through them.
 
 Before your first app, read island_guide. Before starting an app in an island, read its spec with island_spec and the schemas of the items you use with island_spec_schema; use only what the spec lists.`
 

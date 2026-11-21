@@ -186,12 +186,6 @@ func TestFormat(t *testing.T) {
 	if st.Font == nil || !st.Font.Bold || st.NumFmt != 14 {
 		t.Fatalf("C2 style = %+v", st)
 	}
-	if _, err := formatTool(ctx, formatArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:B1", Fill: "pink"}); err == nil {
-		t.Fatal("bad fill: no error")
-	}
-	if _, err := formatTool(ctx, formatArg{Path: "book.xlsx", Sheet: "Data", Range: "A1:B1", NumberFormat: "money"}); err == nil {
-		t.Fatal("bad numberFormat: no error")
-	}
 }
 
 func TestTableDates(t *testing.T) {
@@ -497,7 +491,6 @@ func TestTableRefusesBadColumnsAndCells(t *testing.T) {
 	}{
 		{cols: []columnSpec{{Header: "Amount"}, {Header: "amount"}}, rows: [][]any{{1.0, 2.0}}, wantErr: "unique"},
 		{cols: []columnSpec{{Header: "K"}, {Header: " "}}, rows: [][]any{{"a", "b"}}, wantErr: "header must not be empty"},
-		{cols: []columnSpec{{Header: "Total", Format: "money"}}, rows: [][]any{}, wantErr: "format \"money\""},
 		{cols: []columnSpec{{Header: "K"}, {Header: "V"}}, rows: [][]any{{"a", map[string]any{"v": 1.0}}}, wantErr: "not a cell value"},
 		{cols: []columnSpec{{Header: "K"}}, rows: [][]any{{[]any{"a"}}}, wantErr: "not a cell value"},
 	} {

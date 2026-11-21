@@ -664,13 +664,13 @@ func (e orderEditor) summary(ls []lineForm) gox.Elem {
 //line orderform.gox:368
 		__e = __c.Any(neui.Data{Text: "order total for the items picked so far, USD", Object: round(total)}); if __e != nil { return }
 //line orderform.gox:369
-		__e = (neui.Space{Name: "summary", Desc: "Items picked so far, each with its quantity and amount"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+		__e = (neui.Space{Name: "summary", Desc: "Items picked so far"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
 			__e = __c.Init("div"); if __e != nil { return }
 			{
 				__e = __c.Submit(); if __e != nil { return }
 //line orderform.gox:370
-				__e = __c.Any(neui.Data{Text: "items picked so far, amounts in USD", Object: rows}); if __e != nil { return }
+				__e = __c.Any(neui.Data{Text: "each item with its quantity and amount in USD", Object: rows}); if __e != nil { return }
 //line orderform.gox:371
 				if len(rows) == 0 {
 					__e = __c.Init("p"); if __e != nil { return }

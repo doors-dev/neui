@@ -111,7 +111,7 @@ func TestToolkitFollowsTheTier(t *testing.T) {
 		desc string
 	}{
 		{"developer", neui.TierDeveloper, []string{"dashboard.report*", "workbench*"}, ""},
-		{"agent", neui.TierAgent, []string{"api", "api.customers", "api.orders", "api.products"}, "The shop's data and operations as tools, for scripts and direct calls"},
+		{"agent", neui.TierAgent, []string{"api", "api.customers", "api.orders", "api.products"}, "The shop's data and operations as tools"},
 		{"assistant", neui.TierAssistant, []string{"api", "api.customers", "api.orders", "api.products"}, "The shop's data and operations as tools"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

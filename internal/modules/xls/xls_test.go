@@ -535,3 +535,36 @@ func TestTierModule(t *testing.T) {
 		t.Fatalf("TierDeveloper write refused with %v, want the split hint alone", err)
 	}
 }
+
+func TestVocabularyIsTheSchemas(t *testing.T) {
+	m := Module(Config{})(context.Background())
+	c := testkit.NewController(t, testkit.Setup{})
+	buildBook(t, c.FS(), "book.xlsx")
+	call := func(name string, arg string) error {
+		t.Helper()
+		tool, ok := m.Get(name)
+		if !ok {
+			t.Fatalf("no tool %s", name)
+		}
+		_, err := tool.Agent(c.Ctx(), json.RawMessage(arg))
+		return err
+	}
+	for _, c := range []struct{ tool, arg string }{
+		{"chart", `{"path":"book.xlsx","sheet":"Data","type":"donut","dataRange":"B1:B4","anchor":"F2"}`},
+		{"highlight", `{"path":"book.xlsx","sheet":"Data","range":"B2:B4","rule":{"type":"between","value":"1"}}`},
+		{"total", `{"path":"book.xlsx","sheet":"Data","range":"A1:B4","aggs":[{"column":"B","fn":"SUM"}]}`},
+		{"format", `{"path":"book.xlsx","sheet":"Data","range":"A1:B1","fill":"pink"}`},
+		{"table", `{"path":"new.xlsx","sheet":"S","columns":[{"header":"K","format":"money"}],"rows":[["a"]]}`},
+		{"table", `{"path":"new.xlsx","sheet":"S","columns":[{"header":"K"}],"rows":[["a"]],"preset":"fancy"}`},
+	} {
+		if err := call(c.tool, c.arg); err == nil {
+			t.Fatalf("%s took %s", c.tool, c.arg)
+		}
+	}
+	if err := call("table", `{"path":"new.xlsx","sheet":"S","columns":[{"header":"K"},{"header":"V","format":"number"}],"rows":[["a",1]]}`); err != nil {
+		t.Fatalf("a table with format and preset left out: %v", err)
+	}
+	if err := call("format", `{"path":"book.xlsx","sheet":"Data","range":"A1:B1","bold":true}`); err != nil {
+		t.Fatalf("a format with fill, numberFormat and align left out: %v", err)
+	}
+}

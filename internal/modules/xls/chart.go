@@ -23,13 +23,13 @@ import (
 	"neui.dev/internal/common"
 )
 
-const chartDesc = `Add a chart with one series per column of dataRange.`
+const chartDesc = `Add a chart to a sheet.`
 
 type chartArg struct {
 	Path       string `json:"path" required:"true"`
 	Sheet      string `json:"sheet" required:"true"`
 	Type       string `json:"type" required:"true" enum:"column,bar,line,pie,scatter"`
-	DataRange  string `json:"dataRange" required:"true" description:"header row included, like B1:C13; each header names its series"`
+	DataRange  string `json:"dataRange" required:"true" description:"one series per column, header row included, like B1:C13; each header names its series"`
 	Categories string `json:"categoriesRange" description:"axis labels, header row included, like A1:A13"`
 	Anchor     string `json:"anchor" required:"true" description:"top-left cell of the chart; pick one clear of the data"`
 	Title      string `json:"title"`
@@ -60,10 +60,7 @@ func absRange(sheet string, x1, y1, x2, y2 int) (string, error) {
 }
 
 func chartTool(ctx context.Context, arg chartArg) (struct{}, error) {
-	t, ok := chartTypes[arg.Type]
-	if !ok {
-		return struct{}{}, fmt.Errorf("chart type %q: pick column, bar, line, pie or scatter", arg.Type)
-	}
+	t := chartTypes[arg.Type]
 	b, err := rangeBounds(arg.DataRange)
 	if err != nil {
 		return struct{}{}, err

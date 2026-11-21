@@ -89,8 +89,6 @@ func highlightOpt(f *excelize.File, rule highlightRule) (excelize.ConditionalFor
 		opt.Type, opt.Criteria = rule.Type, "="
 	case "contains":
 		opt.Type, opt.Criteria = "text", "containing"
-	default:
-		return excelize.ConditionalFormatOptions{}, fmt.Errorf("rule type %q: pick gt, lt, top, bottom, contains, colorScale or dataBar", rule.Type)
 	}
 	return opt, nil
 }

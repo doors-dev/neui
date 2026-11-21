@@ -40,7 +40,7 @@ func moduleDesc(tier common.ModelTier) string {
 	return desc
 }
 
-const runDesc = `Run a JavaScript file from the workspace or inline code, exactly one of file and code; one script runs at a time. The script body runs as a function: end it with a return; the returned value must serialize to JSON. A run outlasting a few seconds returns early with deferred: true. Not accessible from scripts.`
+const runDesc = `Run JavaScript from exactly one of file and code; one script runs at a time. The script body runs as a function: end it with a return; the returned value must serialize to JSON. A run outlasting a few seconds returns early with deferred: true. Not accessible from scripts.`
 
 var notAddedLogged sync.Once
 
@@ -78,7 +78,7 @@ type module struct {
 }
 
 type RunArg struct {
-	File       string          `json:"file,omitempty"`
+	File       string          `json:"file,omitempty" description:"workspace path of the script"`
 	Code       string          `json:"code,omitempty"`
 	Comment    string          `json:"comment" description:"a few words on what this run does; the user sees them while a deferred run goes on"`
 	Timeout    uint            `json:"timeoutMs,omitempty" description:"up to the module's cap, which is also the default; the script's tool calls count toward it"`

@@ -34,7 +34,7 @@ type ordersToolInput struct {
 	Status string `json:"status,omitempty" description:"paid, unpaid, refunded or cancelled; empty for all"`
 	From string `json:"from,omitempty" description:"first order date, YYYY-MM-DD; empty for no limit"`
 	To string `json:"to,omitempty" description:"last order date, YYYY-MM-DD; empty for no limit"`
-	Search string `json:"search,omitempty" description:"order id, customer name or email, or part of the address"`
+	Search string `json:"search,omitempty" description:"order id, customer name or email, or part of the address; empty for all"`
 	Sort string `json:"sort,omitempty" description:"date, total, customer or id; prefix - for descending; empty for newest first"`
 	Page int `json:"page,omitempty" description:"page of the table, 1-based; 0 for the first"`
 }
@@ -72,7 +72,7 @@ func ordersPage(path doors.Source[OrdersPath]) gox.Elem {
 //line orders.gox:66
 		__e = (neui.Space{
 		Name: "orders",
-		Desc: "Orders list: filters, a sortable table of orders and its pages. The filters live in the address, so the user can share or reload them",
+		Desc: "Orders list: filters, a sortable table of orders and its pages",
 	}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
 			__e = __c.Init("div"); if __e != nil { return }
@@ -198,7 +198,7 @@ func orderFilters(path doors.Source[OrdersPath]) gox.Elem {
 //line orders.gox:136
 				__e = __c.Any(neui.Tool[ordersToolInput, ordersToolOutput]{
 			Name: "filter_orders",
-			Desc: "Set the filters, sort and page of the orders table the user sees, replacing all of them; an empty field clears it",
+			Desc: "Set the filters, sort and page of the orders table the user sees, replacing all of them",
 			Handler: func(ctx context.Context, in ordersToolInput) (ordersToolOutput, error) {
 				next := OrdersPath{Status: in.Status, From: in.From, To: in.To, Search: in.Search, Sort: in.Sort, Page: in.Page}
 				if next.Status != "" && !validStatus(next.Status) {
@@ -267,7 +267,7 @@ func orderFilters(path doors.Source[OrdersPath]) gox.Elem {
 					__e = __c.InitContainer(); if __e != nil { return }
 					{
 //line orders.gox:175
-						__e = (neui.Use{Desc: "search orders by id, customer name, email or address; applies on Enter or when the field loses focus"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+						__e = (neui.Use{Desc: "search orders by id, customer name, email or address"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 							ctx := __c.Context(); _ = ctx
 							__e = __c.InitVoid("input"); if __e != nil { return }
 							{

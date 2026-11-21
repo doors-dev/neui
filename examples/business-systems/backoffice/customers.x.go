@@ -62,7 +62,7 @@ func customersPage(path doors.Source[CustomersPath]) gox.Elem {
 //line customers.gox:56
 		__e = (neui.Space{
 		Name: "customers",
-		Desc: "Customers list: a search box, a sortable table of customers and its pages; the search lives in the address",
+		Desc: "Customers list: a search box, a sortable table of customers and its pages",
 	}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
 			__e = __c.Init("div"); if __e != nil { return }
@@ -120,7 +120,7 @@ func customersPage(path doors.Source[CustomersPath]) gox.Elem {
 //line customers.gox:74
 							__e = __c.Any(neui.Tool[customersToolInput, customersToolOutput]{
 					Name: "search_customers",
-					Desc: "Set the search, sort and page of the customers table the user sees; an empty field clears it",
+					Desc: "Set the search, sort and page of the customers table the user sees",
 					Handler: func(ctx context.Context, in customersToolInput) (customersToolOutput, error) {
 						next := CustomersPath{Search: in.Search, Sort: in.Sort, Page: in.Page}
 						if err := checkSort(next.Sort, "name", "orders", "spent"); err != nil {
@@ -150,7 +150,7 @@ func customersPage(path doors.Source[CustomersPath]) gox.Elem {
 				})); if __e != nil { return }
 //line customers.gox:96
 							__e = __c.Any(search.Bind(func(q string) gox.Elem {
-					return searchBar("customers-search", "Search by name, email, company or phone", q, "search customers by name, email, company or phone; applies on Enter or when the field loses focus", func(ctx context.Context, v string) {
+					return searchBar("customers-search", "Search by name, email, company or phone", q, "search customers by name, email, company or phone", func(ctx context.Context, v string) {
 						path.Mutate(ctx, func(p CustomersPath) CustomersPath {
 							p.Search, p.Page = v, 0
 							return p

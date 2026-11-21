@@ -366,8 +366,8 @@ elem (e orderEditor) summary(ls []lineForm) {
 	}
 	~~
 	~neui.Data{Text: "order total for the items picked so far, USD", Object: round(total)}
-	~>neui.Space{Name: "summary", Desc: "Items picked so far, each with its quantity and amount"} <div>
-		~neui.Data{Text: "items picked so far, amounts in USD", Object: rows}
+	~>neui.Space{Name: "summary", Desc: "Items picked so far"} <div>
+		~neui.Data{Text: "each item with its quantity and amount in USD", Object: rows}
 		~(if len(rows) == 0 {
 			<p class="text-sm text-stone-500">Pick products to see the total.</p>
 		} else {

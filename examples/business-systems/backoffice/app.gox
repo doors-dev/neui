@@ -141,9 +141,15 @@ elem routes() {
 }
 
 elem sidebar() {
+	~~
+	hint := "Open the chat in the corner and ask it to filter or fill a form."
+	if neui.Tier(ctx) == neui.TierDeveloper {
+		hint = "Open the chat in the corner and ask it to filter, fill a form or build you an app."
+	}
+	~~
 	~>neui.Space{
 		Name: "navigation",
-		Desc: "Main menu, on every page: links to the dashboard, orders, customers and products",
+		Desc: "Main menu",
 		Nav: true,
 	} <aside class="sticky top-0 z-30 border-b border-stone-200 bg-white/90 backdrop-blur side:fixed side:inset-y-0 side:left-0 side:w-64 side:border-r side:border-b-0 side:bg-white">
 		<div class="flex h-full flex-col side:px-4 side:py-6">
@@ -166,7 +172,7 @@ elem sidebar() {
 			</nav>
 			<div class="mt-auto hidden rounded-lg bg-stone-50 p-3 text-xs text-stone-500 ring-1 ring-stone-200 side:block">
 				<p class="font-medium text-stone-700">Assistant</p>
-				<p class="mt-1">Open the chat in the corner and ask it to filter, fill a form or build you an app.</p>
+				<p class="mt-1">~(hint)</p>
 			</div>
 		</div>
 	</aside>

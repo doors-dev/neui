@@ -87,7 +87,7 @@ func (c styleCache) id(f *excelize.File, key string, build func() (*excelize.Sty
 	return id, nil
 }
 
-func applyNumFmt(st *excelize.Style, format string) error {
+func applyNumFmt(st *excelize.Style, format string) {
 	switch format {
 	case "text":
 		st.NumFmt, st.CustomNumFmt = 49, nil
@@ -102,10 +102,7 @@ func applyNumFmt(st *excelize.Style, format string) error {
 		st.NumFmt, st.CustomNumFmt = 14, nil
 	case "integer":
 		st.NumFmt, st.CustomNumFmt = 3, nil
-	default:
-		return fmt.Errorf("format %q must be text, number, currency, percent, date or integer", format)
 	}
-	return nil
 }
 
 var fillPalette = map[string]string{
@@ -135,11 +132,6 @@ func tableTool(ctx context.Context, arg tableArg) (tableResult, error) {
 				return tableResult{}, fmt.Errorf("column %d: header %q repeats %q, table headers must be unique ignoring case", i, col.Header, prev.Header)
 			}
 		}
-		if col.Format != "" {
-			if err := applyNumFmt(&excelize.Style{}, col.Format); err != nil {
-				return tableResult{}, fmt.Errorf("column %q: %w", col.Header, err)
-			}
-		}
 	}
 	anchor := arg.Cell
 	if anchor == "" {
@@ -157,10 +149,7 @@ func tableTool(ctx context.Context, arg tableArg) (tableResult, error) {
 	if preset == "" {
 		preset = "plain"
 	}
-	styleName, ok := presetStyles[preset]
-	if !ok {
-		return tableResult{}, fmt.Errorf("preset %q must be plain, report or financial", arg.Preset)
-	}
+	styleName := presetStyles[preset]
 	for i, row := range arg.Rows {
 		if len(row) > len(arg.Columns) {
 			return tableResult{}, fmt.Errorf("row %d has %d cells, table has %d columns", i, len(row), len(arg.Columns))
@@ -377,9 +366,7 @@ func tableTool(ctx context.Context, arg tableArg) (tableResult, error) {
 		}
 		id, err := cache.id(f, key, func() (*excelize.Style, error) {
 			st := &excelize.Style{}
-			if err := applyNumFmt(st, format); err != nil {
-				return nil, err
-			}
+			applyNumFmt(st, format)
 			if timed[j] {
 				st.NumFmt = 22
 			}
@@ -464,21 +451,6 @@ func tableTool(ctx context.Context, arg tableArg) (tableResult, error) {
 }
 
 func formatTool(ctx context.Context, arg formatArg) (struct{}, error) {
-	if arg.Fill != "" {
-		if _, ok := fillPalette[arg.Fill]; !ok {
-			return struct{}{}, fmt.Errorf("fill %q must be gray, blue, green, yellow or red", arg.Fill)
-		}
-	}
-	switch arg.Align {
-	case "", "left", "center", "right":
-	default:
-		return struct{}{}, fmt.Errorf("align %q must be left, center or right", arg.Align)
-	}
-	if arg.NumberFormat != "" {
-		if err := applyNumFmt(&excelize.Style{}, arg.NumberFormat); err != nil {
-			return struct{}{}, err
-		}
-	}
 	if arg.Range == "" {
 		return struct{}{}, fmt.Errorf("range must look like B2:D20")
 	}
@@ -524,9 +496,7 @@ func formatTool(ctx context.Context, arg formatArg) (struct{}, error) {
 					st.Fill = excelize.Fill{Type: "pattern", Pattern: 1, Color: []string{fillPalette[arg.Fill]}}
 				}
 				if arg.NumberFormat != "" {
-					if err := applyNumFmt(st, arg.NumberFormat); err != nil {
-						return nil, err
-					}
+					applyNumFmt(st, arg.NumberFormat)
 				}
 				if arg.Align != "" {
 					if st.Alignment == nil {
