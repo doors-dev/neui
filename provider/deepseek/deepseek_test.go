@@ -21,6 +21,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -212,16 +214,16 @@ func wantTrace(t *testing.T, events []api.Event, want ...string) {
 // a listed model carries its window, a caller's own literal reads back as
 // written, and an unstated window reads as unknown rather than as no window.
 func TestModel(t *testing.T) {
-	if got := mustNew(t, Conf{Model: V4Pro}, WithAPIKey("k")).Model(); got != V4Pro || got.Context == 0 {
+	if got := mustNew(t, Conf{Model: V4Pro}, WithAPIKey("k")).Model(); !reflect.DeepEqual(got, V4Pro) || got.Context == 0 {
 		t.Fatalf("Model %+v, want %+v", got, V4Pro)
 	}
 	own := api.Model{Name: "deepseek-v4-pro"}
-	if got := mustNew(t, Conf{Model: own}, WithAPIKey("k")).Model(); got != own {
+	if got := mustNew(t, Conf{Model: own}, WithAPIKey("k")).Model(); !reflect.DeepEqual(got, own) {
 		t.Fatalf("Model %+v, want the caller's literal with an unknown window", got)
 	}
 	unknown := api.Model{Name: "my-flash-proxy"}
-	if got := mustNew(t, Conf{Model: unknown}, WithAPIKey("k")).Model(); got.Inputs != 0 {
-		t.Fatalf("an unknown id reads back Inputs %b, want zero, which sends every kind", got.Inputs)
+	if got := mustNew(t, Conf{Model: unknown}, WithAPIKey("k")).Model(); got.Inputs != nil {
+		t.Fatalf("an unknown id reads back Inputs %v, want nil, which sends every kind", got.Inputs)
 	}
 }
 
@@ -357,8 +359,8 @@ func TestModelDeclarations(t *testing.T) {
 	if V4Pro.ImagePixels != 0 || V4Pro.ImageSide != 0 || V4Pro.ImageBytes != 0 || V4Pro.ImagesPerRequest != 0 {
 		t.Errorf("V4Pro declares image capacity it has no path for: %+v", V4Pro)
 	}
-	if Flash.Inputs != api.ModalityText|api.ModalityImage || V4Pro.Inputs != api.ModalityText {
-		t.Errorf("Flash reads %b and V4Pro reads %b, want text and images, and text", Flash.Inputs, V4Pro.Inputs)
+	if !slices.Equal(Flash.Inputs, api.Modalities{api.ModalityText, api.ModalityImage}) || !slices.Equal(V4Pro.Inputs, api.Modalities{api.ModalityText}) {
+		t.Errorf("Flash reads %v and V4Pro reads %v, want text and images, and text", Flash.Inputs, V4Pro.Inputs)
 	}
 }
 

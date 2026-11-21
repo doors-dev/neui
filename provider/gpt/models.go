@@ -49,8 +49,9 @@ const (
 	imageBytes             = (20_971_520 - len("data:image/jpeg;base64,")) / 4 * 3
 	requestBytes           = 512_000_000
 	maxOutputTokensCeiling = 128_000
-	inputs                 = api.ModalityText | api.ModalityImage | api.ModalityDocument
 )
+
+var inputs = api.Modalities{api.ModalityText, api.ModalityImage, api.ModalityDocument}
 
 type rules struct {
 	maxTokens     int

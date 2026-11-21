@@ -51,8 +51,9 @@ const (
 	maxOutput        = 65_536
 	imagesPerRequest = 3_600
 	requestBytes     = 100_000_000
-	inputs           = api.ModalityText | api.ModalityImage | api.ModalityDocument
 )
+
+var inputs = api.Modalities{api.ModalityText, api.ModalityImage, api.ModalityDocument}
 
 type rules struct {
 	maxTokens int

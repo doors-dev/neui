@@ -14,40 +14,68 @@
 
 package api
 
-import "testing"
+import (
+	"encoding/json"
+	"slices"
+	"testing"
+)
 
-func TestModalityHas(t *testing.T) {
-	all := ModalityText | ModalityImage | ModalityDocument
+func TestModalitiesHas(t *testing.T) {
+	all := Modalities{ModalityText, ModalityImage, ModalityDocument}
 	for _, tc := range []struct {
-		set, kind Modality
-		want      bool
+		set  Modalities
+		kind Modality
+		want bool
 	}{
-		{0, ModalityText, true},
-		{0, ModalityImage, true},
-		{0, ModalityImage | ModalityDocument, true},
-		{ModalityText, ModalityText, true},
-		{ModalityText, ModalityImage, false},
-		{ModalityText, ModalityDocument, false},
-		{ModalityText | ModalityImage, ModalityImage, true},
-		{ModalityText | ModalityImage, ModalityDocument, false},
-		{ModalityText | ModalityImage, ModalityImage | ModalityDocument, false},
-		{all, ModalityImage | ModalityDocument, true},
-		{ModalityImage, ModalityText, false},
+		{nil, ModalityText, true},
+		{nil, ModalityImage, true},
+		{nil, ModalityDocument, true},
+		{Modalities{}, ModalityImage, true},
+		{Modalities{}, ModalityDocument, true},
+		{Modalities{ModalityText}, ModalityText, true},
+		{Modalities{ModalityText}, ModalityImage, false},
+		{Modalities{ModalityText}, ModalityDocument, false},
+		{Modalities{ModalityText, ModalityImage}, ModalityImage, true},
+		{Modalities{ModalityText, ModalityImage}, ModalityDocument, false},
+		{all, ModalityImage, true},
+		{all, ModalityDocument, true},
+		{Modalities{ModalityImage}, ModalityText, true},
+		{Modalities{ModalityImage}, ModalityDocument, false},
+		{Modalities{ModalityDocument}, ModalityText, true},
+		{Modalities{ModalityDocument}, ModalityImage, false},
 	} {
 		if got := tc.set.Has(tc.kind); got != tc.want {
-			t.Errorf("Modality(%b).Has(%b) = %v, want %v", tc.set, tc.kind, got, tc.want)
+			t.Errorf("%v.Has(%q) = %v, want %v", tc.set, tc.kind, got, tc.want)
 		}
 	}
 }
 
-func TestModelStaysComparable(t *testing.T) {
-	a := Model{Name: "m", Inputs: ModalityText}
-	b := a
-	if a != b || !map[Model]bool{a: true}[b] {
-		t.Fatal("two equal models compare unequal")
+func TestModalitiesJSON(t *testing.T) {
+	data, err := json.Marshal(Model{Name: "m", Inputs: Modalities{ModalityText, ModalityImage}})
+	if err != nil {
+		t.Fatal(err)
 	}
-	b.Inputs |= ModalityImage
-	if a == b {
-		t.Fatal("models that differ in Inputs compare equal")
+	var m Model
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(m.Inputs, Modalities{ModalityText, ModalityImage}) {
+		t.Fatalf("%s reads back Inputs %v", data, m.Inputs)
+	}
+	data, err = json.Marshal(Modalities{ModalityText, ModalityImage, ModalityDocument})
+	if err != nil || string(data) != `["text","image","document"]` {
+		t.Fatalf("Modalities marshals as %s, %v", data, err)
+	}
+	for _, in := range []string{`{"inputs":null}`, `{"inputs":[]}`, `{}`} {
+		var m Model
+		if err := json.Unmarshal([]byte(in), &m); err != nil || len(m.Inputs) != 0 || !m.Inputs.Has(ModalityImage) {
+			t.Errorf("%s reads back Inputs %v, %v, want empty, which holds every kind", in, m.Inputs, err)
+		}
+	}
+	for _, in := range []string{`{"inputs":["text","audio"]}`, `{"inputs":["Image"]}`, `{"inputs":[""]}`, `{"inputs":[1]}`, `{"inputs":"text"}`} {
+		var m Model
+		if err := json.Unmarshal([]byte(in), &m); err == nil {
+			t.Errorf("%s reads back Inputs %v, want an error", in, m.Inputs)
+		}
 	}
 }

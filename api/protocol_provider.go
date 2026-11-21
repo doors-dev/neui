@@ -14,7 +14,12 @@
 
 package api
 
-import "context"
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"slices"
+)
 
 // Provider is one model API. It converts a Request into whatever that API wants
 // and the reply back into Events.
@@ -93,30 +98,49 @@ type Model struct {
 	// CodeTooLarge. Zero means unknown, and the body is sent without a size
 	// check.
 	RequestBytes int `json:"requestBytes"`
-	// Inputs is the set of kinds the model reads. On replay, an image it
-	// leaves out becomes a note. A document it leaves out goes as plain text
-	// if its type is a text type and its bytes are UTF-8, and becomes a note
-	// otherwise. Zero means unknown: every image and document goes to the
-	// adapter, which sends what its API carries.
-	Inputs Modality `json:"inputs"`
+	// Inputs lists the kinds the model reads; text is always read. On replay,
+	// an image it leaves out becomes a note. A document it leaves out goes as
+	// plain text if its type is a text type and its bytes are UTF-8, and
+	// becomes a note otherwise. Nil or empty means unknown: every image and
+	// document goes to the adapter, which sends what its API carries.
+	Inputs Modalities `json:"inputs"`
 }
 
-// Modality is a set of input kinds, combined with |.
-type Modality uint8
+// Modalities lists input kinds, such as Modalities{ModalityText,
+// ModalityImage}. In JSON it is an array of names: ["text","image"].
+type Modalities []Modality
+
+// Has reports whether m holds k. Every value holds ModalityText, and an empty
+// one holds every kind.
+func (m Modalities) Has(k Modality) bool {
+	return len(m) == 0 || k == ModalityText || slices.Contains(m, k)
+}
+
+// Modality is one input kind.
+type Modality string
 
 // The input kinds.
 const (
-	// ModalityText is text, which every model reads. On its own it declares a
-	// model that reads text only.
-	ModalityText Modality = 1 << iota
+	// ModalityText is text, which every model reads.
+	// Modalities{ModalityText} declares a model that reads text only.
+	ModalityText Modality = "text"
 	// ModalityImage is a ContentImage.
-	ModalityImage
+	ModalityImage Modality = "image"
 	// ModalityDocument is a ContentDocument in the API's own document form,
 	// such as a PDF.
-	ModalityDocument
+	ModalityDocument Modality = "document"
 )
 
-// Has reports whether m holds every kind in k. The zero set holds every kind.
-func (m Modality) Has(k Modality) bool {
-	return m == 0 || m&k == k
+// UnmarshalJSON decodes one of the names above and refuses any other.
+func (k *Modality) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+	switch Modality(s) {
+	case ModalityText, ModalityImage, ModalityDocument:
+		*k = Modality(s)
+		return nil
+	}
+	return fmt.Errorf("input kind %q is not text, image or document", s)
 }

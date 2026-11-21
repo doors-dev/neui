@@ -338,13 +338,13 @@ func checkInputs(t *testing.T, a Adapter, _ *schemas, srv *server, _ limitsFile)
 	shotData, pdfData := base64.StdEncoding.EncodeToString(shot.Data), base64.StdEncoding.EncodeToString(pdf.Data)
 	for _, tc := range []struct {
 		name   string
-		inputs api.Modality
+		inputs api.Modalities
 		want   []string
 		lost   []string
 	}{
-		{"text", api.ModalityText, []string{noImage, noPDF, "a,b\n1,2\n"}, []string{shotData, pdfData}},
-		{"text-image", api.ModalityText | api.ModalityImage, []string{shotData, noPDF, "a,b\n1,2\n"}, []string{noImage, pdfData}},
-		{"unknown", 0, []string{shotData}, []string{noImage, noPDF}},
+		{"text", api.Modalities{api.ModalityText}, []string{noImage, noPDF, "a,b\n1,2\n"}, []string{shotData, pdfData}},
+		{"text-image", api.Modalities{api.ModalityText, api.ModalityImage}, []string{shotData, noPDF, "a,b\n1,2\n"}, []string{noImage, pdfData}},
+		{"unknown", nil, []string{shotData}, []string{noImage, noPDF}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := a.Models[0]
@@ -398,12 +398,12 @@ func checkInputs(t *testing.T, a Adapter, _ *schemas, srv *server, _ limitsFile)
 			}
 			for _, s := range tc.want {
 				if !carries(s) {
-					t.Errorf("Inputs %b: the body does not carry %q\nbody: %s", tc.inputs, s, clip(body))
+					t.Errorf("Inputs %v: the body does not carry %q\nbody: %s", tc.inputs, s, clip(body))
 				}
 			}
 			for _, s := range tc.lost {
 				if carries(s) {
-					t.Errorf("Inputs %b: the body carries %q\nbody: %s", tc.inputs, s, clip(body))
+					t.Errorf("Inputs %v: the body carries %q\nbody: %s", tc.inputs, s, clip(body))
 				}
 			}
 		})
@@ -630,15 +630,15 @@ func checkStreams(t *testing.T, a Adapter, sch *schemas, srv *server, _ limitsFi
 }
 
 type modelLimits struct {
-	Context          int      `json:"context"`
-	ImagePixels      int      `json:"imagePixels"`
-	ImageBytes       int      `json:"imageBytes"`
-	ImageEncoding    string   `json:"imageEncoding"`
-	ImagesPerRequest int      `json:"imagesPerRequest"`
-	RequestBytes     int      `json:"requestBytes"`
-	MaxOutput        int      `json:"maxOutput"`
-	Inputs           []string `json:"inputs"`
-	Note             string   `json:"note"`
+	Context          int            `json:"context"`
+	ImagePixels      int            `json:"imagePixels"`
+	ImageBytes       int            `json:"imageBytes"`
+	ImageEncoding    string         `json:"imageEncoding"`
+	ImagesPerRequest int            `json:"imagesPerRequest"`
+	RequestBytes     int            `json:"requestBytes"`
+	MaxOutput        int            `json:"maxOutput"`
+	Inputs           api.Modalities `json:"inputs"`
+	Note             string         `json:"note"`
 }
 
 type limitsFile struct {
@@ -690,21 +690,8 @@ func checkLimits(t *testing.T, a Adapter, _ *schemas, _ *server, l limitsFile) {
 		if m.RequestBytes <= 0 || m.RequestBytes > doc.RequestBytes {
 			t.Errorf("%s RequestBytes = %d, the docs (as of %s, %s) say at most %d", m.Name, m.RequestBytes, l.AsOf, l.Sources["requestBytes"], doc.RequestBytes)
 		}
-		inputs := api.Modality(0)
-		for _, kind := range doc.Inputs {
-			switch kind {
-			case "text":
-				inputs |= api.ModalityText
-			case "image":
-				inputs |= api.ModalityImage
-			case "document":
-				inputs |= api.ModalityDocument
-			default:
-				t.Errorf("limits/%s.json: %s reads %q, which is not text, image or document", a.Name, m.Name, kind)
-			}
-		}
-		if m.Inputs != inputs {
-			t.Errorf("%s Inputs = %b, the docs (as of %s, %s) say %v", m.Name, m.Inputs, l.AsOf, l.Sources["inputs"], doc.Inputs)
+		if !slices.Equal(slices.Sorted(slices.Values(m.Inputs)), slices.Sorted(slices.Values(doc.Inputs))) {
+			t.Errorf("%s Inputs = %v, the docs (as of %s, %s) say %v", m.Name, m.Inputs, l.AsOf, l.Sources["inputs"], doc.Inputs)
 		}
 		enc := base64.StdEncoding.EncodedLen
 		switch doc.ImageEncoding {

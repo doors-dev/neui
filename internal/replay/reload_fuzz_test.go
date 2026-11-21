@@ -155,13 +155,13 @@ func (f *fuzzRun) sameRequest(got, want []api.Message, op string) {
 	if limit := f.model.ImagesPerRequest; limit > 0 && requestImages(want) > limit {
 		f.fail("%s sends %d images, over the cap %d", op, requestImages(want), limit)
 	}
-	if kinds := sentKinds(want); !f.model.Inputs.Has(kinds) {
-		f.fail("%s sends kinds %b to a model whose Inputs are %b", op, kinds, f.model.Inputs)
+	if kinds := sentKinds(want); slices.ContainsFunc(kinds, func(k api.Modality) bool { return !f.model.Inputs.Has(k) }) {
+		f.fail("%s sends kinds %v to a model whose Inputs are %v", op, kinds, f.model.Inputs)
 	}
 }
 
-func sentKinds(messages []api.Message) api.Modality {
-	kinds := api.Modality(0)
+func sentKinds(messages []api.Message) api.Modalities {
+	var kinds api.Modalities
 	for _, m := range messages {
 		for _, block := range m.Content {
 			blocks := []api.Content{block}
@@ -174,14 +174,15 @@ func sentKinds(messages []api.Message) api.Modality {
 			for _, c := range blocks {
 				switch c.(type) {
 				case api.ContentImage:
-					kinds |= api.ModalityImage
+					kinds = append(kinds, api.ModalityImage)
 				case api.ContentDocument:
-					kinds |= api.ModalityDocument
+					kinds = append(kinds, api.ModalityDocument)
 				}
 			}
 		}
 	}
-	return kinds
+	slices.Sort(kinds)
+	return slices.Compact(kinds)
 }
 
 func (f *fuzzRun) blocks() api.UserContents {
@@ -357,7 +358,7 @@ func (f *fuzzRun) step() {
 }
 
 func TestSessionMatchesLoadUnderRandomRounds(t *testing.T) {
-	inputs := []api.Modality{0, api.ModalityText, api.ModalityText | api.ModalityImage, api.ModalityText | api.ModalityDocument}
+	inputs := []api.Modalities{nil, {api.ModalityText}, {api.ModalityText, api.ModalityImage}, {api.ModalityDocument}}
 	for seed := range uint64(300) {
 		t.Run(fmt.Sprint(seed), func(t *testing.T) {
 			rng := rand.New(rand.NewPCG(seed, 7))
@@ -389,8 +390,8 @@ func TestSessionMatchesLoadUnderRandomRounds(t *testing.T) {
 			if got := requestImages(messages); got > switched.model.ImagesPerRequest {
 				t.Fatalf("after a switch to a cap of %d the request carries %d images", switched.model.ImagesPerRequest, got)
 			}
-			if kinds := sentKinds(messages); !switched.model.Inputs.Has(kinds) {
-				t.Fatalf("after a switch to Inputs %b the request carries kinds %b", switched.model.Inputs, kinds)
+			if kinds := sentKinds(messages); slices.ContainsFunc(kinds, func(k api.Modality) bool { return !switched.model.Inputs.Has(k) }) {
+				t.Fatalf("after a switch to Inputs %v the request carries kinds %v", switched.model.Inputs, kinds)
 			}
 		})
 	}

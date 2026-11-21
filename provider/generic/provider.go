@@ -21,7 +21,7 @@
 // takes precedence over WithProvider if any:
 //
 //	p, err := generic.New(generic.Conf{
-//		Model:   api.Model{Name: "qwen3.8-27b", Context: 131_072, Inputs: api.ModalityText},
+//		Model:   api.Model{Name: "qwen3.8-27b", Context: 131_072, Inputs: api.Modalities{api.ModalityText}},
 //		BaseURL: "http://127.0.0.1:8080/v1",
 //	}, generic.WithEffort(generic.EffortLow))
 //
@@ -44,7 +44,7 @@
 //
 // Images go as data URLs in user messages and tool results. Set Model.Inputs
 // to what the server's model reads: a thread replays a note in place of each
-// image for a model without api.ModalityImage, and with Inputs zero every
+// image for a model without api.ModalityImage, and with Inputs empty every
 // image goes, which a server whose model reads none refuses. A document of a
 // text type goes as its text when its bytes are UTF-8, and any other document
 // gets a short note.

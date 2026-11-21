@@ -71,10 +71,10 @@ func TestLiveDeclaredInputs(t *testing.T) {
 				t.Fatalf("%v: %s", err, body)
 			}
 			if got, want := m.Inputs.Has(api.ModalityImage), info.Capabilities.ImageInput.Supported; got != want {
-				t.Errorf("Inputs %b reads images: %v, the Models API says image_input %v", m.Inputs, got, want)
+				t.Errorf("Inputs %v reads images: %v, the Models API says image_input %v", m.Inputs, got, want)
 			}
 			if got, want := m.Inputs.Has(api.ModalityDocument), info.Capabilities.PDFInput.Supported; got != want {
-				t.Errorf("Inputs %b reads documents: %v, the Models API says pdf_input %v", m.Inputs, got, want)
+				t.Errorf("Inputs %v reads documents: %v, the Models API says pdf_input %v", m.Inputs, got, want)
 			}
 		})
 	}

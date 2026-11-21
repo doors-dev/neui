@@ -1152,17 +1152,17 @@ func TestProviderOptions(t *testing.T) {
 	})
 
 	t.Run("effort values a declared model leaves out fail New", func(t *testing.T) {
-		refused := map[api.Model][]Effort{
-			GPT56Sol:   {EffortMinimal},
-			GPT56Luna:  {EffortMinimal},
-			GPT6Astra:  {EffortMinimal, EffortNone},
-			GPT6Sol:    {EffortMinimal},
-			GPT6Luna:   {EffortMinimal},
-			GPT61Sol:   {EffortMinimal, EffortNone},
-			GPT61Terra: {EffortMinimal},
+		refused := map[string][]Effort{
+			GPT56Sol.Name:   {EffortMinimal},
+			GPT56Luna.Name:  {EffortMinimal},
+			GPT6Astra.Name:  {EffortMinimal, EffortNone},
+			GPT6Sol.Name:    {EffortMinimal},
+			GPT6Luna.Name:   {EffortMinimal},
+			GPT61Sol.Name:   {EffortMinimal, EffortNone},
+			GPT61Terra.Name: {EffortMinimal},
 		}
-		for m, efforts := range refused {
-			for _, e := range efforts {
+		for _, m := range []api.Model{GPT56Sol, GPT56Luna, GPT6Astra, GPT6Sol, GPT6Luna, GPT61Sol, GPT61Terra} {
+			for _, e := range refused[m.Name] {
 				if _, err := New(Conf{Model: m}, WithAPIKey("k"), WithEffort(e)); err == nil {
 					t.Errorf("%s took effort %q", m.Name, e)
 				}
@@ -1181,11 +1181,11 @@ func TestProviderOptions(t *testing.T) {
 	})
 
 	t.Run("the model reads back as configured, window included", func(t *testing.T) {
-		if got := build(t, GPT56Sol, WithAPIKey("k")).Model(); got != GPT56Sol || got.Context != 1_050_000 {
+		if got := build(t, GPT56Sol, WithAPIKey("k")).Model(); !reflect.DeepEqual(got, GPT56Sol) || got.Context != 1_050_000 {
 			t.Fatalf("Model %+v", got)
 		}
 		own := api.Model{Name: testModel}
-		if got := build(t, own, WithAPIKey("k")).Model(); got != own {
+		if got := build(t, own, WithAPIKey("k")).Model(); !reflect.DeepEqual(got, own) {
 			t.Fatalf("Model %+v, want the literal with an unknown window", got)
 		}
 	})
@@ -1256,7 +1256,7 @@ func TestModelLimits(t *testing.T) {
 			t.Errorf("%s declares %d pixels in an image, want the %d of the high-detail patch budget", m.Name, m.ImagePixels, pixels)
 		}
 		side := 2048
-		if m == GPT6Astra {
+		if m.Name == GPT6Astra.Name {
 			side = 65_535
 		}
 		if m.ImageSide != side {

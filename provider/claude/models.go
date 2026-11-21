@@ -39,7 +39,7 @@ var (
 	Sonnet5  = api.Model{Name: "claude-sonnet-5", Context: 1_000_000, ImagePixels: 4784 * 28 * 28, ImageSide: 2576, ImageBytes: 7_500_000, ImagesPerRequest: 600, RequestBytes: 32_000_000, Inputs: inputs}
 )
 
-const inputs = api.ModalityText | api.ModalityImage | api.ModalityDocument
+var inputs = api.Modalities{api.ModalityText, api.ModalityImage, api.ModalityDocument}
 
 type rules struct {
 	maxTokens         int

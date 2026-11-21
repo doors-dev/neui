@@ -23,6 +23,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -1172,11 +1173,11 @@ func TestDocumentInAssistantMessage(t *testing.T) {
 
 func TestModel(t *testing.T) {
 	var p api.Provider = mustNew(t, Conf{Model: Haiku55})
-	if got := p.Model(); got != Haiku55 || got.Context != 1_000_000 {
+	if got := p.Model(); !reflect.DeepEqual(got, Haiku55) || got.Context != 1_000_000 {
 		t.Fatalf("Model = %+v, want %+v", got, Haiku55)
 	}
 	own := api.Model{Name: testModel}
-	if got := mustNew(t, Conf{Model: own}).Model(); got != own {
+	if got := mustNew(t, Conf{Model: own}).Model(); !reflect.DeepEqual(got, own) {
 		t.Fatalf("Model = %+v, want the literal with an unknown window", got)
 	}
 }

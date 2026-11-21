@@ -23,6 +23,7 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -136,7 +137,7 @@ func wantEvents(t *testing.T, events []api.Event, want ...string) {
 
 func TestModel(t *testing.T) {
 	m := api.Model{Name: testModel, Context: 1_024_000, ImagesPerRequest: 8}
-	if got := mustNew(t, Conf{Model: m, BaseURL: "http://127.0.0.1:8080/v1"}).Model(); got != m {
+	if got := mustNew(t, Conf{Model: m, BaseURL: "http://127.0.0.1:8080/v1"}).Model(); !reflect.DeepEqual(got, m) {
 		t.Fatalf("Model %+v, want %+v", got, m)
 	}
 	if got := mustNew(t, Conf{Model: m, BaseURL: "http://127.0.0.1:8080/v1"}).Name(); got != "generic" {

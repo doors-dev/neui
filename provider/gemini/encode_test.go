@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -158,10 +159,10 @@ func TestName(t *testing.T) {
 
 func TestModel(t *testing.T) {
 	m := api.Model{Name: "gemini-9-unknown", Context: 7}
-	if got := mustNew(t, Conf{Model: m}).Model(); got != m {
+	if got := mustNew(t, Conf{Model: m}).Model(); !reflect.DeepEqual(got, m) {
 		t.Fatalf("Model %+v, want %+v", got, m)
 	}
-	if got := mustNew(t, Conf{Model: Hydrogen4}).Model(); got != Hydrogen4 {
+	if got := mustNew(t, Conf{Model: Hydrogen4}).Model(); !reflect.DeepEqual(got, Hydrogen4) {
 		t.Fatalf("Model %+v, want %+v", got, Hydrogen4)
 	}
 }
@@ -180,8 +181,8 @@ func TestDeclaredModels(t *testing.T) {
 		{Flash38, "gemini-3.8-flash", 1_114_112, []Effort{EffortLow, EffortMedium, EffortHigh}},
 		{FlashLite35, "gemini-3.5-flash-lite", 1_114_112, []Effort{EffortMinimal, EffortLow, EffortMedium, EffortHigh}},
 	} {
-		want := api.Model{Name: c.name, Context: c.context, ImagesPerRequest: 3_600, RequestBytes: 100_000_000, Inputs: api.ModalityText | api.ModalityImage | api.ModalityDocument}
-		if c.m != want {
+		want := api.Model{Name: c.name, Context: c.context, ImagesPerRequest: 3_600, RequestBytes: 100_000_000, Inputs: api.Modalities{api.ModalityText, api.ModalityImage, api.ModalityDocument}}
+		if !reflect.DeepEqual(c.m, want) {
 			t.Errorf("%s = %+v, want %+v", c.name, c.m, want)
 		}
 		r, ok := declared[c.name]

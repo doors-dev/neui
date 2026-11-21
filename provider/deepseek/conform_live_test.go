@@ -42,7 +42,7 @@ func TestLiveV4ProReadsNoImages(t *testing.T) {
 		t.Skip("DEEPSEEK_API_KEY is not set")
 	}
 	if V4Pro.Inputs.Has(api.ModalityImage) {
-		t.Fatalf("V4Pro declares Inputs %b, which reads images", V4Pro.Inputs)
+		t.Fatalf("V4Pro declares Inputs %v, which reads images", V4Pro.Inputs)
 	}
 	var shot bytes.Buffer
 	if err := png.Encode(&shot, stdimage.NewGray(stdimage.Rect(0, 0, 8, 8))); err != nil {
