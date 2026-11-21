@@ -519,8 +519,8 @@ func TestTextDocumentIsTextForAModelWithoutDocuments(t *testing.T) {
 	latin := api.ContentDocument{Data: []byte(strings.Repeat("\xff", 500)), Mime: "text/plain", Name: "l.txt"}
 	pdf := api.ContentDocument{Data: []byte("%PDF-1.4\n" + strings.Repeat(" ", 500)), Mime: string(api.DocumentPDF), Name: "a.pdf"}
 	image := api.ContentImage{Data: make([]byte, 30000), Mime: "image/png"}
-	noDocument := func(d api.ContentDocument) api.ContentText {
-		return api.ContentText{Text: fmt.Sprintf(`<nodocument name=%q mime=%q bytes=%d reason="this model reads no documents of type %s"/>`, d.Name, d.Mime, len(d.Data), d.Mime)}
+	noDocument := func(d api.ContentDocument, reason string) api.ContentText {
+		return api.ContentText{Text: fmt.Sprintf(`<nodocument name=%q mime=%q bytes=%d reason=%q/>`, d.Name, d.Mime, len(d.Data), reason)}
 	}
 	for _, c := range []struct {
 		name   string
@@ -533,8 +533,8 @@ func TestTextDocumentIsTextForAModelWithoutDocuments(t *testing.T) {
 		{"over the budget", textOnly, api.UserContents{ok, doc(399, "text/plain")}, api.UserContents{api.ContentText{Text: replay.OmittedNote(401, common.TierDeveloper)}}, api.UserContents{api.ContentText{Text: replay.OmittedNote(401, common.TierDeveloper)}}},
 		{"mime as written", textOnly, api.UserContents{ok, doc(399, " Text/Markdown")}, api.UserContents{api.ContentText{Text: replay.OmittedNote(401, common.TierDeveloper)}}, api.UserContents{api.ContentText{Text: replay.OmittedNote(401, common.TierDeveloper)}}},
 		{"reading model", reading, api.UserContents{ok, doc(399, "text/plain")}, api.UserContents{ok, doc(399, "text/plain")}, api.UserContents{ok, doc(399, "text/plain")}},
-		{"not UTF-8", textOnly, api.UserContents{ok, latin}, api.UserContents{ok, latin}, api.UserContents{ok, noDocument(latin)}},
-		{"not a text type", textOnly, api.UserContents{ok, pdf}, api.UserContents{ok, pdf}, api.UserContents{ok, noDocument(pdf)}},
+		{"not UTF-8", textOnly, api.UserContents{ok, latin}, api.UserContents{ok, latin}, api.UserContents{ok, noDocument(latin, "its bytes are not UTF-8")}},
+		{"not a text type", textOnly, api.UserContents{ok, pdf}, api.UserContents{ok, pdf}, api.UserContents{ok, noDocument(pdf, "this model reads no documents of type application/pdf")}},
 		{"media noted around it", textOnly, api.UserContents{image, doc(100, "text/plain")}, api.UserContents{api.ContentText{Text: replay.OmittedMediaNote(30000)}, doc(100, "text/plain")}, api.UserContents{api.ContentText{Text: replay.OmittedMediaNote(30000)}, api.ContentText{Text: strings.Repeat("x", 100)}}},
 	} {
 		t.Run(c.name, func(t *testing.T) {

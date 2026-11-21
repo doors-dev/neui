@@ -267,16 +267,16 @@ func (r Replay) RoundInit(input api.Input) (api.Round, []api.Message, error) {
 	if !r.IsLoaded() {
 		return api.Round{}, nil, errors.New("state missmatch")
 	}
+	if r.messages.first == api.NoRoundID && !r.messages.compaction.IsValid() && input.Len() != 0 && !slices.Contains(input.Notes, nameInstruction) {
+		input.Notes = append(input.Notes, nameInstruction)
+	}
 	messages, err := r.messages.replay(input)
 	if err != nil {
 		return api.Round{}, nil, err
 	}
 	last := &messages[len(messages)-1]
-	if r.messages.first == api.NoRoundID && !r.messages.compaction.IsValid() && input.Len() != 0 {
-		last.Content = append(last.Content, api.ContentText{Text: nameInstruction})
-	}
-	if input.Note != "" {
-		last.Content = append(last.Content, api.ContentText{Text: input.Note})
+	for _, note := range input.Notes {
+		last.Content = append(last.Content, api.ContentText{Text: note})
 	}
 	id, seq, err := r.storage.RoundInput(r.ctx, r.id, r.seq(), input)
 	if err != nil {
@@ -503,8 +503,8 @@ func (r Replay) Retry(note bool) (api.Round, api.RoundID, []api.Message, error) 
 		return api.Round{}, api.NoRoundID, nil, errors.New("nothing to retry")
 	}
 	truncate, input := r.lastRound.id, r.lastRound.input
-	if note {
-		input.Note = continueInstruction
+	if note && !slices.Contains(input.Notes, continueInstruction) {
+		input.Notes = append(input.Notes, continueInstruction)
 	}
 	if _, err := r.storage.ThreadCut(r.ctx, r.id, r.seq(), truncate); err != nil {
 		return api.Round{}, api.NoRoundID, nil, err

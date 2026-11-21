@@ -101,8 +101,8 @@ func TestEmptyResponseIsSentAgain(t *testing.T) {
 		t.Fatalf("the round ended with usage %+v, want the answer's own %+v", end.Usage, want)
 	}
 	rounds := storedRounds(t, c)
-	if len(rounds) != 1 || rounds[0].Usage != want || rounds[0].Input.Note != "" || len(rounds[0].Response) != 1 || !carries(api.Request{Messages: []api.Message{{Content: rounds[0].Response.Ordered()}}}, "hello") {
-		t.Fatalf("storage holds %+v, want one round with the answer, its usage and no note", rounds)
+	if len(rounds) != 1 || rounds[0].Usage != want || len(rounds[0].Input.Notes) != 1 || !strings.Contains(rounds[0].Input.Notes[0], "Name this chat") || len(rounds[0].Response) != 1 || !carries(api.Request{Messages: []api.Message{{Content: rounds[0].Response.Ordered()}}}, "hello") {
+		t.Fatalf("storage holds %+v, want one round with the answer, its usage and only the naming note", rounds)
 	}
 	if usage := c.State().Usage; usage != want {
 		t.Fatalf("the context is %+v, want the answer's usage %+v", usage, want)
@@ -122,11 +122,11 @@ func TestSecondEmptyResponseSendsTheNoteAndKeepsIt(t *testing.T) {
 	first, noted := p.Request(t, 0), p.Request(t, 2)
 	sameMessages(t, p.Request(t, 1).Messages, first.Messages, "the first resend is not the same request")
 	rounds := storedRounds(t, c)
-	if len(rounds) != 1 || !strings.Contains(rounds[0].Input.Note, "Your previous response had no visible output. Please continue and give the user a visible response.") {
-		t.Fatalf("storage holds %+v, want one round that keeps the note", rounds)
+	if len(rounds) != 1 || len(rounds[0].Input.Notes) != 2 || !strings.Contains(rounds[0].Input.Notes[1], "Your previous response had no visible output. Please continue and give the user a visible response.") {
+		t.Fatalf("storage holds %+v, want one round that keeps the continuation note after the naming note", rounds)
 	}
 	user := first.Messages[len(first.Messages)-1]
-	user.Content = append(user.Content, api.ContentText{Text: rounds[0].Input.Note})
+	user.Content = append(user.Content, api.ContentText{Text: rounds[0].Input.Notes[1]})
 	sameMessages(t, noted.Messages, append(first.Messages[:len(first.Messages)-1:len(first.Messages)-1], user), "the second resend is not the request with the note after the input")
 	c.Send("next")
 	c.Wait()
@@ -318,10 +318,10 @@ func TestToolCallIsNotEmpty(t *testing.T) {
 	sameAfterLoad(t, c, p)
 }
 
-func TestSendAndRewindDropTheNote(t *testing.T) {
+func TestSendAndRewindDropTheNotes(t *testing.T) {
 	p := testkit.NewProvider(api.Model{}, testkit.Say("first"), testkit.Say("again"))
 	c := stack.Headless(t, stack.Host{Provider: p})
-	input := api.Input{Text: "hi", Note: "planted note"}
+	input := api.Input{Text: "hi", Notes: []string{"planted note"}}
 	if err := c.Do(func(l thread.Link, op thread.Operation) thread.Command { return l.Send(op, input) }); err != nil {
 		t.Fatalf("send: %v", err)
 	}
@@ -336,7 +336,10 @@ func TestSendAndRewindDropTheNote(t *testing.T) {
 			t.Fatalf("request %d carries the note the user sent: %+v", i, req.Messages)
 		}
 	}
-	if rounds := storedRounds(t, c); len(rounds) != 1 || rounds[0].Input.Note != "" {
-		t.Fatalf("storage holds %+v, want the rewound round without the note", rounds)
+	if !carries(p.Request(t, 1), "Name this chat") {
+		t.Fatalf("the rewound first round is sent without the naming note: %+v", p.Request(t, 1).Messages)
+	}
+	if rounds := storedRounds(t, c); len(rounds) != 1 || len(rounds[0].Input.Notes) != 1 || !strings.Contains(rounds[0].Input.Notes[0], "Name this chat") {
+		t.Fatalf("storage holds %+v, want the rewound round with only a fresh naming note", rounds)
 	}
 }

@@ -451,5 +451,12 @@ func documentText(c api.ContentDocument) api.ContentText {
 	if TextDocument(c) {
 		return api.ContentText{Text: string(c.Data)}
 	}
-	return api.ContentText{Text: fmt.Sprintf("<nodocument name=%q mime=%q bytes=%d reason=%q/>", c.Name, c.Mime, len(c.Data), "this model reads no documents of type "+c.Mime)}
+	reason := "this model reads no documents of type " + c.Mime
+	if api.DocumentMime(strings.ToLower(strings.TrimSpace(c.Mime))).IsText() {
+		reason = "its bytes are not UTF-8"
+		if len(c.Data) == 0 {
+			reason = "the document is empty"
+		}
+	}
+	return api.ContentText{Text: fmt.Sprintf("<nodocument name=%q mime=%q bytes=%d reason=%q/>", c.Name, c.Mime, len(c.Data), reason)}
 }

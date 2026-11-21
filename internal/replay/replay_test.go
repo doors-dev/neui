@@ -123,12 +123,15 @@ func TestRoundInitNameInstruction(t *testing.T) {
 	r := NewReplay(context.Background(), "a", s, api.ThreadConfig{}, api.Model{})
 	mustCreate(t, r)
 
-	_, messages, err := r.RoundInit(api.Input{Text: "hello"})
+	round, messages, err := r.RoundInit(api.Input{Text: "hello"})
 	if err != nil {
 		t.Fatalf("RoundInit on an unnamed thread: %v", err)
 	}
 	if text, ok := lastBlock(t, messages).(api.ContentText); !ok || text.Text != nameInstruction {
 		t.Fatalf("unnamed thread with input: want the naming instruction last, got %#v", lastBlock(t, messages))
+	}
+	if !slices.Equal(round.Input.Notes, []string{nameInstruction}) {
+		t.Fatalf("the opening round holds notes %q, want the naming instruction", round.Input.Notes)
 	}
 
 	// a record stashed against the first round makes the next round inputless
@@ -156,6 +159,43 @@ func TestRoundInitNameInstruction(t *testing.T) {
 	if text, ok := lastBlock(t, messages).(api.ContentText); !ok || text.Text != nameInstruction {
 		t.Fatalf("thread with no answered round yet: want the naming instruction last whatever the name, got %#v", lastBlock(t, messages))
 	}
+}
+
+func TestRetriedOpeningRoundKeepsOneOfEachNote(t *testing.T) {
+	s := local.NewMessageStorage()
+	r := NewReplay(context.Background(), "a", s, api.ThreadConfig{}, api.Model{})
+	mustCreate(t, r)
+	if _, _, err := r.RoundInit(api.Input{Text: "hello"}); err != nil {
+		t.Fatalf("RoundInit: %v", err)
+	}
+	want := []string{nameInstruction, continueInstruction}
+	for i, note := range []bool{false, true, true, false} {
+		if err := r.RoundError(errors.New(string(api.CodeNetwork)), api.EventUsage{}, nil); err != nil {
+			t.Fatalf("RoundError: %v", err)
+		}
+		round, _, messages, err := r.Retry(note)
+		if err != nil {
+			t.Fatalf("Retry: %v", err)
+		}
+		notes := want[:1]
+		if i > 0 {
+			notes = want
+		}
+		if !slices.Equal(round.Input.Notes, notes) {
+			t.Fatalf("retry %d holds notes %q, want %q", i+1, round.Input.Notes, notes)
+		}
+		var texts []string
+		for _, c := range messages[len(messages)-1].Content {
+			texts = append(texts, c.(api.ContentText).Text)
+		}
+		if !slices.Equal(texts, append([]string{"hello"}, notes...)) {
+			t.Fatalf("retry %d sends %q, want the input followed by %q", i+1, texts, notes)
+		}
+	}
+	if _, err := r.RoundOk(api.EventUsage{}, api.Indexed[api.Content]{0: api.ContentText{Text: "hi"}}); err != nil {
+		t.Fatalf("RoundOk: %v", err)
+	}
+	matchesLoad(t, s, r)
 }
 
 func TestNeedCompactionUnavailable(t *testing.T) {
@@ -1640,8 +1680,8 @@ func TestWithheldKindsBecomeNotes(t *testing.T) {
 	noImage := api.ContentText{Text: `<noimage mime="image/png" bytes=3 reason="this model reads no images"/>`}
 	noPDF := api.ContentText{Text: fmt.Sprintf(`<nodocument name="a.pdf" mime="application/pdf" bytes=%d reason="this model reads no documents of type application/pdf"/>`, len(pdf.Data))}
 	csvText := api.ContentText{Text: "a,b\n1,2\n"}
-	noLatin := api.ContentText{Text: `<nodocument name="l.txt" mime="text/plain" bytes=2 reason="this model reads no documents of type text/plain"/>`}
-	noEmpty := api.ContentText{Text: `<nodocument name="e.txt" mime="text/plain" bytes=0 reason="this model reads no documents of type text/plain"/>`}
+	noLatin := api.ContentText{Text: `<nodocument name="l.txt" mime="text/plain" bytes=2 reason="its bytes are not UTF-8"/>`}
+	noEmpty := api.ContentText{Text: `<nodocument name="e.txt" mime="text/plain" bytes=0 reason="the document is empty"/>`}
 	sent := api.UserContents{png, pdf, csv, latin, empty}
 	for _, tc := range []struct {
 		name   string

@@ -72,4 +72,7 @@ func TestModalitiesJSON(t *testing.T) {
 			t.Errorf("%s reads back Inputs %v, want an error", in, m.Inputs)
 		}
 	}
+	if err := json.Unmarshal([]byte(`{"inputs":["text"]}`), &m); err == nil || err.Error() != `input kind "text" is not image or document` {
+		t.Errorf(`["text"] fails with %v, want the kinds it may name`, err)
+	}
 }

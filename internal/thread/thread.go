@@ -446,7 +446,7 @@ func (t *thread) switchStateRound() (api.Round, bool, error) {
 	taken := t.pending
 	if taken {
 		input = t.input
-		input.Note = ""
+		input.Notes = nil
 		t.input = api.Input{}
 		t.pending = false
 	}
@@ -497,7 +497,7 @@ func (t *thread) rewind(cmd commandRewind) {
 		cmd.Err(api.ErrInputTooLarge)
 		return
 	}
-	cmd.input.Note = ""
+	cmd.input.Notes = nil
 	round, replay, removed, err := t.replay.Rewind(cmd.round, cmd.input)
 	if errors.Is(err, api.ErrWrongState) {
 		cmd.Err(err)

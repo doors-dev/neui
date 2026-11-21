@@ -182,7 +182,6 @@ func (s *messages) appendRound(r api.Round) {
 		userContent = append(userContent, capText(documentsAsText(res, s.model), budget))
 	}
 	s.resultStash = nil
-	opening := s.first == api.NoRoundID && !s.compaction.IsValid() && r.Input.Len() != 0
 	if s.first == api.NoRoundID {
 		s.first = r.ID
 		if s.compaction.IsValid() {
@@ -207,11 +206,8 @@ func (s *messages) appendRound(r api.Round) {
 		}
 	}
 	user := s.cut(omitOversizedMedia(userContent, s.model))
-	if opening {
-		user = append(user, api.ContentText{Text: nameInstruction})
-	}
-	if r.Input.Note != "" {
-		user = append(user, api.ContentText{Text: r.Input.Note})
+	for _, note := range r.Input.Notes {
+		user = append(user, api.ContentText{Text: note})
 	}
 	weight := weigh(user...) + weigh(response...)
 	s.rounds = append(s.rounds, round{
