@@ -32,8 +32,8 @@ import (
 )
 
 const (
-	goldenRequestsHash = "136f45bec49a7ea3b798db8bcf22f181abd4d0c2e26e2f4769957ee23135e2cd"
-	goldenStreamsHash  = "bfdaece1d45ead3c8591b917dd41af0d539ead64839173b801ff6f19244d05e5"
+	goldenRequestsHash = "f90f91086cf99d8dc4f7954d049fc0cf3d432d34f692b967f120364df0bcf4d9"
+	goldenStreamsHash  = "259fc3ce761dfeb13a58380027eeba2cac77b824c455470e22cad24e5665f407"
 )
 
 func goldenBytes(r *rand.Rand, n int) []byte {
@@ -157,7 +157,34 @@ func goldenRequestsText(t testing.TB) string {
 				"chat_template_kwargs": map[string]any{"enable_thinking": false},
 			}))
 		}
+		if i%5 == 0 {
+			opts = append(opts, WithCacheMarker(map[string]any{"cache_control": map[string]any{"type": "ephemeral"}}))
+		}
 		req := goldenRequest(r)
+		for _, m := range req.Messages {
+			var ids []string
+			for _, c := range m.Content {
+				if u, ok := c.(api.ContentToolUse); ok {
+					ids = append(ids, fmt.Sprintf(`%q:{"extra_content":{"google":{"thought_signature":"c2ln"}}}`, u.ID))
+				}
+			}
+			for j, c := range m.Content {
+				switch c := c.(type) {
+				case api.ContentReasoning:
+					if i%3 == 0 {
+						c.Model = model.Name
+						m.Content[j] = c
+					}
+				case api.ContentOpaque:
+					if i%7 == 0 {
+						c.Model = goldenPick(rand.New(rand.NewPCG(uint64(i), uint64(j))), model.Name, "x")
+						c.Kind = opaqueKind
+						c.Data = json.RawMessage(`{"calls":{` + strings.Join(ids, ",") + `},"fields":{"reasoning_details":[{"data":"c2ln","index":0,"type":"reasoning.encrypted"}]}}`)
+						m.Content[j] = c
+					}
+				}
+			}
+		}
 		fmt.Fprintf(&out, "== %d %s\n", i, model.Name)
 		p, err := New(Conf{Model: model, BaseURL: "http://golden.invalid/v1"}, opts...)
 		if err != nil {
@@ -191,6 +218,8 @@ func goldenEvent(e api.Event) string {
 		return fmt.Sprintf("thinking %d %d %q", e.Index, e.Part, e.Text)
 	case api.EventMeta:
 		return fmt.Sprintf("meta %d %s", e.Index, e.Data)
+	case api.EventOpaque:
+		return fmt.Sprintf("opaque %d %s %s", e.Index, e.Kind, e.Data)
 	case api.EventUsage:
 		return fmt.Sprintf("usage %+v", e)
 	case api.EventOk:

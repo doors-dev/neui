@@ -371,13 +371,15 @@ func (ContentToolResult) contentType() string {
 //
 // Where a provider signs or seals reasoning, Meta is what is replayed, byte for
 // byte, and the text never is. An adapter replays a block only when its Meta
-// names that adapter's provider, and then may use any of the block; a block
-// whose Meta is missing or names another provider is skipped whole, with
-// nothing sent in its place. Nothing upstream strips them.
+// names that adapter's provider and, for an adapter that requires it, Model
+// names the model of the request; then it may use any of the block. Any other
+// block is skipped whole, with nothing sent in its place. Nothing upstream
+// strips them.
 type ContentReasoning struct {
 	// Model is the model the provider was configured with, as EventStart.Model
-	// reports. It is informational: adapters judge a stored block by its Meta,
-	// not by comparing this with the model of a later request.
+	// reports. The generic adapter replays the block only to a request for
+	// exactly this model name, so "x:nitro" and "x" differ; the others judge
+	// by Meta alone.
 	Model    string          `json:"model"`
 	Summary  Indexed[string] `json:"summary"`        // paraphrase written by the service
 	Thoughts Indexed[string] `json:"thoughts"`       // thinking as the model generated it
@@ -398,12 +400,13 @@ func (ContentReasoning) contentType() string {
 }
 
 // ContentOpaque carries a payload this protocol has no type for, such as the
-// output of a tool the provider ran itself. It is meant for the adapter that
-// issued it: Kind starts with that adapter's Name and a dot, as in
-// "claude.compaction", and an adapter replays only the kinds it issues and
-// skips every other one; nothing upstream strips them. Folding a stream, a non-empty
-// Kind or Data replaces the one before it and each Delta appends to Deltas in
-// arrival order.
+// output of a tool the provider ran itself or fields of a reply the adapter
+// does not read. It is meant for the adapter that issued it: Kind starts with
+// that adapter's Name and a dot, as in "claude.compaction", and an adapter
+// replays only the kinds it issues, to the model it replays its reasoning to
+// (see ContentReasoning.Model), and skips every other one; nothing upstream
+// strips them. Folding a stream, a non-empty Kind or Data replaces the one
+// before it and each Delta appends to Deltas in arrival order.
 type ContentOpaque struct {
 	Model  string          `json:"model"`  // configured model, as on ContentReasoning
 	Kind   string          `json:"kind"`   // issuing adapter's Name, a dot, and its name for the payload

@@ -60,8 +60,8 @@ type EventStart struct {
 	// ID is the provider's id for the response; empty where it sends none.
 	ID string
 	// Model is the model the provider is configured with and sent, not the
-	// name the service reports serving. It is informational and no adapter
-	// replays by it. See ContentReasoning.Model.
+	// name the service reports serving. The turn's reasoning and opaque
+	// blocks carry it; see ContentReasoning.Model.
 	Model string
 }
 

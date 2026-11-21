@@ -210,6 +210,63 @@ func TestEncodeReasoningReplay(t *testing.T) {
 	}
 }
 
+func TestEncodeReasoningGoesToItsModelOnly(t *testing.T) {
+	own := reasoning(`{"provider":"generic","data":"reasoning"}`, "Mine.")
+	nitro := own
+	nitro.Model = testModel + ":nitro"
+	old := own
+	old.Model = ""
+	for _, tc := range []struct {
+		name string
+		r    api.ContentReasoning
+		want string
+	}{
+		{"the same model", own, `{"role":"assistant","content":"Hi","reasoning":"Mine."}`},
+		{"a variant of the model", nitro, `{"role":"assistant","content":"Hi"}`},
+		{"no model, as stored before", old, `{"role":"assistant","content":"Hi"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := messagesJSON(t, provider(t), user(text("hi")), assistant(tc.r, text("Hi")), user(text("again")))
+			if want := `[{"role":"user","content":"hi"},` + tc.want + `,{"role":"user","content":"again"}]`; got != want {
+				t.Fatalf("messages\n%s\nwant\n%s", got, want)
+			}
+		})
+	}
+}
+
+func TestEncodeOpaqueFields(t *testing.T) {
+	fields := func(model string, data string) api.ContentOpaque {
+		return api.ContentOpaque{Model: model, Kind: "generic.fields", Data: json.RawMessage(data)}
+	}
+	const data = `{"calls":{"c1":{"extra_content":{"google":{"thought_signature":"c2ln"}}}},"fields":{"reasoning_details":[{"data":"ZW5j","index":0,"type":"reasoning.encrypted"}]}}`
+	call := api.ContentToolUse{ID: "c1", Name: "now"}
+	thought := reasoning(`{"provider":"generic","data":"reasoning"}`, "Need the time.")
+	plain := `{"role":"assistant","content":null,"tool_calls":[{"id":"c1","type":"function","function":{"name":"now","arguments":"{}"}}]}`
+	for _, tc := range []struct {
+		name string
+		msg  api.Message
+		want string
+	}{
+		{"the same model", assistant(thought, call, fields(testModel, data)),
+			`{"role":"assistant","content":null,"reasoning":"Need the time.","tool_calls":[{"id":"c1","type":"function","function":{"name":"now","arguments":"{}"},"extra_content":{"google":{"thought_signature":"c2ln"}}}],` +
+				`"reasoning_details":[{"data":"ZW5j","index":0,"type":"reasoning.encrypted"}]}`},
+		{"another model", assistant(func() api.ContentReasoning { r := thought; r.Model = "other"; return r }(), call, fields("other", data)), plain},
+		{"a variant of the model", assistant(call, fields(testModel+":nitro", data)), plain},
+		{"another provider's kind", assistant(call, api.ContentOpaque{Model: testModel, Kind: "gpt.fields", Data: json.RawMessage(data)}), plain},
+		{"message fields only", assistant(call, fields(testModel, `{"fields":{"note":"x"}}`)), strings.TrimSuffix(plain, "}") + `,"note":"x"}`},
+		{"a call without fields", assistant(call, fields(testModel, `{"calls":{"c9":{"sig":"x"}}}`)), plain},
+		{"data that is not ours", assistant(call, fields(testModel, `[1]`)), plain},
+		{"empty objects", assistant(call, fields(testModel, `{"calls":{"c1":{ }},"fields":{}}`)), plain},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := messagesJSON(t, provider(t), user(text("time?")), tc.msg, user(api.ContentToolResult{ID: "c1", Content: api.UserContents{text("noon")}}, fields(testModel, data)))
+			if want := `[{"role":"user","content":"time?"},` + tc.want + `,{"role":"tool","content":"noon","tool_call_id":"c1"}]`; got != want {
+				t.Fatalf("messages\n%s\nwant\n%s", got, want)
+			}
+		})
+	}
+}
+
 func TestEncodeEmptyMessages(t *testing.T) {
 	got := messagesJSON(t, provider(t), user(), assistant(reasoning(`{"provider":"gpt"}`, "x")), user(reasoning("", "y")))
 	if got != `[{"role":"user","content":"[empty]"},{"role":"assistant","content":"[empty]"},{"role":"user","content":"[empty]"}]` {
@@ -321,5 +378,123 @@ func TestEncodeLogging(t *testing.T) {
 	}
 	if errs > 1 || others != 0 {
 		t.Fatalf("an unknown type logged %d errors and %d others, want at most one error", errs, others)
+	}
+}
+
+var marker = map[string]any{"cache_control": map[string]any{"ttl": "1h", "type": "ephemeral"}}
+
+const marked = `"cache_control":{"ttl":"1h","type":"ephemeral"}`
+
+func TestEncodeCacheMarker(t *testing.T) {
+	tools := []api.Tool{{Name: "now"}, {Name: "lookup", Desc: "Finds a code."}}
+	png := api.ContentImage{Data: []byte("\x89PNG\r\n\x1a\n"), Mime: "image/png"}
+	img := `{"type":"image_url","image_url":{"url":"data:image/png;base64,iVBORw0KGgo="}}`
+	for _, tc := range []struct {
+		name   string
+		req    api.Request
+		tools  string
+		system string
+		last   string
+	}{
+		{"system, tools and a user message", api.Request{System: "Be brief.", Tools: tools, Messages: []api.Message{user(text("hi")), assistant(text("Hello.")), user(text("a"), text("b"))}},
+			`[{"type":"function","function":{"name":"now","parameters":{"properties":{},"type":"object"}}},{"type":"function","function":{"name":"lookup","description":"Finds a code.","parameters":{"properties":{},"type":"object"}}}]`,
+			`{"role":"system","content":[{"type":"text","text":"Be brief.",` + marked + `}]}`,
+			`{"role":"user","content":[{"type":"text","text":"a\n\nb",` + marked + `}]}`},
+		{"tools without a system prompt", api.Request{Tools: tools, Messages: []api.Message{user(text("hi"))}},
+			`[{"type":"function","function":{"name":"now","parameters":{"properties":{},"type":"object"}}},{"type":"function","function":{"name":"lookup","description":"Finds a code.","parameters":{"properties":{},"type":"object"}},` + marked + `}]`,
+			"",
+			`{"role":"user","content":[{"type":"text","text":"hi",` + marked + `}]}`},
+		{"a turn ending in tool results", api.Request{Messages: []api.Message{user(text("time?")), assistant(api.ContentToolUse{ID: "c1", Name: "now"}, api.ContentToolUse{ID: "c2", Name: "now"}),
+			user(api.ContentToolResult{ID: "c1", Content: api.UserContents{text("noon")}}, api.ContentToolResult{ID: "c2", Content: api.UserContents{text("a"), text("b")}, Error: api.ToolErrRuntime})}},
+			"", "", `{"role":"tool","content":[{"type":"text","text":"Error: a\n\nb",` + marked + `}],"tool_call_id":"c2"}`},
+		{"results and text", api.Request{Messages: []api.Message{user(text("time?")), assistant(api.ContentToolUse{ID: "c1", Name: "now"}),
+			user(api.ContentToolResult{ID: "c1", Content: api.UserContents{text("noon")}}, text("and the date?"))}},
+			"", "", `{"role":"user","content":[{"type":"text","text":"and the date?",` + marked + `}]}`},
+		{"an image after the text", api.Request{Messages: []api.Message{user(text("look"), png, text("and"), png)}},
+			"", "", `{"role":"user","content":[{"type":"text","text":"look"},` + img + `,{"type":"text","text":"and",` + marked + `},` + img + `]}`},
+		{"an image alone", api.Request{Messages: []api.Message{user(png)}},
+			"", "", `{"role":"user","content":[` + img + `]}`},
+		{"an assistant message last", api.Request{Messages: []api.Message{user(text("hi")), assistant(text("Hel"))}},
+			"", "", `{"role":"assistant","content":[{"type":"text","text":"Hel",` + marked + `}]}`},
+		{"an assistant call last", api.Request{Messages: []api.Message{user(text("hi")), assistant(api.ContentToolUse{ID: "c1", Name: "now"})}},
+			"", "", `{"role":"assistant","content":null,"tool_calls":[{"id":"c1","type":"function","function":{"name":"now","arguments":"{}"}}]}`},
+		{"an assistant message with fields last", api.Request{Messages: []api.Message{user(text("hi")), assistant(text("Hel"), api.ContentOpaque{Model: testModel, Kind: "generic.fields", Data: json.RawMessage(`{"fields":{"note":"x"}}`)})}},
+			"", "", `{"role":"assistant","content":[{"type":"text","text":"Hel",` + marked + `}],"note":"x"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := provider(t, WithCacheMarker(marker))
+			body, err := p.encode(tc.req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			raw, err := lib.MarshalRaw(body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got struct {
+				Tools    json.RawMessage   `json:"tools"`
+				Messages []json.RawMessage `json:"messages"`
+			}
+			if err := json.Unmarshal(raw, &got); err != nil {
+				t.Fatal(err)
+			}
+			var system string
+			if tc.req.System != "" {
+				system = string(got.Messages[0])
+			}
+			if string(got.Tools) != tc.tools || system != tc.system || string(got.Messages[len(got.Messages)-1]) != tc.last {
+				t.Fatalf("tools %s\nsystem %s\nlast %s\nwant\ntools %s\nsystem %s\nlast %s", got.Tools, system, got.Messages[len(got.Messages)-1], tc.tools, tc.system, tc.last)
+			}
+			if n := strings.Count(string(raw), "cache_control"); n != strings.Count(tc.tools+tc.system+tc.last, "cache_control") {
+				t.Fatalf("%d markers in %s", n, raw)
+			}
+			plain, err := lib.MarshalRaw(must(provider(t).encode(tc.req)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := strings.Count(string(plain), "cache_control"); got != 0 {
+				t.Fatalf("a provider without the option sent %d markers", got)
+			}
+		})
+	}
+}
+
+func must[T any](v T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return v
+}
+
+func TestCacheMarkerKeepsTheBodyStable(t *testing.T) {
+	tools := []api.Tool{{Name: "get_weather", Schema: map[string]any{"type": "object", "properties": map[string]any{"city": map[string]any{"type": "string"}}}}}
+	thread := []api.Message{user(text("weather in Paris?"))}
+	p, plain := provider(t, WithCacheMarker(marker)), provider(t)
+	var prev []byte
+	var prevLast, sent int
+	for i, next := range [][]api.Message{
+		{assistant(reasoning(`{"provider":"generic","data":"reasoning"}`, "Call it."), api.ContentToolUse{ID: "call_1", Name: "get_weather", Input: json.RawMessage(`{"city":"Paris"}`)}),
+			user(api.ContentToolResult{ID: "call_1", Content: api.UserContents{text("12C")}})},
+		{assistant(text("12C in Paris.")), user(text("and Rome?"))},
+		nil,
+	} {
+		req := api.Request{System: "Be brief.", Tools: tools, Messages: thread}
+		body := must(lib.MarshalRaw(must(p.encode(req))))
+		last := strings.LastIndex(string(body), `{"role":`)
+		if prev != nil {
+			if !strings.HasPrefix(string(body), string(prev[:prevLast])) {
+				t.Fatalf("body %d does not start with body %d up to its last message:\n%s\n%s", i, i-1, prev, body)
+			}
+			was := must(lib.MarshalRaw(must(plain.encode(api.Request{Messages: thread[:sent]}))))
+			wasLast := was[strings.LastIndex(string(was), `{"role":`) : len(was)-len(`],"stream":true,"stream_options":{"include_usage":true}}`)]
+			if !strings.HasPrefix(string(body[prevLast:]), string(wasLast)) {
+				t.Fatalf("body %d does not carry the last message of body %d in its plain form %s:\n%s", i, i-1, wasLast, body)
+			}
+		}
+		if strings.Count(string(body), "cache_control") != 2 || !strings.Contains(string(body[last:]), "cache_control") {
+			t.Fatalf("body %d does not carry two markers, one on its last message:\n%s", i, body)
+		}
+		prev, prevLast, sent = body, last, len(thread)
+		thread = append(thread, next...)
 	}
 }

@@ -14,13 +14,17 @@
 
 package generic
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"neui.dev/provider/lib"
+)
 
 type chatRequest struct {
 	Model           string         `json:"model"`
-	Tools           []tool         `json:"tools,omitempty"`
+	Tools           []any          `json:"tools,omitempty"`
 	ToolChoice      any            `json:"tool_choice,omitempty"`
-	Messages        []message      `json:"messages"`
+	Messages        []any          `json:"messages"`
 	Stream          bool           `json:"stream"`
 	StreamOptions   *streamOptions `json:"stream_options"`
 	MaxTokens       int            `json:"max_tokens,omitempty"`
@@ -35,12 +39,25 @@ type streamOptions struct {
 }
 
 type message struct {
-	Role             string     `json:"role"`
-	Content          any        `json:"content"`
-	Reasoning        string     `json:"reasoning,omitempty"`
-	ReasoningContent string     `json:"reasoning_content,omitempty"`
-	ToolCalls        []toolCall `json:"tool_calls,omitempty"`
-	ToolCallID       string     `json:"tool_call_id,omitempty"`
+	Role             string `json:"role"`
+	Content          any    `json:"content"`
+	Reasoning        string `json:"reasoning,omitempty"`
+	ReasoningContent string `json:"reasoning_content,omitempty"`
+	ToolCalls        []any  `json:"tool_calls,omitempty"`
+	ToolCallID       string `json:"tool_call_id,omitempty"`
+}
+
+type fielded struct {
+	value  any
+	fields []byte
+}
+
+func (f fielded) MarshalJSON() ([]byte, error) {
+	raw, err := lib.MarshalRaw(f.value)
+	if err != nil {
+		return nil, err
+	}
+	return append(append(append(raw[:len(raw)-1], ','), f.fields...), '}'), nil
 }
 
 type textPart struct {
@@ -102,16 +119,82 @@ type chunkChoice struct {
 }
 
 type delta struct {
-	Content          string      `json:"content"`
-	Reasoning        string      `json:"reasoning"`
-	ReasoningContent string      `json:"reasoning_content"`
-	ToolCalls        []toolDelta `json:"tool_calls"`
+	Content          string
+	Reasoning        string
+	ReasoningContent string
+	ToolCalls        []toolDelta
+	fields           map[string]json.RawMessage
+}
+
+func (d *delta) UnmarshalJSON(data []byte) error {
+	if err := json.Unmarshal(data, &d.fields); err != nil {
+		return err
+	}
+	for name, value := range d.fields {
+		var err error
+		switch name {
+		case "role":
+		case "content":
+			err = json.Unmarshal(value, &d.Content)
+		case "reasoning":
+			err = json.Unmarshal(value, &d.Reasoning)
+		case "reasoning_content":
+			err = json.Unmarshal(value, &d.ReasoningContent)
+		case "tool_calls":
+			err = json.Unmarshal(value, &d.ToolCalls)
+		default:
+			if !empty(value) {
+				continue
+			}
+		}
+		if err != nil {
+			return err
+		}
+		delete(d.fields, name)
+	}
+	return nil
+}
+
+func empty(value json.RawMessage) bool {
+	switch string(value) {
+	case "", "null", `""`, "[]", "{}":
+		return true
+	}
+	return false
 }
 
 type toolDelta struct {
-	Index    *int               `json:"index"`
-	ID       string             `json:"id"`
-	Function *toolDeltaFunction `json:"function"`
+	Index    *int
+	ID       string
+	Function *toolDeltaFunction
+	fields   map[string]json.RawMessage
+}
+
+func (t *toolDelta) UnmarshalJSON(data []byte) error {
+	if err := json.Unmarshal(data, &t.fields); err != nil {
+		return err
+	}
+	for name, value := range t.fields {
+		var err error
+		switch name {
+		case "type":
+		case "index":
+			err = json.Unmarshal(value, &t.Index)
+		case "id":
+			err = json.Unmarshal(value, &t.ID)
+		case "function":
+			err = json.Unmarshal(value, &t.Function)
+		default:
+			if !empty(value) {
+				continue
+			}
+		}
+		if err != nil {
+			return err
+		}
+		delete(t.fields, name)
+	}
+	return nil
 }
 
 type toolDeltaFunction struct {

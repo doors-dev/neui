@@ -172,6 +172,12 @@ func TestNewRefuses(t *testing.T) {
 		{"extra messages", Conf{Model: model, BaseURL: base}, []Option{WithExtraBody(map[string]any{"messages": []any{}})}, `"messages"`},
 		{"extra stream options", Conf{Model: model, BaseURL: base}, []Option{WithExtraBody(map[string]any{"stream_options": map[string]any{"continuous_usage_stats": true}})}, `"stream_options"`},
 		{"an extra value that does not encode", Conf{Model: model, BaseURL: base}, []Option{WithExtraBody(map[string]any{"cache_prompt": true, "hook": func() {}})}, `"hook"`},
+		{"a marker field with no name", Conf{Model: model, BaseURL: base}, []Option{WithCacheMarker(map[string]any{"": 1})}, "no name"},
+		{"a marker type", Conf{Model: model, BaseURL: base}, []Option{WithCacheMarker(map[string]any{"type": "x"})}, `"type"`},
+		{"a marker text", Conf{Model: model, BaseURL: base}, []Option{WithCacheMarker(map[string]any{"text": "x"})}, `"text"`},
+		{"a marker image_url", Conf{Model: model, BaseURL: base}, []Option{WithCacheMarker(map[string]any{"image_url": "x"})}, `"image_url"`},
+		{"a marker function", Conf{Model: model, BaseURL: base}, []Option{WithCacheMarker(map[string]any{"function": "x"})}, `"function"`},
+		{"a marker value that does not encode", Conf{Model: model, BaseURL: base}, []Option{WithCacheMarker(map[string]any{"cache_control": func() {}})}, `cache marker field "cache_control"`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -302,6 +308,12 @@ func TestExtraBody(t *testing.T) {
 	collect(t, capture(t, &bodies, WithExtraBody(routing), WithExtraBody(nil)), turn("hi"))
 	if !strings.HasSuffix(bodies[0], `{"include_usage":true},"seed":7}`) || !strings.HasSuffix(bodies[1], `{"include_usage":true}}`) {
 		t.Fatalf("a later WithExtraBody did not replace the earlier one:\n%s\n%s", bodies[0], bodies[1])
+	}
+
+	bodies = nil
+	collect(t, capture(t, &bodies, WithExtraBody(map[string]any{"cache_control": map[string]any{"type": "ephemeral"}})), turn("hi"))
+	if want := `{"model":"qwen/qwen3.8-27b","messages":[{"role":"user","content":"hi"}],"stream":true,"stream_options":{"include_usage":true},"cache_control":{"type":"ephemeral"}}`; bodies[0] != want {
+		t.Fatalf("top-level marker\n%s\nwant\n%s", bodies[0], want)
 	}
 
 	bodies = nil

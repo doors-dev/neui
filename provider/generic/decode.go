@@ -20,12 +20,16 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	"neui.dev/api"
 	"neui.dev/provider/lib"
 )
 
-const doneSentinel = "[DONE]"
+const (
+	doneSentinel = "[DONE]"
+	opaqueKind   = providerName + ".fields"
+)
 
 var (
 	metaReasoning        = json.RawMessage(`{"provider":"generic","data":"reasoning"}`)
@@ -42,6 +46,9 @@ type converter struct {
 	tools     map[int]int
 	ids       map[string]bool
 	real      map[int]string
+	named     map[int]string
+	fields    []map[string]json.RawMessage
+	called    map[int][]map[string]json.RawMessage
 	stopped   bool
 	finish    string
 	failure   api.Event
@@ -59,6 +66,8 @@ func newConverter(model string, sent int, declared int) *converter {
 		tools:     make(map[int]int),
 		ids:       make(map[string]bool),
 		real:      make(map[int]string),
+		named:     make(map[int]string),
+		called:    make(map[int][]map[string]json.RawMessage),
 		sent:      sent,
 		declared:  declared,
 	}
@@ -75,7 +84,22 @@ func (c *converter) Convert(f lib.Frame) ([]api.Event, bool) {
 		code := api.CodeUnknown
 		switch c.finish {
 		case "stop", "tool_calls", "function_call":
-			return []api.Event{api.EventOk{Code: api.CodeTurn}}, false
+			var data struct {
+				Fields map[string]any            `json:"fields,omitempty"`
+				Calls  map[string]map[string]any `json:"calls,omitempty"`
+			}
+			data.Fields = fold(c.fields)
+			for index, frags := range c.called {
+				if data.Calls == nil {
+					data.Calls = make(map[string]map[string]any)
+				}
+				data.Calls[c.named[index]] = fold(frags)
+			}
+			if len(data.Fields) == 0 && len(data.Calls) == 0 {
+				return []api.Event{api.EventOk{Code: api.CodeTurn}}, false
+			}
+			raw, _ := lib.MarshalRaw(data)
+			return []api.Event{api.EventOpaque{Index: c.next, Kind: opaqueKind, Data: raw}, api.EventOk{Code: api.CodeTurn}}, false
 		case "length":
 			code = api.CodeCapped
 		case "content_filter":
@@ -117,6 +141,9 @@ func (c *converter) Convert(f lib.Frame) ([]api.Event, bool) {
 				c.events = append(c.events, api.EventThinking{Index: c.reasoning, Text: thought})
 			}
 		}
+		if len(d.fields) > 0 {
+			c.fields = append(c.fields, d.fields)
+		}
 		if d.Content != "" {
 			if c.text < 0 {
 				c.text = c.next
@@ -157,6 +184,12 @@ func (c *converter) Convert(f lib.Frame) ([]api.Event, bool) {
 				}
 			}
 			e.Index = index
+			if e.ID != "" {
+				c.named[*t.Index] = e.ID
+			}
+			if len(t.fields) > 0 {
+				c.called[*t.Index] = append(c.called[*t.Index], t.fields)
+			}
 			if t.Function != nil {
 				e.Name, e.Args = t.Function.Name, t.Function.Arguments
 			}
@@ -228,4 +261,88 @@ func (c *converter) End(err error) []api.Event {
 		return nil
 	}
 	return []api.Event{api.EventErr{Code: api.CodeNetwork, Err: err}}
+}
+
+func fold(frags []map[string]json.RawMessage) map[string]any {
+	out := make(map[string]any)
+	done := make(map[string]bool)
+	for _, frag := range frags {
+		for name := range frag {
+			if done[name] {
+				continue
+			}
+			done[name] = true
+			var values []json.RawMessage
+			same := true
+			for _, f := range frags {
+				if v := f[name]; !empty(v) {
+					values = append(values, v)
+					same = same && v[0] == values[0][0]
+				}
+			}
+			if len(values) == 0 {
+				continue
+			}
+			out[name] = values[len(values)-1]
+			if !same {
+				continue
+			}
+			switch values[0][0] {
+			case '"':
+				var text strings.Builder
+				var first string
+				constant := len(values) == len(frags)
+				for i, v := range values {
+					var s string
+					_ = json.Unmarshal(v, &s)
+					if i == 0 {
+						first = s
+					}
+					constant = constant && s == first
+					text.WriteString(s)
+				}
+				if constant {
+					out[name] = first
+				} else {
+					out[name] = text.String()
+				}
+			case '{':
+				objects := make([]map[string]json.RawMessage, len(values))
+				for i, v := range values {
+					_ = json.Unmarshal(v, &objects[i])
+				}
+				out[name] = fold(objects)
+			case '[':
+				var groups [][]map[string]json.RawMessage
+				at := make(map[string]int)
+				indexed := true
+				for _, v := range values {
+					var items []json.RawMessage
+					_ = json.Unmarshal(v, &items)
+					for _, item := range items {
+						var entry map[string]json.RawMessage
+						if json.Unmarshal(item, &entry) != nil || entry["index"] == nil {
+							indexed = false
+							break
+						}
+						g, seen := at[string(entry["index"])]
+						if !seen {
+							g = len(groups)
+							at[string(entry["index"])] = g
+							groups = append(groups, nil)
+						}
+						groups[g] = append(groups[g], entry)
+					}
+				}
+				if indexed && len(groups) > 0 {
+					list := make([]any, len(groups))
+					for i, g := range groups {
+						list[i] = fold(g)
+					}
+					out[name] = list
+				}
+			}
+		}
+	}
+	return out
 }

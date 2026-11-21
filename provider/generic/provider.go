@@ -33,17 +33,28 @@
 // or gateway defines beyond the standard fields.
 //
 // Reasoning streams back from reasoning or reasoning_content, whichever the
-// server writes, and goes back on later turns in the same field; reasoning
-// another provider wrote is left out, and reasoning a server leaves in the
-// text as <think> tags stays text. Images go as data URLs in user messages and
-// tool results. Set Model.Inputs to what the server's model reads: a thread
-// replays a note in place of each image for a model without
-// api.ModalityImage, and with Inputs zero every image goes, which a server
-// whose model reads none refuses. A document of a text type goes as its text
-// when its bytes are UTF-8, and any other document gets a short note. Caching
-// is the server's: keep the tools, system prompt and history stable between
-// turns, and cache reads arrive in the usage where the server reports
-// prompt_tokens_details.cached_tokens.
+// server writes. Every other field with a value, on the reply message and on
+// its tool calls, such as OpenRouter's reasoning_details or a call's signature,
+// is kept as the stream assembled it, in one api.ContentOpaque per turn. On
+// later turns both go back only to the model that wrote them, named exactly as
+// Conf.Model.Name ("x:nitro" and "x" differ): the reasoning in its field and
+// the other fields unchanged on that message and its calls. To any other
+// model, and from any other provider, they are left out whole. Reasoning a
+// server leaves in the text as <think> tags stays text.
+//
+// Images go as data URLs in user messages and tool results. Set Model.Inputs
+// to what the server's model reads: a thread replays a note in place of each
+// image for a model without api.ModalityImage, and with Inputs zero every
+// image goes, which a server whose model reads none refuses. A document of a
+// text type goes as its text when its bytes are UTF-8, and any other document
+// gets a short note.
+//
+// Most servers cache prompt prefixes on their own: keep the tools, system
+// prompt and history stable between turns. For those that cache only at
+// markers, such as OpenRouter's Claude models, see WithCacheMarker. Cache reads
+// and writes arrive in the usage where the server reports
+// prompt_tokens_details.
+//
 // Failures reach the thread as api.EventErr with an api.ErrCode, and a failure
 // the server reported carries an *APIError, read with errors.As.
 package generic
@@ -98,6 +109,7 @@ type Provider struct {
 	stop        []string
 	maxTokens   int
 	extra       []byte
+	marker      []byte
 	transport   lib.Options
 }
 
@@ -265,9 +277,11 @@ func WithStopSequences(seqs ...string) Option {
 // model, messages, tools, tool_choice, stream, stream_options, max_tokens,
 // reasoning_effort, temperature, top_p and stop. The server decides what a
 // field does, and one it refuses ends the turn with api.CodeInvalid.
+// OpenRouter sends a request that carries a model's encrypted or signed
+// reasoning only to the upstream that wrote it, and refuses one whose
+// provider order without fallbacks leaves that upstream out.
 func WithExtraBody(fields map[string]any) Option {
 	return func(p *Provider) error {
-		var extra []byte
 		for _, name := range slices.Sorted(maps.Keys(fields)) {
 			var hint string
 			switch name {
@@ -291,19 +305,73 @@ func WithExtraBody(fields map[string]any) Option {
 			if hint != "" {
 				return fmt.Errorf("generic: WithExtraBody cannot set %q, %s", name, hint)
 			}
-			value, err := lib.MarshalRaw(fields[name])
-			if err != nil {
-				return fmt.Errorf("generic: extra field %q: %w", name, err)
-			}
-			key, _ := lib.MarshalRaw(name)
-			if len(extra) > 0 {
-				extra = append(extra, ',')
-			}
-			extra = append(append(append(extra, key...), ':'), value...)
+		}
+		extra, err := encodeFields(fields)
+		if err != nil {
+			return fmt.Errorf("generic: extra %w", err)
 		}
 		p.extra = extra
 		return nil
 	}
+}
+
+// WithCacheMarker merges fields into the parts a prompt cache is keyed on: the
+// system prompt, or the last tool when there is none, and the last text part
+// of the last message, which moves forward every turn. A message that carries
+// the marker goes as a list of parts. Without the option, or with no fields,
+// no marker is sent.
+//
+//	generic.WithCacheMarker(map[string]any{
+//		"cache_control": map[string]any{"type": "ephemeral", "ttl": "1h"},
+//	})
+//
+// OpenRouter caches Claude models at this marker, and Alibaba's DashScope its
+// models. Leave it off for Gemini through OpenRouter: every turn writes a new
+// cache of the whole prompt at several times the uncached price. Servers that
+// refuse unknown fields, such as Groq, Fireworks and Mistral, refuse every
+// request that carries it; llama.cpp, vLLM, SGLang and Ollama ignore it. A
+// marker at the top level of the body is a WithExtraBody field:
+//
+//	generic.WithExtraBody(map[string]any{"cache_control": map[string]any{"type": "ephemeral"}})
+//
+// For Claude models, prefer neui.dev/provider/claude, which caches by default.
+// The fields are encoded when the option runs, and changing the map later has
+// no effect. New fails on an empty name, a value that does not encode, and
+// type, text, image_url or function, which the provider writes on the parts it
+// marks.
+func WithCacheMarker(fields map[string]any) Option {
+	return func(p *Provider) error {
+		for _, name := range slices.Sorted(maps.Keys(fields)) {
+			switch name {
+			case "":
+				return errors.New("generic: WithCacheMarker has a field with no name")
+			case "type", "text", "image_url", "function":
+				return fmt.Errorf("generic: WithCacheMarker cannot set %q, which the provider writes on the parts it marks", name)
+			}
+		}
+		marker, err := encodeFields(fields)
+		if err != nil {
+			return fmt.Errorf("generic: cache marker %w", err)
+		}
+		p.marker = marker
+		return nil
+	}
+}
+
+func encodeFields(fields map[string]any) ([]byte, error) {
+	var out []byte
+	for _, name := range slices.Sorted(maps.Keys(fields)) {
+		value, err := lib.MarshalRaw(fields[name])
+		if err != nil {
+			return nil, fmt.Errorf("field %q: %w", name, err)
+		}
+		key, _ := lib.MarshalRaw(name)
+		if len(out) > 0 {
+			out = append(out, ',')
+		}
+		out = append(append(append(out, key...), ':'), value...)
+	}
+	return out, nil
 }
 
 var _ api.Provider = (*Provider)(nil)
@@ -320,10 +388,13 @@ func (p *Provider) Model() api.Model {
 
 // Stream runs one turn on its own goroutine and returns its events. A turn that
 // finishes ends in exactly one EventOk or EventErr, then the channel closes; a
-// cancelled ctx or a connection that just stops closes it with neither. A
-// request this wire cannot carry, or one over Model.RequestBytes, ends at once
-// in EventErr with api.CodeInvalid or api.CodeTooLarge. The thread calls it;
-// hosts normally do not.
+// cancelled ctx or a connection that just stops closes it with neither. Fields
+// of the reply this package does not read arrive as one EventOpaque, the last
+// block before EventOk, with Kind "generic.fields". Earlier reasoning and such
+// fields go out only when they came from this model. A request this wire
+// cannot carry, or one over Model.RequestBytes, ends at once in EventErr with
+// api.CodeInvalid or api.CodeTooLarge. The thread calls it; hosts normally do
+// not.
 func (p *Provider) Stream(ctx context.Context, req api.Request) <-chan api.Event {
 	httpReq, sent, err := p.request(ctx, req)
 	if err != nil {

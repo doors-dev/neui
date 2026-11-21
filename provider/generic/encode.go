@@ -17,6 +17,7 @@ package generic
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -56,6 +57,9 @@ func (p *Provider) encode(req api.Request) (*chatRequest, error) {
 			Function: toolFunction{Name: t.Name, Description: t.Desc, Parameters: params},
 		})
 	}
+	if len(p.marker) > 0 && req.System == "" && len(out.Tools) > 0 {
+		out.Tools[len(out.Tools)-1] = fielded{out.Tools[len(out.Tools)-1], p.marker}
+	}
 	name, named := req.ToolChoice.Tool()
 	switch {
 	case len(out.Tools) == 0:
@@ -68,10 +72,15 @@ func (p *Provider) encode(req api.Request) (*chatRequest, error) {
 	case req.ToolChoice == api.ToolChoiceAny:
 		out.ToolChoice = "required"
 	}
-	out.Messages = make([]message, 0, len(req.Messages)+1)
+	out.Messages = make([]any, 0, len(req.Messages)+1)
 	if req.System != "" {
-		out.Messages = append(out.Messages, message{Role: "system", Content: req.System})
+		system := any(req.System)
+		if len(p.marker) > 0 {
+			system = p.mark(req.System)
+		}
+		out.Messages = append(out.Messages, &message{Role: "system", Content: system})
 	}
+	var last *message
 	var called []string
 	for i, m := range req.Messages {
 		switch m.Role {
@@ -115,7 +124,8 @@ func (p *Provider) encode(req api.Request) (*chatRequest, error) {
 							result = append([]any{textPart{Type: "text", Text: "Error:"}}, body...)
 						}
 					}
-					out.Messages = append(out.Messages, message{Role: "tool", ToolCallID: lib.CallID(c.ID), Content: result})
+					last = &message{Role: "tool", ToolCallID: lib.CallID(c.ID), Content: result}
+					out.Messages = append(out.Messages, last)
 					results++
 				case api.ContentImage:
 					parts = append(parts, image(c))
@@ -130,14 +140,16 @@ func (p *Provider) encode(req api.Request) (*chatRequest, error) {
 			}
 			switch {
 			case len(parts) > 0:
-				out.Messages = append(out.Messages, message{Role: "user", Content: content(parts)})
+				last = &message{Role: "user", Content: content(parts)}
+				out.Messages = append(out.Messages, last)
 			case results == 0:
-				out.Messages = append(out.Messages, message{Role: "user", Content: emptyMessage})
+				last = &message{Role: "user", Content: emptyMessage}
+				out.Messages = append(out.Messages, last)
 			}
 			called = nil
 		case api.RoleAssistant:
 			var text, thoughts []string
-			var field []byte
+			var field, opaque []byte
 			var calls []toolCall
 			called = nil
 			for _, c := range m.Content {
@@ -146,7 +158,7 @@ func (p *Provider) encode(req api.Request) (*chatRequest, error) {
 					text = append(text, c.Text)
 				case api.ContentReasoning:
 					data, own := lib.OwnMeta(c.Meta, providerName)
-					if !own {
+					if !own || c.Model != p.model.Name {
 						continue
 					}
 					field = data
@@ -176,11 +188,28 @@ func (p *Provider) encode(req api.Request) (*chatRequest, error) {
 				case api.ContentToolResult:
 					text = append(text, lib.Omitted(c, "a tool result is a message of the tool role and follows the assistant message that called it"))
 				case api.ContentOpaque:
+					if c.Kind == opaqueKind && c.Model == p.model.Name {
+						opaque = c.Data
+					}
 				default:
 					text = append(text, lib.Unknown(providerName, i, c))
 				}
 			}
-			msg := message{Role: "assistant", ToolCalls: calls}
+			var fields struct {
+				Fields json.RawMessage            `json:"fields"`
+				Calls  map[string]json.RawMessage `json:"calls"`
+			}
+			if len(opaque) > 0 {
+				_ = json.Unmarshal(opaque, &fields)
+			}
+			msg := &message{Role: "assistant"}
+			for j, call := range calls {
+				if f := fields.Calls[called[j]]; len(f) > 2 && f[0] == '{' && len(bytes.TrimSpace(f[1:len(f)-1])) > 0 {
+					msg.ToolCalls = append(msg.ToolCalls, fielded{call, f[1 : len(f)-1]})
+				} else {
+					msg.ToolCalls = append(msg.ToolCalls, call)
+				}
+			}
 			if string(field) == `"reasoning"` {
 				msg.Reasoning = strings.Join(thoughts, "")
 			} else {
@@ -192,12 +221,35 @@ func (p *Provider) encode(req api.Request) (*chatRequest, error) {
 			case len(calls) == 0:
 				msg.Content = emptyMessage
 			}
-			out.Messages = append(out.Messages, msg)
+			last = msg
+			if f := fields.Fields; len(f) > 2 && f[0] == '{' && len(bytes.TrimSpace(f[1:len(f)-1])) > 0 {
+				out.Messages = append(out.Messages, fielded{msg, f[1 : len(f)-1]})
+			} else {
+				out.Messages = append(out.Messages, msg)
+			}
 		default:
 			return nil, fmt.Errorf("generic: message %d has role %q, which is neither user nor assistant", i, m.Role)
 		}
 	}
+	if len(p.marker) > 0 && last != nil {
+		last.Content = p.mark(last.Content)
+	}
 	return out, nil
+}
+
+func (p *Provider) mark(content any) any {
+	switch c := content.(type) {
+	case string:
+		return []any{fielded{textPart{Type: "text", Text: c}, p.marker}}
+	case []any:
+		for i := len(c) - 1; i >= 0; i-- {
+			if part, ok := c[i].(textPart); ok {
+				c[i] = fielded{part, p.marker}
+				break
+			}
+		}
+	}
+	return content
 }
 
 func image(c api.ContentImage) any {

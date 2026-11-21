@@ -16,12 +16,16 @@ package generic
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -55,13 +59,15 @@ func TestStreamText(t *testing.T) {
 
 func TestStreamReasoningFields(t *testing.T) {
 	for _, tc := range []struct {
-		name  string
-		delta string
-		meta  string
+		name   string
+		delta  string
+		meta   string
+		fields string
 	}{
-		{"reasoning", `{"content":"","reasoning":"%s","reasoning_details":[{"type":"reasoning.text","text":"%s","format":"unknown","index":0}]}`, `{"provider":"generic","data":"reasoning"}`},
-		{"reasoning_content", `{"content":null,"reasoning_content":"%s"}`, `{"provider":"generic","data":"reasoning_content"}`},
-		{"both, the same text", `{"reasoning":"%s","reasoning_content":"%s"}`, `{"provider":"generic","data":"reasoning"}`},
+		{"reasoning", `{"content":"","reasoning":"%s","reasoning_details":[{"type":"reasoning.text","text":"%s","format":"unknown","index":0}]}`, `{"provider":"generic","data":"reasoning"}`,
+			`opaque 2 "generic.fields" {"fields":{"reasoning_details":[{"format":"unknown","index":0,"text":"Let me think. More.","type":"reasoning.text"}]}} ""`},
+		{"reasoning_content", `{"content":null,"reasoning_content":"%s"}`, `{"provider":"generic","data":"reasoning_content"}`, ""},
+		{"both, the same text", `{"reasoning":"%s","reasoning_content":"%s"}`, `{"provider":"generic","data":"reasoning"}`, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			p := serve(t, stringHandler(
@@ -75,15 +81,18 @@ func TestStreamReasoningFields(t *testing.T) {
 			))
 			events := collect(t, p, turn("hi"))
 			conform.CheckUnframed(t, events)
-			wantEvents(t, events,
+			want := []string{
 				"start gen-1 qwen/qwen3.8-27b",
 				`thinking 0 part=0 "Let me"`,
-				"meta 0 "+tc.meta,
+				"meta 0 " + tc.meta,
 				`thinking 0 part=0 " think."`,
 				`text 1 "\n\nHi"`,
 				`thinking 0 part=0 " More."`,
-				"ok turn",
-			)
+			}
+			if tc.fields != "" {
+				want = append(want, tc.fields)
+			}
+			wantEvents(t, events, append(want, "ok turn")...)
 		})
 	}
 }
@@ -180,6 +189,74 @@ func TestStreamToolCallFailures(t *testing.T) {
 			events := collect(t, serve(t, stringHandler(append(frames, chunkFrame(`{}`, "tool_calls"), doneFrame)...)), turn("ping"))
 			conform.CheckUnframed(t, events)
 			wantEvents(t, events, append(append([]string{"start gen-1 qwen/qwen3.8-27b"}, tc.want...), "err network")...)
+		})
+	}
+}
+
+func TestStreamOpaqueFields(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		frames []string
+		finish string
+		want   string
+	}{
+		{"indexed lists merge by index", []string{
+			`{"reasoning_details":[{"type":"reasoning.text","text":"\n","format":"f","index":0}]}`,
+			`{"reasoning_details":[{"type":"reasoning.text","text":"\n","format":"f","index":0},{"type":"reasoning.encrypted","data":"ab","index":1}]}`,
+			`{"reasoning_details":[{"type":"reasoning.encrypted","data":"cd","index":1,"id":"rs_1"}]}`,
+			`{"reasoning_details":[{"type":"reasoning.text","signature":"c2ln","format":"f","index":0}]}`,
+		}, "stop", `{"fields":{"reasoning_details":[{"format":"f","index":0,"signature":"c2ln","text":"\n\n","type":"reasoning.text"},{"data":"abcd","id":"rs_1","index":1,"type":"reasoning.encrypted"}]}}`},
+		{"one value in every fragment stays one", []string{
+			`{"note":"same"}`,
+			`{"note":"same"}`,
+		}, "stop", `{"fields":{"note":"same"}}`},
+		{"objects merge field by field", []string{
+			`{"meta":{"text":"a","n":1,"deep":{"s":"x"}}}`,
+			`{"meta":{"text":"b","n":2,"flag":true,"deep":{"s":"y"}}}`,
+		}, "stop", `{"fields":{"meta":{"deep":{"s":"xy"},"flag":true,"n":2,"text":"ab"}}}`},
+		{"other values keep the last", []string{
+			`{"annotations":[{"type":"url_citation","url":"a"}],"score":1,"label":"x"}`,
+			`{"annotations":[{"type":"url_citation","url":"b"}],"score":2.5,"label":{"k":1}}`,
+		}, "stop", `{"fields":{"annotations":[{"type":"url_citation","url":"b"}],"label":{"k":1},"score":2.5}}`},
+		{"empty values are absent", []string{
+			`{"refusal":null,"annotations":[],"audio":{},"note":""}`,
+			`{"content":"hi","role":"assistant"}`,
+		}, "stop", ""},
+		{"per-call fields", []string{
+			`{"tool_calls":[{"index":0,"id":"call_a","type":"function","function":{"name":"now","arguments":""},"extra_content":{"google":{"thought_signature":"c2"}}}]}`,
+			`{"tool_calls":[{"index":0,"function":{"arguments":"{}"},"extra_content":{"google":{"thought_signature":"ln"}}},{"index":1,"type":"function","function":{"name":"now","arguments":"{}"},"sig":"x"}]}`,
+			`{"tool_calls":[{"index":1,"id":"call_b","sig":"y"}]}`,
+		}, "tool_calls", `{"calls":{"call_a":{"extra_content":{"google":{"thought_signature":"c2ln"}}},"call_b":{"sig":"xy"}}}`},
+		{"per-call fields of a minted id", []string{
+			`{"tool_calls":[{"index":0,"type":"function","function":{"name":"now","arguments":"{}"},"sig":"x"}]}`,
+		}, "tool_calls", `{"calls":{"gen-1_call_0":{"sig":"x"}}}`},
+		{"an unfinished turn keeps none", []string{
+			`{"reasoning_details":[{"type":"reasoning.text","text":"a","index":0}]}`,
+		}, "length", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var frames []string
+			for _, f := range tc.frames {
+				frames = append(frames, chunkFrame(f, ""))
+			}
+			events := collect(t, serve(t, stringHandler(append(frames, chunkFrame(`{}`, tc.finish), doneFrame)...)), turn("hi"))
+			conform.CheckUnframed(t, events)
+			var got string
+			next := 0
+			for i, e := range events {
+				switch e := e.(type) {
+				case api.EventOpaque:
+					if e.Kind != "generic.fields" || i != len(events)-2 || e.Index != next {
+						t.Fatalf("opaque %s is not the last block before the end: %q", conform.Describe(e), conform.DescribeAll(events))
+					}
+					got = string(e.Data)
+				case api.IndexedEvent:
+					next = max(next, e.At()+1)
+				}
+			}
+			if got != tc.want {
+				t.Fatalf("fields\n%s\nwant\n%s", got, tc.want)
+			}
 		})
 	}
 }
@@ -558,13 +635,13 @@ func TestRecordedStreams(t *testing.T) {
 		file string
 		want string
 	}{
-		{"openrouter-qwen-text.sse", `reasoning[reasoning] "The user wants me to say \"hi\" in one word. This is simple - I just need to respond with a single word greeting.\n" | text "\n\nHi" | usage in=58 out=3 rsn=30 cr=0 cw=0 | ok turn`},
-		{"openrouter-qwen-tools.sse", `reasoning[reasoning] "The user is asking for the weather in Paris and Rome. Since the two are independent of each other, they can be called in parallel.\n" | text "\n\n\n" | tool call_004ac60f136a49038037f6c9 get_weather {"city": "Paris"} | tool call_7fc25788ec4f4f409db6ccfb get_weather {"city": "Rome"} | usage in=335 out=54 rsn=30 cr=0 cw=0 | ok turn`},
+		{"openrouter-qwen-text.sse", `reasoning[reasoning] "The user wants me to say \"hi\" in one word. This is simple - I just need to respond with a single word greeting.\n" | text "\n\nHi" | opaque generic.fields reasoning_details | usage in=58 out=3 rsn=30 cr=0 cw=0 | ok turn`},
+		{"openrouter-qwen-tools.sse", `reasoning[reasoning] "The user is asking for the weather in Paris and Rome. Since the two are independent of each other, they can be called in parallel.\n" | text "\n\n\n" | tool call_004ac60f136a49038037f6c9 get_weather {"city": "Paris"} | tool call_7fc25788ec4f4f409db6ccfb get_weather {"city": "Rome"} | opaque generic.fields reasoning_details | usage in=335 out=54 rsn=30 cr=0 cw=0 | ok turn`},
 		{"openrouter-qwen-cap.sse", `reasoning[reasoning] "We need to respond to user: \"Write a four-line poem about tea.\" Simple. Then final with poem four lines" | usage in=60 out=0 rsn=24 cr=0 cw=0 | err capped`},
-		{"openrouter-gptoss-tools.sse", `reasoning[reasoning] "We need to call get_weather for Paris and Rome." | tool chatcmpl-tool-ad2a7e93260970c4 get_weather {"city":"Paris"} | usage in=74 out=19 rsn=16 cr=64 cw=0 | ok turn`},
+		{"openrouter-gptoss-tools.sse", `reasoning[reasoning] "We need to call get_weather for Paris and Rome." | tool chatcmpl-tool-ad2a7e93260970c4 get_weather {"city":"Paris"} | opaque generic.fields reasoning_details | usage in=74 out=19 rsn=16 cr=64 cw=0 | ok turn`},
 		{"openrouter-gptoss-upstream-error.sse", `reasoning[reasoning] "Need to call tool." | usage in=107 out=0 rsn=5 cr=0 cw=0 | err network`},
 		{"openrouter-qwen-cache-2.sse", `text "ok" | usage in=48 out=2 rsn=0 cr=9920 cw=0 | ok turn`},
-		{"openrouter-mistral-tools.sse", `reasoning[reasoning] "The user wants to know the current weather in Paris and Rome. I need to use the get_weather tool for each city. Let me make two separate calls - one for Paris and one for Rome." | text "I'll get the current weather for both Paris and Rome for you." | tool I77MZpriD get_weather {"city": "Paris"} | tool bAk2mbhvM get_weather {"city": "Rome"} | usage in=94 out=39 rsn=41 cr=0 cw=0 | ok turn`},
+		{"openrouter-mistral-tools.sse", `reasoning[reasoning] "The user wants to know the current weather in Paris and Rome. I need to use the get_weather tool for each city. Let me make two separate calls - one for Paris and one for Rome." | text "I'll get the current weather for both Paris and Rome for you." | tool I77MZpriD get_weather {"city": "Paris"} | tool bAk2mbhvM get_weather {"city": "Rome"} | opaque generic.fields reasoning_details | usage in=94 out=39 rsn=41 cr=0 cw=0 | ok turn`},
 	} {
 		t.Run(tc.file, func(t *testing.T) {
 			data, err := os.ReadFile(filepath.Join("testdata", "streams", tc.file))
@@ -599,6 +676,15 @@ func TestRecordedStreams(t *testing.T) {
 					blocks = append(blocks, fmt.Sprintf("text %q", c.Text))
 				case api.ContentToolUse:
 					blocks = append(blocks, fmt.Sprintf("tool %s %s %s", c.ID, c.Name, c.Input))
+				case api.ContentOpaque:
+					var data struct {
+						Fields map[string]any `json:"fields"`
+						Calls  map[string]any `json:"calls"`
+					}
+					if err := json.Unmarshal(c.Data, &data); err != nil {
+						t.Fatal(err)
+					}
+					blocks = append(blocks, strings.Join(append([]string{"opaque", c.Kind}, append(slices.Sorted(maps.Keys(data.Fields)), slices.Sorted(maps.Keys(data.Calls))...)...), " "))
 				default:
 					blocks = append(blocks, fmt.Sprintf("%T", c))
 				}
@@ -608,4 +694,131 @@ func TestRecordedStreams(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRecordedOpaqueFields(t *testing.T) {
+	type entry struct {
+		Type      string `json:"type"`
+		Text      string `json:"text"`
+		Signature string `json:"signature"`
+		Data      string `json:"data"`
+		Format    string `json:"format"`
+		ID        string `json:"id"`
+		Index     *int   `json:"index"`
+	}
+	for _, tc := range []struct {
+		file  string
+		model string
+		check func(t *testing.T, details []entry, annotations []any, thoughts string, calls []api.ContentToolUse)
+	}{
+		{"openrouter-claude-haiku-thinking-tools", "anthropic/claude-haiku-5.5", func(t *testing.T, d []entry, _ []any, thoughts string, _ []api.ContentToolUse) {
+			if len(d) != 1 || d[0].Type != "reasoning.text" || d[0].Format != "anthropic-claude-v1" || d[0].Text != thoughts || len(thoughts) != 151 ||
+				!strings.HasPrefix(d[0].Signature, "CAQS7AYK") || len(d[0].Signature) != 1273 || d[0].Index == nil || *d[0].Index != 0 {
+				t.Fatalf("details %+v, thoughts %q", d, thoughts)
+			}
+		}},
+		{"openrouter-gpt5mini-encrypted-tools", "openai/gpt-5-mini", func(t *testing.T, d []entry, _ []any, thoughts string, _ []api.ContentToolUse) {
+			if len(d) != 1 || d[0].Type != "reasoning.encrypted" || d[0].Format != "openai-responses-v1" || !strings.HasPrefix(d[0].ID, "rs_") ||
+				!strings.HasPrefix(d[0].Data, "gAAAAA") || len(d[0].Data) != 2351 || thoughts != "" {
+				t.Fatalf("details %+v, thoughts %q", d, thoughts)
+			}
+		}},
+		{"openrouter-gemini-flashlite-encrypted-tools", "google/gemini-3.5-flash-lite", func(t *testing.T, d []entry, _ []any, thoughts string, calls []api.ContentToolUse) {
+			if len(d) != 1 || d[0].Type != "reasoning.encrypted" || d[0].Format != "google-gemini-v1" || len(calls) != 1 || d[0].ID != calls[0].ID || len(d[0].Data) != 265 {
+				t.Fatalf("details %+v, calls %+v", d, calls)
+			}
+		}},
+		{"openrouter-qwen-details-tools", "qwen/qwen3.8-27b", func(t *testing.T, d []entry, _ []any, thoughts string, _ []api.ContentToolUse) {
+			if len(d) != 1 || d[0].Type != "reasoning.text" || d[0].Format != "unknown" || d[0].Text != thoughts || len(thoughts) != 109 {
+				t.Fatalf("details %+v, thoughts %q", d, thoughts)
+			}
+		}},
+		{"openrouter-qwen-web-annotations", "qwen/qwen3.8-27b", func(t *testing.T, d []entry, a []any, _ string, _ []api.ContentToolUse) {
+			if len(d) != 0 || len(a) != 1 || a[0].(map[string]any)["type"] != "url_citation" {
+				t.Fatalf("details %+v, annotations %v", d, a)
+			}
+		}},
+	} {
+		t.Run(tc.file, func(t *testing.T) {
+			data, err := os.ReadFile(filepath.Join("testdata", "streams", tc.file+".sse"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			p := serve(t, stringHandler(string(data)))
+			p.model.Name = tc.model
+			events := collect(t, p, turn("hi"))
+			conform.CheckUnframed(t, events)
+			b := response.NewBulder()
+			for _, e := range events {
+				if _, ok := b.On(e); !ok {
+					t.Fatalf("builder refused %s", conform.Describe(e))
+				}
+			}
+			content := b.Flush().Content.Ordered()
+			var opaque []api.ContentOpaque
+			var calls []api.ContentToolUse
+			var thoughts string
+			for _, c := range content {
+				switch c := c.(type) {
+				case api.ContentOpaque:
+					opaque = append(opaque, c)
+				case api.ContentToolUse:
+					calls = append(calls, c)
+				case api.ContentReasoning:
+					thoughts = strings.Join(c.Thoughts.Ordered(), "")
+				}
+			}
+			if len(opaque) != 1 || opaque[0].Kind != "generic.fields" || opaque[0].Model != tc.model {
+				t.Fatalf("opaque blocks %+v", opaque)
+			}
+			var fields struct {
+				Fields struct {
+					Details     []entry `json:"reasoning_details"`
+					Annotations []any   `json:"annotations"`
+				} `json:"fields"`
+				Calls map[string]any `json:"calls"`
+			}
+			if err := json.Unmarshal(opaque[0].Data, &fields); err != nil {
+				t.Fatal(err)
+			}
+			if len(fields.Calls) != 0 {
+				t.Fatalf("per-call fields %v", fields.Calls)
+			}
+			tc.check(t, fields.Fields.Details, fields.Fields.Annotations, thoughts, calls)
+
+			msgs := []api.Message{user(text("hi")), assistant(content...), answer(calls)}
+			sent, err := os.ReadFile(filepath.Join("testdata", "streams", tc.file+".sent.json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got []any
+			var want any
+			if err := json.Unmarshal([]byte(messagesJSON(t, p, msgs...)), &got); err != nil {
+				t.Fatal(err)
+			}
+			if err := json.Unmarshal(sent, &want); err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got[1], want) {
+				t.Fatalf("replayed\n%v\nthe probe sent and the server took\n%v", got[1], want)
+			}
+
+			other := mustNew(t, Conf{Model: api.Model{Name: tc.model + ":nitro"}, BaseURL: "http://127.0.0.1:8080/v1"})
+			replay := messagesJSON(t, other, msgs...)
+			if strings.Contains(replay, "reasoning") || strings.Contains(replay, "annotations") {
+				t.Fatalf("another model got the reasoning or fields: %s", replay)
+			}
+		})
+	}
+}
+
+func answer(calls []api.ContentToolUse) api.Message {
+	var results api.Contents
+	for _, c := range calls {
+		results = append(results, api.ContentToolResult{ID: c.ID, Content: api.UserContents{text("alpha: 58")}})
+	}
+	if len(results) == 0 {
+		results = append(results, text("Thanks."))
+	}
+	return user(results...)
 }

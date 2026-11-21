@@ -275,7 +275,7 @@ func genericCorpus() []corpusCase {
 	failed := chunk(`{"role":"assistant","content":"half"}`, "null") +
 		sseFrame("", `{"id":"gen-1","object":"chat.completion.chunk","created":1,"model":"qwen/qwen3.8-27b","provider":"Wafer","error":{"code":502,"message":"Provider disconnected <retry>","metadata":{"error_type":"provider_unavailable"}},"choices":[{"index":0,"delta":{"content":""},"finish_reason":"error"}]}`)
 	return []corpusCase{
-		{name: "generic/rich", body: rich, want: "e3926b73fc7832c6fe72a66df8a272212a8ccae035a260746eedbd0f32c1539f"},
+		{name: "generic/rich", body: rich, want: "a6d2577e18b5fe3ef60daa7b8cb1f93301c9cf83f323b9ae7e3deca50ae75f08"},
 		{name: "generic/capped", body: capped, want: "22d19996cbf14f4e75efe5dff39f295bef23d17f4fe9851a43e9ee4af78206c3"},
 		{name: "generic/error", body: failed, want: "8215468c1c65e0c53919444a4381d7925b2efb2de3533999e8c131da83cf59f0"},
 	}
