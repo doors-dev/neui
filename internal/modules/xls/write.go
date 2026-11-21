@@ -26,7 +26,7 @@ import (
 	"neui.dev/internal/common"
 )
 
-const writeDesc = `Write a block of values or formulas. One row repeated fills a column: cell E2, rows [["=B{row}*C{row}"]], repeat 19 fills E2:E20.`
+const writeDesc = `Write a block of values or formulas; creates the workbook and the sheet when they do not exist. One row repeated fills a column: cell E2, rows [["=B{row}*C{row}"]], repeat 19 fills E2:E20.`
 
 var futureFn = map[string]bool{
 	"ACOT": true, "ACOTH": true, "AGGREGATE": true, "ARABIC": true, "ARRAYTOTEXT": true, "BASE": true, "BETA.DIST": true, "BETA.INV": true,
@@ -71,8 +71,9 @@ type writeArg struct {
 }
 
 type writeResult struct {
-	_     struct{} `description:"range: the block written"`
-	Range string   `json:"range"`
+	Range   string   `json:"range"`
+	Created bool     `json:"created,omitempty"`
+	_       struct{} `description:"range: the block written; created: the workbook did not exist and this call made it"`
 }
 
 func writeTool(ctx context.Context, arg writeArg) (writeResult, error) {
@@ -119,13 +120,33 @@ func writeTool(ctx context.Context, arg writeArg) (writeResult, error) {
 		return writeResult{}, fmt.Errorf("block from %s does not fit on a sheet: %w", start, err)
 	}
 	fs := common.GetController(ctx).FS()
-	f, _, release, err := openWrite(ctx, fs, arg.Path, false)
+	f, created, release, err := openWrite(ctx, fs, arg.Path, true)
 	if err != nil {
 		return writeResult{}, err
 	}
 	defer release()
-	if err := checkTarget(ctx, fs, f, arg.Path, arg.Sheet, bounds{x1, y1, x1 + width - 1, y1 + height - 1}, true); err != nil {
-		return writeResult{}, err
+	newSheet := created
+	if created && arg.Sheet != "Sheet1" {
+		if err := f.SetSheetName("Sheet1", arg.Sheet); err != nil {
+			return writeResult{}, err
+		}
+	}
+	if !created {
+		idx, err := f.GetSheetIndex(arg.Sheet)
+		if err != nil {
+			return writeResult{}, err
+		}
+		if idx < 0 {
+			if _, err := f.NewSheet(arg.Sheet); err != nil {
+				return writeResult{}, err
+			}
+			newSheet = true
+		}
+	}
+	if !newSheet {
+		if err := checkTarget(ctx, fs, f, arg.Path, arg.Sheet, bounds{x1, y1, x1 + width - 1, y1 + height - 1}, true); err != nil {
+			return writeResult{}, err
+		}
 	}
 	formulas := false
 	for i := range height {
@@ -158,7 +179,7 @@ func writeTool(ctx context.Context, arg writeArg) (writeResult, error) {
 	if err := save(ctx, fs, f, arg.Path); err != nil {
 		return writeResult{}, err
 	}
-	return writeResult{Range: start + ":" + end}, nil
+	return writeResult{Range: start + ":" + end, Created: created}, nil
 }
 
 func formula(s string) (string, error) {

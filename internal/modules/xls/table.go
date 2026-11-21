@@ -31,7 +31,7 @@ import (
 
 const maxFormatCells = 100000
 
-const tableDesc = `Create a styled table with a header row and per-column number formats.`
+const tableDesc = `Create a styled table with a header row and per-column number formats; creates the workbook and the sheet when they do not exist.`
 
 const formatDesc = `Restyle a range; only the options you pass change.`
 
@@ -43,8 +43,8 @@ type columnSpec struct {
 }
 
 type tableArg struct {
-	Path    string       `json:"path" required:"true" description:"created when missing"`
-	Sheet   string       `json:"sheet" required:"true" description:"created when missing"`
+	Path    string       `json:"path" required:"true"`
+	Sheet   string       `json:"sheet" required:"true"`
 	Cell    string       `json:"cell" description:"where the header row starts; default A1"`
 	Columns []columnSpec `json:"columns" required:"true"`
 	Rows    [][]any      `json:"rows" required:"true" description:"one array per data row, in column order"`
@@ -53,9 +53,10 @@ type tableArg struct {
 }
 
 type tableResult struct {
-	_     struct{} `description:"range: the table, header row included; name: for formulas like =SUM(Sales[Amount])"`
-	Range string   `json:"range"`
-	Name  string   `json:"name"`
+	Range   string   `json:"range"`
+	Name    string   `json:"name"`
+	Created bool     `json:"created,omitempty"`
+	_       struct{} `description:"range: the table, header row included; name: for formulas like =SUM(Sales[Amount]); created: the workbook did not exist and this call made it"`
 }
 
 type formatArg struct {
@@ -459,7 +460,7 @@ func tableTool(ctx context.Context, arg tableArg) (tableResult, error) {
 	if err := save(ctx, fs, f, arg.Path); err != nil {
 		return tableResult{}, err
 	}
-	return tableResult{Range: ref, Name: name}, nil
+	return tableResult{Range: ref, Name: name, Created: created}, nil
 }
 
 func formatTool(ctx context.Context, arg formatArg) (struct{}, error) {

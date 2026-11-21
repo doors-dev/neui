@@ -17,9 +17,11 @@ package xls
 import (
 	"archive/zip"
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
+	"neui.dev/api"
 	"neui.dev/internal/testkit"
 )
 
@@ -180,5 +182,37 @@ func TestSheetRefQuotes(t *testing.T) {
 		if got := sheetRef(in); got != want {
 			t.Fatalf("sheetRef(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestWriteCreatesAMissingWorkbookAndOthersRefuseIt(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	fs := c.FS()
+	res, err := writeTool(c.Ctx(), writeArg{Path: "report.xlsx", Sheet: "Summary", Cell: "A1", Rows: [][]any{{"Total", 42.0}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Created || res.Range != "A1:B1" {
+		t.Fatalf("the first write answered %+v, want the range and created", res)
+	}
+	f := reopen(t, fs, "report.xlsx")
+	if v, err := f.GetCellValue("Summary", "B1"); err != nil || v != "42" {
+		t.Fatalf("Summary!B1 = %q (%v), want 42", v, err)
+	}
+	res, err = writeTool(c.Ctx(), writeArg{Path: "report.xlsx", Sheet: "Notes", Cell: "A1", Rows: [][]any{{"later"}}})
+	if err != nil || res.Created {
+		t.Fatalf("a write to a new sheet of the existing workbook answered %+v (%v), want no created", res, err)
+	}
+	_, err = chartTool(c.Ctx(), chartArg{Path: "missing.xlsx", Sheet: "Data", Type: "column", DataRange: "B1:B4", Anchor: "F2"})
+	if err == nil || !strings.Contains(err.Error(), "no workbook at this path: table or write creates one") {
+		t.Fatalf("a chart on a missing workbook answered %v, want the way to create one", err)
+	}
+}
+
+func TestWriteIntoUploadsIsRefused(t *testing.T) {
+	c := testkit.NewController(t, testkit.Setup{})
+	_, err := writeTool(c.Ctx(), writeArg{Path: "agent_uploads/report.xlsx", Sheet: "Summary", Cell: "A1", Rows: [][]any{{"Total"}}})
+	if !errors.Is(err, api.ErrReadOnly) || !strings.HasPrefix(err.Error(), `"agent_uploads/report.xlsx": `) {
+		t.Fatalf("a write straight into agent_uploads answered %v, want it refused under its own name", err)
 	}
 }

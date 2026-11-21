@@ -109,7 +109,12 @@ func openWrite(ctx context.Context, fs api.FS, name string, create bool) (*excel
 	}
 	var f *excelize.File
 	created := false
-	if _, err := fs.Stat(ctx, name); create && errors.Is(err, api.ErrNotFound) {
+	_, statErr := fs.Stat(ctx, name)
+	if !create && errors.Is(statErr, api.ErrNotFound) {
+		unlock()
+		return nil, false, nil, fmt.Errorf("%q: no workbook at this path: table or write creates one: %w", name, api.ErrNotFound)
+	}
+	if create && errors.Is(statErr, api.ErrNotFound) {
 		if strings.ToLower(path.Ext(name)) != ".xlsx" {
 			unlock()
 			return nil, false, nil, fmt.Errorf("%q does not end in .xlsx: new workbooks are created as .xlsx only", name)
@@ -133,6 +138,9 @@ func openWrite(ctx context.Context, fs api.FS, name string, create bool) (*excel
 func save(ctx context.Context, fs api.FS, f *excelize.File, name string) error {
 	tmp := fmt.Sprintf("%s.tmp-%016x~", name, rand.Uint64())
 	w, err := fs.Create(tmp)
+	if errors.Is(err, api.ErrReadOnly) {
+		return fmt.Errorf("%q: %w", name, api.ErrReadOnly)
+	}
 	if err != nil {
 		return err
 	}
