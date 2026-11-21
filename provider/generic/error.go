@@ -99,7 +99,7 @@ func errorCode(status int, e *APIError) api.ErrCode {
 		return api.CodeNetwork
 	case http.StatusRequestEntityTooLarge:
 		return api.CodeTooLarge
-	case http.StatusBadRequest, http.StatusNotFound, http.StatusUnprocessableEntity, http.StatusNotImplemented:
+	case http.StatusBadRequest, http.StatusNotFound, http.StatusConflict, http.StatusUnprocessableEntity, http.StatusNotImplemented:
 		return api.CodeInvalid
 	default:
 		if status >= 500 {

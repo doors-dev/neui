@@ -164,14 +164,19 @@ type ErrorCase struct {
 }
 
 type Live struct {
-	Env                   string
-	Model                 api.Model
-	Params                Params
-	Base                  string
-	Count                 string
-	Strip                 []string
-	Auth                  func(r *http.Request, key string)
-	AnyModel              bool
+	Env    string
+	Model  api.Model
+	Params Params
+	Base   string
+	Count  string
+	Strip  []string
+	Auth   func(r *http.Request, key string)
+	// AnyModel skips the unknown-model check, for a server that answers any
+	// model name.
+	AnyModel bool
+	// DropsEarlierReasoning makes the switch-back check log instead of fail
+	// when the model's own earlier reasoning adds no input tokens, for a server
+	// whose chat template drops it.
 	DropsEarlierReasoning bool
 }
 

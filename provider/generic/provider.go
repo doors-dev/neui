@@ -25,25 +25,21 @@
 //		BaseURL: "http://127.0.0.1:8080/v1",
 //	}, generic.WithEffort(generic.EffortLow))
 //
-// No key is read from the environment: WithAPIKey sets one, and without it no
-// Authorization header is sent. A provider serves one model with one set of
-// options; build two for two settings. No model is declared here: New checks
-// no combination, every option is sent as configured, and a turn the server
-// refuses ends with api.CodeInvalid. WithExtraBody sends the settings a server
-// or gateway defines beyond the standard fields.
+// No key is read from the environment; WithAPIKey sets one. A provider serves
+// one model with one set of options; build two for two settings.
 //
 // Reasoning streams back from reasoning or reasoning_content, whichever the
-// server writes. Every other field with a value, on the reply message and on
-// its tool calls, such as a call's signature, is kept whole in one
+// server writes. Every other field on the reply message and on its tool calls,
+// such as a call's signature, is kept whole, empty values included, in one
 // api.ContentOpaque per turn: a field that arrives again replaces the earlier
-// value, and OpenRouter's reasoning_details is assembled entry by entry. On
-// later turns both go back only to the model that wrote them, named exactly as
-// Conf.Model.Name ("x:nitro" and "x" differ): the reasoning in its field and
-// the other fields unchanged on that message and its calls. To any other
-// model, and from any other provider, they are left out whole. Reasoning a
-// server leaves in the text as <think> tags stays text. A tool call that
-// arrives without an index, as from Gemini's OpenAI-compatible endpoint, is
-// one whole call.
+// value, and OpenRouter's reasoning_details list is assembled entry by entry.
+// On later turns both go back only to the model that wrote them, named exactly
+// as Conf.Model.Name ("x:nitro" and "x" differ): the reasoning in its field and
+// the other fields unchanged on that message and its calls. To any other model,
+// and from any other provider, they are left out whole. Reasoning a server
+// leaves in the text as <think> tags stays text. A tool call that arrives
+// without an index, as from Gemini's OpenAI-compatible endpoint, is one whole
+// call.
 //
 // Images go as data URLs in user messages and tool results. For a vision
 // model, declare api.ModalityImage in Model.Inputs; without it a thread
@@ -86,7 +82,7 @@ const (
 // string passes through unchanged.
 type Effort string
 
-// The reasoning_effort levels OpenAI documents.
+// Effort values, from no reasoning to the most.
 const (
 	EffortNone    Effort = "none"
 	EffortMinimal Effort = "minimal"
@@ -123,21 +119,21 @@ type Option func(*Provider) error
 type Conf struct {
 	// Model is the model every turn is sent to, named as the server lists it.
 	// Set Context, Inputs and the other limits the server has; none is read
-	// from the server. New refuses an empty Model.Name.
+	// from the server.
 	Model api.Model `json:"model"`
 	// BaseURL is the server's OpenAI-compatible root, such as
 	// http://127.0.0.1:8080/v1 or https://openrouter.ai/api/v1, without the
-	// /chat/completions path; a trailing slash is trimmed. New refuses an
-	// empty value or one without a scheme and host.
+	// /chat/completions path; a trailing slash is trimmed.
 	BaseURL string `json:"baseURL"`
 }
 
 // New builds a Provider for conf.Model at conf.BaseURL. A nil option is
 // skipped. New returns the first option error, and an error for an empty
 // Model.Name or a BaseURL that is empty, does not parse or has no scheme and
-// host. Nothing else is checked: the server decides what it accepts, and a
-// missing or wrong key ends the turn with api.CodeAccess. The default HTTP
-// client has no timeout; WithTransport bounds a dead connection.
+// host. Nothing else is checked: every option is sent as configured, and a
+// turn the server refuses ends with api.CodeInvalid, or with api.CodeAccess
+// for a missing or wrong key. The default HTTP client has no timeout;
+// WithTransport bounds a dead connection.
 func New(conf Conf, opts ...Option) (*Provider, error) {
 	p := &Provider{
 		model:  conf.Model,
@@ -169,8 +165,7 @@ func New(conf Conf, opts ...Option) (*Provider, error) {
 }
 
 // WithAPIKey sets the key, sent as a bearer token. Without it, or with an
-// empty key, no Authorization header is sent; a server that wants one
-// refuses the turn with api.CodeAccess.
+// empty key, no Authorization header is sent.
 func WithAPIKey(key string) Option {
 	return func(p *Provider) error {
 		p.key = key
@@ -277,11 +272,10 @@ func WithStopSequences(seqs ...string) Option {
 // A later call replaces the fields of an earlier one. New fails on an empty
 // name, a value that does not encode, and a field the provider sets itself:
 // model, messages, tools, tool_choice, stream, stream_options, max_tokens,
-// reasoning_effort, temperature, top_p and stop. The server decides what a
-// field does, and one it refuses ends the turn with api.CodeInvalid.
-// OpenRouter sends a request that carries a model's encrypted or signed
-// reasoning only to the upstream that wrote it, and refuses one whose
-// provider order without fallbacks leaves that upstream out.
+// reasoning_effort, temperature, top_p and stop. OpenRouter sends a request
+// that carries a model's encrypted or signed reasoning only to the upstream
+// that wrote it, and refuses one whose provider order without fallbacks leaves
+// that upstream out.
 func WithExtraBody(fields map[string]any) Option {
 	return func(p *Provider) error {
 		for _, name := range slices.Sorted(maps.Keys(fields)) {
@@ -317,12 +311,11 @@ func WithExtraBody(fields map[string]any) Option {
 	}
 }
 
-// WithCacheMarker merges fields into the parts a prompt cache is keyed on: the
-// system prompt, or the last tool when there is none, and the last text part
-// of the conversation, which moves forward every turn: the last message's, or
-// the nearest earlier one when the last message has none, such as images or
-// tool calls alone. A message that carries the marker goes as a list of parts.
-// Without the option, or with no fields, no marker is sent.
+// WithCacheMarker merges fields into the system prompt, or the last tool when
+// there is none, and into the last text part of the conversation: the last
+// message's, or the nearest earlier message's when the last has no text, as
+// with images or tool calls alone. A message that carries the marker goes as a
+// list of parts. Without the option, or with no fields, no marker is sent.
 //
 //	generic.WithCacheMarker(map[string]any{
 //		"cache_control": map[string]any{"type": "ephemeral", "ttl": "1h"},
@@ -392,12 +385,11 @@ func (p *Provider) Model() api.Model {
 // Stream runs one turn on its own goroutine and returns its events. A turn that
 // finishes ends in exactly one EventOk or EventErr, then the channel closes; a
 // cancelled ctx or a connection that just stops closes it with neither. Fields
-// of the reply this package does not read arrive as one EventOpaque, the last
-// block before EventOk, with Kind "generic.fields". Earlier reasoning and such
-// fields go out only when they came from this model. A request this wire
-// cannot carry, or one over Model.RequestBytes, ends at once in EventErr with
-// api.CodeInvalid or api.CodeTooLarge. The thread calls it; hosts normally do
-// not.
+// of the reply this package does not read arrive as one EventOpaque with Kind
+// "generic.fields", the turn's last block, however the turn ends unless ctx is
+// cancelled. A request this wire cannot carry, or one over Model.RequestBytes,
+// ends at once in EventErr with api.CodeInvalid or api.CodeTooLarge. The
+// thread calls it; hosts normally do not.
 func (p *Provider) Stream(ctx context.Context, req api.Request) <-chan api.Event {
 	httpReq, sent, err := p.request(ctx, req)
 	if err != nil {

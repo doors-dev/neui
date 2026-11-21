@@ -17,6 +17,8 @@ package generic
 import (
 	"encoding/json"
 	"strings"
+
+	"neui.dev/provider/lib"
 )
 
 type reasoningDetails struct {
@@ -26,16 +28,17 @@ type reasoningDetails struct {
 
 func (d *reasoningDetails) add(value json.RawMessage) bool {
 	var frags []map[string]json.RawMessage
-	if json.Unmarshal(value, &frags) != nil {
+	if json.Unmarshal(value, &frags) != nil || frags == nil {
 		return false
 	}
 	for _, frag := range frags {
 		index := frag["index"]
+		apart := len(index) == 0 || string(index) == "null"
 		at, seen := d.at[string(index)]
-		if empty(index) || !seen {
+		if apart || !seen {
 			at = len(d.entries)
 			d.entries = append(d.entries, make(map[string]any))
-			if !empty(index) {
+			if !apart {
 				if d.at == nil {
 					d.at = make(map[string]int)
 				}
@@ -44,11 +47,14 @@ func (d *reasoningDetails) add(value json.RawMessage) bool {
 		}
 		entry := d.entries[at]
 		for name, v := range frag {
-			if empty(v) {
-				continue
-			}
 			switch name {
 			case "text", "summary", "data", "signature":
+				if string(v) == "null" {
+					if _, set := entry[name]; !set {
+						entry[name] = v
+					}
+					continue
+				}
 				var s string
 				if json.Unmarshal(v, &s) == nil {
 					b, ok := entry[name].(*strings.Builder)
@@ -66,13 +72,16 @@ func (d *reasoningDetails) add(value json.RawMessage) bool {
 	return true
 }
 
-func (d *reasoningDetails) list() []map[string]any {
-	for _, entry := range d.entries {
+func (d *reasoningDetails) MarshalJSON() ([]byte, error) {
+	list := make([]map[string]any, len(d.entries))
+	for i, entry := range d.entries {
+		list[i] = make(map[string]any, len(entry))
 		for name, v := range entry {
 			if b, ok := v.(*strings.Builder); ok {
-				entry[name] = b.String()
+				v = b.String()
 			}
+			list[i][name] = v
 		}
 	}
-	return d.entries
+	return lib.MarshalRaw(list)
 }

@@ -85,12 +85,16 @@ func (p *Provider) encodeTools(out *chatRequest, req api.Request) error {
 		if t.Name == "" {
 			return errors.New("deepseek: tool has no name")
 		}
+		params := t.Schema
+		if params == nil {
+			params = map[string]any{"type": "object", "properties": map[string]any{}}
+		}
 		out.Tools = append(out.Tools, tool{
 			Type: "function",
 			Function: toolFunction{
 				Name:        t.Name,
 				Description: t.Desc,
-				Parameters:  t.Schema,
+				Parameters:  params,
 			},
 		})
 	}

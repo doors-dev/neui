@@ -23,7 +23,11 @@
       "type": "function",
       "function": {
         "name": "clock",
-        "description": "Read the time."
+        "description": "Read the time.",
+        "parameters": {
+          "properties": {},
+          "type": "object"
+        }
       }
     }
   ],

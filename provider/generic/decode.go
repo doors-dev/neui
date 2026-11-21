@@ -52,7 +52,6 @@ type converter struct {
 	called    map[int]map[string]json.RawMessage
 	stopped   bool
 	finish    string
-	failure   api.Event
 	sent      int
 	declared  int
 	k         chunk
@@ -77,34 +76,13 @@ func newConverter(model string, sent int, declared int) *converter {
 
 func (c *converter) Convert(f lib.Frame) ([]api.Event, bool) {
 	if string(f.Data) == doneSentinel {
-		if c.failure != nil {
-			return []api.Event{c.failure}, false
-		}
 		if !c.stopped {
-			return []api.Event{api.EventErr{Code: api.CodeNetwork, Err: errors.New("generic: [DONE] without a finish_reason")}}, false
+			return c.end(api.EventErr{Code: api.CodeNetwork, Err: errors.New("generic: [DONE] without a finish_reason")}), false
 		}
 		code := api.CodeUnknown
 		switch c.finish {
 		case "stop", "tool_calls", "function_call":
-			var data struct {
-				Fields map[string]any                        `json:"fields,omitempty"`
-				Calls  map[string]map[string]json.RawMessage `json:"calls,omitempty"`
-			}
-			if len(c.details.entries) > 0 {
-				c.fields["reasoning_details"] = c.details.list()
-			}
-			data.Fields = c.fields
-			for index, fields := range c.called {
-				if data.Calls == nil {
-					data.Calls = make(map[string]map[string]json.RawMessage)
-				}
-				data.Calls[c.named[index]] = fields
-			}
-			if len(data.Fields) == 0 && len(data.Calls) == 0 {
-				return []api.Event{api.EventOk{Code: api.CodeTurn}}, false
-			}
-			raw, _ := lib.MarshalRaw(data)
-			return []api.Event{api.EventOpaque{Index: c.next, Kind: opaqueKind, Data: raw}, api.EventOk{Code: api.CodeTurn}}, false
+			return c.end(api.EventOk{Code: api.CodeTurn}), false
 		case "length":
 			code = api.CodeCapped
 		case "content_filter":
@@ -112,15 +90,12 @@ func (c *converter) Convert(f lib.Frame) ([]api.Event, bool) {
 		case "abort", "error":
 			code = api.CodeNetwork
 		}
-		return []api.Event{api.EventErr{Code: code, Err: &APIError{Provider: providerName, Code: c.finish, RequestID: c.id, Message: "the turn ended on this finish_reason"}}}, false
+		return c.end(api.EventErr{Code: code, Err: &APIError{Provider: providerName, Code: c.finish, RequestID: c.id, Message: "the turn ended on this finish_reason"}}), false
 	}
 	c.k = chunk{}
 	c.events = c.events[:0]
 	if err := json.Unmarshal(f.Data, &c.k); err != nil {
-		if c.failure != nil {
-			return []api.Event{c.failure}, false
-		}
-		return []api.Event{api.EventErr{Code: api.CodeNetwork, Err: fmt.Errorf("generic: stream frame did not parse: %w", err)}}, false
+		return c.end(api.EventErr{Code: api.CodeNetwork, Err: fmt.Errorf("generic: stream frame did not parse: %w", err)}), false
 	}
 	if !c.started {
 		c.started = true
@@ -129,7 +104,7 @@ func (c *converter) Convert(f lib.Frame) ([]api.Event, bool) {
 	}
 	for i := range c.k.Choices {
 		ch := &c.k.Choices[i]
-		if ch.Index != 0 || c.failure != nil {
+		if ch.Index != 0 {
 			continue
 		}
 		d := &ch.Delta
@@ -147,9 +122,14 @@ func (c *converter) Convert(f lib.Frame) ([]api.Event, bool) {
 			}
 		}
 		for name, value := range d.fields {
-			if name != "reasoning_details" || !c.details.add(value) {
-				c.fields[name] = value
+			if name == "reasoning_details" {
+				if c.details.add(value) {
+					c.fields[name] = &c.details
+					continue
+				}
+				c.details = reasoningDetails{}
 			}
+			c.fields[name] = value
 		}
 		if d.Content != "" {
 			if c.text < 0 {
@@ -189,7 +169,7 @@ func (c *converter) Convert(f lib.Frame) ([]api.Event, bool) {
 				c.ids[e.ID] = true
 			case t.ID == "" || t.ID == c.real[*t.Index]:
 			case c.real[*t.Index] != "":
-				return append(c.events, api.EventErr{Code: api.CodeNetwork, Err: fmt.Errorf("generic: tool call %d named %q after %q", *t.Index, t.ID, c.real[*t.Index])}), false
+				return append(c.events, c.end(api.EventErr{Code: api.CodeNetwork, Err: fmt.Errorf("generic: tool call %d named %q after %q", *t.Index, t.ID, c.real[*t.Index])})...), false
 			default:
 				c.real[*t.Index] = t.ID
 				if !c.ids[t.ID] {
@@ -235,13 +215,13 @@ func (c *converter) Convert(f lib.Frame) ([]api.Event, bool) {
 			CacheWrite: written,
 		})
 	}
-	if c.failure == nil && len(c.k.Error) > 0 && string(c.k.Error) != "null" {
+	if len(c.k.Error) > 0 && string(c.k.Error) != "null" {
 		e := &APIError{Provider: providerName, RequestID: c.id}
 		status := readError(e, c.k.Error)
 		if e.Message == "" {
 			e.Message = lib.ErrorMessage(c.k.Error)
 		}
-		c.failure = api.EventErr{Code: errorCode(status, e), Err: e}
+		return append(c.events, c.end(api.EventErr{Code: errorCode(status, e), Err: e})...), false
 	}
 	return c.events, true
 }
@@ -272,10 +252,27 @@ func (c *converter) End(err error) []api.Event {
 	switch {
 	case err == context.Canceled, err == context.DeadlineExceeded:
 		return nil
-	case c.failure != nil:
-		return []api.Event{c.failure}
 	case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
-		return nil
+		return c.end()
 	}
-	return []api.Event{api.EventErr{Code: api.CodeNetwork, Err: err}}
+	return c.end(api.EventErr{Code: api.CodeNetwork, Err: err})
+}
+
+func (c *converter) end(events ...api.Event) []api.Event {
+	var data struct {
+		Fields map[string]any                        `json:"fields,omitempty"`
+		Calls  map[string]map[string]json.RawMessage `json:"calls,omitempty"`
+	}
+	data.Fields = c.fields
+	for index, fields := range c.called {
+		if data.Calls == nil {
+			data.Calls = make(map[string]map[string]json.RawMessage)
+		}
+		data.Calls[c.named[index]] = fields
+	}
+	if len(data.Fields) == 0 && len(data.Calls) == 0 {
+		return events
+	}
+	raw, _ := lib.MarshalRaw(data)
+	return append([]api.Event{api.EventOpaque{Index: c.next, Kind: opaqueKind, Data: raw}}, events...)
 }

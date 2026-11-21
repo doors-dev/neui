@@ -223,14 +223,33 @@ func TestStreamOpaqueFields(t *testing.T) {
 			`{"reasoning_details":[{"type":"reasoning.text","signature":"ln","format":"g","index":0,"id":null}]}`,
 			`{"reasoning_details":[{"type":"reasoning.summary","summary":"**Plan**\n","format":"o","index":2},{"type":"reasoning.summary","summary":"one","format":"o","index":2,"extra":1}]}`,
 			`{"reasoning_details":[{"type":"reasoning.summary","summary":" step","format":"o","index":2,"extra":2}]}`,
-		}, "stop", `{"fields":{"reasoning_details":[{"format":"g","index":0,"signature":"c2ln","text":"\n\n","type":"reasoning.text"},{"data":"abcd","id":"rs_1","index":1,"type":"reasoning.encrypted"},{"extra":2,"format":"o","index":2,"summary":"**Plan**\none step","type":"reasoning.summary"}]}}`},
+		}, "stop", `{"fields":{"reasoning_details":[{"format":"g","id":null,"index":0,"signature":"c2ln","text":"\n\n","type":"reasoning.text"},{"data":"abcd","id":"rs_1","index":1,"type":"reasoning.encrypted"},{"extra":2,"format":"o","index":2,"summary":"**Plan**\none step","type":"reasoning.summary"}]}}`},
 		{"reasoning_details entries without an index stay apart", []string{
 			`{"reasoning_details":[{"type":"reasoning.text","text":"a"}]}`,
 			`{"reasoning_details":[{"type":"reasoning.text","text":"b"}]}`,
 		}, "stop", `{"fields":{"reasoning_details":[{"text":"a","type":"reasoning.text"},{"text":"b","type":"reasoning.text"}]}}`},
+		{"reasoning_details entries keep empty values", []string{
+			`{"reasoning_details":[{"type":"reasoning.text","text":"","signature":"c2","format":"f","index":0,"id":null}]}`,
+			`{"reasoning_details":[{"type":"reasoning.text","signature":"ln","index":0}]}`,
+		}, "stop", `{"fields":{"reasoning_details":[{"format":"f","id":null,"index":0,"signature":"c2ln","text":"","type":"reasoning.text"}]}}`},
+		{"a null adds nothing to a concatenated value", []string{
+			`{"reasoning_details":[{"type":"reasoning.text","text":"a","signature":null,"index":0}]}`,
+			`{"reasoning_details":[{"type":"reasoning.text","signature":"sig","index":0}]}`,
+			`{"reasoning_details":[{"type":"reasoning.text","text":"b","signature":null,"index":0},{"type":"reasoning.text","text":null,"signature":null,"index":1}]}`,
+		}, "stop", `{"fields":{"reasoning_details":[{"index":0,"signature":"sig","text":"ab","type":"reasoning.text"},{"index":1,"signature":null,"text":null,"type":"reasoning.text"}]}}`},
 		{"reasoning_details that is no list stays whole", []string{
 			`{"reasoning_details":{"type":"reasoning.text","text":"a"}}`,
 		}, "stop", `{"fields":{"reasoning_details":{"type":"reasoning.text","text":"a"}}}`},
+		{"reasoning_details that is no list replaces a list", []string{
+			`{"reasoning_details":[{"type":"reasoning.text","text":"a","index":0}]}`,
+			`{"reasoning_details":null}`,
+		}, "stop", `{"fields":{"reasoning_details":null}}`},
+		{"a list replaces reasoning_details that is no list", []string{
+			`{"reasoning_details":[{"type":"reasoning.text","text":"a","index":0}]}`,
+			`{"reasoning_details":"x"}`,
+			`{"reasoning_details":[{"type":"reasoning.text","text":"b","index":0}]}`,
+			`{"reasoning_details":[{"type":"reasoning.text","text":"c","index":0}]}`,
+		}, "stop", `{"fields":{"reasoning_details":[{"index":0,"text":"bc","type":"reasoning.text"}]}}`},
 		{"a string that arrives again replaces", []string{
 			`{"note":"same"}`,
 			`{"note":"same"}`,
@@ -245,21 +264,21 @@ func TestStreamOpaqueFields(t *testing.T) {
 			`{"annotations":[{"type":"url_citation","url":"a","index":0}],"score":1,"label":"x"}`,
 			`{"annotations":[{"type":"url_citation","url":"b","index":0}],"score":2.5,"label":{"k":1}}`,
 		}, "stop", `{"fields":{"annotations":[{"type":"url_citation","url":"b","index":0}],"label":{"k":1},"score":2.5}}`},
-		{"empty values are absent", []string{
-			`{"refusal":null,"annotations":[],"audio":{},"note":""}`,
+		{"empty values are kept", []string{
+			`{"refusal":null,"annotations":[],"audio":{},"note":"","reasoning_details":[]}`,
 			`{"content":"hi","role":"assistant"}`,
-		}, "stop", ""},
+		}, "stop", `{"fields":{"annotations":[],"audio":{},"note":"","reasoning_details":[],"refusal":null}}`},
 		{"per-call fields", []string{
 			`{"tool_calls":[{"index":0,"id":"call_a","type":"function","function":{"name":"now","arguments":""},"extra_content":{"google":{"thought_signature":"c2"}}}]}`,
 			`{"tool_calls":[{"index":0,"function":{"arguments":"{}"},"extra_content":{"google":{"thought_signature":"ln"}}},{"index":1,"type":"function","function":{"name":"now","arguments":"{}"},"sig":"x"}]}`,
 			`{"tool_calls":[{"index":1,"id":"call_b","sig":"y"}]}`,
 		}, "tool_calls", `{"calls":{"call_a":{"extra_content":{"google":{"thought_signature":"ln"}}},"call_b":{"sig":"y"}}}`},
 		{"per-call fields of a minted id", []string{
-			`{"tool_calls":[{"index":0,"type":"function","function":{"name":"now","arguments":"{}"},"sig":"x"}]}`,
-		}, "tool_calls", `{"calls":{"gen-1_call_0":{"sig":"x"}}}`},
-		{"an unfinished turn keeps none", []string{
+			`{"tool_calls":[{"index":0,"type":"function","function":{"name":"now","arguments":"{}"},"sig":"x","note":null}]}`,
+		}, "tool_calls", `{"calls":{"gen-1_call_0":{"note":null,"sig":"x"}}}`},
+		{"a capped turn keeps them", []string{
 			`{"reasoning_details":[{"type":"reasoning.text","text":"a","index":0}]}`,
-		}, "length", ""},
+		}, "length", `{"fields":{"reasoning_details":[{"index":0,"text":"a","type":"reasoning.text"}]}}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var frames []string
@@ -359,7 +378,7 @@ func TestStreamKeepAliveAndUnusedFrames(t *testing.T) {
 		chunkFrame(`{}`, "stop"),
 		doneFrame,
 	))
-	wantEvents(t, collect(t, p, turn("hi")), "start gen-1 qwen/qwen3.8-27b", `text 0 "hi"`, "ok turn")
+	wantEvents(t, collect(t, p, turn("hi")), "start gen-1 qwen/qwen3.8-27b", `text 0 "hi"`, `opaque 1 "generic.fields" {"fields":{"annotations":[],"refusal":null}} ""`, "ok turn")
 }
 
 func TestStreamKeepAliveHoldsTheIdleDeadline(t *testing.T) {
@@ -506,6 +525,7 @@ func TestHTTPErrors(t *testing.T) {
 		{"fastapi detail", 404, nil, `{"detail":"Not Found"}`, `err invalid generic: http 404: {"detail":"Not Found"}`, nil},
 		{"payment", 402, nil, `{"error":{"message":"Insufficient credits","code":402}}`, "err access", nil},
 		{"a timeout", 408, nil, ``, "err network", nil},
+		{"a conflict", 409, nil, ``, "err invalid", nil},
 		{"an unlisted status", 418, nil, ``, "err unknown", nil},
 		{"a context word on a 404 is not an overflow", 404, nil, `{"error":{"message":"model with context length 8k not found"}}`, "err invalid", nil},
 		{"a context overflow on a 413", 413, nil, `{"error":{"message":"` + overflow + `"}}`, "err context_length", nil},
@@ -554,33 +574,59 @@ func TestErrorBodyIsCut(t *testing.T) {
 }
 
 func TestEndings(t *testing.T) {
-	const failed = `{"id":"gen-1","choices":[],"error":{"code":502,"message":"Provider disconnected","metadata":{"error_type":"provider_unavailable"}}}`
-	const held = "err network generic: provider_unavailable: Provider disconnected (request gen-1)"
 	for _, c := range []struct {
 		err  error
-		held bool
 		want string
 	}{
-		{io.EOF, false, ""},
-		{io.ErrUnexpectedEOF, false, ""},
-		{context.Canceled, false, ""},
-		{context.DeadlineExceeded, false, ""},
-		{fmt.Errorf("dial tcp: %w", context.DeadlineExceeded), false, "err network dial tcp: context deadline exceeded"},
-		{fmt.Errorf("read: %w", context.Canceled), false, "err network read: context canceled"},
-		{lib.ErrIdle, false, "err network neui: stream went idle"},
-		{errors.New("boom"), false, "err network boom"},
-		{context.Canceled, true, ""},
-		{io.EOF, true, held},
-		{fmt.Errorf("read: %w", context.DeadlineExceeded), true, held},
-		{lib.ErrIdle, true, held},
+		{io.EOF, ""},
+		{io.ErrUnexpectedEOF, ""},
+		{context.Canceled, ""},
+		{context.DeadlineExceeded, ""},
+		{fmt.Errorf("dial tcp: %w", context.DeadlineExceeded), "err network dial tcp: context deadline exceeded"},
+		{fmt.Errorf("read: %w", context.Canceled), "err network read: context canceled"},
+		{lib.ErrIdle, "err network neui: stream went idle"},
+		{errors.New("boom"), "err network boom"},
 	} {
-		conv := newConverter(testModel, 0, 0)
-		if c.held {
-			conv.Convert(lib.Frame{Data: []byte(failed)})
+		if got := strings.Join(conform.DescribeAll(newConverter(testModel, 0, 0).End(c.err)), "|"); got != c.want {
+			t.Fatalf("End(%v) = %q, want %q", c.err, got, c.want)
 		}
-		if got := strings.Join(conform.DescribeAll(conv.End(c.err)), "|"); got != c.want {
-			t.Fatalf("End(%v) held %v = %q, want %q", c.err, c.held, got, c.want)
-		}
+	}
+}
+
+func TestFieldsOnEveryEnding(t *testing.T) {
+	const opaque = `opaque 1 "generic.fields" {"fields":{"note":"kept"}} ""`
+	for _, tc := range []struct {
+		name  string
+		frame string
+		end   error
+		want  string
+	}{
+		{"capped", `{"id":"gen-1","choices":[{"index":0,"delta":{},"finish_reason":"length"}]}`, nil, opaque + "|err capped generic: length: the turn ended on this finish_reason (request gen-1)"},
+		{"no finish_reason", "", nil, opaque + "|err network generic: [DONE] without a finish_reason"},
+		{"an error frame", `{"id":"gen-1","choices":[],"error":{"code":502,"message":"Provider disconnected"}}`, nil, opaque + "|err network generic: 502: Provider disconnected (request gen-1)"},
+		{"a frame that does not parse", `{"choices":[`, nil, opaque + "|err network generic: stream frame did not parse: unexpected end of JSON input"},
+		{"the end of the body", "", io.EOF, opaque},
+		{"the idle deadline", "", lib.ErrIdle, opaque + "|err network neui: stream went idle"},
+		{"a cancelled ctx", "", context.Canceled, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := newConverter(testModel, 0, 0)
+			c.Convert(lib.Frame{Data: []byte(`{"id":"gen-1","choices":[{"index":0,"delta":{"content":"x","note":"kept"},"finish_reason":null}]}`)})
+			var events []api.Event
+			more := true
+			if tc.frame != "" {
+				events, more = c.Convert(lib.Frame{Data: []byte(tc.frame)})
+			}
+			switch {
+			case tc.end != nil:
+				events = c.End(tc.end)
+			case more:
+				events, more = c.Convert(lib.Frame{Data: []byte(doneSentinel)})
+			}
+			if got := strings.Join(conform.DescribeAll(events), "|"); got != tc.want || (tc.end == nil && more) {
+				t.Fatalf("ended %q (more %v), want %q", got, more, tc.want)
+			}
+		})
 	}
 }
 
@@ -614,47 +660,24 @@ func TestStreamInBandError(t *testing.T) {
 	}
 }
 
-func TestStreamInBandErrorWaitsForTheUsage(t *testing.T) {
-	const failed = `{"id":"gen-1","object":"chat.completion.chunk","created":1,"model":"m","provider":"P","choices":[],"error":{"code":502,"message":"Provider disconnected","metadata":{"error_type":"provider_unavailable"}}}`
-	for _, tc := range []struct {
-		name   string
-		ending string
-		hold   bool
-	}{
-		{"at [DONE]", doneFrame, false},
-		{"at the end of the body", "", false},
-		{"at a frame cut short", `data: {"id":"gen-1"`, false},
-		{"at a frame that does not parse", frame(`{"choices":[`), false},
-		{"past a second error", frame(`{"error":{"code":429,"message":"slow down"}}`) + doneFrame, false},
-		{"at the idle deadline", "", true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			p := serve(t, func(w http.ResponseWriter, r *http.Request) {
-				stringHandler(chunkFrame(`{"content":"partial"}`, ""), frame(failed), chunkFrame(`{"content":"late"}`, "error"), usageFrame, tc.ending)(w, r)
-				if tc.hold {
-					select {
-					case <-r.Context().Done():
-					case <-time.After(5 * time.Second):
-					}
-				}
-			}, WithTransport(lib.Options{Idle: 200 * time.Millisecond}))
-			events := collect(t, p, turn("hi"))
-			conform.CheckUnframed(t, events)
-			wantEvents(t, events,
-				"start gen-1 qwen/qwen3.8-27b",
-				`text 0 "partial"`,
-				"usage in=376 out=45 rsn=15 cr=64 cw=0",
-				"err network generic: provider_unavailable: Provider disconnected (request gen-1)",
-			)
-		})
-	}
-	c := newConverter(testModel, 0, 0)
-	if _, more := c.Convert(lib.Frame{Data: []byte(failed)}); !more {
-		t.Fatal("the turn ended at the error frame")
-	}
-	if events := c.End(context.Canceled); len(events) != 0 {
-		t.Fatalf("a cancelled turn ended with %q", conform.DescribeAll(events))
-	}
+func TestStreamInBandErrorEndsTheTurn(t *testing.T) {
+	release := make(chan struct{})
+	defer close(release)
+	p := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		stringHandler(
+			chunkFrame(`{"content":"partial"}`, ""),
+			frame(`{"id":"gen-1","choices":[],"error":{"code":502,"message":"Provider disconnected","metadata":{"error_type":"provider_unavailable"}}}`),
+			chunkFrame(`{"content":"late"}`, "error"),
+			usageFrame,
+		)(w, r)
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	})
+	events := collect(t, p, turn("hi"))
+	conform.CheckUnframed(t, events)
+	wantEvents(t, events, "start gen-1 qwen/qwen3.8-27b", `text 0 "partial"`, "err network generic: provider_unavailable: Provider disconnected (request gen-1)")
 }
 
 func TestRecordedStreams(t *testing.T) {
@@ -664,10 +687,11 @@ func TestRecordedStreams(t *testing.T) {
 	}{
 		{"openrouter-qwen-text.sse", `reasoning[reasoning] "The user wants me to say \"hi\" in one word. This is simple - I just need to respond with a single word greeting.\n" | text "\n\nHi" | opaque generic.fields reasoning_details | usage in=58 out=3 rsn=30 cr=0 cw=0 | ok turn`},
 		{"openrouter-qwen-tools.sse", `reasoning[reasoning] "The user is asking for the weather in Paris and Rome. Since the two are independent of each other, they can be called in parallel.\n" | text "\n\n\n" | tool call_004ac60f136a49038037f6c9 get_weather {"city": "Paris"} | tool call_7fc25788ec4f4f409db6ccfb get_weather {"city": "Rome"} | opaque generic.fields reasoning_details | usage in=335 out=54 rsn=30 cr=0 cw=0 | ok turn`},
-		{"openrouter-qwen-cap.sse", `reasoning[reasoning] "We need to respond to user: \"Write a four-line poem about tea.\" Simple. Then final with poem four lines" | usage in=60 out=0 rsn=24 cr=0 cw=0 | err capped`},
+		{"openrouter-qwen-cap.sse", `reasoning[reasoning] "We need to respond to user: \"Write a four-line poem about tea.\" Simple. Then final with poem four lines" | opaque generic.fields reasoning_details | usage in=60 out=0 rsn=24 cr=0 cw=0 | err capped`},
 		{"openrouter-gptoss-tools.sse", `reasoning[reasoning] "We need to call get_weather for Paris and Rome." | tool chatcmpl-tool-ad2a7e93260970c4 get_weather {"city":"Paris"} | opaque generic.fields reasoning_details | usage in=74 out=19 rsn=16 cr=64 cw=0 | ok turn`},
-		{"openrouter-gptoss-upstream-error.sse", `reasoning[reasoning] "Need to call tool." | usage in=107 out=0 rsn=5 cr=0 cw=0 | err network`},
+		{"openrouter-gptoss-upstream-error.sse", `reasoning[reasoning] "Need to call tool." | opaque generic.fields reasoning_details | err network`},
 		{"openrouter-qwen-cache-2.sse", `text "ok" | usage in=48 out=2 rsn=0 cr=9920 cw=0 | ok turn`},
+		{"openrouter-claude-cache-write.sse", `text "It's sunny in Paris, with a temperature of 21°C." | usage in=2 out=23 rsn=0 cr=0 cw=3540 | ok turn`},
 		{"openrouter-mistral-tools.sse", `reasoning[reasoning] "The user wants to know the current weather in Paris and Rome. I need to use the get_weather tool for each city. Let me make two separate calls - one for Paris and one for Rome." | text "I'll get the current weather for both Paris and Rome for you." | tool I77MZpriD get_weather {"city": "Paris"} | tool bAk2mbhvM get_weather {"city": "Rome"} | opaque generic.fields reasoning_details | usage in=94 out=39 rsn=41 cr=0 cw=0 | ok turn`},
 		{"llamacpp-weather-tools.sse", `reasoning[reasoning_content] "The user is asking for the current weather in two cities: Paris and Rome. They specifically want me to use the tool for each city. I have a get_weather function that takes a city parameter. I need to call this function twice, once for Paris and once for Rome." | tool EbJNSsMDTpz1hWF7LnV5DjEKzWHX1x6p get_weather {"city":"Paris"} | tool lku4tuMDAPTHMZiTmb8fb8dF36jBw9Pi get_weather {"city":"Rome"} | usage in=286 out=112 rsn=0 cr=0 cw=0 | ok turn`},
 		{"llamacpp-tools.sse", `reasoning[reasoning_content] "The user is asking me to look up the code of item \"alpha\" using the lookup tool. I need to call the lookup function with the item parameter set to \"alpha\"." | tool t9Obof2b5xOfzVwv4E4fUivinD9O4L7G lookup {"item":"alpha"} | usage in=287 out=64 rsn=0 cr=0 cw=0 | ok turn`},

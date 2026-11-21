@@ -33,7 +33,7 @@ import (
 
 const (
 	goldenRequestsHash = "251f7a8d4076e1def14a661966d799f7769c846dbe4373e37b00232e894c5aa9"
-	goldenStreamsHash  = "5b02c1290e2324b0982e403e217d132e50eba0a372b761f682f20bad3054da1a"
+	goldenStreamsHash  = "3d6fbbca5a6b0bfb1f57cc4dcca0722f639f2cbece2cd9ae5b36c832c1463253"
 )
 
 func goldenBytes(r *rand.Rand, n int) []byte {

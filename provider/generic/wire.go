@@ -143,9 +143,7 @@ func (d *delta) UnmarshalJSON(data []byte) error {
 		case "tool_calls":
 			err = json.Unmarshal(value, &d.ToolCalls)
 		default:
-			if !empty(value) {
-				continue
-			}
+			continue
 		}
 		if err != nil {
 			return err
@@ -153,14 +151,6 @@ func (d *delta) UnmarshalJSON(data []byte) error {
 		delete(d.fields, name)
 	}
 	return nil
-}
-
-func empty(value json.RawMessage) bool {
-	switch string(value) {
-	case "", "null", `""`, "[]", "{}":
-		return true
-	}
-	return false
 }
 
 type toolDelta struct {
@@ -185,9 +175,7 @@ func (t *toolDelta) UnmarshalJSON(data []byte) error {
 		case "function":
 			err = json.Unmarshal(value, &t.Function)
 		default:
-			if !empty(value) {
-				continue
-			}
+			continue
 		}
 		if err != nil {
 			return err
