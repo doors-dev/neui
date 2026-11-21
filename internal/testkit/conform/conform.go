@@ -37,7 +37,10 @@ func Run(t *testing.T, a Adapter) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	limits := loadLimits(t, a.Name)
+	var limits limitsFile
+	if !a.Undeclared {
+		limits = loadLimits(t, a.Name)
+	}
 	srv := newServer(t)
 	for _, c := range []struct {
 		name string
@@ -447,7 +450,7 @@ func checkRoundTrip(t *testing.T, a Adapter, sch *schemas, srv *server, _ limits
 			}
 			body := send(content)
 			for i, c := range content {
-				for _, want := range replayed(c, s.Blocks[i]) {
+				for _, want := range replayed(c, s.Blocks[i], a.Signed) {
 					if !bytes.Contains(body, want) {
 						t.Fatalf("block %d did not replay byte for byte: %s is not in\n%s", i, want, clip(body))
 					}
@@ -457,10 +460,10 @@ func checkRoundTrip(t *testing.T, a Adapter, sch *schemas, srv *server, _ limits
 	}
 }
 
-func replayed(c api.Content, b Block) [][]byte {
+func replayed(c api.Content, b Block, signed bool) [][]byte {
 	switch c := c.(type) {
 	case api.ContentReasoning:
-		if b.Signature != "" && len(c.Meta) > 0 {
+		if signed && b.Signature != "" {
 			return [][]byte{[]byte(b.Signature)}
 		}
 		quoted, _ := json.Marshal(b.Text)
@@ -567,6 +570,9 @@ func loadLimits(t *testing.T, name string) limitsFile {
 const dataURLPrefix = len("data:image/jpeg;base64,")
 
 func checkLimits(t *testing.T, a Adapter, _ *schemas, _ *server, l limitsFile) {
+	if a.Undeclared {
+		t.Skipf("%s declares no models, so there are no limits to check", a.Name)
+	}
 	for _, field := range []string{"context", "imagePixels", "imageBytes", "imagesPerRequest", "requestBytes", "maxOutput"} {
 		if !strings.HasPrefix(l.Sources[field], "https://") {
 			t.Errorf("limits/%s.json has no doc URL for %s", a.Name, field)

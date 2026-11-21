@@ -1,0 +1,36 @@
+data: {"id":"gen-1795186531-9BiX3EzScGPmcdo6twEJ","object":"chat.completion.chunk","created":1795186531,"model":"qwen/qwen3.8-27b","provider":"Wafer","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":"The","reasoning_details":[{"type":"reasoning.text","text":"The","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1795186531-9BiX3EzScGPmcdo6twEJ","object":"chat.completion.chunk","created":1795186531,"model":"qwen/qwen3.8-27b","provider":"Wafer","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" user wants","reasoning_details":[{"type":"reasoning.text","text":" user wants","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1795186531-9BiX3EzScGPmcdo6twEJ","object":"chat.completion.chunk","created":1795186531,"model":"qwen/qwen3.8-27b","provider":"Wafer","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" a one-word answer for the","reasoning_details":[{"type":"reasoning.text","text":" a one-word answer for the","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1795186531-9BiX3EzScGPmcdo6twEJ","object":"chat.completion.chunk","created":1795186531,"model":"qwen/qwen3.8-27b","provider":"Wafer","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" colour of the square. The","reasoning_details":[{"type":"reasoning.text","text":" colour of the square. The","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1795186531-9BiX3EzScGPmcdo6twEJ","object":"chat.completion.chunk","created":1795186531,"model":"qwen/qwen3.8-27b","provider":"Wafer","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" image is a solid red square","reasoning_details":[{"type":"reasoning.text","text":" image is a solid red square","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1795186531-9BiX3EzScGPmcdo6twEJ","object":"chat.completion.chunk","created":1795186531,"model":"qwen/qwen3.8-27b","provider":"Wafer","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" (a","reasoning_details":[{"type":"reasoning.text","text":" (a","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1795186531-9BiX3EzScGPmcdo6twEJ","object":"chat.completion.chunk","created":1795186531,"model":"qwen/qwen3.8-27b","provider":"Wafer","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" muted/","reasoning_details":[{"type":"reasoning.text","text":" muted/","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1795186531-9BiX3EzScGPmcdo6twEJ","object":"chat.completion.chunk","created":1795186531,"model":"qwen/qwen3.8-27b","provider":"Wafer","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":"brick red","reasoning_details":[{"type":"reasoning.text","text":"brick red","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1795186531-9BiX3EzScGPmcdo6twEJ","object":"chat.completion.chunk","created":1795186531,"model":"qwen/qwen3.8-27b","provider":"Wafer","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":"). The simplest","reasoning_details":[{"type":"reasoning.text","text":"). The simplest","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1795186531-9BiX3EzScGPmcdo6twEJ","object":"chat.completion.chunk","created":1795186531,"model":"qwen/qwen3.8-27b","provider":"Wafer","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" accurate","reasoning_details":[{"type":"reasoning.text","text":" accurate","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1795186531-9BiX3EzScGPmcdo6twEJ","object":"chat.completion.chunk","created":1795186531,"model":"qwen/qwen3.8-27b","provider":"Wafer","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" one-word answer is \"Red","reasoning_details":[{"type":"reasoning.text","text":" one-word answer is \"Red","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1795186531-9BiX3EzScGPmcdo6twEJ","object":"chat.completion.chunk","created":1795186531,"model":"qwen/qwen3.8-27b","provider":"Wafer","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":"\". I'll provide","reasoning_details":[{"type":"reasoning.text","text":"\". I'll provide","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1795186531-9BiX3EzScGPmcdo6twEJ","object":"chat.completion.chunk","created":1795186531,"model":"qwen/qwen3.8-27b","provider":"Wafer","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" just that word","reasoning_details":[{"type":"reasoning.text","text":" just that word","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1795186531-9BiX3EzScGPmcdo6twEJ","object":"chat.completion.chunk","created":1795186531,"model":"qwen/qwen3.8-27b","provider":"Wafer","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":".\n","reasoning_details":[{"type":"reasoning.text","text":".\n","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1795186531-9BiX3EzScGPmcdo6twEJ","object":"chat.completion.chunk","created":1795186531,"model":"qwen/qwen3.8-27b","provider":"Wafer","choices":[{"index":0,"delta":{"content":"\n\nRed","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1795186531-9BiX3EzScGPmcdo6twEJ","object":"chat.completion.chunk","created":1795186531,"model":"qwen/qwen3.8-27b","provider":"Wafer","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":null},"finish_reason":"stop","native_finish_reason":"stop"}]}
+
+data: {"id":"gen-1795186531-9BiX3EzScGPmcdo6twEJ","object":"chat.completion.chunk","created":1795186531,"model":"qwen/qwen3.8-27b","provider":"Wafer","service_tier":null,"choices":[{"index":0,"delta":{"content":"","role":"assistant"},"finish_reason":"stop","native_finish_reason":"stop"}],"usage":{"prompt_tokens":115,"completion_tokens":50,"total_tokens":165,"cost":0.0001049,"is_byok":false,"prompt_tokens_details":{"cached_tokens":0,"cache_write_tokens":0,"audio_tokens":0,"video_tokens":0},"cost_details":{"upstream_inference_cost":0.0001049,"upstream_inference_prompt_cost":0.0000069,"upstream_inference_completions_cost":0.000098},"completion_tokens_details":{"reasoning_tokens":47,"image_tokens":0,"audio_tokens":0}}}
+
+data: [DONE]
+

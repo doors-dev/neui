@@ -38,6 +38,25 @@ func MarshalRaw(v any) ([]byte, error) {
 	return bytes.TrimRight(buf.Bytes(), "\n"), nil
 }
 
+// OwnMeta reads Meta in the shared form {"provider":"<name>","data":<payload>}
+// that an adapter writes on a reasoning block it can replay. It returns the
+// payload, nil when there is none, and true when Meta names provider; for
+// empty Meta, Meta in another form or Meta naming another provider it
+// returns false, and the adapter skips the block.
+func OwnMeta(meta json.RawMessage, provider string) (json.RawMessage, bool) {
+	if len(meta) == 0 {
+		return nil, false
+	}
+	var m struct {
+		Provider string          `json:"provider"`
+		Data     json.RawMessage `json:"data"`
+	}
+	if json.Unmarshal(meta, &m) != nil || m.Provider != provider {
+		return nil, false
+	}
+	return m.Data, true
+}
+
 var bodies = sync.Pool{New: func() any { return new(bytes.Buffer) }}
 
 var errBodyReleased = errors.New("neui: request body already released")
@@ -64,6 +83,22 @@ func MarshalBody(v any) (*Body, error) {
 	}
 	buf.Truncate(len(bytes.TrimRight(buf.Bytes(), "\n")))
 	return &Body{buf: buf, refs: 1}, nil
+}
+
+// AppendFields adds fields, members of a JSON object written without braces
+// such as "a":1,"b":true, at the end of the object the body holds. A provider
+// uses it for fields its host adds to every request. Call it before Request;
+// empty fields leave the body as it is.
+func (b *Body) AppendFields(fields []byte) {
+	if len(fields) == 0 {
+		return
+	}
+	b.buf.Truncate(b.buf.Len() - 1)
+	if b.buf.Len() > 1 {
+		b.buf.WriteByte(',')
+	}
+	b.buf.Write(fields)
+	b.buf.WriteByte('}')
 }
 
 // Bytes returns the encoded body. It is valid until the request is handed to

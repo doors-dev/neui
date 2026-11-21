@@ -28,6 +28,7 @@ import (
 
 	"neui.dev/api"
 	"neui.dev/provider/claude"
+	"neui.dev/provider/compat"
 	"neui.dev/provider/deepseek"
 	"neui.dev/provider/gemini"
 	"neui.dev/provider/gpt"
@@ -249,6 +250,37 @@ func geminiCorpus() []corpusCase {
 	}
 }
 
+func compatCorpus() []corpusCase {
+	chunk := func(delta, finish string) string {
+		return sseFrame("", `{"id":"gen-1","object":"chat.completion.chunk","created":1,"model":"qwen/qwen3.8-27b","provider":"Wafer","choices":[{"index":0,"delta":`+delta+`,"finish_reason":`+finish+`,"native_finish_reason":`+finish+`}]}`)
+	}
+	usage := `{"prompt_tokens":3000,"completion_tokens":900,"total_tokens":3900,"cost":0.001,"is_byok":false,"prompt_tokens_details":{"cached_tokens":2048,"cache_write_tokens":0},"completion_tokens_details":{"reasoning_tokens":400}}`
+	long := filler("reason", 80000)
+	rich := ": OPENROUTER PROCESSING\n\n" +
+		chunk(`{"role":"assistant","content":"","reasoning":"Let me","reasoning_details":[{"type":"reasoning.text","text":"Let me","format":"unknown","index":0}]}`, "null") +
+		chunk(`{"role":"assistant","content":"","reasoning":`+quoted(long)+`,"reasoning_details":[{"type":"reasoning.text","text":`+quoted(long)+`,"format":"unknown","index":0}]}`, "null") +
+		": OPENROUTER PROCESSING\n\n" +
+		chunk(`{"role":"assistant","content":"Hello <b> & "}`, "null") +
+		chunk(`{"role":"assistant","content":`+quoted(filler("content", 100000))+`}`, "null") +
+		chunk(`{"tool_calls":[{"index":0,"id":"call_0","type":"function","function":{"name":"get_weather","arguments":""}}]}`, "null") +
+		chunk(`{"tool_calls":[{"index":0,"function":{"arguments":"{\"city\":"}}]}`, "null") +
+		chunk(`{"tool_calls":[{"index":0,"function":{"arguments":`+quoted(quoted(filler("city", 60000))+"}")+`}}]}`, "null") +
+		chunk(`{"tool_calls":[{"index":1,"id":"chatcmpl-tool-1","type":"function","function":{"name":"noop","arguments":"{}"}}]}`, "null") +
+		chunk(`{"content":"","reasoning":null}`, `"tool_calls"`) +
+		sseFrame("", `{"id":"gen-1","object":"chat.completion.chunk","created":1,"model":"qwen/qwen3.8-27b","provider":"Wafer","choices":[{"index":0,"delta":{"content":"","role":"assistant"},"finish_reason":"tool_calls","native_finish_reason":"tool_calls"}],"usage":`+usage+`}`) +
+		"data: [DONE]\n\n"
+	capped := chunk(`{"role":"assistant","content":"","reasoning_content":"cut"}`, "null") +
+		sseFrame("", `{"id":"gen-1","object":"chat.completion.chunk","created":1,"model":"qwen/qwen3.8-27b","choices":[{"index":0,"delta":{"reasoning_content":" off"},"finish_reason":"length"}],"usage":`+usage+`}`) +
+		"data: [DONE]\n\n"
+	failed := chunk(`{"role":"assistant","content":"half"}`, "null") +
+		sseFrame("", `{"id":"gen-1","object":"chat.completion.chunk","created":1,"model":"qwen/qwen3.8-27b","provider":"Wafer","error":{"code":502,"message":"Provider disconnected <retry>","metadata":{"error_type":"provider_unavailable"}},"choices":[{"index":0,"delta":{"content":""},"finish_reason":"error"}]}`)
+	return []corpusCase{
+		{name: "compat/rich", body: rich, want: "c66d3463d927c4071242390cdac86dfa34883eda295189c1b616fd7ee9e714b7"},
+		{name: "compat/capped", body: capped, want: "06cd47217a90b1151ffb50105d0545b638bd2ac7b54e6ca55c71819ab50662f0"},
+		{name: "compat/error", body: failed, want: "d21794e6bc89f9406dc0dc13828f96a3d4d8bee0a7adf3d455dff11aa1ef63ae"},
+	}
+}
+
 func chunked(body string, done chan<- struct{}) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer close(done)
@@ -299,6 +331,8 @@ func corpusProvider(t *testing.T, name, url string) streamer {
 		p, err = deepseek.New(deepseek.Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, deepseek.WithAPIKey("k"), deepseek.WithBaseURL(url))
 	case "gemini":
 		p, err = gemini.New(gemini.Conf{Model: api.Model{Name: "gemini-4-hydrogen"}}, gemini.WithAPIKey("k"), gemini.WithBaseURL(url))
+	case "compat":
+		p, err = compat.New(compat.Conf{Model: api.Model{Name: "qwen/qwen3.8-27b"}, BaseURL: url}, compat.WithAPIKey("k"))
 	}
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -307,7 +341,7 @@ func corpusProvider(t *testing.T, name, url string) streamer {
 }
 
 func corpus() []corpusCase {
-	return append(append(append(claudeCorpus(), gptCorpus()...), deepseekCorpus()...), geminiCorpus()...)
+	return append(append(append(append(claudeCorpus(), gptCorpus()...), deepseekCorpus()...), geminiCorpus()...), compatCorpus()...)
 }
 
 func runCorpus(t *testing.T, c corpusCase, late bool) []api.Event {

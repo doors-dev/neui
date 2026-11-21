@@ -268,3 +268,56 @@ func TestLargeBodyIsNotPooled(t *testing.T) {
 		}
 	}
 }
+
+func TestBodyAppendFields(t *testing.T) {
+	for _, c := range []struct {
+		value  any
+		fields string
+		want   string
+	}{
+		{map[string]int{"a": 1}, `"b":2`, `{"a":1,"b":2}`},
+		{map[string]int{}, `"b":2`, `{"b":2}`},
+		{map[string]int{"a": 1}, ``, `{"a":1}`},
+		{map[string]string{"a": "<x>"}, `"b":{"c":[1,"&"]},"d":null`, `{"a":"<x>","b":{"c":[1,"&"]},"d":null}`},
+	} {
+		body, err := MarshalBody(c.value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body.AppendFields([]byte(c.fields))
+		if got := string(body.Bytes()); got != c.want {
+			t.Errorf("%v + %s = %s, want %s", c.value, c.fields, got, c.want)
+		}
+		req, err := body.Request(context.Background(), "http://example.invalid/")
+		if err != nil {
+			t.Fatal(err)
+		}
+		sent, err := io.ReadAll(req.Body)
+		if err != nil || string(sent) != c.want || req.ContentLength != int64(len(c.want)) {
+			t.Errorf("request carried %q (%v), ContentLength %d, want %q", sent, err, req.ContentLength, c.want)
+		}
+		req.Body.Close()
+	}
+}
+
+func TestOwnMeta(t *testing.T) {
+	for _, c := range []struct {
+		meta string
+		data string
+		own  bool
+	}{
+		{`{"provider":"compat","data":"reasoning"}`, `"reasoning"`, true},
+		{`{"data":{"a":1},"provider":"compat"}`, `{"a":1}`, true},
+		{`{"provider":"compat"}`, ``, true},
+		{`{"provider":"deepseek","data":"reasoning"}`, ``, false},
+		{`{"type":"reasoning","id":"rs_1"}`, ``, false},
+		{`"c2lnbmF0dXJl"`, ``, false},
+		{`{"provider":`, ``, false},
+		{``, ``, false},
+	} {
+		data, own := OwnMeta(json.RawMessage(c.meta), "compat")
+		if own != c.own || string(data) != c.data {
+			t.Errorf("OwnMeta(%s) = %s, %v, want %s, %v", c.meta, data, own, c.data, c.own)
+		}
+	}
+}

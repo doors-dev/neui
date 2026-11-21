@@ -29,6 +29,7 @@ import (
 	"neui.dev/api"
 	"neui.dev/nekit"
 	"neui.dev/provider/claude"
+	"neui.dev/provider/compat"
 	"neui.dev/provider/deepseek"
 	"neui.dev/provider/gemini"
 	"neui.dev/provider/gpt"
@@ -49,9 +50,8 @@ func main() {
 		if name == "" {
 			name = "local"
 		}
-		provider, err = deepseek.New(deepseek.Conf{Model: api.Model{Name: name, Context: window}},
-			deepseek.WithBaseURL(os.Getenv("LOCAL_LLM_URL")),
-			deepseek.WithAPIKey(os.Getenv("LOCAL_LLM_KEY")))
+		provider, err = compat.New(compat.Conf{Model: api.Model{Name: name, Context: window}, BaseURL: os.Getenv("LOCAL_LLM_URL")},
+			compat.WithAPIKey(os.Getenv("LOCAL_LLM_KEY")))
 	case os.Getenv("DEEPSEEK_API_KEY") != "":
 		provider, err = deepseek.New(deepseek.Conf{Model: deepseek.Flash})
 	case os.Getenv("OPENAI_API_KEY") != "":

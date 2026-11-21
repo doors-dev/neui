@@ -172,16 +172,17 @@ type Live struct {
 }
 
 type Adapter struct {
-	Name     string
-	Models   []api.Model
-	New      func(base string, m api.Model, p Params) (api.Provider, error)
-	Wire     map[string]string
-	Spec     Spec
-	Render   func(m api.Model, s Script) (string, bool)
-	Errors   []ErrorCase
-	Rules    []Rule
-	Sampling bool
-	Signed   bool
-	Unframed bool
-	Live     Live
+	Name       string
+	Models     []api.Model
+	New        func(base string, m api.Model, p Params) (api.Provider, error)
+	Wire       map[string]string
+	Spec       Spec
+	Render     func(m api.Model, s Script) (string, bool)
+	Errors     []ErrorCase
+	Rules      []Rule
+	Sampling   bool
+	Signed     bool
+	Unframed   bool
+	Undeclared bool
+	Live       Live
 }

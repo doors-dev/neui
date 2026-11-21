@@ -1,0 +1,36 @@
+data: {"id":"gen-1795186533-8eh2Vww9Ghezh9OlXcji","object":"chat.completion.chunk","created":1795186533,"model":"qwen/qwen3.8-27b","provider":"Wafer","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":"The","reasoning_details":[{"type":"reasoning.text","text":"The","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1795186533-8eh2Vww9Ghezh9OlXcji","object":"chat.completion.chunk","created":1795186533,"model":"qwen/qwen3.8-27b","provider":"Wafer","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" user asked","reasoning_details":[{"type":"reasoning.text","text":" user asked","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1795186533-8eh2Vww9Ghezh9OlXcji","object":"chat.completion.chunk","created":1795186533,"model":"qwen/qwen3.8-27b","provider":"Wafer","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" me to call the lookup tool","reasoning_details":[{"type":"reasoning.text","text":" me to call the lookup tool","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1795186533-8eh2Vww9Ghezh9OlXcji","object":"chat.completion.chunk","created":1795186533,"model":"qwen/qwen3.8-27b","provider":"Wafer","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" with q set to \"cat","reasoning_details":[{"type":"reasoning.text","text":" with q set to \"cat","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1795186533-8eh2Vww9Ghezh9OlXcji","object":"chat.completion.chunk","created":1795186533,"model":"qwen/qwen3.8-27b","provider":"Wafer","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":"\". The tool returned","reasoning_details":[{"type":"reasoning.text","text":"\". The tool returned","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1795186533-8eh2Vww9Ghezh9OlXcji","object":"chat.completion.chunk","created":1795186533,"model":"qwen/qwen3.8-27b","provider":"Wafer","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" \"a small feline\".","reasoning_details":[{"type":"reasoning.text","text":" \"a small feline\".","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1795186533-8eh2Vww9Ghezh9OlXcji","object":"chat.completion.chunk","created":1795186533,"model":"qwen/qwen3.8-27b","provider":"Wafer","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" I should now relay","reasoning_details":[{"type":"reasoning.text","text":" I should now relay","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1795186533-8eh2Vww9Ghezh9OlXcji","object":"chat.completion.chunk","created":1795186533,"model":"qwen/qwen3.8-27b","provider":"Wafer","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" this result to","reasoning_details":[{"type":"reasoning.text","text":" this result to","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1795186533-8eh2Vww9Ghezh9OlXcji","object":"chat.completion.chunk","created":1795186533,"model":"qwen/qwen3.8-27b","provider":"Wafer","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":" the user.\n","reasoning_details":[{"type":"reasoning.text","text":" the user.\n","format":"unknown","index":0}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1795186533-8eh2Vww9Ghezh9OlXcji","object":"chat.completion.chunk","created":1795186533,"model":"qwen/qwen3.8-27b","provider":"Wafer","choices":[{"index":0,"delta":{"content":"\n\n","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1795186533-8eh2Vww9Ghezh9OlXcji","object":"chat.completion.chunk","created":1795186533,"model":"qwen/qwen3.8-27b","provider":"Wafer","choices":[{"index":0,"delta":{"content":"The lookup","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1795186533-8eh2Vww9Ghezh9OlXcji","object":"chat.completion.chunk","created":1795186533,"model":"qwen/qwen3.8-27b","provider":"Wafer","choices":[{"index":0,"delta":{"content":" for","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1795186533-8eh2Vww9Ghezh9OlXcji","object":"chat.completion.chunk","created":1795186533,"model":"qwen/qwen3.8-27b","provider":"Wafer","choices":[{"index":0,"delta":{"content":" \"","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1795186533-8eh2Vww9Ghezh9OlXcji","object":"chat.completion.chunk","created":1795186533,"model":"qwen/qwen3.8-27b","provider":"Wafer","choices":[{"index":0,"delta":{"content":"cat\" returned: **a","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1795186533-8eh2Vww9Ghezh9OlXcji","object":"chat.completion.chunk","created":1795186533,"model":"qwen/qwen3.8-27b","provider":"Wafer","choices":[{"index":0,"delta":{"content":" small feline**","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1795186533-8eh2Vww9Ghezh9OlXcji","object":"chat.completion.chunk","created":1795186533,"model":"qwen/qwen3.8-27b","provider":"Wafer","choices":[{"index":0,"delta":{"content":"","role":"assistant","reasoning":null},"finish_reason":"stop","native_finish_reason":"stop"}]}
+
+data: {"id":"gen-1795186533-8eh2Vww9Ghezh9OlXcji","object":"chat.completion.chunk","created":1795186533,"model":"qwen/qwen3.8-27b","provider":"Wafer","service_tier":null,"choices":[{"index":0,"delta":{"content":"","role":"assistant"},"finish_reason":"stop","native_finish_reason":"stop"}],"usage":{"prompt_tokens":412,"completion_tokens":53,"total_tokens":465,"cost":0.0001286,"is_byok":false,"prompt_tokens_details":{"cached_tokens":0,"cache_write_tokens":0,"audio_tokens":0,"video_tokens":0},"cost_details":{"upstream_inference_cost":0.0001286,"upstream_inference_prompt_cost":0.00002472,"upstream_inference_completions_cost":0.00010388},"completion_tokens_details":{"reasoning_tokens":37,"image_tokens":0,"audio_tokens":0}}}
+
+data: [DONE]
+

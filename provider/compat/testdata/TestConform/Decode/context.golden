@@ -1,0 +1,8 @@
+data: {"choices":[{"delta":{"content":"","role":"assistant"},"finish_reason":null,"index":0}],"created":1,"id":"chatcmpl-01","model":"qwen3.8-27b","object":"chat.completion.chunk"}
+
+data: {"choices":[{"delta":{"content":"Partial"},"finish_reason":null,"index":0}],"created":1,"id":"chatcmpl-01","model":"qwen3.8-27b","object":"chat.completion.chunk"}
+
+data: {"choices":[],"created":1,"id":"chatcmpl-01","model":"qwen3.8-27b","object":"chat.completion.chunk","usage":{"completion_tokens":7,"prompt_tokens":11,"total_tokens":18}}
+
+data: {"choices":[{"delta":{"content":""},"finish_reason":"error","index":0}],"created":1,"error":{"code":400,"message":"This endpoint's maximum context length is 131072 tokens.","metadata":{"error_type":"context_length_exceeded"}},"id":"chatcmpl-01","model":"qwen3.8-27b","object":"chat.completion.chunk"}
+
