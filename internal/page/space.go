@@ -46,7 +46,6 @@ type space struct {
 	data     []*data
 	island   island.Island
 	within   island.Island
-	app      bool
 	digest   [4]uint64
 	plain    uint64
 	warned   bool
@@ -55,17 +54,11 @@ type space struct {
 }
 
 func (s Space) AddSpace(ctx context.Context, name string, desc string) (context.Context, error) {
-	return s.addSpace(ctx, name, desc, nil, false)
-}
-
-// AddIslandApp adds the space that holds an island's app functions as tools;
-// calls on it need no read first.
-func (s Space) AddIslandApp(ctx context.Context, name string, desc string) (context.Context, error) {
-	return s.addSpace(ctx, name, desc, nil, true)
+	return s.addSpace(ctx, name, desc, nil)
 }
 
 func (s Space) AddIsland(ctx context.Context, name string, desc string, island island.Island) (context.Context, error) {
-	ctx, err := s.addSpace(ctx, name, desc, island, false)
+	ctx, err := s.addSpace(ctx, name, desc, island)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +66,7 @@ func (s Space) AddIsland(ctx context.Context, name string, desc string, island i
 	return ctx, nil
 }
 
-func (s Space) addSpace(ctx context.Context, name string, desc string, island island.Island, app bool) (context.Context, error) {
+func (s Space) addSpace(ctx context.Context, name string, desc string, island island.Island) (context.Context, error) {
 	if name == "" {
 		return nil, errors.New("space name is empty")
 	}
@@ -95,7 +88,6 @@ func (s Space) addSpace(ctx context.Context, name string, desc string, island is
 		desc:   desc,
 		island: island,
 		within: cmp.Or(island, s.within),
-		app:    app,
 	}
 	defer doors.OnClean(ctx, func() {
 		s.removeSpace(space)

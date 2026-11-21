@@ -541,12 +541,11 @@ func (t *thread) switchStateWait() {
 	t.state = threadWait{thread: t}
 }
 
-func (t *thread) switchStateCompact(round api.Round, failed api.ErrCode, reason error, usage api.EventUsage, content api.Indexed[api.Content]) *threadCompact {
+func (t *thread) switchStateCompact(round api.Round, failed api.ErrCode, usage api.EventUsage, content api.Indexed[api.Content]) *threadCompact {
 	state := &threadCompact{
 		thread:  t,
 		round:   round,
 		failed:  failed,
-		reason:  reason,
 		usage:   usage,
 		content: content,
 	}

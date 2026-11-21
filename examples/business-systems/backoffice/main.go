@@ -76,6 +76,22 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	options := []doors.With{neui.WithProvider(provider), neui.WithSystemPrompt(
+		"Back office of Kettle & Burr, a small coffee gear shop. " +
+			"The user works on the pages next to the chat: prefer acting there, so they see it happen. " +
+			"Deletions happen only when the user confirms them on the page.",
+	)}
+	modules := []neui.ModuleFactory{neui.ModuleJS, neui.ModuleXLS(neui.XLSConfig{})}
+	if v := os.Getenv("LOCAL_LLM_LIGHT"); v != "" {
+		on, err := strconv.ParseBool(v)
+		if err != nil {
+			log.Fatalf("LOCAL_LLM_LIGHT: %v", err)
+		}
+		if on {
+			options = append(options, neui.WithLightMode())
+			modules = modules[1:]
+		}
+	}
 	db, err := sql.Open("sqlite", "neui.db")
 	if err != nil {
 		log.Fatal(err)
@@ -87,14 +103,7 @@ func main() {
 	}
 	app := doors.NewApp(func(ctx context.Context, r doors.Request) gox.Comp {
 		return App{Threads: threads}
-	}, neui.WithProvider(provider), neui.WithSystemPrompt(
-		"Back office of Kettle & Burr, a small coffee gear shop. "+
-			"The user works on the pages next to the chat: prefer acting there, so they see it happen. "+
-			"Deletions happen only when the user confirms them on the page.",
-	), neui.WithModules(
-		neui.ModuleJS,
-		neui.ModuleXLS(neui.XLSConfig{}),
-	))
+	}, append(options, neui.WithModules(modules...))...)
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8095"

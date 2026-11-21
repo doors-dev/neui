@@ -84,7 +84,7 @@ func TestReadPaging(t *testing.T) {
 		b.WriteString("\n")
 	}
 	write(t, fs, "a.txt", b.String())
-	read := readTool
+	read := func(ctx context.Context, arg readArg) (string, error) { return readTool(ctx, arg, false) }
 	out, err := read(c.Ctx(), readArg{Path: "a.txt"})
 	if err != nil {
 		t.Fatal(err)
@@ -111,8 +111,13 @@ func TestReadPaging(t *testing.T) {
 	if _, err := read(c.Ctx(), readArg{Path: "bin"}); err == nil || !strings.Contains(err.Error(), "readBytes") {
 		t.Fatalf("binary: %v", err)
 	}
-	if _, err := read(context.WithValue(c.Ctx(), common.LightModeKey{}, true), readArg{Path: "bin"}); err == nil || strings.Contains(err.Error(), "readBytes") || !strings.Contains(err.Error(), "readDocument") {
+	light, _ := Module(context.WithValue(context.Background(), common.LightModeKey{}, true)).Get("read")
+	if _, err := light.Agent(c.Ctx(), json.RawMessage(`{"path":"bin"}`)); err == nil || strings.Contains(err.Error(), "readBytes") || !strings.Contains(err.Error(), "readDocument") {
 		t.Fatalf("binary in light mode: %v", err)
+	}
+	full, _ := Module(context.Background()).Get("read")
+	if _, err := full.Agent(context.WithValue(c.Ctx(), common.LightModeKey{}, true), json.RawMessage(`{"path":"bin"}`)); err == nil || !strings.Contains(err.Error(), "readBytes") {
+		t.Fatalf("binary in full mode: %v", err)
 	}
 }
 
@@ -126,7 +131,7 @@ func TestReadByteLimit(t *testing.T) {
 	}
 	write(t, limited.FS(), "a.txt", b.String())
 	write(t, c.FS(), "a.txt", b.String())
-	out, err := readTool(limited.Ctx(), readArg{Path: "a.txt"})
+	out, err := readTool(limited.Ctx(), readArg{Path: "a.txt"}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +141,7 @@ func TestReadByteLimit(t *testing.T) {
 	if !strings.HasSuffix(out, "(showing lines 1-3 of 5, continue with offset=4)") {
 		t.Fatalf("out = %q", out)
 	}
-	out, err = readTool(c.Ctx(), readArg{Path: "a.txt"})
+	out, err = readTool(c.Ctx(), readArg{Path: "a.txt"}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -517,7 +522,7 @@ func TestReadOverlongLine(t *testing.T) {
 	c := testkit.NewController(t, testkit.Setup{})
 	fs := c.FS()
 	write(t, fs, "a.txt", "first\r\n"+strings.Repeat("x", 3<<20)+"\r\nthird\n")
-	out, err := readTool(c.Ctx(), readArg{Path: "a.txt"})
+	out, err := readTool(c.Ctx(), readArg{Path: "a.txt"}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -679,7 +684,7 @@ func TestReadHidesTheBOMAndAgreesWithGrepOnLoneCR(t *testing.T) {
 	c := testkit.NewController(t, testkit.Setup{})
 	fs := c.FS()
 	write(t, fs, "b.txt", "\ufeffa\rb\r\nneedle\n")
-	out, err := readTool(c.Ctx(), readArg{Path: "b.txt"})
+	out, err := readTool(c.Ctx(), readArg{Path: "b.txt"}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -706,7 +711,7 @@ func TestLineCutsKeepWholeRunes(t *testing.T) {
 	c := testkit.NewController(t, testkit.Setup{})
 	fs := c.FS()
 	write(t, fs, "u.txt", "x"+strings.Repeat("é", 1500)+"\n")
-	out, err := readTool(c.Ctx(), readArg{Path: "u.txt"})
+	out, err := readTool(c.Ctx(), readArg{Path: "u.txt"}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -743,7 +748,7 @@ func TestLongToolsStopOnCancel(t *testing.T) {
 	if _, err := grepTool(ctx, grepArg{Pattern: "needle", Path: "a/b.txt"}); !errors.Is(err, stop) {
 		t.Fatalf("grep file: %v", err)
 	}
-	if _, err := readTool(ctx, readArg{Path: "a/b.txt"}); !errors.Is(err, stop) {
+	if _, err := readTool(ctx, readArg{Path: "a/b.txt"}, false); !errors.Is(err, stop) {
 		t.Fatalf("read: %v", err)
 	}
 	if _, err := zipTool(ctx, zipArg{Paths: []string{"a"}, Dst: "out.zip"}); !errors.Is(err, stop) {
@@ -869,7 +874,7 @@ func TestReadFromScriptIsTheText(t *testing.T) {
 	c := testkit.NewController(t, testkit.Setup{})
 	content := `{"cards":[1,2]}` + "\n" + strings.Repeat("y", 3000) + "\r\nlast"
 	write(t, c.FS(), "a.txt", content)
-	tool, err := tools.NewTool("read", readDesc(false), readTool, false)
+	tool, err := tools.NewTool("read", readDesc(false), func(ctx context.Context, arg readArg) (string, error) { return readTool(ctx, arg, false) }, false)
 	if err != nil {
 		t.Fatal(err)
 	}

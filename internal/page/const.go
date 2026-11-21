@@ -67,8 +67,8 @@ func treeDesc(light bool) string {
 	return desc
 }
 
-const refusedUnreadMessage = "not done: this space has not been read; space shows it as it is now and counts as a read, so check it and call again"
-const refusedChangedMessage = "not done: the space changed since it was last read; diff shows what changed and brings the read up to date, so check it and call again"
+const refusedUnreadMessage = "not done: this space had not been read. space shows it as it is now and counts as a read: check it and call again directly, no sync needed"
+const refusedChangedMessage = "not done: the space changed since your last read. diff shows what changed and brings your read up to date: check it and call again directly, no sync needed"
 const refusedDuplicateMessage = "not done: more than one input in this space has this id, so no call can address any of them; use a tool of the space that does the same, or ask the user to do it on the page"
 const refusedTooLargeMessage = "not done: this space has not been read as it is now, and it is too large to show in a result"
 const spaceTooLargeMessage = "the space is too large for a result"
@@ -110,7 +110,7 @@ Open one when it serves the user better than chat or direct page calls do:
 
 Don't open one when a script alone does the job and you have the js module; for example, when bulk work on the page needs nothing from the user, such as the same steps over many rows.
 
-An island's app functions are also tools of its app child space, which calls reach without a read: call one directly for a single change instead of starting an app, and to read records the page shows a page at a time instead of paging through them; call them from a js script when you have that module and the task needs no UI.
+An island's app functions are also tools of its app child space: call one directly for a single change instead of starting an app, and to read records the page shows a page at a time instead of paging through them; call them from a js script when you have that module and the task needs no UI.
 
 Before your first app, read island_guide: it teaches how to write one. Before starting an app in an island, read its spec with island_spec: it lists the views, controls, layouts, app functions and tools the app can use; use only what it lists, and read the schemas of the items you use with island_spec_schema.`
 

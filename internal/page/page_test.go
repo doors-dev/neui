@@ -767,10 +767,10 @@ return [act("cart", "add"), act("", "checkout")]`, "comment": "adds and checks o
 	c.Wait()
 	var script struct{ Result [][]string }
 	testkit.Decode(t, testkit.Results(p.Request(t, 3))[0], &script)
-	if len(script.Result) != 2 || len(script.Result[0]) != 2 || !strings.HasPrefix(script.Result[0][0], "not done: the space changed since it was last read") || script.Result[0][1] != "diff" {
+	if len(script.Result) != 2 || len(script.Result[0]) != 2 || script.Result[0][0] != "not done: the space changed since your last read. diff shows what changed and brings your read up to date: check it and call again directly, no sync needed" || script.Result[0][1] != "diff" {
 		t.Fatalf("a script's add on the cart the agent read before the restock saw %q, want it refused with the diff", script.Result)
 	}
-	if len(script.Result[1]) != 2 || !strings.HasPrefix(script.Result[1][0], "not done: this space has not been read") || script.Result[1][1] != "space" {
+	if len(script.Result[1]) != 2 || script.Result[1][0] != "not done: this space had not been read. space shows it as it is now and counts as a read: check it and call again directly, no sync needed" || script.Result[1][1] != "space" {
 		t.Fatalf("a script's checkout on the root nobody read saw %q, want it refused with the space", script.Result[1])
 	}
 	for i, want := range []string{"added", "checking out"} {

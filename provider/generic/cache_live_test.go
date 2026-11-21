@@ -122,14 +122,16 @@ func (b *bodyTee) RoundTrip(r *http.Request) (*http.Response, error) {
 	return http.DefaultTransport.RoundTrip(r)
 }
 
-func liveToolLoop(t *testing.T, model string, system string, opts ...Option) ([2]api.EventUsage, api.Message, []string) {
+const openRouter = "https://openrouter.ai/api/v1"
+
+func liveToolLoop(t *testing.T, base string, keyName string, model string, system string, opts ...Option) ([2]api.EventUsage, api.Message, []string) {
 	t.Helper()
-	key := os.Getenv("OPENROUTER_API_KEY")
+	key := os.Getenv(keyName)
 	if key == "" {
-		t.Skip("OPENROUTER_API_KEY is not set")
+		t.Skip(keyName + " is not set")
 	}
 	tee := &bodyTee{}
-	p, err := New(Conf{Model: api.Model{Name: model}, BaseURL: "https://openrouter.ai/api/v1"},
+	p, err := New(Conf{Model: api.Model{Name: model}, BaseURL: base},
 		append([]Option{WithAPIKey(key), WithHTTPClient(&http.Client{Transport: tee}), WithEffort(EffortLow), WithMaxTokens(2048)}, opts...)...)
 	if err != nil {
 		t.Fatal(err)
@@ -172,7 +174,8 @@ func liveToolLoop(t *testing.T, model string, system string, opts ...Option) ([2
 					continue
 				}
 				var fields struct {
-					Fields map[string]json.RawMessage `json:"fields"`
+					Fields map[string]json.RawMessage            `json:"fields"`
+					Calls  map[string]map[string]json.RawMessage `json:"calls"`
 				}
 				if err := json.Unmarshal(o.Data, &fields); err != nil {
 					t.Fatal(err)
@@ -181,6 +184,14 @@ func liveToolLoop(t *testing.T, model string, system string, opts ...Option) ([2
 					if !strings.Contains(tee.bodies[1], fmt.Sprintf("%q:%s", name, value)) {
 						t.Fatalf("the second request does not carry %s unchanged:\n%s", name, tee.bodies[1])
 					}
+				}
+				for id, call := range fields.Calls {
+					for name, value := range call {
+						if !strings.Contains(tee.bodies[1], fmt.Sprintf("%q:%s", name, value)) {
+							t.Fatalf("the second request does not carry %s of call %s unchanged:\n%s", name, id, tee.bodies[1])
+						}
+					}
+					t.Logf("fields of call %s sent back: %s", id, strings.Join(slices.Sorted(maps.Keys(call)), ", "))
 				}
 				t.Logf("fields sent back: %s", strings.Join(slices.Sorted(maps.Keys(fields.Fields)), ", "))
 			}
@@ -207,7 +218,7 @@ func TestLiveCacheMarker(t *testing.T) {
 	for i := range 150 {
 		fmt.Fprintf(&system, "Record %04d: the ledger keeps entry %d of %d in its original order.\n", i, i*7, 150*7)
 	}
-	usage, _, bodies := liveToolLoop(t, "anthropic/claude-haiku-5.5", system.String(), WithCacheMarker(map[string]any{"cache_control": map[string]any{"type": "ephemeral"}}))
+	usage, _, bodies := liveToolLoop(t, openRouter, "OPENROUTER_API_KEY", "anthropic/claude-haiku-5.5", system.String(), WithCacheMarker(map[string]any{"cache_control": map[string]any{"type": "ephemeral"}}))
 	if strings.Count(bodies[0], `"cache_control"`) != 2 || strings.Count(bodies[1], `"cache_control"`) != 2 {
 		t.Fatalf("the bodies do not carry two markers each:\n%s\n%s", bodies[0], bodies[1])
 	}
@@ -222,7 +233,7 @@ func TestLiveCacheMarker(t *testing.T) {
 func TestLiveOpaqueFields(t *testing.T) {
 	for _, model := range []string{"anthropic/claude-haiku-5.5", "openai/gpt-5-mini", "google/gemini-3.5-flash-lite", "qwen/qwen3.8-27b"} {
 		t.Run(strings.ReplaceAll(model, "/", "_"), func(t *testing.T) {
-			_, reply, _ := liveToolLoop(t, model, "Item codes are only known through the lookup tool; never guess them.")
+			_, reply, _ := liveToolLoop(t, openRouter, "OPENROUTER_API_KEY", model, "Item codes are only known through the lookup tool; never guess them.")
 			kept := false
 			for _, c := range reply.Content {
 				o, ok := c.(api.ContentOpaque)
@@ -232,5 +243,30 @@ func TestLiveOpaqueFields(t *testing.T) {
 				t.Fatalf("the first turn kept no fields: %+v", reply.Content)
 			}
 		})
+	}
+}
+
+func TestLiveGeminiWholeToolCalls(t *testing.T) {
+	_, reply, bodies := liveToolLoop(t, "https://generativelanguage.googleapis.com/v1beta/openai/", "GEMINI_API_KEY", "gemini-3.5-flash-lite", "Item codes are only known through the lookup tool; never guess them.")
+	signed := 0
+	for _, c := range reply.Content {
+		o, ok := c.(api.ContentOpaque)
+		if !ok || o.Kind != "generic.fields" {
+			continue
+		}
+		var data struct {
+			Calls map[string]map[string]json.RawMessage `json:"calls"`
+		}
+		if err := json.Unmarshal(o.Data, &data); err != nil {
+			t.Fatal(err)
+		}
+		for _, call := range data.Calls {
+			if strings.Contains(string(call["extra_content"]), `"thought_signature"`) {
+				signed++
+			}
+		}
+	}
+	if signed == 0 || !strings.Contains(bodies[1], `"extra_content"`) {
+		t.Fatalf("no call kept its thought signature: %+v", reply.Content)
 	}
 }

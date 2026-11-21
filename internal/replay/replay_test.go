@@ -1457,9 +1457,6 @@ func TestRejectedRoundRefusesItsResultsAcrossAReload(t *testing.T) {
 		{string(api.CodeInvalid), true},
 		{string(api.CodeTooLarge), true},
 		{string(api.CodeNetwork), false},
-		{"invalid: claude: http 400 invalid_request_error: messages: text content blocks must be non-empty", true},
-		{"too_large: claude: http 413", true},
-		{"network: dial tcp: connection refused", false},
 	} {
 		t.Run(c.reason, func(t *testing.T) {
 			s := local.NewMessageStorage()

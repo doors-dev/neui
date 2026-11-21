@@ -394,7 +394,7 @@ func TestEncodeCacheMarker(t *testing.T) {
 		req    api.Request
 		tools  string
 		system string
-		last   string
+		marked string
 	}{
 		{"system, tools and a user message", api.Request{System: "Be brief.", Tools: tools, Messages: []api.Message{user(text("hi")), assistant(text("Hello.")), user(text("a"), text("b"))}},
 			`[{"type":"function","function":{"name":"now","parameters":{"properties":{},"type":"object"}}},{"type":"function","function":{"name":"lookup","description":"Finds a code.","parameters":{"properties":{},"type":"object"}}}]`,
@@ -413,11 +413,18 @@ func TestEncodeCacheMarker(t *testing.T) {
 		{"an image after the text", api.Request{Messages: []api.Message{user(text("look"), png, text("and"), png)}},
 			"", "", `{"role":"user","content":[{"type":"text","text":"look"},` + img + `,{"type":"text","text":"and",` + marked + `},` + img + `]}`},
 		{"an image alone", api.Request{Messages: []api.Message{user(png)}},
-			"", "", `{"role":"user","content":[` + img + `]}`},
+			"", "", ""},
+		{"an image alone after the system prompt", api.Request{System: "Be brief.", Messages: []api.Message{user(png)}},
+			"", `{"role":"system","content":[{"type":"text","text":"Be brief.",` + marked + `}]}`, ""},
+		{"an image after an answer", api.Request{Messages: []api.Message{user(text("hi")), assistant(text("Hello.")), user(png)}},
+			"", "", `{"role":"assistant","content":[{"type":"text","text":"Hello.",` + marked + `}]}`},
 		{"an assistant message last", api.Request{Messages: []api.Message{user(text("hi")), assistant(text("Hel"))}},
 			"", "", `{"role":"assistant","content":[{"type":"text","text":"Hel",` + marked + `}]}`},
 		{"an assistant call last", api.Request{Messages: []api.Message{user(text("hi")), assistant(api.ContentToolUse{ID: "c1", Name: "now"})}},
-			"", "", `{"role":"assistant","content":null,"tool_calls":[{"id":"c1","type":"function","function":{"name":"now","arguments":"{}"}}]}`},
+			"", "", `{"role":"user","content":[{"type":"text","text":"hi",` + marked + `}]}`},
+		{"results with images only", api.Request{Messages: []api.Message{user(text("time?")), assistant(api.ContentToolUse{ID: "c1", Name: "now"}, api.ContentToolUse{ID: "c2", Name: "now"}),
+			user(api.ContentToolResult{ID: "c1", Content: api.UserContents{text("noon"), png}}, api.ContentToolResult{ID: "c2", Content: api.UserContents{png}})}},
+			"", "", `{"role":"tool","content":[{"type":"text","text":"noon",` + marked + `},` + img + `],"tool_call_id":"c1"}`},
 		{"an assistant message with fields last", api.Request{Messages: []api.Message{user(text("hi")), assistant(text("Hel"), api.ContentOpaque{Model: testModel, Kind: "generic.fields", Data: json.RawMessage(`{"fields":{"note":"x"}}`)})}},
 			"", "", `{"role":"assistant","content":[{"type":"text","text":"Hel",` + marked + `}],"note":"x"}`},
 	} {
@@ -438,14 +445,19 @@ func TestEncodeCacheMarker(t *testing.T) {
 			if err := json.Unmarshal(raw, &got); err != nil {
 				t.Fatal(err)
 			}
-			var system string
-			if tc.req.System != "" {
-				system = string(got.Messages[0])
+			var system, carrier string
+			for i, m := range got.Messages {
+				switch {
+				case i == 0 && tc.req.System != "":
+					system = string(m)
+				case strings.Contains(string(m), "cache_control"):
+					carrier = string(m)
+				}
 			}
-			if string(got.Tools) != tc.tools || system != tc.system || string(got.Messages[len(got.Messages)-1]) != tc.last {
-				t.Fatalf("tools %s\nsystem %s\nlast %s\nwant\ntools %s\nsystem %s\nlast %s", got.Tools, system, got.Messages[len(got.Messages)-1], tc.tools, tc.system, tc.last)
+			if string(got.Tools) != tc.tools || system != tc.system || carrier != tc.marked {
+				t.Fatalf("tools %s\nsystem %s\nmarked %s\nwant\ntools %s\nsystem %s\nmarked %s", got.Tools, system, carrier, tc.tools, tc.system, tc.marked)
 			}
-			if n := strings.Count(string(raw), "cache_control"); n != strings.Count(tc.tools+tc.system+tc.last, "cache_control") {
+			if n := strings.Count(string(raw), "cache_control"); n != strings.Count(tc.tools+tc.system+tc.marked, "cache_control") {
 				t.Fatalf("%d markers in %s", n, raw)
 			}
 			plain, err := lib.MarshalRaw(must(provider(t).encode(tc.req)))

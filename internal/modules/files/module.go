@@ -33,7 +33,9 @@ func Module(ctx context.Context) common.Module {
 	light := common.LightMode(ctx)
 	m := tools.NewModule("files", moduleDesc(light))
 	add(m, "list", listDesc, listTool)
-	add(m, "read", readDesc(light), readTool)
+	add(m, "read", readDesc(light), func(ctx context.Context, arg readArg) (string, error) {
+		return readTool(ctx, arg, light)
+	})
 	add(m, "readImage", readImageDesc, readImageTool)
 	add(m, "readDocument", readDocumentDesc(light), readDocumentTool)
 	add(m, "copy", copyDesc, copyTool)

@@ -793,15 +793,14 @@ func TestRejectedRoundRefusesTheWaitingResults(t *testing.T) {
 	}
 }
 
-func TestFailedRoundKeepsItsCause(t *testing.T) {
+func TestFailedRoundStoresItsCode(t *testing.T) {
 	for _, c := range []struct {
 		code  api.ErrCode
 		cause error
-		want  string
 	}{
-		{api.CodeUnknown, errors.New("stub: http 520: origin error"), "unknown: stub: http 520: origin error"},
-		{api.CodeInvalid, errors.New("stub: rejected"), "invalid: stub: rejected"},
-		{api.CodeNetwork, nil, "network"},
+		{api.CodeUnknown, errors.New("stub: http 520: origin error")},
+		{api.CodeInvalid, errors.New("stub: rejected")},
+		{api.CodeNetwork, nil},
 	} {
 		t.Run(string(c.code), func(t *testing.T) {
 			s := local.NewMessageStorage()
@@ -813,8 +812,8 @@ func TestFailedRoundKeepsItsCause(t *testing.T) {
 			if err != nil || len(stored) != 1 {
 				t.Fatalf("RoundAfter: %d rounds, %v", len(stored), err)
 			}
-			if stored[0].State != api.RoundError || stored[0].Error != c.want {
-				t.Fatalf("the failed round is stored as %s %q, want an error %q", stored[0].State, stored[0].Error, c.want)
+			if stored[0].State != api.RoundError || stored[0].Error != string(c.code) {
+				t.Fatalf("the failed round is stored as %s %q, want an error %q", stored[0].State, stored[0].Error, c.code)
 			}
 			err = chat.Do(thread.Link.Retry)
 			if (err == nil) != (c.code != api.CodeInvalid) {

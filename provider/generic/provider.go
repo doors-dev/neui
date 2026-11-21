@@ -34,13 +34,16 @@
 //
 // Reasoning streams back from reasoning or reasoning_content, whichever the
 // server writes. Every other field with a value, on the reply message and on
-// its tool calls, such as OpenRouter's reasoning_details or a call's signature,
-// is kept as the stream assembled it, in one api.ContentOpaque per turn. On
+// its tool calls, such as a call's signature, is kept whole in one
+// api.ContentOpaque per turn: a field that arrives again replaces the earlier
+// value, and OpenRouter's reasoning_details is assembled entry by entry. On
 // later turns both go back only to the model that wrote them, named exactly as
 // Conf.Model.Name ("x:nitro" and "x" differ): the reasoning in its field and
 // the other fields unchanged on that message and its calls. To any other
 // model, and from any other provider, they are left out whole. Reasoning a
-// server leaves in the text as <think> tags stays text.
+// server leaves in the text as <think> tags stays text. A tool call that
+// arrives without an index, as from Gemini's OpenAI-compatible endpoint, is
+// one whole call.
 //
 // Images go as data URLs in user messages and tool results. Set Model.Inputs
 // to what the server's model reads: a thread replays a note in place of each
@@ -317,9 +320,10 @@ func WithExtraBody(fields map[string]any) Option {
 
 // WithCacheMarker merges fields into the parts a prompt cache is keyed on: the
 // system prompt, or the last tool when there is none, and the last text part
-// of the last message, which moves forward every turn. A message that carries
-// the marker goes as a list of parts. Without the option, or with no fields,
-// no marker is sent.
+// of the conversation, which moves forward every turn: the last message's, or
+// the nearest earlier one when the last message has none, such as images or
+// tool calls alone. A message that carries the marker goes as a list of parts.
+// Without the option, or with no fields, no marker is sent.
 //
 //	generic.WithCacheMarker(map[string]any{
 //		"cache_control": map[string]any{"type": "ephemeral", "ttl": "1h"},

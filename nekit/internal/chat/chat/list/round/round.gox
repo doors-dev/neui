@@ -16,7 +16,6 @@ package round
 
 import (
 	"context"
-	"strings"
 	"time"
 	
 	"github.com/doors-dev/doors"
@@ -186,8 +185,7 @@ elem (r LiveRound) retry() {
 }
 
 func rejected(err string) bool {
-	code, _, _ := strings.Cut(err, ":")
-	return code == string(api.CodeInvalid) || code == string(api.CodeTooLarge)
+	return err == string(api.CodeInvalid) || err == string(api.CodeTooLarge)
 }
 
 type Round = *round

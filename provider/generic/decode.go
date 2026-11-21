@@ -20,7 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
+	"maps"
 
 	"neui.dev/api"
 	"neui.dev/provider/lib"
@@ -47,8 +47,9 @@ type converter struct {
 	ids       map[string]bool
 	real      map[int]string
 	named     map[int]string
-	fields    []map[string]json.RawMessage
-	called    map[int][]map[string]json.RawMessage
+	fields    map[string]any
+	details   reasoningDetails
+	called    map[int]map[string]json.RawMessage
 	stopped   bool
 	finish    string
 	failure   api.Event
@@ -67,7 +68,8 @@ func newConverter(model string, sent int, declared int) *converter {
 		ids:       make(map[string]bool),
 		real:      make(map[int]string),
 		named:     make(map[int]string),
-		called:    make(map[int][]map[string]json.RawMessage),
+		fields:    make(map[string]any),
+		called:    make(map[int]map[string]json.RawMessage),
 		sent:      sent,
 		declared:  declared,
 	}
@@ -85,15 +87,18 @@ func (c *converter) Convert(f lib.Frame) ([]api.Event, bool) {
 		switch c.finish {
 		case "stop", "tool_calls", "function_call":
 			var data struct {
-				Fields map[string]any            `json:"fields,omitempty"`
-				Calls  map[string]map[string]any `json:"calls,omitempty"`
+				Fields map[string]any                        `json:"fields,omitempty"`
+				Calls  map[string]map[string]json.RawMessage `json:"calls,omitempty"`
 			}
-			data.Fields = fold(c.fields)
-			for index, frags := range c.called {
+			if len(c.details.entries) > 0 {
+				c.fields["reasoning_details"] = c.details.list()
+			}
+			data.Fields = c.fields
+			for index, fields := range c.called {
 				if data.Calls == nil {
-					data.Calls = make(map[string]map[string]any)
+					data.Calls = make(map[string]map[string]json.RawMessage)
 				}
-				data.Calls[c.named[index]] = fold(frags)
+				data.Calls[c.named[index]] = fields
 			}
 			if len(data.Fields) == 0 && len(data.Calls) == 0 {
 				return []api.Event{api.EventOk{Code: api.CodeTurn}}, false
@@ -141,8 +146,10 @@ func (c *converter) Convert(f lib.Frame) ([]api.Event, bool) {
 				c.events = append(c.events, api.EventThinking{Index: c.reasoning, Text: thought})
 			}
 		}
-		if len(d.fields) > 0 {
-			c.fields = append(c.fields, d.fields)
+		for name, value := range d.fields {
+			if name != "reasoning_details" || !c.details.add(value) {
+				c.fields[name] = value
+			}
 		}
 		if d.Content != "" {
 			if c.text < 0 {
@@ -154,7 +161,14 @@ func (c *converter) Convert(f lib.Frame) ([]api.Event, bool) {
 		for j := range d.ToolCalls {
 			t := &d.ToolCalls[j]
 			if t.Index == nil {
-				return append(c.events, api.EventErr{Code: api.CodeNetwork, Err: errors.New("generic: tool call fragment without an index")}), false
+				free := len(c.tools)
+				for {
+					if _, taken := c.tools[free]; !taken {
+						break
+					}
+					free++
+				}
+				t.Index = &free
 			}
 			e := api.EventTool{}
 			index, seen := c.tools[*t.Index]
@@ -188,7 +202,10 @@ func (c *converter) Convert(f lib.Frame) ([]api.Event, bool) {
 				c.named[*t.Index] = e.ID
 			}
 			if len(t.fields) > 0 {
-				c.called[*t.Index] = append(c.called[*t.Index], t.fields)
+				if c.called[*t.Index] == nil {
+					c.called[*t.Index] = make(map[string]json.RawMessage)
+				}
+				maps.Copy(c.called[*t.Index], t.fields)
 			}
 			if t.Function != nil {
 				e.Name, e.Args = t.Function.Name, t.Function.Arguments
@@ -261,88 +278,4 @@ func (c *converter) End(err error) []api.Event {
 		return nil
 	}
 	return []api.Event{api.EventErr{Code: api.CodeNetwork, Err: err}}
-}
-
-func fold(frags []map[string]json.RawMessage) map[string]any {
-	out := make(map[string]any)
-	done := make(map[string]bool)
-	for _, frag := range frags {
-		for name := range frag {
-			if done[name] {
-				continue
-			}
-			done[name] = true
-			var values []json.RawMessage
-			same := true
-			for _, f := range frags {
-				if v := f[name]; !empty(v) {
-					values = append(values, v)
-					same = same && v[0] == values[0][0]
-				}
-			}
-			if len(values) == 0 {
-				continue
-			}
-			out[name] = values[len(values)-1]
-			if !same {
-				continue
-			}
-			switch values[0][0] {
-			case '"':
-				var text strings.Builder
-				var first string
-				constant := len(values) == len(frags)
-				for i, v := range values {
-					var s string
-					_ = json.Unmarshal(v, &s)
-					if i == 0 {
-						first = s
-					}
-					constant = constant && s == first
-					text.WriteString(s)
-				}
-				if constant {
-					out[name] = first
-				} else {
-					out[name] = text.String()
-				}
-			case '{':
-				objects := make([]map[string]json.RawMessage, len(values))
-				for i, v := range values {
-					_ = json.Unmarshal(v, &objects[i])
-				}
-				out[name] = fold(objects)
-			case '[':
-				var groups [][]map[string]json.RawMessage
-				at := make(map[string]int)
-				indexed := true
-				for _, v := range values {
-					var items []json.RawMessage
-					_ = json.Unmarshal(v, &items)
-					for _, item := range items {
-						var entry map[string]json.RawMessage
-						if json.Unmarshal(item, &entry) != nil || entry["index"] == nil {
-							indexed = false
-							break
-						}
-						g, seen := at[string(entry["index"])]
-						if !seen {
-							g = len(groups)
-							at[string(entry["index"])] = g
-							groups = append(groups, nil)
-						}
-						groups[g] = append(groups[g], entry)
-					}
-				}
-				if indexed && len(groups) > 0 {
-					list := make([]any, len(groups))
-					for i, g := range groups {
-						list[i] = fold(g)
-					}
-					out[name] = list
-				}
-			}
-		}
-	}
-	return out
 }

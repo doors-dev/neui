@@ -124,6 +124,7 @@ func TestLightModeHidesIslands(t *testing.T) {
 				testkit.Call("page__tree", map[string]any{}),
 				testkit.Call("page__sync", map[string]any{"path": ""}),
 				testkit.Call("page__sync", map[string]any{"path": "board"}),
+				testkit.Call("page__sync", map[string]any{"path": "board.app"}),
 				testkit.Call("page__tool", map[string]any{"path": "board.app", "tool": "mark", "arg": map[string]any{"N": 1}}),
 				testkit.Call("page__sync", map[string]any{"path": "panel"}),
 				testkit.Call("page__tool", map[string]any{"path": "panel", "tool": "open", "arg": map[string]any{}}),
@@ -146,7 +147,7 @@ func TestLightModeHidesIslands(t *testing.T) {
 				Diff    json.RawMessage
 				Changes json.RawMessage
 			}
-			testkit.Decode(t, result(6), &opened)
+			testkit.Decode(t, result(7), &opened)
 			if opened.Output != fmt.Sprint(light) {
 				t.Fatalf("the page tool's handler saw light mode %s, want %v", opened.Output, light)
 			}
@@ -159,13 +160,14 @@ func TestLightModeHidesIslands(t *testing.T) {
 				}
 				refused(t, result(3), "no such space")
 				refused(t, result(4), "no such space")
+				refused(t, result(5), "no such space")
 				if len(marks) != 0 {
 					t.Fatal("an island's app function ran in light mode")
 				}
 				if string(opened.Diff) != "{}" || opened.Changes != nil {
 					t.Fatalf("opening answered diff %s and changes %s, want no change at all", opened.Diff, opened.Changes)
 				}
-				if got := tree(7); !slices.Equal(got, []string{"panel"}) {
+				if got := tree(8); !slices.Equal(got, []string{"panel"}) {
 					t.Fatalf("tree after opening shows %v, want the panel alone", got)
 				}
 				for _, space := range []string{"board", "panel.inner", "outer"} {
@@ -184,13 +186,13 @@ func TestLightModeHidesIslands(t *testing.T) {
 			if r := result(3); r.Error != api.ToolOk {
 				t.Fatalf("the board's sync answered %#v", r.Content)
 			}
-			if r := result(4); r.Error != api.ToolOk || <-marks != 1 {
+			if r := result(5); r.Error != api.ToolOk || <-marks != 1 {
 				t.Fatalf("the board's mark answered %#v", r.Content)
 			}
 			if string(opened.Diff) != `{"children":{"added":[{"name":"inner","desc":"a late island","island":true}]}}` || string(opened.Changes) != `[{"path":"outer","added":true,"desc":"a late island"}]` {
 				t.Fatalf("opening answered diff %s and changes %s, want the inner island in the diff and the outer one in changes", opened.Diff, opened.Changes)
 			}
-			if got := tree(7); !slices.Equal(got, []string{"board*", "outer*", "panel"}) {
+			if got := tree(8); !slices.Equal(got, []string{"board*", "outer*", "panel"}) {
 				t.Fatalf("tree after opening shows %v, want both islands at the root", got)
 			}
 			if strings.Contains(logged.String(), "light mode") {

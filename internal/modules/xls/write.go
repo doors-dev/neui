@@ -80,7 +80,7 @@ type writeResult struct {
 	Range string `json:"range" description:"the block written, like E2:E20"`
 }
 
-func writeTool(ctx context.Context, arg writeArg) (writeResult, error) {
+func writeTool(ctx context.Context, arg writeArg, light bool) (writeResult, error) {
 	x1, y1, err := excelize.CellNameToCoordinates(arg.Cell)
 	if err != nil {
 		return writeResult{}, fmt.Errorf("cell %q: %w", arg.Cell, err)
@@ -109,7 +109,7 @@ func writeTool(ctx context.Context, arg writeArg) (writeResult, error) {
 		return writeResult{}, fmt.Errorf("rows hold no cells")
 	}
 	split := "split it into several writes"
-	if !common.LightMode(ctx) {
+	if !light {
 		split += ", such as from a js script"
 	}
 	if arg.Repeat > maxFormatCells {

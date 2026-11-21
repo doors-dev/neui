@@ -156,16 +156,31 @@ func TestStreamToolCallPieces(t *testing.T) {
 	}
 }
 
+func TestStreamWholeToolCalls(t *testing.T) {
+	p := serve(t, stringHandler(
+		chunkFrame(`{"role":"assistant","tool_calls":[{"extra_content":{"google":{"thought_signature":"c2ln"}},"function":{"arguments":"{\"item\":\"alpha\"}","name":"lookup"},"id":"call_1","type":"function"}]}`, ""),
+		chunkFrame(`{"role":"assistant","tool_calls":[{"function":{"arguments":"{\"item\":\"beta\"}","name":"lookup"},"id":"call_2","type":"function"},{"function":{"arguments":"{}","name":"now"},"type":"function"}]}`, ""),
+		chunkFrame(`{"role":"assistant"}`, "stop"),
+		doneFrame,
+	))
+	events := collect(t, p, turn("look up"))
+	conform.CheckUnframed(t, events)
+	wantEvents(t, events,
+		"start gen-1 qwen/qwen3.8-27b",
+		`tool 0 "call_1" "lookup" "{\"item\":\"alpha\"}"`,
+		`tool 1 "call_2" "lookup" "{\"item\":\"beta\"}"`,
+		`tool 2 "gen-1_call_2" "now" "{}"`,
+		`opaque 3 "generic.fields" {"calls":{"call_1":{"extra_content":{"google":{"thought_signature":"c2ln"}}}}} ""`,
+		"ok turn",
+	)
+}
+
 func TestStreamToolCallFailures(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		frames []string
 		want   []string
 	}{
-		{"a fragment without an index", []string{
-			`{"tool_calls":[{"index":0,"id":"call_a","function":{"name":"now","arguments":""}}]}`,
-			`{"tool_calls":[{"id":"call_x","function":{"name":"now"}}]}`,
-		}, []string{`tool 0 "call_a" "now" ""`}},
 		{"a call that changes its id", []string{
 			`{"tool_calls":[{"index":0,"id":"call_a","function":{"name":"now","arguments":""}}]}`,
 			`{"tool_calls":[{"index":0,"id":"call_b"}]}`,
@@ -200,24 +215,36 @@ func TestStreamOpaqueFields(t *testing.T) {
 		finish string
 		want   string
 	}{
-		{"indexed lists merge by index", []string{
+		{"reasoning_details merge by index", []string{
 			`{"reasoning_details":[{"type":"reasoning.text","text":"\n","format":"f","index":0}]}`,
 			`{"reasoning_details":[{"type":"reasoning.text","text":"\n","format":"f","index":0},{"type":"reasoning.encrypted","data":"ab","index":1}]}`,
 			`{"reasoning_details":[{"type":"reasoning.encrypted","data":"cd","index":1,"id":"rs_1"}]}`,
-			`{"reasoning_details":[{"type":"reasoning.text","signature":"c2ln","format":"f","index":0}]}`,
-		}, "stop", `{"fields":{"reasoning_details":[{"format":"f","index":0,"signature":"c2ln","text":"\n\n","type":"reasoning.text"},{"data":"abcd","id":"rs_1","index":1,"type":"reasoning.encrypted"}]}}`},
-		{"one value in every fragment stays one", []string{
+			`{"reasoning_details":[{"type":"reasoning.text","signature":"c2","format":"f","index":0}]}`,
+			`{"reasoning_details":[{"type":"reasoning.text","signature":"ln","format":"g","index":0,"id":null}]}`,
+			`{"reasoning_details":[{"type":"reasoning.summary","summary":"**Plan**\n","format":"o","index":2},{"type":"reasoning.summary","summary":"one","format":"o","index":2,"extra":1}]}`,
+			`{"reasoning_details":[{"type":"reasoning.summary","summary":" step","format":"o","index":2,"extra":2}]}`,
+		}, "stop", `{"fields":{"reasoning_details":[{"format":"g","index":0,"signature":"c2ln","text":"\n\n","type":"reasoning.text"},{"data":"abcd","id":"rs_1","index":1,"type":"reasoning.encrypted"},{"extra":2,"format":"o","index":2,"summary":"**Plan**\none step","type":"reasoning.summary"}]}}`},
+		{"reasoning_details entries without an index stay apart", []string{
+			`{"reasoning_details":[{"type":"reasoning.text","text":"a"}]}`,
+			`{"reasoning_details":[{"type":"reasoning.text","text":"b"}]}`,
+		}, "stop", `{"fields":{"reasoning_details":[{"text":"a","type":"reasoning.text"},{"text":"b","type":"reasoning.text"}]}}`},
+		{"reasoning_details that is no list stays whole", []string{
+			`{"reasoning_details":{"type":"reasoning.text","text":"a"}}`,
+		}, "stop", `{"fields":{"reasoning_details":{"type":"reasoning.text","text":"a"}}}`},
+		{"a string that arrives again replaces", []string{
 			`{"note":"same"}`,
 			`{"note":"same"}`,
-		}, "stop", `{"fields":{"note":"same"}}`},
-		{"objects merge field by field", []string{
+			`{"tag":"a"}`,
+			`{"tag":"b"}`,
+		}, "stop", `{"fields":{"note":"same","tag":"b"}}`},
+		{"an object that arrives again replaces whole", []string{
 			`{"meta":{"text":"a","n":1,"deep":{"s":"x"}}}`,
 			`{"meta":{"text":"b","n":2,"flag":true,"deep":{"s":"y"}}}`,
-		}, "stop", `{"fields":{"meta":{"deep":{"s":"xy"},"flag":true,"n":2,"text":"ab"}}}`},
+		}, "stop", `{"fields":{"meta":{"text":"b","n":2,"flag":true,"deep":{"s":"y"}}}}`},
 		{"other values keep the last", []string{
-			`{"annotations":[{"type":"url_citation","url":"a"}],"score":1,"label":"x"}`,
-			`{"annotations":[{"type":"url_citation","url":"b"}],"score":2.5,"label":{"k":1}}`,
-		}, "stop", `{"fields":{"annotations":[{"type":"url_citation","url":"b"}],"label":{"k":1},"score":2.5}}`},
+			`{"annotations":[{"type":"url_citation","url":"a","index":0}],"score":1,"label":"x"}`,
+			`{"annotations":[{"type":"url_citation","url":"b","index":0}],"score":2.5,"label":{"k":1}}`,
+		}, "stop", `{"fields":{"annotations":[{"type":"url_citation","url":"b","index":0}],"label":{"k":1},"score":2.5}}`},
 		{"empty values are absent", []string{
 			`{"refusal":null,"annotations":[],"audio":{},"note":""}`,
 			`{"content":"hi","role":"assistant"}`,
@@ -226,7 +253,7 @@ func TestStreamOpaqueFields(t *testing.T) {
 			`{"tool_calls":[{"index":0,"id":"call_a","type":"function","function":{"name":"now","arguments":""},"extra_content":{"google":{"thought_signature":"c2"}}}]}`,
 			`{"tool_calls":[{"index":0,"function":{"arguments":"{}"},"extra_content":{"google":{"thought_signature":"ln"}}},{"index":1,"type":"function","function":{"name":"now","arguments":"{}"},"sig":"x"}]}`,
 			`{"tool_calls":[{"index":1,"id":"call_b","sig":"y"}]}`,
-		}, "tool_calls", `{"calls":{"call_a":{"extra_content":{"google":{"thought_signature":"c2ln"}}},"call_b":{"sig":"xy"}}}`},
+		}, "tool_calls", `{"calls":{"call_a":{"extra_content":{"google":{"thought_signature":"ln"}}},"call_b":{"sig":"y"}}}`},
 		{"per-call fields of a minted id", []string{
 			`{"tool_calls":[{"index":0,"type":"function","function":{"name":"now","arguments":"{}"},"sig":"x"}]}`,
 		}, "tool_calls", `{"calls":{"gen-1_call_0":{"sig":"x"}}}`},
@@ -809,6 +836,51 @@ func TestRecordedOpaqueFields(t *testing.T) {
 				t.Fatalf("another model got the reasoning or fields: %s", replay)
 			}
 		})
+	}
+}
+
+func TestRecordedReasoningSummary(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("testdata", "streams", "openrouter-gpt5mini-summary.sse"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := serve(t, stringHandler(string(data)))
+	p.model.Name = "openai/gpt-5-mini"
+	events := collect(t, p, turn("hi"))
+	conform.CheckUnframed(t, events)
+	b := response.NewBulder()
+	for _, e := range events {
+		if _, ok := b.On(e); !ok {
+			t.Fatalf("builder refused %s", conform.Describe(e))
+		}
+	}
+	var thoughts string
+	var fields struct {
+		Fields struct {
+			Details []struct {
+				Type    string `json:"type"`
+				Summary string `json:"summary"`
+				Data    string `json:"data"`
+				Format  string `json:"format"`
+				ID      string `json:"id"`
+				Index   int    `json:"index"`
+			} `json:"reasoning_details"`
+		} `json:"fields"`
+	}
+	for _, c := range b.Flush().Content.Ordered() {
+		switch c := c.(type) {
+		case api.ContentReasoning:
+			thoughts = strings.Join(c.Thoughts.Ordered(), "")
+		case api.ContentOpaque:
+			if err := json.Unmarshal(c.Data, &fields); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	d := fields.Fields.Details
+	if len(d) != 2 || d[0].Type != "reasoning.summary" || d[0].Format != "openai-responses-v1" || d[0].Index != 0 || d[0].Summary != thoughts || !strings.HasPrefix(thoughts, "**Calculating the sum**\n\nI'm looking") || !strings.HasSuffix(thoughts, "Keeping it simple is key here!") ||
+		d[1].Type != "reasoning.encrypted" || d[1].Index != 1 || !strings.HasPrefix(d[1].ID, "rs_") || !strings.HasPrefix(d[1].Data, "gAAAAA") {
+		t.Fatalf("details %+v, thoughts %q", d, thoughts)
 	}
 }
 

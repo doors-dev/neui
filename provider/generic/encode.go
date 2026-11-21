@@ -76,11 +76,10 @@ func (p *Provider) encode(req api.Request) (*chatRequest, error) {
 	if req.System != "" {
 		system := any(req.System)
 		if len(p.marker) > 0 {
-			system = p.mark(req.System)
+			system, _ = p.mark(req.System)
 		}
 		out.Messages = append(out.Messages, &message{Role: "system", Content: system})
 	}
-	var last *message
 	var called []string
 	for i, m := range req.Messages {
 		switch m.Role {
@@ -124,8 +123,7 @@ func (p *Provider) encode(req api.Request) (*chatRequest, error) {
 							result = append([]any{textPart{Type: "text", Text: "Error:"}}, body...)
 						}
 					}
-					last = &message{Role: "tool", ToolCallID: lib.CallID(c.ID), Content: result}
-					out.Messages = append(out.Messages, last)
+					out.Messages = append(out.Messages, &message{Role: "tool", ToolCallID: lib.CallID(c.ID), Content: result})
 					results++
 				case api.ContentImage:
 					parts = append(parts, image(c))
@@ -140,11 +138,9 @@ func (p *Provider) encode(req api.Request) (*chatRequest, error) {
 			}
 			switch {
 			case len(parts) > 0:
-				last = &message{Role: "user", Content: content(parts)}
-				out.Messages = append(out.Messages, last)
+				out.Messages = append(out.Messages, &message{Role: "user", Content: content(parts)})
 			case results == 0:
-				last = &message{Role: "user", Content: emptyMessage}
-				out.Messages = append(out.Messages, last)
+				out.Messages = append(out.Messages, &message{Role: "user", Content: emptyMessage})
 			}
 			called = nil
 		case api.RoleAssistant:
@@ -221,7 +217,6 @@ func (p *Provider) encode(req api.Request) (*chatRequest, error) {
 			case len(calls) == 0:
 				msg.Content = emptyMessage
 			}
-			last = msg
 			if f := fields.Fields; len(f) > 2 && f[0] == '{' && len(bytes.TrimSpace(f[1:len(f)-1])) > 0 {
 				out.Messages = append(out.Messages, fielded{msg, f[1 : len(f)-1]})
 			} else {
@@ -231,25 +226,32 @@ func (p *Provider) encode(req api.Request) (*chatRequest, error) {
 			return nil, fmt.Errorf("generic: message %d has role %q, which is neither user nor assistant", i, m.Role)
 		}
 	}
-	if len(p.marker) > 0 && last != nil {
-		last.Content = p.mark(last.Content)
+	for i := len(out.Messages) - 1; i >= 0 && len(p.marker) > 0; i-- {
+		m, _ := out.Messages[i].(*message)
+		if f, wrapped := out.Messages[i].(fielded); wrapped {
+			m = f.value.(*message)
+		}
+		if content, marked := p.mark(m.Content); marked {
+			m.Content = content
+			break
+		}
 	}
 	return out, nil
 }
 
-func (p *Provider) mark(content any) any {
+func (p *Provider) mark(content any) (any, bool) {
 	switch c := content.(type) {
 	case string:
-		return []any{fielded{textPart{Type: "text", Text: c}, p.marker}}
+		return []any{fielded{textPart{Type: "text", Text: c}, p.marker}}, true
 	case []any:
 		for i := len(c) - 1; i >= 0; i-- {
 			if part, ok := c[i].(textPart); ok {
 				c[i] = fielded{part, p.marker}
-				break
+				return c, true
 			}
 		}
 	}
-	return content
+	return content, false
 }
 
 func image(c api.ContentImage) any {

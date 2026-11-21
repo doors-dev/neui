@@ -771,29 +771,26 @@ func TestIslandAppFunctionIsATool(t *testing.T) {
 	}
 }
 
-func TestIslandAppFunctionNeedsNoRead(t *testing.T) {
+func TestIslandAppFunctionNeedsARead(t *testing.T) {
 	marks := make(chan int, 2)
 	p := testkit.NewProvider(api.Model{},
 		testkit.Call("page__tool", map[string]any{"path": "board.app", "tool": "mark", "arg": map[string]any{"N": 7}}),
-		testkit.Call("page__tool", map[string]any{"path": "board.app", "tool": "mark", "arg": map[string]any{"N": 8}}),
-		testkit.Call("page__tool", map[string]any{"path": "board", "tool": "anything", "arg": map[string]any{}}),
+		testkit.Call("page__tool", map[string]any{"path": "board.app", "tool": "mark", "arg": map[string]any{"N": 7}}),
 		testkit.Say("marked"),
 	)
 	page := func(cur gox.Cursor) error { return cur.Any(board(marks, nil)) }
 	c := stack.Page(t, stack.Host{Provider: p, Page: page})
-	c.Send("mark 7 and 8")
+	c.Send("mark 7")
 	c.Wait()
-	for i, want := range []int{7, 8} {
-		var out struct {
-			Output int
-			Diff   map[string]any
-		}
-		testkit.Decode(t, testkit.Results(p.Request(t, i+1))[0], &out)
-		if out.Output != want || <-marks != want || len(out.Diff) != 0 {
-			t.Fatalf("call %d on the unread app space answered %d with diff %v, want %d run with no diff", i+1, out.Output, out.Diff, want)
-		}
+	refused(t, testkit.Results(p.Request(t, 1))[0], "not done: this space had not been read. space shows it as it is now and counts as a read: check it and call again directly, no sync needed")
+	if len(marks) != 1 {
+		t.Fatalf("mark ran %d times, want once: the refused call ran too", len(marks))
 	}
-	refused(t, testkit.Results(p.Request(t, 3))[0], "this space has not been read")
+	var out struct{ Output int }
+	testkit.Decode(t, testkit.Results(p.Request(t, 2))[0], &out)
+	if out.Output != 7 || <-marks != 7 {
+		t.Fatalf("the call after the refusal answered %d, want the refusal to count as a read and mark 7 to run", out.Output)
+	}
 }
 
 func endBoard(held chan<- struct{}, screens chan<- string, success bool) gox.Elem {

@@ -38,14 +38,14 @@ func TestWrite(t *testing.T) {
 	fs := ctl.FS()
 	buildBook(t, fs, "book.xlsx")
 	ctx := ctl.Ctx()
-	res, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "E1", Rows: [][]any{{"Triple", "Flag", nil, "n"}}})
+	res, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "E1", Rows: [][]any{{"Triple", "Flag", nil, "n"}}}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if res.Range != "E1:H1" {
 		t.Fatalf("result = %+v", res)
 	}
-	res, err = writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "E2", Rows: [][]any{{"=B{row}*3", true, nil, 7.5}}, Repeat: 3})
+	res, err = writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "E2", Rows: [][]any{{"=B{row}*3", true, nil, 7.5}}, Repeat: 3}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func TestWriteKeepsOtherCachedValues(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeBook(t, fs, "book.xlsx", f)
-	if _, err := writeTool(c.Ctx(), writeArg{Path: "book.xlsx", Sheet: "Sheet1", Cell: "C2", Rows: [][]any{{"=A{row}*3"}}, Repeat: 2}); err != nil {
+	if _, err := writeTool(c.Ctx(), writeArg{Path: "book.xlsx", Sheet: "Sheet1", Cell: "C2", Rows: [][]any{{"=A{row}*3"}}, Repeat: 2}, false); err != nil {
 		t.Fatal(err)
 	}
 	g := reopen(t, fs, "book.xlsx")
@@ -114,15 +114,15 @@ func TestWriteRefusesNonEmpty(t *testing.T) {
 	c := testkit.NewController(t, testkit.Setup{})
 	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	_, err := writeTool(c.Ctx(), writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "C2", Rows: [][]any{{nil, "x"}}})
+	_, err := writeTool(c.Ctx(), writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "C2", Rows: [][]any{{nil, "x"}}}, false)
 	if err == nil || !strings.Contains(err.Error(), "not empty") || !strings.Contains(err.Error(), "C2") {
 		t.Fatalf("err = %v", err)
 	}
-	_, err = writeTool(c.Ctx(), writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "D3", Rows: [][]any{{"=1"}}, Repeat: 1})
+	_, err = writeTool(c.Ctx(), writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "D3", Rows: [][]any{{"=1"}}, Repeat: 1}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = writeTool(c.Ctx(), writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "D3", Rows: [][]any{{"=2"}}})
+	_, err = writeTool(c.Ctx(), writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "D3", Rows: [][]any{{"=2"}}}, false)
 	if err == nil || !strings.Contains(err.Error(), "not empty") {
 		t.Fatalf("formula cell err = %v", err)
 	}
@@ -198,15 +198,15 @@ func TestWriteRefusals(t *testing.T) {
 		{"XFD1", [][]any{{1.0, 2.0}}, "does not fit"},
 		{"M1", [][]any{{1}}, "int is not a cell value"},
 	} {
-		_, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: c.cell, Rows: c.rows})
+		_, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: c.cell, Rows: c.rows}, false)
 		if err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Fatalf("%s %v: err = %v, want %q", c.cell, c.rows, err, c.want)
 		}
 	}
-	if _, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "B3", Rows: [][]any{{"y"}}}); err != nil {
+	if _, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "B3", Rows: [][]any{{"y"}}}, false); err != nil {
 		t.Fatalf("inside table: %v", err)
 	}
-	if _, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "E3", Rows: [][]any{{"c", 2.0}}}); err != nil {
+	if _, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "E3", Rows: [][]any{{"c", 2.0}}}, false); err != nil {
 		t.Fatalf("inside autofilter: %v", err)
 	}
 	g := reopen(t, fs, "book.xlsx")
@@ -234,7 +234,7 @@ func TestWriteFutureFunctions(t *testing.T) {
 		"=IFNA(SWITCH(B{row},10.5,1,0),0)+STDEV.S(B2:B4)*0+DAYS360(1,2)*0",
 		"=IFERROR(IFS(IFS(TRUE,TRUE),1),0)",
 	}}
-	if _, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "E2", Rows: rows}); err != nil {
+	if _, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "E2", Rows: rows}, false); err != nil {
 		t.Fatal(err)
 	}
 	f := reopen(t, fs, "book.xlsx")
@@ -252,10 +252,10 @@ func TestWriteFutureFunctions(t *testing.T) {
 			t.Fatalf("%s = %q, %v, want %q", c.cell, v, err, c.value)
 		}
 	}
-	if _, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "E3", Rows: [][]any{{"=HYPERLINK(\"https://x.test\",\"site\")"}}}); err != nil {
+	if _, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "E3", Rows: [][]any{{"=HYPERLINK(\"https://x.test\",\"site\")"}}}, false); err != nil {
 		t.Fatalf("hyperlink: %v", err)
 	}
-	if _, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "E4", Rows: [][]any{{"=SUM('Q1|Q2'!A1)", "='IFS (old)'!A1+IFS(TRUE,1)"}}}); err != nil {
+	if _, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "E4", Rows: [][]any{{"=SUM('Q1|Q2'!A1)", "='IFS (old)'!A1+IFS(TRUE,1)"}}}, false); err != nil {
 		t.Fatalf("quoted sheet names: %v", err)
 	}
 	f = reopen(t, fs, "book.xlsx")
@@ -278,7 +278,7 @@ func TestWriteRefusesHugeRepeat(t *testing.T) {
 	c := testkit.NewController(t, testkit.Setup{})
 	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
-	_, err := writeTool(c.Ctx(), writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "E2", Rows: [][]any{{1.0}}, Repeat: math.MaxUint64})
+	_, err := writeTool(c.Ctx(), writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "E2", Rows: [][]any{{1.0}}, Repeat: math.MaxUint64}, false)
 	if err == nil || !strings.Contains(err.Error(), "repeat") {
 		t.Fatalf("err = %v", err)
 	}
@@ -319,7 +319,7 @@ func TestWriteRefusesVBA(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := c.Ctx()
-	_, err = writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Sheet1", Cell: "A1", Rows: [][]any{{1.0}}})
+	_, err = writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Sheet1", Cell: "A1", Rows: [][]any{{1.0}}}, false)
 	if err == nil || !strings.Contains(err.Error(), "VBA") {
 		t.Fatalf("err = %v", err)
 	}
@@ -348,7 +348,7 @@ func TestWriteConcurrent(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: fmt.Sprintf("F%d", i+1), Rows: [][]any{{float64(i)}}})
+			_, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: fmt.Sprintf("F%d", i+1), Rows: [][]any{{float64(i)}}}, false)
 			errs <- err
 		}()
 	}
@@ -439,13 +439,13 @@ func TestExcelFixtureKeptByWrites(t *testing.T) {
 	if len(infos) != 2 || infos[0].Filter != "A1:C4" || infos[1].Filter != "" || len(infos[1].Tables) != 1 || infos[1].Tables[0].Range != "A1:B4" {
 		t.Fatalf("infos = %+v", infos)
 	}
-	if _, err := writeTool(ctx, writeArg{Path: "excel.xlsx", Sheet: "Data", Cell: "E1", Rows: [][]any{{"Note"}, {"=B{row}+1"}}}); err != nil {
+	if _, err := writeTool(ctx, writeArg{Path: "excel.xlsx", Sheet: "Data", Cell: "E1", Rows: [][]any{{"Note"}, {"=B{row}+1"}}}, false); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := totalTool(ctx, totalArg{Path: "excel.xlsx", Sheet: "Data", Range: "A1:C4", Aggs: []aggSpec{{Column: "Amount", Fn: "sum"}}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := writeTool(ctx, writeArg{Path: "excel.xlsx", Sheet: "Sales", Cell: "D1", Rows: [][]any{{"Share"}, {"=B{row}/B4"}}}); err != nil {
+	if _, err := writeTool(ctx, writeArg{Path: "excel.xlsx", Sheet: "Sales", Cell: "D1", Rows: [][]any{{"Share"}, {"=B{row}/B4"}}}, false); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := tableTool(ctx, tableArg{Path: "excel.xlsx", Sheet: "Sales", Cell: "F1", Columns: []columnSpec{{Header: "K"}}, Rows: [][]any{{"a"}}}); err != nil {
