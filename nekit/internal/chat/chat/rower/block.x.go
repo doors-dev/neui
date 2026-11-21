@@ -173,31 +173,45 @@ func summaryDone() gox.Elem {
 }
 
 //line block.gox:66
-func toolsRunning() gox.Elem {
+func recordsIcon() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 //line block.gox:67
-		__e = (doors.Class("nechat-ic nechat-ic_spin")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+		__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
 //line block.gox:67
-			__e = __c.Any(icons.Gear()); if __e != nil { return }
+			__e = __c.Any(icons.EnvelopeSimple()); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
 //line block.gox:68
 }
 
 //line block.gox:70
-func toolsDone() gox.Elem {
+func toolsRunning() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 //line block.gox:71
-		__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+		__e = (doors.Class("nechat-ic nechat-ic_spin")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
 //line block.gox:71
-			__e = __c.Any(icons.Terminal()); if __e != nil { return }
+			__e = __c.Any(icons.Gear()); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
 //line block.gox:72
+}
+
+//line block.gox:74
+func toolsDone() gox.Elem {
+	return gox.Elem(func(__c gox.Cursor) (__e error) {
+		ctx := __c.Context(); _ = ctx
+//line block.gox:75
+		__e = (doors.Class("nechat-ic")).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+			ctx := __c.Context(); _ = ctx
+//line block.gox:75
+			__e = __c.Any(icons.Terminal()); if __e != nil { return }
+		return })); if __e != nil { return }
+	return })
+//line block.gox:76
 }
 
 type block struct {
@@ -206,30 +220,30 @@ type block struct {
 	body any
 }
 
-//line block.gox:80
+//line block.gox:84
 func (b block) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line block.gox:81
+//line block.gox:85
 			__e = __c.Set("class", "nechat-blk"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line block.gox:82
+//line block.gox:86
 				__e = __c.Set("class", "nechat-gut"); if __e != nil { return }
-//line block.gox:82
+//line block.gox:86
 				__e = __c.Set("title", b.title); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line block.gox:82
+//line block.gox:86
 				__e = __c.Any(b.icon); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
-//line block.gox:83
+//line block.gox:87
 			__e = __c.Any(b.body); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line block.gox:85
+//line block.gox:89
 }

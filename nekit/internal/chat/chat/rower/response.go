@@ -16,6 +16,8 @@ package rower
 
 import (
 	"context"
+	"maps"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -28,84 +30,82 @@ import (
 	"neui.dev/nekit/internal/chat/params"
 )
 
-func NewResponse(p params.Params, state api.Indexed[api.Content], fs api.FS) Response {
+func NewResponse(ctx context.Context, p params.Params, state api.Indexed[api.Content], fs api.FS, lead Chips) Response {
+	r := &response{
+		params: p,
+		lead:   lead,
+	}
 	content := make(map[int]streamer[api.IndexedEvent])
-	for index, c := range state {
-		switch c := c.(type) {
+	for _, index := range slices.Sorted(maps.Keys(state)) {
+		switch c := state[index].(type) {
 		case api.ContentText:
 			if strings.TrimSpace(c.Text) == "" {
 				continue
 			}
 			content[index] = newTextRow(c.Text, fs)
+			r.hasText = true
+			if r.afterText != nil {
+				r.afterText.Close(ctx)
+				r.afterText = nil
+			}
 		case api.ContentReasoning:
-			if p.Off(params.Thinking) || blank(c.Thoughts) && blank(c.Summary) {
+			if p.Off(params.Thinking) {
 				continue
 			}
-			content[index] = newThinking(c.Thoughts, c.Summary)
+			chips := lead
+			if r.hasText {
+				if r.afterText == nil {
+					r.afterText = NewChips(p, nil, false)
+					content[index] = chipsRow{r.afterText}
+				}
+				chips = r.afterText
+			}
+			for _, part := range slices.Sorted(maps.Keys(c.Summary)) {
+				chips.Reason(ctx, api.EventSummary{Index: index, Part: part, Text: c.Summary[part]})
+			}
+			for _, part := range slices.Sorted(maps.Keys(c.Thoughts)) {
+				chips.Reason(ctx, api.EventThinking{Index: index, Part: part, Text: c.Thoughts[part]})
+			}
 		}
 	}
-	r := newRower(content, func(e api.IndexedEvent) streamer[api.IndexedEvent] {
-		switch e := e.(type) {
-		case api.EventText:
-			if strings.TrimSpace(e.Text) == "" {
-				return nil
-			}
-			return newTextRow(e.Text, fs)
-		case api.EventThinking:
-			if p.Off(params.Thinking) || strings.TrimSpace(e.Text) == "" {
-				return nil
-			}
-			return newThinking(
-				map[int]string{
-					e.Part: e.Text,
-				},
-				nil,
-			)
-		case api.EventSummary:
-			if p.Off(params.Thinking) || strings.TrimSpace(e.Text) == "" {
-				return nil
-			}
-			return newThinking(
-				nil,
-				map[int]string{
-					e.Part: e.Text,
-				},
-			)
-		default:
+	r.rower = newRower(content, func(e api.IndexedEvent) streamer[api.IndexedEvent] {
+		text, ok := e.(api.EventText)
+		if !ok || strings.TrimSpace(text.Text) == "" {
 			return nil
 		}
+		return newTextRow(text.Text, fs)
 	})
-	return &response{
-		rower: r,
-	}
-}
-
-func blank(parts map[int]string) bool {
-	for _, s := range parts {
-		if strings.TrimSpace(s) != "" {
-			return false
-		}
-	}
-	return true
+	return r
 }
 
 type Response = *response
 
 type response struct {
-	rower   *rower[api.IndexedEvent]
-	mu      sync.Mutex
-	started bool
-	closed  bool
-	pending deque.Deque[replacement]
-	signal  *chan struct{}
+	params    params.Params
+	rower     *rower[api.IndexedEvent]
+	lead      Chips
+	hasText   bool
+	afterText Chips
+	mu        sync.Mutex
+	started   bool
+	closed    bool
+	pending   deque.Deque[replacement]
+	signal    *chan struct{}
 }
 
 func (r Response) IsEmpty() bool {
 	return r.rower.IsEmpty()
 }
 
-func (r Response) Close() {
+func (r Response) AfterText() Chips {
+	return r.afterText
+}
+
+func (r Response) Close(ctx context.Context) {
 	r.push(r.rower.Close())
+	if r.afterText != nil {
+		r.afterText.Close(ctx)
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.closed = true
@@ -115,17 +115,36 @@ func (r Response) Close() {
 	}
 }
 
-func (r Response) On(e api.IndexedEvent) {
+func (r Response) On(ctx context.Context, e api.IndexedEvent) {
 	switch e := e.(type) {
 	case api.EventText:
+		if strings.TrimSpace(e.Text) != "" {
+			r.hasText = true
+			if r.afterText != nil {
+				r.afterText.Close(ctx)
+				r.afterText = nil
+			}
+		}
 		r.push(r.rower.Append(e))
-	case api.EventThinking:
-		r.push(r.rower.Append(e))
-	case api.EventSummary:
-		r.push(r.rower.Append(e))
+	case api.EventThinking, api.EventSummary:
+		if r.params.Off(params.Thinking) {
+			return
+		}
+		if !r.hasText {
+			r.lead.Reason(ctx, e)
+			return
+		}
+		if r.afterText == nil {
+			r.afterText = NewChips(r.params, nil, false)
+			r.push(r.rower.Insert(e.At(), chipsRow{r.afterText}))
+		}
+		r.afterText.Reason(ctx, e)
 	case api.EventClose:
 		r.push(r.rower.Append(e))
-	default:
+		r.lead.Reason(ctx, e)
+		if r.afterText != nil {
+			r.afterText.Reason(ctx, e)
+		}
 	}
 }
 
@@ -247,4 +266,16 @@ func (t *textRow) Close() []replacement {
 	t.closed = true
 	t.Marksman.Close()
 	return []replacement{{t.slot, textDone()}}
+}
+
+type chipsRow struct {
+	Chips
+}
+
+func (chipsRow) Append(api.IndexedEvent) []replacement {
+	return nil
+}
+
+func (chipsRow) Close() []replacement {
+	return nil
 }

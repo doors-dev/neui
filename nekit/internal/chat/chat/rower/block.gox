@@ -63,6 +63,10 @@ elem summaryDone() {
 	~>(doors.Class("nechat-ic")) ~(notepadLines())
 }
 
+elem recordsIcon() {
+	~>(doors.Class("nechat-ic")) ~(icons.EnvelopeSimple())
+}
+
 elem toolsRunning() {
 	~>(doors.Class("nechat-ic nechat-ic_spin")) ~(icons.Gear())
 }

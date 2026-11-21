@@ -751,7 +751,7 @@ func Beams() gox.Elem {
 }
 
 //line icons.gox:136
-func FloppyDisk() gox.Elem {
+func EnvelopeSimple() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("svg"); if __e != nil { return }
@@ -764,7 +764,7 @@ func FloppyDisk() gox.Elem {
 			__e = __c.Init("path"); if __e != nil { return }
 			{
 //line icons.gox:137
-				__e = __c.Set("d", "M219.31,72,184,36.69A15.86,15.86,0,0,0,172.69,32H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V83.31A15.86,15.86,0,0,0,219.31,72ZM168,208H88V152h80Zm40,0H184V152a16,16,0,0,0-16-16H88a16,16,0,0,0-16,16v56H48V48H172.69L208,83.31ZM160,72a8,8,0,0,1-8,8H96a8,8,0,0,1,0-16h56A8,8,0,0,1,160,72Z"); if __e != nil { return }
+				__e = __c.Set("d", "M224,48H32a8,8,0,0,0-8,8V192a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A8,8,0,0,0,224,48ZM203.43,64,128,133.15,52.57,64ZM216,192H40V74.19l82.59,75.71a8,8,0,0,0,10.82,0L216,74.19V192Z"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }

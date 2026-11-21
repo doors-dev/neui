@@ -53,11 +53,11 @@ func TestRejectedRoundOffersNoRetry(t *testing.T) {
 		{api.RoundRefuse, "", false},
 		{api.RoundOk, "", false},
 	} {
-		stored := NewRound(params.Params{}, thread{}, rewinder{}, latest, api.Round{ID: 1, State: c.state, Error: c.err}, nil, false)
+		stored := NewRound(context.Background(), params.Params{}, thread{}, rewinder{}, latest, api.Round{ID: 1, State: c.state, Error: c.err}, nil, false)
 		if stored.retriable != c.retriable {
 			t.Fatalf("a stored %s round with error %q is retriable %v, want %v", c.state, c.err, stored.retriable, c.retriable)
 		}
-		live := NewLiveRound(params.Params{}, thread{}, rewinder{}, latest, api.Round{ID: 1}, false)
+		live := NewLiveRound(context.Background(), params.Params{}, thread{}, rewinder{}, latest, api.Round{ID: 1}, false, nil)
 		live.Done(context.Background(), c.state, c.err)
 		if got := live.retriable.Get(); got != c.retriable {
 			t.Fatalf("a live round ending %s with error %q is retriable %v, want %v", c.state, c.err, got, c.retriable)

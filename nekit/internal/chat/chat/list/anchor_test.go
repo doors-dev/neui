@@ -36,6 +36,10 @@ func (t roundsThread) RoundBefore(ctx context.Context, start api.RoundID, limit 
 	return t.rounds[max(end-limit, 0):end], nil
 }
 
+func (roundsThread) FS() api.FS {
+	return nil
+}
+
 func (t roundsThread) RoundAfter(ctx context.Context, start api.RoundID, limit int) ([]api.Round, error) {
 	from := int(start) + 1
 	if start == api.NoRoundID {

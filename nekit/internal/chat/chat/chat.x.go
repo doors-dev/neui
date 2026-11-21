@@ -262,7 +262,7 @@ type chat struct {
 
 func (c *chat) Update(ctx context.Context, e api.ChatEvent) {
 	if e, ok := e.(api.ChatEventIndexed); ok {
-		c.list.IndexedEvent(e.Event)
+		c.list.IndexedEvent(ctx, e.Event)
 		block := ""
 		switch e.Event.(type) {
 		case api.EventText:

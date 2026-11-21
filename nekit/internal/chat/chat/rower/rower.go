@@ -85,20 +85,33 @@ func (rw *rower[C]) Close() []replacement {
 	return replacements
 }
 
+func (rw *rower[C]) Insert(index int, content streamer[C]) []replacement {
+	rw.mu.Lock()
+	defer rw.mu.Unlock()
+	if rw.closed {
+		return nil
+	}
+	return rw.insert(index, content)
+}
+
 func (rw *rower[C]) on(c C) []replacement {
 	if r, ok := rw.rows[c.At()]; ok {
 		return r.Append(c)
 	}
-	nums := rw.nums()
 	content := rw.factory(c)
 	if content == nil {
 		return nil
 	}
+	return rw.insert(c.At(), content)
+}
+
+func (rw *rower[C]) insert(index int, content streamer[C]) []replacement {
+	nums := rw.nums()
 	row := newRow(content)
-	rw.rows[c.At()] = row
+	rw.rows[index] = row
 	after := nums[len(nums)-1]
 	for _, num := range nums {
-		if c.At() < num {
+		if index < num {
 			break
 		}
 		after = num

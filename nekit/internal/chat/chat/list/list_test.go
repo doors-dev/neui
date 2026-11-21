@@ -43,7 +43,7 @@ func TestFailedSeedIgnoresRoundEvents(t *testing.T) {
 	}
 	l.RoundStart(ctx, api.Round{ID: 1}, api.NoRoundID)
 	l.RoundStart(ctx, api.Round{ID: 2}, 1)
-	l.IndexedEvent(nil)
+	l.IndexedEvent(ctx, nil)
 	l.ToolsDone(ctx)
 	l.RoundDone(ctx, api.RoundOk, "")
 	if l.lastSection.live != nil {

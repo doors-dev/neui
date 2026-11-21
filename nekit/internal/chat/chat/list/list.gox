@@ -64,7 +64,7 @@ type list struct {
 	lastSection struct {
 		entry entry
 		setter *doors.Setter
-		tools rower.Tools
+		chips rower.Chips
 		live round.LiveRound
 		roundAppender *doors.Door
 		hidden bool
@@ -173,14 +173,6 @@ func (l List) seed(ctx context.Context, active *api.Round, anchor api.RoundID) (
 	if active != nil {
 		lastID = active.ID
 		lastHead = active.Created
-		l.lastSection.live = round.NewLiveRound(
-			l.params,
-			l.thread,
-			l.rewinder,
-			l.lastRound,
-			*active,
-			head == api.NoRoundID,
-		)
 	}
 	if len(tail) != 0 {
 		lastID = tail[0].ID
@@ -195,8 +187,8 @@ func (l List) seed(ctx context.Context, active *api.Round, anchor api.RoundID) (
 		}
 		l.history.PushBack(l.intoHistory(ctx, s, next, 0, nil))
 	}
-	if l.lastSection.live != nil || len(tail) != 0 {
-		l.activate(ctx, lastID, lastHead, tail, new(doors.Door), head == api.NoRoundID && l.lastSection.live != nil)
+	if active != nil || len(tail) != 0 {
+		l.activate(ctx, lastID, lastHead, tail, active, new(doors.Door), head == api.NoRoundID)
 	}
 	if active == nil && len(tail) == 0 && len(sections) == 0 && !l.params.Off(params.Greeting) {
 		l.greeting = new(doors.Door)
@@ -220,18 +212,18 @@ func (l List) seed(ctx context.Context, active *api.Round, anchor api.RoundID) (
 func (l List) ToolsDone(ctx context.Context) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.lastSection.tools == nil {
+	if l.lastSection.chips == nil {
 		return
 	}
-	l.lastSection.tools.Done(ctx)
+	l.lastSection.chips.Done(ctx)
 }
 
-func (l List) IndexedEvent(e api.IndexedEvent) {
+func (l List) IndexedEvent(ctx context.Context, e api.IndexedEvent) {
 	live := l.lastSection.live
 	if live == nil {
 		return
 	}
-	live.On(e)
+	live.On(ctx, e)
 }
 
 func (l List) RoundDone(ctx context.Context, state api.RoundState, err string) {
@@ -243,22 +235,21 @@ func (l List) RoundDone(ctx context.Context, state api.RoundState, err string) {
 	live := l.lastSection.live
 	l.lastSection.live = nil
 	live.Done(ctx, state, err)
-	if live.Tools().IsEmpty() {
-		l.lastSection.tools = nil
+	if !live.Tools().HasCalls() {
+		l.lastSection.chips = nil
 		return
 	}
 	if live.IsErr() {
 		live.Tools().Done(ctx)
 		live.Tools().Reload(ctx)
-		l.lastSection.tools = nil
+		l.lastSection.chips = nil
 		return
 	}
-	if live.IsEmpty() && l.lastSection.tools != nil {
-		l.lastSection.tools.Merge(ctx, live.Tools())
+	if live.IsEmpty() && l.lastSection.chips != nil {
+		l.lastSection.chips.Merge(ctx, live.Tools())
 		return
 	}
-	live.Tools().Reload(ctx)
-	l.lastSection.tools = live.Tools()
+	l.lastSection.chips = live.Head(ctx)
 }
 
 func (l List) RoundStart(ctx context.Context, r api.Round, truncate api.RoundID) {
@@ -272,14 +263,6 @@ func (l List) RoundStart(ctx context.Context, r api.Round, truncate api.RoundID)
 		l.greeting = nil
 	}
 	l.lastRound.Update(ctx, r.ID)
-	l.lastSection.live = round.NewLiveRound(
-		l.params,
-		l.thread,
-		l.rewinder,
-		l.lastRound,
-		r,
-		true,
-	)
 	reset := false
 	if truncate != api.NoRoundID && l.lastSection.entry.door != nil && truncate > l.lastSection.entry.id {
 		sections, _, err := l.loadBefore(ctx, r.ID, 1)
@@ -291,7 +274,7 @@ func (l List) RoundStart(ctx context.Context, r api.Round, truncate api.RoundID)
 			if len(sections) != 0 {
 				tail = sections[0]
 			}
-			l.activate(ctx, l.lastSection.entry.id, l.lastSection.entry.head, tail, l.lastSection.entry.door, l.lastSection.live != nil)
+			l.activate(ctx, l.lastSection.entry.id, l.lastSection.entry.head, tail, &r, l.lastSection.entry.door, true)
 			return
 		}
 	}
@@ -338,7 +321,7 @@ func (l List) RoundStart(ctx context.Context, r api.Round, truncate api.RoundID)
 			l.scrollState.last = api.NoRoundID
 			l.scrollState.synced = true
 		}
-		l.activate(ctx, r.ID, r.Created, nil, new(doors.Door), l.lastSection.live != nil)
+		l.activate(ctx, r.ID, r.Created, nil, &r, new(doors.Door), true)
 		newAppender, oldAppender := new(doors.Door), l.sectionAppender
 		l.sectionAppender = newAppender
 		l.historyAppender = new(doors.Door)
@@ -363,6 +346,16 @@ func (l List) RoundStart(ctx context.Context, r api.Round, truncate api.RoundID)
 		}
 		return
 	}
+	l.lastSection.live = round.NewLiveRound(
+		ctx,
+		l.params,
+		l.thread,
+		l.rewinder,
+		l.lastRound,
+		r,
+		true,
+		l.lastSection.chips,
+	)
 	newAppender, oldAppender := new(doors.Door), l.lastSection.roundAppender
 	l.lastSection.roundAppender = newAppender
 	oldAppender.Static(ctx, doors.Once(&seed{
@@ -371,11 +364,27 @@ func (l List) RoundStart(ctx context.Context, r api.Round, truncate api.RoundID)
 	}))
 }
 
-func (l List) activate(ctx context.Context, id api.RoundID, head time.Time, tail []api.Round, door *doors.Door, span bool) {
+func (l List) activate(ctx context.Context, id api.RoundID, head time.Time, tail []api.Round, active *api.Round, door *doors.Door, span bool) {
 	var rounds []round.Round
-	l.lastSection.tools = nil
+	l.lastSection.chips = nil
 	if len(tail) != 0 {
-		rounds, l.lastSection.tools = l.intoRounds(tail, span)
+		rounds, l.lastSection.chips = l.intoRounds(tail, span && active != nil)
+	}
+	if active != nil {
+		chain := l.lastSection.chips
+		if active.Input.Len() != 0 {
+			chain = nil
+		}
+		l.lastSection.live = round.NewLiveRound(
+			ctx,
+			l.params,
+			l.thread,
+			l.rewinder,
+			l.lastRound,
+			*active,
+			span,
+			chain,
+		)
 	}
 	l.lastSection.entry = entry{id: id, head: head, door: door}
 	l.lastSection.setter = new(doors.Setter)
@@ -537,56 +546,40 @@ func (l List) loadBefore(ctx context.Context, cursor api.RoundID, num int) ([][]
 	return sections, ended, nil
 }
 
-func (l *list) intoRounds(section []api.Round, span bool) ([]round.Round, rower.Tools) {
-	var lastTools rower.Tools
+func (l *list) intoRounds(section []api.Round, span bool) ([]round.Round, rower.Chips) {
+	var head rower.Chips
 	rounds := make([]round.Round, 0, len(section))
 	for _, r := range section {
-		tools := rower.NewTools(
-			r.Response,
-			true,
-		)
-		empty := r.Input.Len() == 0 && len(r.PinnedRecords) == 0 && r.State == api.RoundOk && !rendered(r.Response, l.params.Off(params.Thinking))
-		if empty {
-			if tools.IsEmpty() {
-				continue
-			}
-			if lastTools != nil {
-				lastTools.Merge(l.ctx, tools)
-			} else {
-				lastTools = tools
-			}
-			continue
+		chain := head
+		if r.Input.Len() != 0 {
+			chain = nil
 		}
-		if r.State == api.RoundOk && !tools.IsEmpty() {
-			lastTools = tools
-		} else {
-			lastTools = nil
-		}
-		rounds = append(rounds, round.NewRound(
+		next := round.NewRound(
+			l.ctx,
 			l.params,
 			l.thread,
 			l.rewinder,
 			l.lastRound,
 			r,
-			tools,
+			chain,
 			span,
-		))
-	}
-	return rounds, lastTools
-}
-
-func rendered(response api.Indexed[api.Content], hideThinking bool) bool {
-	for _, c := range response {
-		switch c.(type) {
-		case api.ContentText:
-			return true
-		case api.ContentReasoning:
-			if !hideThinking {
-				return true
+		)
+		if next.IsEmpty() && head != nil && r.State == api.RoundOk {
+			if next.Tools().HasCalls() {
+				head.Merge(l.ctx, next.Tools())
+			} else {
+				head = nil
 			}
+			continue
+		}
+		rounds = append(rounds, next)
+		if r.State == api.RoundOk && next.Tools().HasCalls() {
+			head = next.Head(l.ctx)
+		} else {
+			head = nil
 		}
 	}
-	return false
+	return rounds, head
 }
 
 type section struct {

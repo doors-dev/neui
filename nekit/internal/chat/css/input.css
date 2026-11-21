@@ -1589,7 +1589,7 @@ a.nechat-file_done:hover { @apply bg-(--secondary-bg-hover) }
 
 .nechat-blk:has(> :is(.nechat-prose, .nechat-summary), > .nechat-col > .nechat-status, > .nechat-think[open]) { @apply grid me-0 my-2 leading-[1.6] font-serif }
 
-.nechat-blk > :is(.nechat-records, .nechat-tools-flat, div.nechat-think),
+.nechat-blk > :is(.nechat-events, .nechat-tools-flat, div.nechat-think),
 .nechat-blk > .nechat-think:not([open]) > .nechat-think-head { @apply block whitespace-nowrap overflow-hidden text-ellipsis }
 
 .nechat-user { @apply relative flex justify-end items-center gap-2 min-w-0 mt-5 mb-3 leading-[1.6] }
@@ -1640,7 +1640,7 @@ a.nechat-file_done:hover { @apply bg-(--secondary-bg-hover) }
 .nechat-bubble-text { @apply whitespace-pre-wrap }
 .nechat-bubble-files { @apply flex flex-wrap justify-end gap-1.5 min-w-0 }
 .nechat-agent { @apply inline min-w-0 }
-.nechat-records, .nechat-summary { @apply text-(--app-ink-quiet) }
+.nechat-events, .nechat-summary { @apply text-(--app-ink-quiet) }
 .nechat-summary p:has(~ p, ~ * p) { @apply hidden }
 .nechat-summary p:not(:has(~ p, ~ * p)) { @apply mt-0 }
 

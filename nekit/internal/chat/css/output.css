@@ -1886,7 +1886,7 @@ a.nechat-file_done:hover {
   --nechat-tw-leading: 1.6;
   line-height: 1.6;
 }
-.nechat-blk > :is(.nechat-records, .nechat-tools-flat, div.nechat-think), .nechat-blk > .nechat-think:not([open]) > .nechat-think-head {
+.nechat-blk > :is(.nechat-events, .nechat-tools-flat, div.nechat-think), .nechat-blk > .nechat-think:not([open]) > .nechat-think-head {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1954,7 +1954,7 @@ a.nechat-file_done:hover {
   display: inline;
   min-width: 0px;
 }
-.nechat-records, .nechat-summary {
+.nechat-events, .nechat-summary {
   color: var(--app-ink-quiet);
 }
 .nechat-summary p:has(~ p, ~ * p) {
