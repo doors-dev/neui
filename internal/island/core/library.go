@@ -189,7 +189,7 @@ func (l Library) View[I any, U any](name string, desc string, f func(ctx context
 		desc:         desc,
 		updateSchema: updateSchema,
 		inputSchema:  inputSchema,
-		specs:        []specSchema{{"params", inputSchema.Root(), inputSchema.Defs()}, {"patch", updateSchema.Root(), updateSchema.Defs()}},
+		specs:        []specSchema{{"params", inputSchema.View()}, {"patch", updateSchema.View()}},
 		factory: func(ctx context.Context, i I, _ func(context.Context, struct{}) bool) (api.Widget[U], error) {
 			return f(ctx, i)
 		},
@@ -208,7 +208,7 @@ func (l Library) Layout[I any](name string, desc string, f func(i I, children []
 	l.layouts[name] = layoutFactory[I]{
 		desc:        desc,
 		inputSchema: inputSchema,
-		specs:       []specSchema{{"params", inputSchema.Root(), inputSchema.Defs()}},
+		specs:       []specSchema{{"params", inputSchema.View()}},
 		factory:     f,
 	}
 	return nil
@@ -235,7 +235,7 @@ func (l Library) Control[I any, U any, O any](name string, desc string, f func(c
 		updateSchema: updateSchema,
 		inputSchema:  inputSchema,
 		outputSchema: &outputSchema,
-		specs:        []specSchema{{"params", inputSchema.Root(), inputSchema.Defs()}, {"patch", updateSchema.Root(), updateSchema.Defs()}, {"output", outputSchema.Root(), outputSchema.Defs()}},
+		specs:        []specSchema{{"params", inputSchema.View()}, {"patch", updateSchema.View()}, {"output", outputSchema.View()}},
 		factory:      f,
 	}
 	return nil

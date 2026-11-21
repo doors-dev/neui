@@ -34,8 +34,8 @@ func TestObjectKeepsAnObjectSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 	o := s.Object()
-	if !bytes.Equal(o.Raw(), s.Raw()) || !bytes.Equal(o.Root(), s.Root()) {
-		t.Fatalf("an object schema changed in object mode: %s", o.Raw())
+	if !bytes.Equal(o.View().Raw, s.View().Raw) || !bytes.Equal(o.View().Root, s.View().Root) {
+		t.Fatalf("an object schema changed in object mode: %s", o.View().Raw)
 	}
 	in := []byte(`{"name":"a"}`)
 	got, err := o.Decode(in)
@@ -55,14 +55,14 @@ func TestObjectWrapsAValue(t *testing.T) {
 		Properties map[string]json.RawMessage `json:"properties"`
 		Required   []string                   `json:"required"`
 	}
-	if err := json.Unmarshal(o.Raw(), &shown); err != nil {
+	if err := json.Unmarshal(o.View().Raw, &shown); err != nil {
 		t.Fatal(err)
 	}
-	if shown.Type != "object" || len(shown.Required) != 1 || shown.Required[0] != "input" || !bytes.Equal(shown.Properties["input"], s.Raw()) {
-		t.Fatalf("a string schema in object mode shows %s, want it under a required input", o.Raw())
+	if shown.Type != "object" || len(shown.Required) != 1 || shown.Required[0] != "input" || !bytes.Equal(shown.Properties["input"], s.View().Raw) {
+		t.Fatalf("a string schema in object mode shows %s, want it under a required input", o.View().Raw)
 	}
-	if !bytes.Equal(s.Raw(), []byte(`{"type":"string"}`)) {
-		t.Fatalf("object mode changed the original schema to %s", s.Raw())
+	if !bytes.Equal(s.View().Raw, []byte(`{"type":"string"}`)) {
+		t.Fatalf("object mode changed the original schema to %s", s.View().Raw)
 	}
 	got, err := o.Decode([]byte(`{"input":"hello"}`))
 	if err != nil || got != "hello" {
@@ -84,16 +84,16 @@ func TestObjectHoistsDefinitions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Contains(s.Raw(), []byte(`"definitions"`)) {
-		t.Skipf("the reflected schema has no definitions to hoist: %s", s.Raw())
+	if !bytes.Contains(s.View().Raw, []byte(`"definitions"`)) {
+		t.Skipf("the reflected schema has no definitions to hoist: %s", s.View().Raw)
 	}
 	o := s.Object()
 	var shown map[string]json.RawMessage
-	if err := json.Unmarshal(o.Raw(), &shown); err != nil {
+	if err := json.Unmarshal(o.View().Raw, &shown); err != nil {
 		t.Fatal(err)
 	}
 	if shown["definitions"] == nil || bytes.Contains(shown["properties"], []byte(`"definitions"`)) {
-		t.Fatalf("definitions were not moved to the top: %s", o.Raw())
+		t.Fatalf("definitions were not moved to the top: %s", o.View().Raw)
 	}
 	got, err := o.Decode([]byte(`{"input":[{"name":"a"}]}`))
 	if err != nil || len(got) != 1 || got[0].Name != "a" {
@@ -136,16 +136,16 @@ type objectList []objectNode
 func checkObjectMatchesRaw[T any](t *testing.T, name string, s Schema[T], draft *jsonvalid.Draft, inputs map[string]bool) {
 	t.Helper()
 	o := s.Object()
-	doc, err := jsonvalid.UnmarshalJSON(bytes.NewReader(o.Raw()))
+	doc, err := jsonvalid.UnmarshalJSON(bytes.NewReader(o.View().Raw))
 	if err != nil {
 		t.Fatalf("%s: %v", name, err)
 	}
 	var top map[string]json.RawMessage
-	if err := json.Unmarshal(o.Raw(), &top); err != nil || !bytes.Equal(top["type"], []byte(`"object"`)) {
-		t.Fatalf("%s: object mode declares %s, want an object schema", name, o.Raw())
+	if err := json.Unmarshal(o.View().Raw, &top); err != nil || !bytes.Equal(top["type"], []byte(`"object"`)) {
+		t.Fatalf("%s: object mode declares %s, want an object schema", name, o.View().Raw)
 	}
-	if err := json.Unmarshal(o.Root(), &top); err != nil || !bytes.Equal(top["type"], []byte(`"object"`)) {
-		t.Fatalf("%s: object mode root is %s, want an object schema", name, o.Root())
+	if err := json.Unmarshal(o.View().Root, &top); err != nil || !bytes.Equal(top["type"], []byte(`"object"`)) {
+		t.Fatalf("%s: object mode root is %s, want an object schema", name, o.View().Root)
 	}
 	c := jsonvalid.NewCompiler()
 	c.DefaultDraft(draft)
@@ -154,7 +154,7 @@ func checkObjectMatchesRaw[T any](t *testing.T, name string, s Schema[T], draft 
 	}
 	declared, err := c.Compile("urn:declared")
 	if err != nil {
-		t.Fatalf("%s: the declared schema %s does not compile: %v", name, o.Raw(), err)
+		t.Fatalf("%s: the declared schema %s does not compile: %v", name, o.View().Raw, err)
 	}
 	for in, want := range inputs {
 		inst, err := jsonvalid.UnmarshalJSON(strings.NewReader(in))
@@ -249,12 +249,12 @@ func TestObjectRewritesSelfReferencesInDefinitions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Contains(s.Raw(), []byte(`"$ref":"#"`)) {
-		t.Skipf("the reflected schema has no self reference: %s", s.Raw())
+	if !bytes.Contains(s.View().Raw, []byte(`"$ref":"#"`)) {
+		t.Skipf("the reflected schema has no self reference: %s", s.View().Raw)
 	}
 	o := s.Object()
-	if bytes.Contains(o.Raw(), []byte(`"$ref":"#"`)) || !bytes.Contains(o.Raw(), []byte(`"$ref":"#/properties/input"`)) {
-		t.Fatalf("a self reference still points at the wrapper: %s", o.Raw())
+	if bytes.Contains(o.View().Raw, []byte(`"$ref":"#"`)) || !bytes.Contains(o.View().Raw, []byte(`"$ref":"#/properties/input"`)) {
+		t.Fatalf("a self reference still points at the wrapper: %s", o.View().Raw)
 	}
 }
 
@@ -293,11 +293,11 @@ func TestObjectAnswersNoInput(t *testing.T) {
 
 func TestObjectOnASchemaWithoutAType(t *testing.T) {
 	o := AnyRawSchema.Object()
-	if string(o.Raw()) != `{"properties":{"input":{"description":"any JSON value"}},"required":["input"],"type":"object"}` {
-		t.Fatalf("an any schema in object mode shows %s, want it under a required input", o.Raw())
+	if string(o.View().Raw) != `{"properties":{"input":{"description":"any JSON value"}},"required":["input"],"type":"object"}` {
+		t.Fatalf("an any schema in object mode shows %s, want it under a required input", o.View().Raw)
 	}
-	if string(AnyRawSchema.Raw()) != `{"description":"any JSON value"}` {
-		t.Fatalf("object mode changed the any schema to %s", AnyRawSchema.Raw())
+	if string(AnyRawSchema.View().Raw) != `{"description":"any JSON value"}` {
+		t.Fatalf("object mode changed the any schema to %s", AnyRawSchema.View().Raw)
 	}
 	inner, err := o.Unwrap([]byte(`{"input":{"a":1}}`))
 	if err != nil || !bytes.Equal(inner, []byte(`{"a":1}`)) {

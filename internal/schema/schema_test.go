@@ -17,6 +17,7 @@ package schema
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"maps"
 	"os"
 	"path/filepath"
@@ -180,23 +181,23 @@ func checkSplit[T any](t *testing.T, defs []string, valid []string, invalid []st
 		t.Fatal(err)
 	}
 	var got, want any
-	if err := json.Unmarshal(s.Raw(), &got); err != nil {
+	if err := json.Unmarshal(s.View().Raw, &got); err != nil {
 		t.Fatal(err)
 	}
 	if err := json.Unmarshal(before, &want); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("raw differs:\n got %s\nwant %s", s.Raw(), before)
+		t.Fatalf("raw differs:\n got %s\nwant %s", s.View().Raw, before)
 	}
 	var root map[string]json.RawMessage
-	if err := json.Unmarshal(s.Root(), &root); err != nil {
+	if err := json.Unmarshal(s.View().Root, &root); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := root["definitions"]; ok {
-		t.Fatalf("definitions in root: %s", s.Root())
+		t.Fatalf("definitions in root: %s", s.View().Root)
 	}
-	if names := slices.Sorted(maps.Keys(s.Defs())); !slices.Equal(names, defs) {
+	if names := slices.Sorted(maps.Keys(s.View().Defs)); !slices.Equal(names, defs) {
 		t.Fatalf("defs %v, want %v", names, defs)
 	}
 	doc, err := jsonvalid.UnmarshalJSON(bytes.NewReader(before))
@@ -236,25 +237,25 @@ func TestSplitNested(t *testing.T) {
 
 func TestSplitSelfReference(t *testing.T) {
 	s := checkSplit[node](t, []string{"SchemaNode"}, []string{`{"Label":"a","Children":[{"Label":"b","Children":[{"Label":"c"}]}]}`}, []string{`{"Children":[{"Children":[{"Label":1}]}]}`, `{"Children":[1]}`})
-	if !strings.Contains(string(s.Root()), `"$ref":"#/definitions/SchemaNode"`) || strings.Contains(string(s.Root()), `"$ref":"#"`) {
-		t.Fatalf("root does not reference itself by name: %s", s.Root())
+	if !strings.Contains(string(s.View().Root), `"$ref":"#/definitions/SchemaNode"`) || strings.Contains(string(s.View().Root), `"$ref":"#"`) {
+		t.Fatalf("root does not reference itself by name: %s", s.View().Root)
 	}
-	if !strings.Contains(string(s.Raw()), `"$ref":"#"`) || strings.Contains(string(s.Raw()), "SchemaNode") {
-		t.Fatalf("raw keeps the root's name: %s", s.Raw())
+	if !strings.Contains(string(s.View().Raw), `"$ref":"#"`) || strings.Contains(string(s.View().Raw), "SchemaNode") {
+		t.Fatalf("raw keeps the root's name: %s", s.View().Raw)
 	}
 }
 
 func TestSplitMutualReference(t *testing.T) {
 	s := checkSplit[pairA](t, []string{"SchemaPairA", "SchemaPairB"}, []string{`{"Name":"a","B":{"A":{"Name":"b","B":{}}}}`}, []string{`{"B":{"A":{"Name":1}}}`, `{"B":{"A":{"B":{"A":[]}}}}`})
-	if !strings.Contains(string(s.Defs()["SchemaPairB"]), `"$ref":"#/definitions/SchemaPairA"`) {
-		t.Fatalf("pairB does not reference pairA by name: %s", s.Defs()["SchemaPairB"])
+	if !strings.Contains(string(s.View().Defs["SchemaPairB"]), `"$ref":"#/definitions/SchemaPairA"`) {
+		t.Fatalf("pairB does not reference pairA by name: %s", s.View().Defs["SchemaPairB"])
 	}
 }
 
 func TestSplitPrimitive(t *testing.T) {
 	s := checkSplit[string](t, nil, []string{`"x"`}, []string{`1`, `{}`})
-	if string(s.Root()) != `{"type":"string"}` {
-		t.Fatalf("root %s", s.Root())
+	if string(s.View().Root) != `{"type":"string"}` {
+		t.Fatalf("root %s", s.View().Root)
 	}
 }
 
@@ -271,7 +272,126 @@ func TestSplitAny(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(s.Raw(), anySchema) || !bytes.Equal(s.Root(), anySchema) || s.Defs() != nil {
-		t.Fatalf("raw %s root %s defs %v", s.Raw(), s.Root(), s.Defs())
+	if !bytes.Equal(s.View().Raw, anySchema) || !bytes.Equal(s.View().Root, anySchema) || s.View().Defs != nil {
+		t.Fatalf("raw %s root %s defs %v", s.View().Raw, s.View().Root, s.View().Defs)
+	}
+}
+
+type descTagged struct {
+	Name string   `json:"name"`
+	_    struct{} `description:"rows found"`
+}
+
+type descPlain struct {
+	Name string `json:"name"`
+}
+
+type descInner struct {
+	ID string   `json:"id"`
+	_  struct{} `description:"inner"`
+}
+
+type descOuter struct {
+	descInner
+	Name string   `json:"name"`
+	_    struct{} `description:"outer"`
+}
+
+type descText string
+
+func (descText) Description() string {
+	return "a greeting"
+}
+
+func TestViewDesc(t *testing.T) {
+	tagged, err1 := NewSchema[descTagged]()
+	plain, err2 := NewSchema[descPlain]()
+	outer, err3 := NewSchema[descOuter]()
+	text, err4 := NewSchema[descText]()
+	raw, err5 := NewRawSchema(json.RawMessage(`{"type":"object","description":"orders","properties":{"id":{"type":"string"}}}`))
+	rawText, err6 := NewRawSchema(json.RawMessage(`{"type":"string","description":"an order id"}`))
+	nullable, err7 := NewRawSchema(json.RawMessage(`{"type":["object","null"],"description":"maybe orders"}`))
+	accept, err8 := NewRawSchema(true)
+	reject, err9 := NewRawSchema(false)
+	anything, err10 := NewSchema[any]()
+	if err := errors.Join(err1, err2, err3, err4, err5, err6, err7, err8, err9, err10); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		name string
+		v    View
+		want string
+	}{
+		{"tagged", tagged.View(), "rows found"},
+		{"tagged in object mode", tagged.Object().View(), "rows found"},
+		{"untagged", plain.View(), ""},
+		{"embedded before the tag", outer.View(), "outer"},
+		{"non-object", text.View(), ""},
+		{"non-object in object mode", text.Object().View(), ""},
+		{"raw", raw.View(), "orders"},
+		{"raw non-object", rawText.View(), ""},
+		{"raw nullable object", nullable.View(), ""},
+		{"boolean true", accept.View(), ""},
+		{"boolean false", reject.View(), ""},
+		{"any raw", AnyRawSchema.View(), ""},
+		{"any", anything.View(), ""},
+	} {
+		if c.v.Desc != c.want {
+			t.Fatalf("%s: Desc %q, want %q", c.name, c.v.Desc, c.want)
+		}
+		if c.want == "" {
+			continue
+		}
+		var root struct {
+			Description string `json:"description"`
+		}
+		if err := json.Unmarshal(c.v.Root, &root); err != nil {
+			t.Fatal(err)
+		}
+		if root.Description != c.want {
+			t.Fatalf("%s: root description %q, want %q", c.name, root.Description, c.want)
+		}
+	}
+}
+
+type viewRow struct {
+	ID string `json:"id"`
+}
+
+type viewRows struct {
+	Rows []viewRow `json:"rows"`
+	_    struct{}  `description:"rows found"`
+}
+
+func TestView(t *testing.T) {
+	rows, err1 := NewSchema[viewRows]()
+	list, err2 := NewSchema[[]viewRow]()
+	if err := errors.Join(err1, err2); err != nil {
+		t.Fatal(err)
+	}
+	const row = `{"properties":{"id":{"type":"string"}},"type":"object"}`
+	const root = `{"description":"rows found","properties":{"rows":{"items":{"$ref":"#/definitions/SchemaViewRow"},"type":["array","null"]}},"type":"object"}`
+	want := View{
+		Raw:  []byte(`{"definitions":{"SchemaViewRow":` + row + `},` + root[1:]),
+		Root: []byte(root),
+		Defs: map[string]json.RawMessage{"SchemaViewRow": json.RawMessage(row)},
+		Desc: "rows found",
+	}
+	if got := rows.View(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("view %+v, want %+v", got, want)
+	}
+	if got := rows.Object().View(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("an object schema in object mode shows %+v, want %+v", got, want)
+	}
+	want = View{
+		Raw:  []byte(`{"definitions":{"SchemaViewRow":` + row + `},"properties":{"input":{"items":{"$ref":"#/definitions/SchemaViewRow"},"type":"array"}},"required":["input"],"type":"object"}`),
+		Root: []byte(`{"type":"object","properties":{"input":{"items":{"$ref":"#/definitions/SchemaViewRow"},"type":"array"}},"required":["input"]}`),
+		Defs: map[string]json.RawMessage{"SchemaViewRow": json.RawMessage(row)},
+	}
+	if got := list.Object().View(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("a list in object mode shows %+v, want %+v", got, want)
+	}
+	if got := list.View(); string(got.Root) != `{"items":{"$ref":"#/definitions/SchemaViewRow"},"type":"array"}` || got.Desc != "" {
+		t.Fatalf("object mode changed the list to %+v", got)
 	}
 }

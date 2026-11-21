@@ -41,22 +41,22 @@ func checkRaw[T any](t *testing.T) {
 		t.Fatal(err)
 	}
 	var got, want any
-	if err := json.Unmarshal(s.Raw(), &got); err != nil {
+	if err := json.Unmarshal(s.View().Raw, &got); err != nil {
 		t.Fatal(err)
 	}
 	if err := json.Unmarshal(before, &want); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(got, dropCalls(want)) {
-		t.Fatalf("%T: raw differs:\n got %s\nwant %s", sample, s.Raw(), before)
+		t.Fatalf("%T: raw differs:\n got %s\nwant %s", sample, s.View().Raw, before)
 	}
 	for _, key := range []string{`"x-neui-call"`, `"allOf"`, `"function"`} {
-		if strings.Contains(string(s.Raw()), key) {
-			t.Fatalf("%T: %s in raw: %s", sample, key, s.Raw())
+		if strings.Contains(string(s.View().Raw), key) {
+			t.Fatalf("%T: %s in raw: %s", sample, key, s.View().Raw)
 		}
 	}
-	docs := []json.RawMessage{s.Root()}
-	for _, def := range s.Defs() {
+	docs := []json.RawMessage{s.View().Root}
+	for _, def := range s.View().Defs {
 		docs = append(docs, def)
 	}
 	for _, doc := range docs {
@@ -65,11 +65,11 @@ func checkRaw[T any](t *testing.T) {
 		}
 	}
 	var root map[string]json.RawMessage
-	if err := json.Unmarshal(s.Root(), &root); err != nil {
+	if err := json.Unmarshal(s.View().Root, &root); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := root["definitions"]; ok {
-		t.Fatalf("%T: definitions in root: %s", sample, s.Root())
+		t.Fatalf("%T: definitions in root: %s", sample, s.View().Root)
 	}
 }
 

@@ -58,9 +58,15 @@ func newSchema[T any](raw []byte, doc any, defaultDraft *jsonvalid.Draft) (Schem
 	if err != nil {
 		return Schema[T]{}, err
 	}
+	top, _ := doc.(map[string]any)
+	desc, _ := top["description"].(string)
+	if top["type"] != "object" {
+		desc = ""
+	}
 	schema := Schema[T]{
 		raw:       raw,
 		root:      raw,
+		desc:      desc,
 		objectRaw: objectRaw,
 		Schema:    validSchema,
 	}
@@ -119,6 +125,7 @@ type Schema[T any] struct {
 	raw          []byte
 	root         []byte
 	defs         map[string]json.RawMessage
+	desc         string
 	objectRaw    []byte
 	objectSchema *jsonvalid.Schema
 	object       bool
@@ -242,34 +249,23 @@ func (s Schema[T]) Decode(raw []byte) (T, error) {
 	return arg, nil
 }
 
-func (s Schema[T]) Raw() []byte {
+// View is a JSON schema in the forms the agent sees.
+type View struct {
+	Raw  []byte                     // the whole schema, its definitions included
+	Root []byte                     // Raw without Defs, referring to them as {"$ref":"#/definitions/X"}
+	Defs map[string]json.RawMessage // the definitions split out of Raw
+	Desc string                     // the root description of an object schema; "" otherwise
+}
+
+func (s Schema[T]) View() View {
 	if s.object {
-		return s.objectRaw
+		return View{
+			Raw:  s.objectRaw,
+			Root: []byte(`{"type":"object","properties":{"input":` + string(s.root) + `},"required":["input"]}`),
+			Defs: s.defs,
+		}
 	}
-	return s.raw
-}
-
-func (s Schema[T]) Root() []byte {
-	if s.object {
-		return []byte(`{"type":"object","properties":{"input":` + string(s.root) + `},"required":["input"]}`)
-	}
-	return s.root
-}
-
-func (s Schema[T]) Defs() map[string]json.RawMessage {
-	return s.defs
-}
-
-func (s Schema[T]) MarshalJSON() ([]byte, error) {
-	return s.Raw(), nil
-}
-
-func (s Schema[T]) Params() map[string]any {
-	var m map[string]any
-	if err := json.Unmarshal(s.Raw(), &m); err != nil {
-		panic(fmt.Sprintf("schema: corrupt Raw: %v", err))
-	}
-	return m
+	return View{Raw: s.raw, Root: s.root, Defs: s.defs, Desc: s.desc}
 }
 
 var anySchema = []byte(`{"description":"any JSON value"}`)

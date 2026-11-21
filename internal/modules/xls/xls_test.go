@@ -495,7 +495,7 @@ func TestTierModule(t *testing.T) {
 			t.Fatalf("tier %d registers %d tools, want 10", tier, n)
 		}
 		read, _ := m.Get("read")
-		if params := string(read.Params()); !strings.Contains(params, `"raw"`) || !strings.Contains(params, `"limit"`) {
+		if params := string(read.Input().Raw); !strings.Contains(params, `"raw"`) || !strings.Contains(params, `"limit"`) {
 			t.Fatalf("tier %d read takes %s, want raw and limit", tier, params)
 		}
 	}
@@ -508,7 +508,7 @@ func TestTierModule(t *testing.T) {
 		t.Fatalf("TierAssistant registers %v, want %v", names, want)
 	}
 	read, _ := assistant.Get("read")
-	if params := string(read.Params()); strings.Contains(params, `"raw"`) || strings.Contains(params, `"limit"`) {
+	if params := string(read.Input().Raw); strings.Contains(params, `"raw"`) || strings.Contains(params, `"limit"`) {
 		t.Fatalf("TierAssistant read takes %s, want no raw or limit", params)
 	}
 	c := testkit.NewController(t, testkit.Setup{})

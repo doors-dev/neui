@@ -399,7 +399,7 @@ func (s Space) AddTool(ctx context.Context, from common.Tool) error {
 	t := &tool{
 		Name:   from.Name(),
 		Desc:   from.Desc(),
-		Input:  from.Params(),
+		Input:  from.Input().Raw,
 		decode: from.Decode,
 		call: func(ctx context.Context, input any) (any, error) {
 			var out any
@@ -431,13 +431,15 @@ func (s Space) AddTool(ctx context.Context, from common.Tool) error {
 	}
 	type bare tool
 	short := bare(*t)
-	short.Desc = tools.ResultDesc(from)
+	if desc := from.Output().Desc; desc != "" {
+		short.Desc += "\nResult: " + desc
+	}
 	lean, err := json.Marshal(short)
 	if err != nil {
 		return err
 	}
 	full := bare(*t)
-	full.Desc += "\nOutput schema: " + string(from.Output())
+	full.Desc += "\nOutput schema: " + string(from.Output().Raw)
 	raw, err := json.Marshal(full)
 	if err != nil {
 		return err

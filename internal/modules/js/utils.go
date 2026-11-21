@@ -127,7 +127,7 @@ func RegisterTools(vm *quickjs.VM, ctx func() context.Context, prefix string, li
 		var params struct {
 			Type any `json:"type"`
 		}
-		if json.Unmarshal(t.Params(), &params) == nil && params.Type == "object" {
+		if json.Unmarshal(t.Input().Raw, &params) == nil && params.Type == "object" {
 			missing = "{}"
 		}
 		b.WriteString("Object.defineProperty(globalThis, \"")

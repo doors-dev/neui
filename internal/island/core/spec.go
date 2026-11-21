@@ -16,7 +16,6 @@ package core
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"maps"
 	"regexp"
@@ -24,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/zeebo/xxh3"
+	"neui.dev/internal/schema"
 )
 
 var identifier = regexp.MustCompile(`^[A-Za-z_$][A-Za-z0-9_$]*$`)
@@ -61,8 +61,7 @@ func writeSchema(b *strings.Builder, label string, raw []byte) {
 
 type specSchema struct {
 	label string
-	raw   []byte
-	defs  map[string]json.RawMessage
+	schema.View
 }
 
 var definitionRef = regexp.MustCompile(`"#/definitions/([^"]+)"`)
@@ -88,18 +87,18 @@ func (l Library) Build() error {
 			}
 			for changed := true; changed; {
 				changed = false
-				for _, name := range slices.Sorted(maps.Keys(s.defs)) {
+				for _, name := range slices.Sorted(maps.Keys(s.Defs)) {
 					if _, ok := renames[name]; ok {
 						continue
 					}
-					if seen, ok := defs[name]; ok && !bytes.Equal(seen, rename(s.defs[name])) {
-						renames[name] = fmt.Sprintf("%sType_%06x", name, xxh3.Hash(s.defs[name])&0xffffff)
+					if seen, ok := defs[name]; ok && !bytes.Equal(seen, rename(s.Defs[name])) {
+						renames[name] = fmt.Sprintf("%sType_%06x", name, xxh3.Hash(s.Defs[name])&0xffffff)
 						changed = true
 					}
 				}
 			}
-			writeSchema(&sb, s.label, rename(s.raw))
-			for name, raw := range s.defs {
+			writeSchema(&sb, s.label, rename(s.Root))
+			for name, raw := range s.Defs {
 				if to, ok := renames[name]; ok {
 					name = to
 				}
@@ -155,16 +154,7 @@ func (l Library) Build() error {
 	if len(fetches) > 0 {
 		b.WriteString("\nApp functions: app.<name>(input) -> result\n")
 		for _, t := range fetches {
-			specs := []specSchema{{"input", t.Params(), nil}, {"result", t.Output(), nil}}
-			if t, ok := t.(interface {
-				ParamsSpec() ([]byte, map[string]json.RawMessage)
-				OutputSpec() ([]byte, map[string]json.RawMessage)
-			}); ok {
-				input, inputDefs := t.ParamsSpec()
-				result, resultDefs := t.OutputSpec()
-				specs = []specSchema{{"input", input, inputDefs}, {"result", result, resultDefs}}
-			}
-			if err := write("app."+t.Name(), t.Desc(), specs); err != nil {
+			if err := write("app."+t.Name(), t.Desc(), []specSchema{{"input", t.Input()}, {"result", t.Output()}}); err != nil {
 				return err
 			}
 		}

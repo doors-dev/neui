@@ -108,14 +108,14 @@ func TestCallSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw := string(s.Raw())
+	raw := string(s.View().Raw)
 	if strings.Contains(raw, "$ref") || strings.Contains(raw, "x-neui-call") || strings.Contains(raw, "allOf") || strings.Contains(raw, "function") {
 		t.Fatalf("call schema in raw: %s", raw)
 	}
 	var doc struct {
 		Properties map[string]map[string]any `json:"properties"`
 	}
-	if err := json.Unmarshal(s.Raw(), &doc); err != nil {
+	if err := json.Unmarshal(s.View().Raw, &doc); err != nil {
 		t.Fatal(err)
 	}
 	total := doc.Properties["total"]
@@ -138,7 +138,7 @@ func TestCallSpec(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	spec, defs := s.Root(), s.Defs()
+	spec, defs := s.View().Root, s.View().Defs
 	type function struct {
 		Arg     json.RawMessage `json:"arg"`
 		Returns json.RawMessage `json:"returns"`
@@ -184,8 +184,8 @@ func TestCallSpec(t *testing.T) {
 	if len(defs) != 2 || !strings.Contains(string(defs["IslandCallTestRow"]), `"sku"`) {
 		t.Fatalf("defs: %v", defs)
 	}
-	if strings.Contains(string(s.Raw()), "function") {
-		t.Fatalf("validation schema: %s", s.Raw())
+	if strings.Contains(string(s.View().Raw), "function") {
+		t.Fatalf("validation schema: %s", s.View().Raw)
 	}
 	if _, err := s.DecodeString(`{"steps":["() => ({search: (q) => []})"],"total":"(row) => row.qty"}`); err != nil {
 		t.Fatalf("valid: %v", err)
@@ -205,7 +205,7 @@ func TestCallSpecNilPointer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if spec := s.Root(); strings.Count(string(spec), `"function":{"arg":{"type":"integer"},"returns":{"type":"integer"}}`) != 2 {
+	if spec := s.View().Root; strings.Count(string(spec), `"function":{"arg":{"type":"integer"},"returns":{"type":"integer"}}`) != 2 {
 		t.Fatalf("spec: %s", spec)
 	}
 }

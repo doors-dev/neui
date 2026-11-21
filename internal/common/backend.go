@@ -20,6 +20,7 @@ import (
 
 	"modernc.org/quickjs"
 	"neui.dev/api"
+	"neui.dev/internal/schema"
 )
 
 // ModuleFactory returns the module a thread uses: a fresh one or a shared
@@ -33,23 +34,18 @@ type ModuleFactory = func(ctx context.Context) Module
 // Tool is one tool as the runtime sees it, the result of a Tool or Ask
 // definition.
 type Tool interface {
-	// Params is the JSON schema of the tool's input.
-	Params() []byte
 	// Name is the tool's name within its module.
 	Name() string
 	// Desc is the description the tool was defined with.
 	Desc() string
-	// Summary is the description the agent sees at TierDeveloper and
-	// TierAgent: Desc with the output schema appended.
-	Summary() string
-	// Brief is Summary with the output schema's definitions left out, for
-	// when they are listed with the module.
-	Brief() string
+	// Input is the JSON schema of the tool's input.
+	Input() schema.View
 	// Output is the JSON schema of the tool's result.
-	Output() []byte
-	// OutputSpec is the output schema's root and its definitions, the root
-	// referring to them as {"$ref":"#/definitions/X"}.
-	OutputSpec() ([]byte, map[string]json.RawMessage)
+	Output() schema.View
+	// OutputHint is how a direct call's result arrives: "a text block",
+	// "content blocks" or "a <type> block" such as "an image block"; "" when
+	// it arrives as JSON.
+	OutputHint() string
 	// Agent calls the tool as a direct tool call and returns its result as
 	// content for the model.
 	Agent(ctx context.Context, input json.RawMessage) (api.UserContents, error)

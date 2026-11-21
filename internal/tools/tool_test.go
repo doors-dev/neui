@@ -161,17 +161,20 @@ func TestToolNotesHowResultsArrive(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, want := range map[string]string{
-		"image":    "\nOn a direct tool call the result arrives as an image block",
-		"document": "\nOn a direct tool call the result arrives as a document block",
-		"label":    "\nOn a direct tool call the result arrives as a text block",
-		"parts":    "\nOn a direct tool call the result arrives as content blocks",
+		"image":    "an image block",
+		"document": "a document block",
+		"label":    "a text block",
+		"parts":    "content blocks",
 		"string":   "",
 	} {
 		tool, _ := m.Get(name)
-		_, note, _ := strings.Cut(tool.Summary(), "\nOn a direct")
-		if note != strings.TrimPrefix(want, "\nOn a direct") {
-			t.Errorf("%s: summary %q, want it to end with %q", name, tool.Summary(), want)
+		if tool.OutputHint() != want {
+			t.Errorf("%s: hint %q, want %q", name, tool.OutputHint(), want)
 		}
+	}
+	parts, _ := m.Get("parts")
+	if !reflect.DeepEqual(parts.Output(), schema.BlocksRawSchema.View()) {
+		t.Errorf("content blocks declare %+v, want the blocks schema", parts.Output())
 	}
 }
 
@@ -184,11 +187,10 @@ func TestRawToolNotesBlocks(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	const note = "\nOn a direct tool call the result arrives as content blocks"
-	for name, want := range map[string]bool{"blocks": true, "any": false} {
+	for name, want := range map[string]string{"blocks": "content blocks", "any": ""} {
 		tool, _ := m.Get(name)
-		if got := strings.HasSuffix(tool.Summary(), note); got != want {
-			t.Errorf("%s: summary %q carries the blocks note: %v, want %v", name, tool.Summary(), got, want)
+		if tool.OutputHint() != want {
+			t.Errorf("%s: hint %q, want %q", name, tool.OutputHint(), want)
 		}
 	}
 }
@@ -211,8 +213,8 @@ func TestObjectModuleTakesInput(t *testing.T) {
 		"any":  `{"properties":{"input":{"description":"any JSON value"}},"required":["input"],"type":"object"}`,
 	} {
 		tool, _ := m.Get(name)
-		if string(tool.Params()) != want {
-			t.Errorf("%s: declares %s, want %s", name, tool.Params(), want)
+		if string(tool.Input().Raw) != want {
+			t.Errorf("%s: declares %s, want %s", name, tool.Input().Raw, want)
 		}
 	}
 	for _, c := range []struct {
@@ -256,8 +258,8 @@ func TestScriptModuleKeepsSchemas(t *testing.T) {
 		t.Fatal(err)
 	}
 	tool, _ := m.Get("echo")
-	if string(tool.Params()) != `{"type":"string"}` {
-		t.Fatalf("a script module tool declares %s, want the schema as it is", tool.Params())
+	if string(tool.Input().Raw) != `{"type":"string"}` {
+		t.Fatalf("a script module tool declares %s, want the schema as it is", tool.Input().Raw)
 	}
 	got, err := tool.JS(context.Background())([]any{`"x"`})
 	if err != nil || got != "got:x" {
@@ -295,7 +297,7 @@ type undescribed struct {
 	Rows []string `json:"rows"`
 }
 
-func TestResultDescAppendsTheOutputDescription(t *testing.T) {
+func TestOutputCarriesTheResultDescription(t *testing.T) {
 	m := NewModule("m", "")
 	_, err1 := m.Add("described", "Read rows.", func(context.Context, struct{}) (described, error) { return described{}, nil })
 	_, err2 := m.Add("pointer", "Read rows.", func(context.Context, struct{}) (*described, error) { return nil, nil })
@@ -310,22 +312,25 @@ func TestResultDescAppendsTheOutputDescription(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, want := range map[string]string{
-		"described":   "Read rows.\nResult: rows of the sheet; truncated: call again",
-		"pointer":     "Read rows.\nResult: rows of the sheet; truncated: call again",
-		"undescribed": "Read rows.",
-		"list":        "Read rows.",
-		"string":      "Read rows.",
-		"parts":       "Read rows.",
-		"any":         "Read rows.",
-		"raw":         "Read rows.\nResult: the server's rows",
+		"described":   "rows of the sheet; truncated: call again",
+		"pointer":     "rows of the sheet; truncated: call again",
+		"undescribed": "",
+		"list":        "",
+		"string":      "",
+		"parts":       "",
+		"any":         "",
+		"raw":         "the server's rows",
 	} {
 		tool, _ := m.Get(name)
-		if got := ResultDesc(tool); got != want {
+		if got := tool.Output().Desc; got != want {
 			t.Errorf("%s: result description %q, want %q", name, got, want)
+		}
+		if tool.Desc() != "Read rows." {
+			t.Errorf("%s: description %q, want the tool's own", name, tool.Desc())
 		}
 	}
 	tool, _ := m.Get("described")
-	if !strings.Contains(tool.Summary(), `"description":"rows of the sheet; truncated: call again"`) {
-		t.Errorf("the full description %q lacks the output description", tool.Summary())
+	if !strings.Contains(string(tool.Output().Raw), `"description":"rows of the sheet; truncated: call again"`) {
+		t.Errorf("the output schema %s lacks the output description", tool.Output().Raw)
 	}
 }

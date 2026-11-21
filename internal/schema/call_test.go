@@ -80,12 +80,12 @@ func checkCalls[T any](t *testing.T) schema.Schema[T] {
 		t.Fatal("NewSchema did not return")
 	}
 	for _, key := range []string{`"x-neui-call"`, `"allOf"`, `"function"`} {
-		if strings.Contains(string(s.Raw()), key) {
-			t.Fatalf("%s in raw: %s", key, s.Raw())
+		if strings.Contains(string(s.View().Raw), key) {
+			t.Fatalf("%s in raw: %s", key, s.View().Raw)
 		}
 	}
-	docs := []json.RawMessage{s.Root()}
-	for _, def := range s.Defs() {
+	docs := []json.RawMessage{s.View().Root}
+	for _, def := range s.View().Defs {
 		docs = append(docs, def)
 	}
 	for _, doc := range docs {
@@ -99,14 +99,14 @@ func checkCalls[T any](t *testing.T) schema.Schema[T] {
 func TestCallSelfReference(t *testing.T) {
 	s := checkCalls[callSelf](t)
 	want := `{"properties":{"kids":{"description":"finds \u003ckids\u003e","function":{"arg":{"type":"string"},"returns":{"items":{"$ref":"#/definitions/SchemaTestCallSelf"},"type":"array"}},"type":"string"},"name":{"type":"string"}},"type":"object"}`
-	if string(s.Root()) != want {
-		t.Fatalf("root %s", s.Root())
+	if string(s.View().Root) != want {
+		t.Fatalf("root %s", s.View().Root)
 	}
-	if names := slices.Sorted(maps.Keys(s.Defs())); !slices.Equal(names, []string{"SchemaTestCallSelf"}) || string(s.Defs()["SchemaTestCallSelf"]) != want {
-		t.Fatalf("defs %v", s.Defs())
+	if names := slices.Sorted(maps.Keys(s.View().Defs)); !slices.Equal(names, []string{"SchemaTestCallSelf"}) || string(s.View().Defs["SchemaTestCallSelf"]) != want {
+		t.Fatalf("defs %v", s.View().Defs)
 	}
-	if string(s.Raw()) != `{"properties":{"kids":{"description":"finds \u003ckids\u003e","type":"string"},"name":{"type":"string"}},"type":"object"}` {
-		t.Fatalf("raw %s", s.Raw())
+	if string(s.View().Raw) != `{"properties":{"kids":{"description":"finds \u003ckids\u003e","type":"string"},"name":{"type":"string"}},"type":"object"}` {
+		t.Fatalf("raw %s", s.View().Raw)
 	}
 	if _, err := s.DecodeString(`{"name":"a","kids":"(name) => []"}`); err != nil {
 		t.Fatalf("source rejected: %v", err)
@@ -120,17 +120,17 @@ func TestCallSelfReference(t *testing.T) {
 
 func TestCallChain(t *testing.T) {
 	s := checkCalls[callA](t)
-	if string(s.Root()) != `{"properties":{"b":{"function":{"arg":{"type":"integer"},"returns":{"$ref":"#/definitions/SchemaTestCallB"}},"type":"string"}},"type":"object"}` {
-		t.Fatalf("root %s", s.Root())
+	if string(s.View().Root) != `{"properties":{"b":{"function":{"arg":{"type":"integer"},"returns":{"$ref":"#/definitions/SchemaTestCallB"}},"type":"string"}},"type":"object"}` {
+		t.Fatalf("root %s", s.View().Root)
 	}
-	if names := slices.Sorted(maps.Keys(s.Defs())); !slices.Equal(names, []string{"SchemaTestCallA", "SchemaTestCallB", "SchemaTestCallC"}) {
+	if names := slices.Sorted(maps.Keys(s.View().Defs)); !slices.Equal(names, []string{"SchemaTestCallA", "SchemaTestCallB", "SchemaTestCallC"}) {
 		t.Fatalf("defs %v", names)
 	}
-	if string(s.Defs()["SchemaTestCallB"]) != `{"properties":{"c":{"function":{"arg":{"$ref":"#/definitions/SchemaTestCallC"},"returns":{"type":"integer"}},"type":"string"}},"type":"object"}` {
-		t.Fatalf("callB %s", s.Defs()["SchemaTestCallB"])
+	if string(s.View().Defs["SchemaTestCallB"]) != `{"properties":{"c":{"function":{"arg":{"$ref":"#/definitions/SchemaTestCallC"},"returns":{"type":"integer"}},"type":"string"}},"type":"object"}` {
+		t.Fatalf("callB %s", s.View().Defs["SchemaTestCallB"])
 	}
-	if string(s.Defs()["SchemaTestCallC"]) != `{"properties":{"a":{"items":{"function":{"arg":{"$ref":"#/definitions/SchemaTestCallA"},"returns":{"$ref":"#/definitions/SchemaTestCallA"}},"type":"string"},"type":["array","null"]}},"type":"object"}` {
-		t.Fatalf("callC %s", s.Defs()["SchemaTestCallC"])
+	if string(s.View().Defs["SchemaTestCallC"]) != `{"properties":{"a":{"items":{"function":{"arg":{"$ref":"#/definitions/SchemaTestCallA"},"returns":{"$ref":"#/definitions/SchemaTestCallA"}},"type":"string"},"type":["array","null"]}},"type":"object"}` {
+		t.Fatalf("callC %s", s.View().Defs["SchemaTestCallC"])
 	}
 	if _, err := s.DecodeString(`{"b":"(n) => ({c: '(c) => 1'})"}`); err != nil {
 		t.Fatalf("source rejected: %v", err)
@@ -160,12 +160,12 @@ func TestCallFormSearch(t *testing.T) {
 			} `json:"search"`
 		} `json:"properties"`
 	}
-	if err := json.Unmarshal(s.Defs()["FormSearchParams"], &search); err != nil {
+	if err := json.Unmarshal(s.View().Defs["FormSearchParams"], &search); err != nil {
 		t.Fatal(err)
 	}
 	call := search.Properties.Search
-	if call.Type != "string" || string(call.Function.Arg) != `{"type":"string"}` || call.Function.Returns.Type != "array" || call.Function.Returns.Items.Ref != "#/definitions/FormOption" || s.Defs()["FormOption"] == nil {
-		t.Fatalf("search: %s", s.Defs()["FormSearchParams"])
+	if call.Type != "string" || string(call.Function.Arg) != `{"type":"string"}` || call.Function.Returns.Type != "array" || call.Function.Returns.Items.Ref != "#/definitions/FormOption" || s.View().Defs["FormOption"] == nil {
+		t.Fatalf("search: %s", s.View().Defs["FormSearchParams"])
 	}
 	if err := s.ValidateString(`{"fields":[{"type":"search","label":"City","name":"city","search":"(q) => app.cities({q})"}]}`); err != nil {
 		t.Fatalf("source rejected: %v", err)

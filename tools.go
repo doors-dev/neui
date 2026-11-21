@@ -28,6 +28,7 @@ import (
 	"neui.dev/internal/modules/mcp"
 	"neui.dev/internal/modules/web"
 	"neui.dev/internal/modules/xls"
+	"neui.dev/internal/schema"
 	"neui.dev/internal/tools"
 )
 
@@ -409,8 +410,12 @@ func (b searchBackend) Search(ctx context.Context, q web.Query) ([]web.Result, e
 type AnyModule = common.Module
 
 // AnyTool is one tool as the runtime sees it, the result of a Tool or Ask
-// definition.
+// definition. Its Input and Output are ToolSchema values.
 type AnyTool = common.Tool
+
+// ToolSchema is a tool's input or output JSON schema in the forms the agent
+// sees.
+type ToolSchema = schema.View
 
 // Tooler is a tool definition: a Tool or an Ask. The same value can be added
 // to a Module and, for a Tool, to an island Library or rendered on a page.

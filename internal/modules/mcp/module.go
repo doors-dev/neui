@@ -302,7 +302,7 @@ func (m *module) buildModule(list []*mcp.Tool) tools.Module {
 			)
 			continue
 		}
-		if bytes.Equal(inputSchema.Raw(), schema.AnyRawSchema.Raw()) {
+		if bytes.Equal(inputSchema.View().Raw, schema.AnyRawSchema.View().Raw) {
 			inputSchema = schema.ObjectRawSchema
 		}
 		outputSchema := schema.BlocksRawSchema

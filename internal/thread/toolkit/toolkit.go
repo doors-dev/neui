@@ -27,7 +27,6 @@ import (
 	"github.com/doors-dev/doors"
 	"neui.dev/api"
 	"neui.dev/internal/common"
-	"neui.dev/internal/tools"
 )
 
 type ToolFunc = func(ctx context.Context, arg json.RawMessage) (api.UserContents, error)
@@ -141,17 +140,26 @@ func (t Toolkit) Tools() iter.Seq[api.Tool] {
 			name := m.Name()
 			_, brief := outputDefs(m)
 			for _, tool := range m.List() {
-				desc := tool.Summary()
-				if brief[tool.Name()] {
-					desc = tool.Brief()
-				}
+				desc := tool.Desc()
+				output := tool.Output()
 				if tier == common.TierAssistant {
-					desc = tools.ResultDesc(tool)
+					if output.Desc != "" {
+						desc += "\nResult: " + output.Desc
+					}
+				} else {
+					schema := output.Raw
+					if brief[tool.Name()] {
+						schema = output.Root
+					}
+					desc += "\nOutput schema: " + string(schema)
+					if hint := tool.OutputHint(); hint != "" {
+						desc += "\nOn a direct tool call the result arrives as " + hint
+					}
 				}
 				if !yield(api.Tool{
 					Name:   fmt.Sprintf("%s__%s", name, tool.Name()),
 					Desc:   desc,
-					Schema: json.RawMessage(tool.Params()),
+					Schema: json.RawMessage(tool.Input().Raw),
 				}) {
 					return
 				}
@@ -169,7 +177,7 @@ func outputDefs(m common.Module) (map[string]json.RawMessage, map[string]bool) {
 		return defs, brief
 	}
 	for _, t := range m.List() {
-		_, own := t.OutputSpec()
+		own := t.Output().Defs
 		if len(own) == 0 {
 			continue
 		}

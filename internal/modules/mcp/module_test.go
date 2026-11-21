@@ -205,8 +205,8 @@ func TestNoInputSchemaBecomesObject(t *testing.T) {
 	if !ok {
 		t.Fatal("tool not registered")
 	}
-	if !bytes.Equal(tool.Params(), schema.ObjectRawSchema.Raw()) {
-		t.Fatalf("got %s, want %s", tool.Params(), schema.ObjectRawSchema.Raw())
+	if !bytes.Equal(tool.Input().Raw, schema.ObjectRawSchema.View().Raw) {
+		t.Fatalf("got %s, want %s", tool.Input().Raw, schema.ObjectRawSchema.View().Raw)
 	}
 }
 
