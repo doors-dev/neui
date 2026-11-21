@@ -527,13 +527,31 @@ func TestIslandScriptThrowReportsError(t *testing.T) {
 	c.Send("open the board")
 	c.Wait()
 	record := recorded(t, c, p, `kind="script_error"`)
-	for _, want := range []string{`script="1"`, "boom", "send what should still run with island_append"} {
+	for _, want := range []string{`script="1"`, "boom", "send what should still run with island_append", "nothing has been drawn yet"} {
 		if !strings.Contains(record, want) {
 			t.Fatalf("the throw reported %q, want it to carry %s", record, want)
 		}
 	}
 	if strings.Contains(record, "last_action") {
 		t.Fatalf("a throw before any user action reported %q, want no last_action", record)
+	}
+}
+
+func TestIslandPartWithoutDrawReportsTheEmptyScreen(t *testing.T) {
+	p := testkit.NewProvider(api.Model{},
+		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
+		revised(t, func(revision string) testkit.Turn {
+			return start(revision, `var loaded = 1`)
+		}),
+		testkit.Say("started"),
+		testkit.Say("seen"),
+	)
+	c := stack.Page(t, stack.Host{Provider: p, Page: board(make(chan int, 1), nil)})
+	c.Send("open the board")
+	c.Wait()
+	record := recorded(t, c, p, `kind="script_note"`)
+	if !strings.Contains(record, "has not drawn yet, so the user sees nothing") {
+		t.Fatalf("a part that ended without drawing reported %q, want the empty-screen note", record)
 	}
 }
 

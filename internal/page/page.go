@@ -97,7 +97,17 @@ func (p *page) Module(ctx context.Context) Module {
 		if err != nil {
 			return toolResult{}, err
 		}
-		in, err := a.item.decode(arg.Arg)
+		input := arg.Arg
+		if len(input) == 0 {
+			input = json.RawMessage("{}")
+		}
+		in, err := a.item.decode(input)
+		var text string
+		if err != nil && json.Unmarshal(input, &text) == nil && json.Valid([]byte(text)) {
+			if unwrapped, again := a.item.decode(json.RawMessage(text)); again == nil {
+				in, err = unwrapped, nil
+			}
+		}
 		if err != nil {
 			return toolResult{}, err
 		}

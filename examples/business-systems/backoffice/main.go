@@ -40,33 +40,33 @@ func main() {
 	var provider api.Provider
 	var err error
 	switch {
-	case os.Getenv("LOCAL_LLM_URL") != "":
+	case os.Getenv("GENERIC_URL") != "":
 		window := 0
-		if v := os.Getenv("LOCAL_LLM_CONTEXT"); v != "" {
+		if v := os.Getenv("GENERIC_CONTEXT"); v != "" {
 			if window, err = strconv.Atoi(v); err != nil {
-				log.Fatalf("LOCAL_LLM_CONTEXT: %v", err)
+				log.Fatalf("GENERIC_CONTEXT: %v", err)
 			}
 		}
-		name := os.Getenv("LOCAL_LLM_MODEL")
+		name := os.Getenv("GENERIC_MODEL")
 		if name == "" {
 			name = "local"
 		}
-		opts := []generic.Option{generic.WithAPIKey(os.Getenv("LOCAL_LLM_KEY"))}
-		if v := os.Getenv("LOCAL_LLM_BODY"); v != "" {
+		opts := []generic.Option{generic.WithAPIKey(os.Getenv("GENERIC_KEY"))}
+		if v := os.Getenv("GENERIC_BODY"); v != "" {
 			var body map[string]any
 			if err = json.Unmarshal([]byte(v), &body); err != nil {
-				log.Fatalf("LOCAL_LLM_BODY: %v", err)
+				log.Fatalf("GENERIC_BODY: %v", err)
 			}
 			opts = append(opts, generic.WithExtraBody(body))
 		}
-		if v := os.Getenv("LOCAL_LLM_MAX_TOKENS"); v != "" {
+		if v := os.Getenv("GENERIC_MAX_TOKENS"); v != "" {
 			n, err := strconv.Atoi(v)
 			if err != nil || n < 0 {
-				log.Fatalf("LOCAL_LLM_MAX_TOKENS: %q is not a token count", v)
+				log.Fatalf("GENERIC_MAX_TOKENS: %q is not a token count", v)
 			}
 			opts = append(opts, generic.WithMaxTokens(n))
 		}
-		provider, err = generic.New(generic.Conf{Model: api.Model{Name: name, Context: window}, BaseURL: os.Getenv("LOCAL_LLM_URL")}, opts...)
+		provider, err = generic.New(generic.Conf{Model: api.Model{Name: name, Context: window}, BaseURL: os.Getenv("GENERIC_URL")}, opts...)
 	case os.Getenv("DEEPSEEK_API_KEY") != "":
 		provider, err = deepseek.New(deepseek.Conf{Model: deepseek.Flash})
 	case os.Getenv("OPENAI_API_KEY") != "":
@@ -78,7 +78,7 @@ func main() {
 	case os.Getenv("GEMINI_API_KEY") != "":
 		provider, err = gemini.New(gemini.Conf{Model: gemini.Hydrogen4}, gemini.WithEffort(gemini.EffortMedium))
 	default:
-		log.Fatal("set LOCAL_LLM_URL, DEEPSEEK_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY or GEMINI_API_KEY")
+		log.Fatal("set GENERIC_URL, DEEPSEEK_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY or GEMINI_API_KEY")
 	}
 	if err != nil {
 		log.Fatal(err)
@@ -89,10 +89,10 @@ func main() {
 			"Deletions happen only when the user confirms them on the page.",
 	)}
 	modules := []neui.ModuleFactory{neui.ModuleJS, neui.ModuleXLS(neui.XLSConfig{})}
-	if v := os.Getenv("LOCAL_LLM_LIGHT"); v != "" {
+	if v := os.Getenv("LIGHT_MODE"); v != "" {
 		on, err := strconv.ParseBool(v)
 		if err != nil {
-			log.Fatalf("LOCAL_LLM_LIGHT: %v", err)
+			log.Fatalf("LIGHT_MODE: %v", err)
 		}
 		if on {
 			options = append(options, neui.WithLightMode())

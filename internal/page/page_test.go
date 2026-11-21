@@ -387,6 +387,24 @@ func TestActionWithoutReadRefusedWithSpace(t *testing.T) {
 	}
 }
 
+func TestToolArgMayBeAbsentOrAJSONString(t *testing.T) {
+	p := testkit.NewProvider(api.Model{},
+		testkit.Call("page__sync", map[string]any{"path": "cart"}),
+		round(call("absent", "page__tool", map[string]any{"path": "cart", "tool": "add"}), call("string", "page__tool", map[string]any{"path": "cart", "tool": "add", "arg": "{}"})),
+		testkit.Say("done"),
+	)
+	c := stack.Page(t, stack.Host{Provider: p, Page: shop()})
+	c.Send("add two items")
+	c.Wait()
+	for i, r := range testkit.Results(p.Request(t, 2)) {
+		var added toolOutput
+		testkit.Decode(t, r, &added)
+		if added.Output != "added" {
+			t.Fatalf("call %d answered %+v, want the tool run", i, added)
+		}
+	}
+}
+
 func TestChangeByOtherCallRefusedWithDiff(t *testing.T) {
 	add := map[string]any{"path": "cart", "tool": "add", "arg": map[string]any{}}
 	p := testkit.NewProvider(api.Model{},

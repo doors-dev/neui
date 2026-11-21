@@ -118,6 +118,7 @@ type state struct {
 	handover           bool
 	root               slot
 	seeded             bool
+	drawn              bool
 	applied            chan struct{}
 	noted              bool
 }
@@ -377,6 +378,7 @@ func (s *state) toolDraw(ctx context.Context, ms int) (*Result, error) {
 	s.mu.Lock()
 	handover := s.handover
 	s.handover = false
+	s.drawn = true
 	ch := make(chan struct{})
 	if !handover {
 		s.hook = &ch
@@ -473,6 +475,12 @@ func (s *state) LastAction() string {
 		}{action.ID, true})
 	}
 	return string(data)
+}
+
+func (s *state) Drawn() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.drawn
 }
 
 func (s *state) ResetHandover() {

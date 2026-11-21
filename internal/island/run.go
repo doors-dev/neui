@@ -198,6 +198,7 @@ type run struct {
 	queue            deque.Deque[eval]
 	trigger          *chan struct{}
 	handover         bool
+	undrawn          bool
 	env              precheck.Env
 	globals          precheck.Globals
 }
@@ -407,6 +408,10 @@ func (r *run) run() {
 					meta["last_action"] = action
 					meta["note"] = scriptErrorActionNote
 				}
+				if !r.state.Drawn() {
+					meta["note"] = meta["note"].(string) + "; " + undrawnErrorNote
+					r.undrawn = true
+				}
 				if len(dropped) > 0 {
 					meta["dropped"] = dropped
 				}
@@ -414,6 +419,13 @@ func (r *run) run() {
 				r.task.Notify(data, meta)
 			case err == nil:
 				r.state.FlushNotifications("")
+				r.mu.Lock()
+				idle := r.queue.Len() == 0
+				r.mu.Unlock()
+				if idle && !r.undrawn && !r.state.Drawn() {
+					r.undrawn = true
+					r.Note(undrawnNote)
+				}
 			}
 			if r.island.entered.Load() > 0 {
 				r.state.Release()
