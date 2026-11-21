@@ -71,7 +71,7 @@
       "role": "user"
     }
   ],
-  "instructions": "\u003c2650 bytes\u003e",
+  "instructions": "\u003c2844 bytes\u003e",
   "model": "gpt-6-luna",
   "store": false,
   "stream": true,

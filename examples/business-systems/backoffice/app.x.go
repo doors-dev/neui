@@ -296,13 +296,13 @@ func sidebar() gox.Elem {
 						__e = __c.Set("aria-label", "Main"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 //line app.gox:161
-						__e = __c.Any(navItem("Dashboard", iconDashboard, HomePath{}, false, "go to the dashboard")); if __e != nil { return }
+						__e = __c.Any(navItem("Dashboard", iconDashboard, HomePath{}, false, "go to the dashboard: this month's numbers, recent orders and products running low")); if __e != nil { return }
 //line app.gox:162
-						__e = __c.Any(navItem("Orders", iconOrders, OrdersPath{}, true, "go to the orders list")); if __e != nil { return }
+						__e = __c.Any(navItem("Orders", iconOrders, OrdersPath{}, true, "go to the orders list: search, filter by status and dates, sort by any column; an order's page shows and edits its items, shipping and payment, and refunds or cancels it")); if __e != nil { return }
 //line app.gox:163
-						__e = __c.Any(navItem("Customers", iconCustomers, CustomersPath{}, true, "go to the customers list")); if __e != nil { return }
+						__e = __c.Any(navItem("Customers", iconCustomers, CustomersPath{}, true, "go to the customers list: search and sort; a customer's page shows their orders and edits their details")); if __e != nil { return }
 //line app.gox:164
-						__e = __c.Any(navItem("Products", iconProducts, ProductsPath{}, true, "go to the products list")); if __e != nil { return }
+						__e = __c.Any(navItem("Products", iconProducts, ProductsPath{}, true, "go to the products list: search, sort by price or stock; a product's page edits it")); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
 					__e = __c.Init("div"); if __e != nil { return }

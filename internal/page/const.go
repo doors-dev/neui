@@ -22,7 +22,11 @@ import (
 const moduleName = "page"
 
 func moduleDesc(light bool) string {
-	desc := `Your access to the live page the user has open: use it to help the user operate the application — navigate, fill inputs, press buttons, call the tools the page exposes, or focus an element to point the user at it. The page is a tree of spaces, UI regions carrying tools, inputs and child spaces; a space's path is its child names from the root joined with dots, "" being the page root. Only what the application chose to expose is there, so a missing element means unavailable to you, not absent from the page: say so instead of guessing. read, write, click, focus and tool need the space read first, with sync, `
+	desc := `Your access to the live page the user has open: use it to help the user operate the application — navigate, fill inputs, press buttons, call the tools the page exposes, or focus an element to point the user at it. Start from what the application already offers: when its pages have the view or form the task needs, such as a filtered and sorted list or an edit form, do it there, so the user sees it happen. `
+	if !light {
+		desc += `Open an island or call an island's app functions only for what the pages do not offer. `
+	}
+	desc += `The page is a tree of spaces, UI regions carrying tools, inputs and child spaces; a space's path is its child names from the root joined with dots, "" being the page root. Only what the application chose to expose is there, so a missing element means unavailable to you, not absent from the page: say so instead of guessing. read, write, click, focus and tool need the space read first, with sync, `
 	if !light {
 		desc += `by you or a script, `
 	}

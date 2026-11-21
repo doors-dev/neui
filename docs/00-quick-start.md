@@ -284,6 +284,8 @@ First, organize page regions into spaces. Spaces separate the functional areas o
 ~>neui.Space{Name: "product", Desc: "product card"} <section>...</section>
 ```
 
+Describe a navigation link by what its destination offers, not only where it leads: `"go to the orders list: search, filter by status and dates, sort by any column"`. The agent chooses from what it can see from where it is, so a link that only names its target hides that page's features.
+
 ### Inputs
 
 Next, mark what the agent can use: put `neui.Use` in front of the element. With `neui.R` the agent can't press it, so the user gives the final confirmation:

@@ -158,10 +158,10 @@ elem sidebar() {
 				</div>
 			</a>
 			<nav class="mt-2 flex gap-1 overflow-x-auto px-3 pb-2 side:mt-8 side:flex-col side:overflow-visible side:px-0 side:pb-0" aria-label="Main">
-				~(navItem("Dashboard", iconDashboard, HomePath{}, false, "go to the dashboard"))
-				~(navItem("Orders", iconOrders, OrdersPath{}, true, "go to the orders list"))
-				~(navItem("Customers", iconCustomers, CustomersPath{}, true, "go to the customers list"))
-				~(navItem("Products", iconProducts, ProductsPath{}, true, "go to the products list"))
+				~(navItem("Dashboard", iconDashboard, HomePath{}, false, "go to the dashboard: this month's numbers, recent orders and products running low"))
+				~(navItem("Orders", iconOrders, OrdersPath{}, true, "go to the orders list: search, filter by status and dates, sort by any column; an order's page shows and edits its items, shipping and payment, and refunds or cancels it"))
+				~(navItem("Customers", iconCustomers, CustomersPath{}, true, "go to the customers list: search and sort; a customer's page shows their orders and edits their details"))
+				~(navItem("Products", iconProducts, ProductsPath{}, true, "go to the products list: search, sort by price or stock; a product's page edits it"))
 			</nav>
 			<div class="mt-auto hidden rounded-lg bg-stone-50 p-3 text-xs text-stone-500 ring-1 ring-stone-200 side:block">
 				<p class="font-medium text-stone-700">Assistant</p>
