@@ -120,9 +120,14 @@ func TestToolLoopReplaysResult(t *testing.T) {
 }
 
 func TestStopHangingTurn(t *testing.T) {
-	p := testkit.NewProvider(api.Model{}, testkit.Hang(api.EventStart{ID: "hang", Model: "fake"}), testkit.Say("again"))
+	requested := make(chan struct{}, 1)
+	p := testkit.NewProvider(api.Model{}, testkit.Then(func(api.Request) testkit.Turn {
+		requested <- struct{}{}
+		return testkit.Hang(api.EventStart{ID: "hang", Model: "fake"})
+	}), testkit.Say("again"))
 	c := stack.Headless(t, stack.Host{Provider: p})
 	c.Send("hang")
+	<-requested
 	c.Stop()
 	expectTrace(t, c.Wait(), "ThreadCreated", "RoundStart", "RoundEnd(abort,final)")
 	c.Send("next")

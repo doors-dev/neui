@@ -33,6 +33,8 @@ import (
 	"neui.dev/internal/thread"
 )
 
+func init() { thread.Backpressure.Store(false) }
+
 type stubProvider struct{}
 
 func (stubProvider) Name() string { return "stub" }

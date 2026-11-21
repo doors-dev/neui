@@ -68,12 +68,7 @@ func (s Space) addSpace(ctx context.Context, name string, desc string, island is
 	if name == "" {
 		return nil, errors.New("space name is empty")
 	}
-	sanitized := utils.SanitizeName(name)
-	if sanitized == "" {
-		sanitized = fmt.Sprintf("space_%016x", xxh3.HashString(name))
-		doors.Logger(ctx).Warn("neui: space name has no letter or digit, named from its hash", "name", name, "as", sanitized)
-	}
-	name = sanitized
+	name = utils.SanitizeName(name)
 	s.root.mu.Lock()
 	if ctx.Err() != nil {
 		s.root.mu.Unlock()

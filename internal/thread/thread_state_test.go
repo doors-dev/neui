@@ -36,6 +36,8 @@ import (
 	"neui.dev/internal/tools"
 )
 
+func init() { Backpressure.Store(false) }
+
 func stubThread(t *testing.T, id api.ThreadID, p api.Provider, config api.ThreadConfig) (*thread, api.MessageStorage, replay.Replay) {
 	t.Helper()
 	ctx := context.WithValue(context.Background(), common.ConfigKey{}, config)

@@ -47,6 +47,7 @@ import (
 	"neui.dev/internal/testkit/stack"
 	"neui.dev/internal/thread"
 	"neui.dev/internal/tools"
+	"neui.dev/internal/utils"
 )
 
 type state struct {
@@ -293,10 +294,6 @@ func (l *logs) String() string {
 }
 
 func TestSpaceNamedFromHash(t *testing.T) {
-	logged := &logs{}
-	logger := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(logged, nil)))
-	t.Cleanup(func() { slog.SetDefault(logger) })
 	p := testkit.NewProvider(api.Model{}, testkit.Call("page__tree", map[string]any{}), testkit.Say("done"))
 	c := stack.Page(t, stack.Host{Provider: p, Page: func(cur gox.Cursor) error {
 		return (neui.Space{Name: "!!!", Desc: "odd"}).Proxy(cur, func(cur gox.Cursor) error { return nil })
@@ -305,12 +302,8 @@ func TestSpaceNamedFromHash(t *testing.T) {
 	c.Wait()
 	var root struct{ Children []struct{ Name string } }
 	testkit.Decode(t, testkit.Results(p.Request(t, 1))[0], &root)
-	name := fmt.Sprintf("space_%016x", xxh3.HashString("!!!"))
-	if len(root.Children) != 1 || root.Children[0].Name != name {
-		t.Fatalf("a space named !!! shows as %+v, want it named from its hash", root.Children)
-	}
-	if !strings.Contains(logged.String(), "level=WARN") || !strings.Contains(logged.String(), "as="+name) {
-		t.Fatalf("the naming logged %q, want a warning with the hash name", logged.String())
+	if name := "x" + utils.NameHash("!!!"); len(root.Children) != 1 || root.Children[0].Name != name {
+		t.Fatalf("a space named !!! shows as %+v, want it named %s from its hash", root.Children, name)
 	}
 }
 
@@ -795,6 +788,7 @@ return [act("cart", "add"), act("", "checkout")]`, "comment": "adds and checks o
 
 func TestRewindClearsReads(t *testing.T) {
 	started := make(chan struct{}, 1)
+	streaming := make(chan struct{}, 1)
 	hold := tools.NewModule("hold", "")
 	if _, err := hold.AddRaw("run", "holds until canceled", schema.ObjectRawSchema, schema.AnyRawSchema, func(ctx context.Context, _ json.RawMessage) (any, error) {
 		started <- struct{}{}
@@ -809,7 +803,10 @@ func TestRewindClearsReads(t *testing.T) {
 		enter func(c *stack.Chat)
 	}{
 		{"waiting", testkit.Say("later"), func(c *stack.Chat) { c.Wait() }},
-		{"streaming", testkit.Hang(api.EventStart{ID: "hang", Model: "stub"}), func(*stack.Chat) {}},
+		{"streaming", testkit.Then(func(api.Request) testkit.Turn {
+			streaming <- struct{}{}
+			return testkit.Hang(api.EventStart{ID: "hang", Model: "stub"})
+		}), func(*stack.Chat) { <-streaming }},
 		{"tools", testkit.Call("hold__run", map[string]any{}), func(*stack.Chat) { <-started }},
 		{"compacting", testkit.Events(api.EventStart{ID: "full", Model: "stub"}, api.EventErr{Code: api.CodeContextLength, Err: errors.New("prompt is too long")}), func(c *stack.Chat) {
 			c.Until(func(e api.ChatEvent) bool {
@@ -838,6 +835,10 @@ func TestRewindClearsReads(t *testing.T) {
 			second := events[len(events)-1].(api.ChatEventRoundStart).Round.ID
 			state.enter(c)
 			c.Rewind(second, "add")
+			c.Until(func(e api.ChatEvent) bool {
+				start, ok := e.(api.ChatEventRoundStart)
+				return ok && start.Truncate == second
+			})
 			c.Wait()
 			requests := p.Requests()
 			if r := refusedWith(t, testkit.Results(requests[len(requests)-1])[0]); r.Space == nil {

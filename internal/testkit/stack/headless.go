@@ -31,6 +31,8 @@ import (
 	"neui.dev/internal/thread"
 )
 
+func init() { thread.Backpressure.Store(false) }
+
 type Host struct {
 	Provider *testkit.Provider
 	Config   api.ThreadConfig

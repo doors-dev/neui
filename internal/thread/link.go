@@ -23,6 +23,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/doors-dev/doors"
 
@@ -33,6 +34,13 @@ import (
 	"neui.dev/internal/replay"
 	"neui.dev/internal/thread/toolkit"
 )
+
+// Backpressure holds each round until the page has answered a time call sent
+// when the previous round started. It is on by default. Turn it off before any
+// thread runs when pages have no browser behind them, as in tests.
+var Backpressure atomic.Bool
+
+func init() { Backpressure.Store(true) }
 
 func newLink(thread *thread, backend *common.Backend, page page.Page, meta any) *link {
 	fs := filesystem.Open(thread.id, backend.WorkspaceStorage(), backend.UploadStorage(), backend.FilesConfig())
@@ -258,8 +266,8 @@ func (l *link) send(m Message) {
 func (l *link) backpressure() <-chan error {
 	prev := l.guard
 	l.guard = nil
-	if ctx := l.page.Context(); doors.HasInstance(ctx) {
-		l.guard = doors.Call(ctx, doors.ActionTime{})
+	if Backpressure.Load() {
+		l.guard = doors.Call(l.page.Context(), doors.ActionTime{})
 	}
 	if prev == nil {
 		closed := make(chan error)
