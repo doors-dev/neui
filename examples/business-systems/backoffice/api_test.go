@@ -110,13 +110,13 @@ func TestToolkitFollowsTheTier(t *testing.T) {
 		want []string
 		desc string
 	}{
-		{"architect", neui.TierArchitect, []string{"dashboard.report*", "workbench*"}, ""},
+		{"developer", neui.TierDeveloper, []string{"dashboard.report*", "workbench*"}, ""},
 		{"agent", neui.TierAgent, []string{"api", "api.customers", "api.orders", "api.products"}, "The shop's data and operations as tools, for scripts and direct calls"},
 		{"assistant", neui.TierAssistant, []string{"api", "api.customers", "api.orders", "api.products"}, "The shop's data and operations as tools"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			p := testkit.NewProvider(api.Model{}, testkit.Call("page__tree", map[string]any{}), testkit.Say("done"))
-			c := stack.Page(t, stack.Host{Provider: p, Page: renderedAt(tc.tier), Options: []neui.Option{neui.OptionTier(neui.TierArchitect)}})
+			c := stack.Page(t, stack.Host{Provider: p, Page: renderedAt(tc.tier), Options: []neui.Option{neui.OptionTier(neui.TierDeveloper)}})
 			c.Send("look")
 			c.Wait()
 			var root treeNode
@@ -132,7 +132,7 @@ func TestToolkitFollowsTheTier(t *testing.T) {
 			}
 			slices.Sort(got)
 			if !slices.Equal(got, tc.want) {
-				t.Fatalf("rendered at %s, an architect sees %v on the page, want %v", tc.name, got, tc.want)
+				t.Fatalf("rendered at %s, a TierDeveloper session sees %v on the page, want %v", tc.name, got, tc.want)
 			}
 			if desc := root.paths("")["api"].Desc; desc != tc.desc {
 				t.Fatalf("rendered at %s, api is described %q, want %q", tc.name, desc, tc.desc)

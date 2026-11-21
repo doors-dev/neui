@@ -44,7 +44,7 @@ func content(t *testing.T, fs api.FS, name string) string {
 
 func TestRegister(t *testing.T) {
 	full := []string{"append", "edit", "insert", "replace", "write"}
-	for tier, want := range map[common.ModelTier][]string{common.TierArchitect: full, common.TierAgent: full, common.TierAssistant: {"edit", "write"}} {
+	for tier, want := range map[common.ModelTier][]string{common.TierDeveloper: full, common.TierAgent: full, common.TierAssistant: {"edit", "write"}} {
 		m := tools.NewModule("files", "")
 		Register(m, tier)
 		var names []string

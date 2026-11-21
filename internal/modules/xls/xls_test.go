@@ -489,7 +489,7 @@ func TestSheetsAutoFilter(t *testing.T) {
 
 func TestTierModule(t *testing.T) {
 	factory := Module(Config{})
-	for _, tier := range []common.ModelTier{common.TierArchitect, common.TierAgent} {
+	for _, tier := range []common.ModelTier{common.TierDeveloper, common.TierAgent} {
 		m := factory(context.WithValue(context.Background(), common.TierKey{}, tier))
 		if n := len(m.List()); n != 10 {
 			t.Fatalf("tier %d registers %d tools, want 10", tier, n)
@@ -532,6 +532,6 @@ func TestTierModule(t *testing.T) {
 	}
 	write, _ = factory(context.Background()).Get("write")
 	if _, err := write.Agent(c.Ctx(), over); err == nil || !strings.HasSuffix(err.Error(), "split it into several writes") {
-		t.Fatalf("TierArchitect write refused with %v, want the split hint alone", err)
+		t.Fatalf("TierDeveloper write refused with %v, want the split hint alone", err)
 	}
 }

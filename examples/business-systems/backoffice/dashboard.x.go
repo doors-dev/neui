@@ -31,9 +31,9 @@ func dashboardPage() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 //line dashboard.gox:28
-		architect := neui.Tier(ctx) == neui.TierArchitect
+		developer := neui.Tier(ctx) == neui.TierDeveloper
 	desc := "Dashboard: this month's numbers, recent orders and products running low"
-	if architect {
+	if developer {
 		desc = "Dashboard: this month's numbers, recent orders, products running low and a report panel"
 	}
 
@@ -95,7 +95,7 @@ func dashboardPage() gox.Elem {
 		}()); if __e != nil { return }
 				return })); if __e != nil { return }
 //line dashboard.gox:52
-				if architect {
+				if developer {
 					__e = __c.Init("div"); if __e != nil { return }
 					{
 //line dashboard.gox:53

@@ -251,7 +251,7 @@ func (p *page) Module(ctx context.Context) Module {
 	if err != nil {
 		panic(err)
 	}
-	if tier != common.TierArchitect {
+	if tier != common.TierDeveloper {
 		return m
 	}
 	_, err = m.Add(islandGuideName, islandGuideDesc, func(ctx context.Context, _ struct{}) (string, error) {

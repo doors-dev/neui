@@ -102,12 +102,12 @@ func WithIslandConfig(c api.IslandConfig) doors.With {
 type ModelTier = common.ModelTier
 
 const (
-	// TierArchitect: everything TierAgent does, plus it builds small apps for
+	// TierDeveloper: everything TierAgent does, plus it builds small apps for
 	// the user right on the page — a report, a form, an editor for a batch of
 	// records — that the user works with directly. The default. Suits models
 	// that can also write an interactive program: lay out a screen and
 	// respond to what the user does in it; 200k context is recommended.
-	TierArchitect = common.TierArchitect
+	TierDeveloper = common.TierDeveloper
 
 	// TierAgent: everything TierAssistant does, plus it writes scripts to
 	// automate work, such as changing many records in one go instead of
@@ -127,7 +127,7 @@ const (
 
 // WithTier sets the model tier for every session the app serves, as an app
 // option for doors.NewApp; OptionTier sets it for one session. Without it,
-// the tier is TierArchitect.
+// the tier is TierDeveloper.
 func WithTier(t ModelTier) doors.With {
 	return doors.WithValue(common.TierKey{}, t)
 }

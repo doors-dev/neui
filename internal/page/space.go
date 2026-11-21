@@ -163,14 +163,14 @@ func (s *space) find(path string, tier common.ModelTier) (*space, error) {
 }
 
 func (s *space) hidden(tier common.ModelTier) bool {
-	if tier == common.TierArchitect || s.island == nil {
+	if tier == common.TierDeveloper || s.island == nil {
 		return false
 	}
 	return true
 }
 
 func (s *space) findIsland(path string) (island.Island, string, error) {
-	space, err := s.find(path, common.TierArchitect)
+	space, err := s.find(path, common.TierDeveloper)
 	if err != nil {
 		return nil, "", err
 	}
@@ -231,7 +231,7 @@ func (s *space) rehash(set int) {
 
 func (s *space) digestFor(tier common.ModelTier) [4]uint64 {
 	digest := s.digest
-	if tier != common.TierArchitect {
+	if tier != common.TierDeveloper {
 		digest[3] = s.plain
 	}
 	return digest

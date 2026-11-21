@@ -179,7 +179,7 @@ func TestSearchForeignCancelIsUnavailable(t *testing.T) {
 
 func TestSearchDescNamesScriptsAboveTierAssistant(t *testing.T) {
 	factory := Module(Config{Search: &fakeBackend{}})
-	for _, tier := range []common.ModelTier{common.TierArchitect, common.TierAgent, common.TierAssistant} {
+	for _, tier := range []common.ModelTier{common.TierDeveloper, common.TierAgent, common.TierAssistant} {
 		search, ok := factory(context.WithValue(context.Background(), common.TierKey{}, tier)).Get("search")
 		if !ok {
 			t.Fatal("no search tool")

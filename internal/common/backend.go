@@ -39,7 +39,7 @@ type Tool interface {
 	Name() string
 	// Desc is the description the tool was defined with.
 	Desc() string
-	// Summary is the description the agent sees at TierArchitect and
+	// Summary is the description the agent sees at TierDeveloper and
 	// TierAgent: Desc with the output schema appended.
 	Summary() string
 	// Brief is Summary with the output schema's definitions left out, for

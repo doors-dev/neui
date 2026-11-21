@@ -83,7 +83,7 @@ type Tool[I any, O any] struct {
 	// letter or digit.
 	Name string
 	// Desc tells the agent what the tool does and when to call it. At
-	// TierArchitect and TierAgent the output schema is appended to it; at
+	// TierDeveloper and TierAgent the output schema is appended to it; at
 	// TierAssistant only O's description is, on a line starting "Result: ".
 	// Describe O with the description tag of a `_ struct{}` field placed
 	// after any embedded struct: what the result is and which of its fields

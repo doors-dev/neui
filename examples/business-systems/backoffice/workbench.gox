@@ -24,7 +24,7 @@ import (
 
 elem workbenchPanel() {
 	~~
-	if neui.Tier(ctx) != neui.TierArchitect {
+	if neui.Tier(ctx) != neui.TierDeveloper {
 		return nil
 	}
 	~~
@@ -42,7 +42,7 @@ elem workbenchPanel() {
 elem apiSpace() {
 	~~
 	tier := neui.Tier(ctx)
-	if tier == neui.TierArchitect {
+	if tier == neui.TierDeveloper {
 		return nil
 	}
 	desc := "The shop's data and operations as tools, for scripts and direct calls"

@@ -50,7 +50,7 @@ type TierKey struct{}
 type ModelTier int
 
 const (
-	TierArchitect ModelTier = iota
+	TierDeveloper ModelTier = iota
 	TierAgent
 	TierAssistant
 )

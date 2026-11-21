@@ -25,9 +25,9 @@ import (
 
 elem dashboardPage() {
 	~~
-	architect := neui.Tier(ctx) == neui.TierArchitect
+	developer := neui.Tier(ctx) == neui.TierDeveloper
 	desc := "Dashboard: this month's numbers, recent orders and products running low"
-	if architect {
+	if developer {
 		desc = "Dashboard: this month's numbers, recent orders, products running low and a report panel"
 	}
 	~~
@@ -49,7 +49,7 @@ elem dashboardPage() {
 			}
 			return dashboardBody(shop.Stats(), shop.Orders(orderQuery{}))
 		})
-		~(if architect {
+		~(if developer {
 			<div class="mt-6">~(reportPanel())</div>
 		})
 	</div>

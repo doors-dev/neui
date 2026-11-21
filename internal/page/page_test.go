@@ -1439,7 +1439,7 @@ func TestTierShowsPageToolResultDescriptions(t *testing.T) {
 			}})
 		})
 	}
-	for _, tier := range []common.ModelTier{common.TierArchitect, common.TierAgent, common.TierAssistant} {
+	for _, tier := range []common.ModelTier{common.TierDeveloper, common.TierAgent, common.TierAssistant} {
 		assistant := tier == common.TierAssistant
 		p := testkit.NewProvider(api.Model{}, testkit.Call("page__sync", map[string]any{"path": "sheet"}), testkit.Say("done"))
 		c := stack.Page(t, stack.Host{Provider: p, Page: page, Options: []common.Option{common.OptionTier(tier)}})

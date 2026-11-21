@@ -115,7 +115,7 @@ func TestAppUploadStorageIsUsedAndSessionOptionOverridesIt(t *testing.T) {
 
 func TestOptionTierOverridesTheApp(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
-	tiers := []common.ModelTier{common.TierArchitect, common.TierAgent, common.TierAssistant}
+	tiers := []common.ModelTier{common.TierDeveloper, common.TierAgent, common.TierAssistant}
 	for _, app := range tiers {
 		for _, option := range tiers {
 			ctx := context.WithValue(context.Background(), common.TierKey{}, app)
@@ -140,7 +140,7 @@ func TestOptionTierOverridesTheApp(t *testing.T) {
 			}
 		}
 	}
-	if got := common.Tier(context.Background()); got != common.TierArchitect {
-		t.Fatalf("without WithTier the tier is %d, want TierArchitect", got)
+	if got := common.Tier(context.Background()); got != common.TierDeveloper {
+		t.Fatalf("without WithTier the tier is %d, want TierDeveloper", got)
 	}
 }

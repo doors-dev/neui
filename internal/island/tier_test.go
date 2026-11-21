@@ -50,7 +50,7 @@ func (n spaceNode) names(prefix string) []string {
 	return out
 }
 
-func TestTiersBelowArchitectHideIslands(t *testing.T) {
+func TestTiersBelowDeveloperHideIslands(t *testing.T) {
 	late := func(name string) gox.Elem {
 		return func(cur gox.Cursor) error {
 			return cur.Comp(neui.Island{
@@ -64,7 +64,7 @@ func TestTiersBelowArchitectHideIslands(t *testing.T) {
 			})
 		}
 	}
-	for _, tier := range []common.ModelTier{common.TierArchitect, common.TierAgent, common.TierAssistant} {
+	for _, tier := range []common.ModelTier{common.TierDeveloper, common.TierAgent, common.TierAssistant} {
 		t.Run(fmt.Sprintf("tier=%d", tier), func(t *testing.T) {
 			shown := doors.NewSource(false)
 			marks := make(chan int, 1)
@@ -126,7 +126,7 @@ func TestTiersBelowArchitectHideIslands(t *testing.T) {
 			if opened.Output != fmt.Sprint(tier) {
 				t.Fatalf("the page tool's handler saw tier %s, want %d", opened.Output, tier)
 			}
-			if tier != common.TierArchitect {
+			if tier != common.TierDeveloper {
 				if got := tree(1); !slices.Equal(got, []string{"panel"}) {
 					t.Fatalf("tree shows %v, want the panel alone", got)
 				}
@@ -137,7 +137,7 @@ func TestTiersBelowArchitectHideIslands(t *testing.T) {
 				refused(t, result(4), "no space ")
 				refused(t, result(5), "no space ")
 				if len(marks) != 0 {
-					t.Fatal("an island's app function ran below TierArchitect")
+					t.Fatal("an island's app function ran below TierDeveloper")
 				}
 				if string(opened.Diff) != "{}" || opened.Changes != nil {
 					t.Fatalf("opening answered diff %s and changes %s, want no change at all", opened.Diff, opened.Changes)

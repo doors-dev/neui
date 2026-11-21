@@ -48,7 +48,7 @@ var scriptWords = regexp.MustCompile(`(?i)\bscripts?\b|js__|Output schema|Output
 var islandWords = regexp.MustCompile(`(?i)island`)
 
 func TestTierToolsAndSystem(t *testing.T) {
-	for _, tier := range []common.ModelTier{common.TierArchitect, common.TierAgent, common.TierAssistant} {
+	for _, tier := range []common.ModelTier{common.TierDeveloper, common.TierAgent, common.TierAssistant} {
 		p := testkit.NewProvider(api.Model{}, testkit.Say("hi"))
 		c := stack.Headless(t, stack.Host{Provider: p, Options: []common.Option{
 			common.OptionModule(chatmod.Module),
@@ -87,9 +87,9 @@ func TestTierToolsAndSystem(t *testing.T) {
 			names[tool.Name] = true
 		}
 		switch tier {
-		case common.TierArchitect:
+		case common.TierDeveloper:
 			if len(req.Tools) != 50 || len(scripts) == 0 || len(islands) == 0 {
-				t.Fatalf("TierArchitect offers %d tools and mentions %d script and %d island words, want 50 tools and the full texts", len(req.Tools), len(scripts), len(islands))
+				t.Fatalf("TierDeveloper offers %d tools and mentions %d script and %d island words, want 50 tools and the full texts", len(req.Tools), len(scripts), len(islands))
 			}
 		case common.TierAgent:
 			if len(req.Tools) != 43 || len(scripts) == 0 || outputs == 0 || !names["js__run"] || !names["files__zip"] || !names["xls__format"] {
@@ -110,7 +110,7 @@ func TestTierToolsAndSystem(t *testing.T) {
 }
 
 func TestHostModuleReadsTier(t *testing.T) {
-	names := map[common.ModelTier]string{common.TierArchitect: "architect", common.TierAgent: "agent", common.TierAssistant: "assistant"}
+	names := map[common.ModelTier]string{common.TierDeveloper: "developer", common.TierAgent: "agent", common.TierAssistant: "assistant"}
 	host := func(ctx context.Context) neui.AnyModule {
 		m := neui.NewModule("crm", "")
 		if _, err := m.Tool(names[neui.Tier(ctx)], "reports the tier", func(ctx context.Context, _ struct{}) (string, error) {
@@ -130,7 +130,7 @@ func TestHostModuleReadsTier(t *testing.T) {
 		}
 		return m
 	}
-	for _, tier := range []common.ModelTier{common.TierArchitect, common.TierAgent, common.TierAssistant} {
+	for _, tier := range []common.ModelTier{common.TierDeveloper, common.TierAgent, common.TierAssistant} {
 		name := "crm__" + names[tier]
 		p := testkit.NewProvider(api.Model{}, testkit.Call(name, map[string]any{}), testkit.Say("done"))
 		c := stack.Headless(t, stack.Host{Provider: p, Options: []common.Option{common.OptionModules([]common.ModuleFactory{host, extra}), common.OptionTier(tier)}})
@@ -172,7 +172,7 @@ func TestTierShowsResultDescriptions(t *testing.T) {
 		}
 		return m
 	}
-	for _, tier := range []common.ModelTier{common.TierArchitect, common.TierAgent, common.TierAssistant} {
+	for _, tier := range []common.ModelTier{common.TierDeveloper, common.TierAgent, common.TierAssistant} {
 		assistant := tier == common.TierAssistant
 		p := testkit.NewProvider(api.Model{}, testkit.Say("hi"))
 		c := stack.Headless(t, stack.Host{Provider: p, Options: []common.Option{common.OptionModules([]common.ModuleFactory{host}), common.OptionTier(tier)}})

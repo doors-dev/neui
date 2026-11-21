@@ -500,7 +500,7 @@ func TestMediaNoteCountsTowardTheTextBudget(t *testing.T) {
 			h.Wait()
 			want := api.UserContents{api.ContentText{Text: text}, api.ContentText{Text: note}}
 			if !c.kept {
-				want = api.UserContents{api.ContentText{Text: replay.OmittedNote(c.text+len(note), common.TierArchitect)}}
+				want = api.UserContents{api.ContentText{Text: replay.OmittedNote(c.text+len(note), common.TierDeveloper)}}
 			}
 			if results := testkit.Results(p.Request(t, 1)); len(results) != 1 || !reflect.DeepEqual(results[0].Content, want) {
 				t.Fatalf("the result went out as %#v, want %#v", results, want)
@@ -530,8 +530,8 @@ func TestTextDocumentIsTextForAModelWithoutDocuments(t *testing.T) {
 		sent   api.UserContents
 	}{
 		{"fits the budget", textOnly, api.UserContents{ok, doc(398, "text/plain")}, api.UserContents{ok, doc(398, "text/plain")}, api.UserContents{ok, api.ContentText{Text: strings.Repeat("x", 398)}}},
-		{"over the budget", textOnly, api.UserContents{ok, doc(399, "text/plain")}, api.UserContents{api.ContentText{Text: replay.OmittedNote(401, common.TierArchitect)}}, api.UserContents{api.ContentText{Text: replay.OmittedNote(401, common.TierArchitect)}}},
-		{"mime as written", textOnly, api.UserContents{ok, doc(399, " Text/Markdown")}, api.UserContents{api.ContentText{Text: replay.OmittedNote(401, common.TierArchitect)}}, api.UserContents{api.ContentText{Text: replay.OmittedNote(401, common.TierArchitect)}}},
+		{"over the budget", textOnly, api.UserContents{ok, doc(399, "text/plain")}, api.UserContents{api.ContentText{Text: replay.OmittedNote(401, common.TierDeveloper)}}, api.UserContents{api.ContentText{Text: replay.OmittedNote(401, common.TierDeveloper)}}},
+		{"mime as written", textOnly, api.UserContents{ok, doc(399, " Text/Markdown")}, api.UserContents{api.ContentText{Text: replay.OmittedNote(401, common.TierDeveloper)}}, api.UserContents{api.ContentText{Text: replay.OmittedNote(401, common.TierDeveloper)}}},
 		{"reading model", reading, api.UserContents{ok, doc(399, "text/plain")}, api.UserContents{ok, doc(399, "text/plain")}, api.UserContents{ok, doc(399, "text/plain")}},
 		{"not UTF-8", textOnly, api.UserContents{ok, latin}, api.UserContents{ok, latin}, api.UserContents{ok, noDocument(latin)}},
 		{"not a text type", textOnly, api.UserContents{ok, pdf}, api.UserContents{ok, pdf}, api.UserContents{ok, noDocument(pdf)}},

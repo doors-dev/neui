@@ -597,12 +597,12 @@ func TestTierAssistantAddsNoModule(t *testing.T) {
 	if n := strings.Count(logged.String(), "js: module not added at TierAssistant"); n != 1 {
 		t.Fatalf("the error was logged %d times, want once per process", n)
 	}
-	for _, tier := range []common.ModelTier{common.TierArchitect, common.TierAgent} {
+	for _, tier := range []common.ModelTier{common.TierDeveloper, common.TierAgent} {
 		m := Module(context.WithValue(context.Background(), common.TierKey{}, tier))
 		if m == nil {
 			t.Fatalf("tier %d added no js module", tier)
 		}
-		if got := strings.Contains(m.Desc(), "island"); got != (tier == common.TierArchitect) {
+		if got := strings.Contains(m.Desc(), "island"); got != (tier == common.TierDeveloper) {
 			t.Fatalf("tier %d: the module text reads %q", tier, m.Desc())
 		}
 	}

@@ -30,7 +30,7 @@ func workbenchPanel() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 //line workbench.gox:27
-		if neui.Tier(ctx) != neui.TierArchitect {
+		if neui.Tier(ctx) != neui.TierDeveloper {
 		return nil
 	}
 
@@ -61,7 +61,7 @@ func apiSpace() gox.Elem {
 		ctx := __c.Context(); _ = ctx
 //line workbench.gox:44
 		tier := neui.Tier(ctx)
-	if tier == neui.TierArchitect {
+	if tier == neui.TierDeveloper {
 		return nil
 	}
 	desc := "The shop's data and operations as tools, for scripts and direct calls"
