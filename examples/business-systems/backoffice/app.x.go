@@ -155,24 +155,26 @@ func (a App) Main() gox.Elem {
 //line app.gox:86
 					__e = __c.Any(workbenchPanel()); if __e != nil { return }
 //line app.gox:87
+					__e = __c.Any(apiSpace()); if __e != nil { return }
+//line app.gox:88
 					__e = __c.Any(toast()); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
-//line app.gox:89
+//line app.gox:90
 				__e = __c.Any(nekit.Chat{ThemeLight: chatTheme}); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line app.gox:92
+//line app.gox:93
 }
 
-//line app.gox:94
+//line app.gox:95
 func routes() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line app.gox:95
+//line app.gox:96
 		__e = __c.Any(doors.Route(
 		doors.RouteModel[HomePath](doors.RouteComp[HomePath](dashboardPage())),
 		doors.RouteModel[OrdersPath](
@@ -219,9 +221,8 @@ func routes() gox.Elem {
 		doors.RouteComp[doors.Location](notFound("Page", crumb{Label: "Back to the dashboard", Model: HomePath{}})),
 	)); if __e != nil { return }
 	return })
-//line app.gox:140
+//line app.gox:141
 }
-
 
 //line app.gox:143
 func sidebar() gox.Elem {
@@ -231,7 +232,7 @@ func sidebar() gox.Elem {
 		__e = (neui.Space{
 		Name: "navigation",
 		Desc: "Main menu, on every page: links to the dashboard, orders, customers and products",
-		Nav:  true,
+		Nav: true,
 	}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
 			__e = __c.Init("aside"); if __e != nil { return }

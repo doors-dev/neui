@@ -16,6 +16,7 @@ package main
 
 import (
 	"context"
+	"slices"
 
 	"neui.dev"
 	"neui.dev/nekit"
@@ -46,7 +47,7 @@ func workbenchLibrary(l neui.Library) error {
 	if err := nekit.IslandRegisterAll(l); err != nil {
 		return err
 	}
-	for _, t := range operations {
+	for _, t := range slices.Concat(orderOperations, customerOperations, productOperations) {
 		if err := l.Add(t); err != nil {
 			return err
 		}
@@ -55,19 +56,36 @@ func workbenchLibrary(l neui.Library) error {
 }
 
 func addShopData(l neui.Library) error {
-	if err := l.Tool("orders", "Orders matching a filter, with lines and totals", func(ctx context.Context, in orderQuery) (ordersOutput, error) {
+	for _, t := range []neui.Tooler{readOrders, readCustomers, readProducts} {
+		if err := l.Add(t); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+var readOrders = neui.Tool[orderQuery, ordersOutput]{
+	Name: "orders",
+	Desc: "Orders matching a filter, with lines and totals",
+	Handler: func(ctx context.Context, in orderQuery) (ordersOutput, error) {
 		return ordersOutput{Orders: shop.Orders(in)}, nil
-	}); err != nil {
-		return err
-	}
-	if err := l.Tool("customers", "All customers with their order count and paid total", func(ctx context.Context, _ struct{}) (customersOutput, error) {
+	},
+}
+
+var readCustomers = neui.Tool[struct{}, customersOutput]{
+	Name: "customers",
+	Desc: "All customers with their order count and paid total",
+	Handler: func(ctx context.Context, _ struct{}) (customersOutput, error) {
 		return customersOutput{Customers: shop.Customers("", "")}, nil
-	}); err != nil {
-		return err
-	}
-	return l.Tool("products", "All products with price and stock", func(ctx context.Context, _ struct{}) (productsOutput, error) {
+	},
+}
+
+var readProducts = neui.Tool[struct{}, productsOutput]{
+	Name: "products",
+	Desc: "All products with price and stock",
+	Handler: func(ctx context.Context, _ struct{}) (productsOutput, error) {
 		return productsOutput{Products: shop.Products("", "")}, nil
-	})
+	},
 }
 
 type ordersOutput struct {

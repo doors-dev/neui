@@ -321,7 +321,7 @@ func adjustStock(ctx context.Context, in adjustStockInput) (stockOutput, error) 
 	return stockOutput{Stock: p.Stock}, nil
 }
 
-var operations = []neui.Tooler{
+var orderOperations = []neui.Tooler{
 	neui.Tool[createOrderInput, created]{
 		Name:    "create_order",
 		Desc:    "Create an order, checked like the New order form; stock is taken when it is created. Returns its id; open_order shows it to the user",
@@ -372,6 +372,9 @@ var operations = []neui.Tooler{
 		Desc:    "Move the due date of an unpaid order later by 1 to 60 days",
 		Handler: extendDue,
 	},
+}
+
+var customerOperations = []neui.Tooler{
 	neui.Tool[customerInput, created]{
 		Name:    "create_customer",
 		Desc:    "Add a customer, checked like the New customer form. Returns their id; open_customer shows them to the user",
@@ -382,6 +385,9 @@ var operations = []neui.Tooler{
 		Desc:    "Change a customer's contact details, checked like the edit form; omitted fields stay as they are",
 		Handler: updateCustomer,
 	},
+}
+
+var productOperations = []neui.Tooler{
 	neui.Tool[productInput, created]{
 		Name:    "create_product",
 		Desc:    "Add a product, checked like the New product form. Returns its id",
