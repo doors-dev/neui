@@ -117,3 +117,16 @@ func TestBlankReasoningAfterTextOpensNoRow(t *testing.T) {
 		t.Fatal("reasoning with text after a text opened no chips row")
 	}
 }
+
+func TestToolsChipCountsOnlyModuleCalls(t *testing.T) {
+	chips := NewChips(params.Params{}, api.Indexed[api.Content]{
+		0: api.ContentToolUse{ID: "a", Name: "page__read"},
+		1: api.ContentToolUse{ID: "b", Name: `page{"path": "api", "tool": "orders__by_date_range"}`},
+		2: api.ContentToolUse{ID: "c", Name: "orders"},
+		3: api.ContentToolUse{ID: "d", Name: "page__sync"},
+	}, true)
+	page := renderChips(t, chips)
+	if !strings.Contains(page, `<div class="nechat-col nechat-tools-flat"><span class="nechat-tool-flat">page<span class="nechat-tool-count">×2</span></span></div>`) {
+		t.Fatalf("the tools chip counts calls that name no module: %s", page)
+	}
+}

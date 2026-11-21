@@ -256,8 +256,10 @@ func (c Chips) Close(ctx context.Context) {
 	c.tools = toolsClosed
 	for _, index := range slices.Sorted(maps.Keys(c.callNames)) {
 		name := c.callNames[index].String()
-		module, _, _ := strings.Cut(name, "__")
-		if module == "chat" {
+		module, _, found := strings.Cut(name, "__")
+		if !found || module == "" || module == "chat" || strings.ContainsFunc(module, func(r rune) bool {
+			return r != '_' && (r < '0' || r > '9') && (r < 'a' || r > 'z') && (r < 'A' || r > 'Z')
+		}) {
 			continue
 		}
 		c.count(module, 1)

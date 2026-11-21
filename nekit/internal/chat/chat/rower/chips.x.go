@@ -259,8 +259,10 @@ func (c Chips) Close(ctx context.Context) {
 	c.tools = toolsClosed
 	for _, index := range slices.Sorted(maps.Keys(c.callNames)) {
 		name := c.callNames[index].String()
-		module, _, _ := strings.Cut(name, "__")
-		if module == "chat" {
+		module, _, found := strings.Cut(name, "__")
+		if !found || module == "" || module == "chat" || strings.ContainsFunc(module, func(r rune) bool {
+			return r != '_' && (r < '0' || r > '9') && (r < 'a' || r > 'z') && (r < 'A' || r > 'Z')
+		}) {
 			continue
 		}
 		c.count(module, 1)
@@ -303,14 +305,14 @@ func (c Chips) Append(e api.EventTool) {
 	b.WriteString(e.Name)
 }
 
-//line chips.gox:303
+//line chips.gox:305
 func (c Chips) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line chips.gox:304
+//line chips.gox:306
 		__e = (c.recordsFrame).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
-//line chips.gox:304
+//line chips.gox:306
 			__e = __c.Any(func() any {
 		c.mu.Lock()
 		defer c.mu.Unlock()
@@ -325,23 +327,23 @@ func (c Chips) Main() gox.Elem {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line chips.gox:314
+//line chips.gox:316
 					__e = __c.Set("class", "nechat-col nechat-events"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
 					__e = __c.Text("event "); if __e != nil { return }
-//line chips.gox:314
+//line chips.gox:316
 					__e = __c.Any(tally(records)); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
-//line chips.gox:314
+//line chips.gox:316
 			return }),
 		}
 	}()); if __e != nil { return }
 		return })); if __e != nil { return }
-//line chips.gox:317
+//line chips.gox:319
 		__e = (c.reasoningFrame).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
-//line chips.gox:317
+//line chips.gox:319
 			__e = __c.Any(func() any {
 		c.mu.Lock()
 		defer c.mu.Unlock()
@@ -356,15 +358,15 @@ func (c Chips) Main() gox.Elem {
 					ctx := __c.Context(); _ = ctx
 					__e = __c.Init("div"); if __e != nil { return }
 					{
-//line chips.gox:327
+//line chips.gox:329
 						__e = __c.Set("class", "nechat-col nechat-think"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 						__e = __c.Text("reasoning "); if __e != nil { return }
-//line chips.gox:327
+//line chips.gox:329
 						__e = __c.Any(&c.reasoningTally); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
-//line chips.gox:327
+//line chips.gox:329
 				return }),
 			}
 		}
@@ -375,39 +377,39 @@ func (c Chips) Main() gox.Elem {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.Init("details"); if __e != nil { return }
 				{
-//line chips.gox:333
+//line chips.gox:335
 					__e = __c.Set("class", "nechat-col nechat-think"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
 					__e = __c.Init("summary"); if __e != nil { return }
 					{
-//line chips.gox:334
+//line chips.gox:336
 						__e = __c.Set("class", "nechat-think-head"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
 						__e = __c.Text("reasoning "); if __e != nil { return }
-//line chips.gox:334
+//line chips.gox:336
 						__e = __c.Any(&c.reasoningTally); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
 					__e = __c.Init("div"); if __e != nil { return }
 					{
-//line chips.gox:335
+//line chips.gox:337
 						__e = __c.Set("class", "nechat-think-body"); if __e != nil { return }
 						__e = __c.Submit(); if __e != nil { return }
-//line chips.gox:335
+//line chips.gox:337
 						__e = __c.Any(&c.thoughtsBody); if __e != nil { return }
 					}
 					__e = __c.Close(); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
-//line chips.gox:336
+//line chips.gox:338
 			return }),
 		}
 	}()); if __e != nil { return }
 		return })); if __e != nil { return }
-//line chips.gox:339
+//line chips.gox:341
 		__e = (c.toolsFrame).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
-//line chips.gox:339
+//line chips.gox:341
 			__e = __c.Any(func() any {
 		c.mu.Lock()
 		defer c.mu.Unlock()
@@ -425,34 +427,34 @@ func (c Chips) Main() gox.Elem {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line chips.gox:352
+//line chips.gox:354
 					__e = __c.Set("class", "nechat-col nechat-tools-flat"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line chips.gox:353
+//line chips.gox:355
 					for _, module := range modules {
 						__e = __c.Init("span"); if __e != nil { return }
 						{
-//line chips.gox:354
+//line chips.gox:356
 							__e = __c.Set("class", "nechat-tool-flat"); if __e != nil { return }
 							__e = __c.Submit(); if __e != nil { return }
-//line chips.gox:355
+//line chips.gox:357
 							__e = __c.Any(module.name); if __e != nil { return }
-//line chips.gox:356
+//line chips.gox:358
 							__e = __c.Any(tally(module.count)); if __e != nil { return }
 						}
 						__e = __c.Close(); if __e != nil { return }
 					}
 				}
 				__e = __c.Close(); if __e != nil { return }
-//line chips.gox:359
+//line chips.gox:361
 			return }),
 		}
 	}()); if __e != nil { return }
 		return })); if __e != nil { return }
-//line chips.gox:362
+//line chips.gox:364
 		__e = (c.summaryFrame).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
-//line chips.gox:362
+//line chips.gox:364
 			__e = __c.Any(func() any {
 		c.mu.Lock()
 		defer c.mu.Unlock()
@@ -466,38 +468,38 @@ func (c Chips) Main() gox.Elem {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.Init("div"); if __e != nil { return }
 				{
-//line chips.gox:371
+//line chips.gox:373
 					__e = __c.Set("class", "nechat-col nechat-summary"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line chips.gox:371
+//line chips.gox:373
 					__e = __c.Any(&c.summaryBody); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
-//line chips.gox:371
+//line chips.gox:373
 			return }),
 		}
 	}()); if __e != nil { return }
 		return })); if __e != nil { return }
 	return })
-//line chips.gox:374
+//line chips.gox:376
 }
 
-//line chips.gox:376
+//line chips.gox:378
 func tally(count int) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
-//line chips.gox:377
+//line chips.gox:379
 		if count > 1 {
 			__e = __c.Init("span"); if __e != nil { return }
 			{
-//line chips.gox:378
+//line chips.gox:380
 				__e = __c.Set("class", "nechat-tool-count"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line chips.gox:378
+//line chips.gox:380
 				__e = __c.Any("×" + strconv.Itoa(count)); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		}
 	return })
-//line chips.gox:380
+//line chips.gox:382
 }
