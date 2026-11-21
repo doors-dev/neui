@@ -16,8 +16,11 @@ package conform
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
+	"image"
+	"image/png"
 	"io/fs"
 	"net/http"
 	"os"
@@ -28,6 +31,8 @@ import (
 	"testing"
 
 	"neui.dev/api"
+	"neui.dev/internal/replay"
+	"neui.dev/internal/storage/local"
 	"neui.dev/internal/testkit"
 	"neui.dev/internal/thread/response"
 )
@@ -52,6 +57,7 @@ func Run(t *testing.T, a Adapter) {
 		{"Encode", checkEncode},
 		{"Corpus", checkCorpus},
 		{"RequestBytes", checkRequestBytes},
+		{"Inputs", checkInputs},
 		{"Decode", checkDecode},
 		{"RoundTrip", checkRoundTrip},
 		{"Errors", checkErrors},
@@ -318,6 +324,91 @@ func checkRequestBytes(t *testing.T, a Adapter, _ *schemas, srv *server, _ limit
 	}
 }
 
+func checkInputs(t *testing.T, a Adapter, _ *schemas, srv *server, _ limitsFile) {
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, image.NewGray(image.Rect(0, 0, 1, 1))); err != nil {
+		t.Fatal(err)
+	}
+	shot := api.ContentImage{Data: buf.Bytes(), Mime: "image/png"}
+	pdf := api.ContentDocument{Data: pdfBytes, Mime: "application/pdf", Name: "a.pdf"}
+	csv := api.ContentDocument{Data: []byte("a,b\n1,2\n"), Mime: "text/csv", Name: "t.csv"}
+	noImage := `reason="this model reads no images"`
+	noPDF := `reason="this model reads no documents of type application/pdf"`
+	shotData, pdfData := base64.StdEncoding.EncodeToString(shot.Data), base64.StdEncoding.EncodeToString(pdf.Data)
+	for _, tc := range []struct {
+		name   string
+		inputs api.Modality
+		want   []string
+		lost   []string
+	}{
+		{"text", api.ModalityText, []string{noImage, noPDF, "a,b\n1,2\n"}, []string{shotData, pdfData}},
+		{"text-image", api.ModalityText | api.ModalityImage, []string{shotData, noPDF, "a,b\n1,2\n"}, []string{noImage, pdfData}},
+		{"unknown", 0, []string{shotData}, []string{noImage, noPDF}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := a.Models[0]
+			m.Inputs = tc.inputs
+			r := replay.NewReplay(context.Background(), "a", local.NewMessageStorage(), api.ThreadConfig{ThreadMemoryLimit: -1, ReplayItemShare: 0.25}, m)
+			if _, err := r.Create(); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := r.RoundInit(api.Input{Text: "look up cat"}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := r.RoundOk(api.EventUsage{}, api.Indexed[api.Content]{0: call("call_1", "lookup", `{"q":"cat"}`)}); err != nil {
+				t.Fatal(err)
+			}
+			if err := r.RoundResult(map[string]api.ContentToolResult{"call_1": result("call_1", api.ToolOk, text("found"), shot, pdf, csv)}); err != nil {
+				t.Fatal(err)
+			}
+			_, messages, err := r.RoundInit(api.Input{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			srv.reset(reply{body: mustRender(t, a, m, scriptText)})
+			events := collect(t, a.build(t, srv.srv.URL, m, Params{}), api.Request{Tools: tools(), Messages: messages})
+			body, _ := srv.last()
+			if srv.hits() != 1 {
+				t.Fatalf("the request was not sent: %v", DescribeAll(events))
+			}
+			var decoded any
+			if err := json.Unmarshal(body, &decoded); err != nil {
+				t.Fatal(err)
+			}
+			var texts []string
+			var walk func(v any)
+			walk = func(v any) {
+				switch v := v.(type) {
+				case string:
+					texts = append(texts, v)
+				case []any:
+					for _, x := range v {
+						walk(x)
+					}
+				case map[string]any:
+					for _, x := range v {
+						walk(x)
+					}
+				}
+			}
+			walk(decoded)
+			carries := func(s string) bool {
+				return slices.ContainsFunc(texts, func(x string) bool { return strings.Contains(x, s) })
+			}
+			for _, s := range tc.want {
+				if !carries(s) {
+					t.Errorf("Inputs %b: the body does not carry %q\nbody: %s", tc.inputs, s, clip(body))
+				}
+			}
+			for _, s := range tc.lost {
+				if carries(s) {
+					t.Errorf("Inputs %b: the body carries %q\nbody: %s", tc.inputs, s, clip(body))
+				}
+			}
+		})
+	}
+}
+
 func checkDecode(t *testing.T, a Adapter, sch *schemas, srv *server, _ limitsFile) {
 	m := a.Models[0]
 	for _, s := range Scripts() {
@@ -538,14 +629,15 @@ func checkStreams(t *testing.T, a Adapter, sch *schemas, srv *server, _ limitsFi
 }
 
 type modelLimits struct {
-	Context          int    `json:"context"`
-	ImagePixels      int    `json:"imagePixels"`
-	ImageBytes       int    `json:"imageBytes"`
-	ImageEncoding    string `json:"imageEncoding"`
-	ImagesPerRequest int    `json:"imagesPerRequest"`
-	RequestBytes     int    `json:"requestBytes"`
-	MaxOutput        int    `json:"maxOutput"`
-	Note             string `json:"note"`
+	Context          int      `json:"context"`
+	ImagePixels      int      `json:"imagePixels"`
+	ImageBytes       int      `json:"imageBytes"`
+	ImageEncoding    string   `json:"imageEncoding"`
+	ImagesPerRequest int      `json:"imagesPerRequest"`
+	RequestBytes     int      `json:"requestBytes"`
+	MaxOutput        int      `json:"maxOutput"`
+	Inputs           []string `json:"inputs"`
+	Note             string   `json:"note"`
 }
 
 type limitsFile struct {
@@ -573,7 +665,7 @@ func checkLimits(t *testing.T, a Adapter, _ *schemas, _ *server, l limitsFile) {
 	if a.Undeclared {
 		t.Skipf("%s declares no models, so there are no limits to check", a.Name)
 	}
-	for _, field := range []string{"context", "imagePixels", "imageBytes", "imagesPerRequest", "requestBytes", "maxOutput"} {
+	for _, field := range []string{"context", "imagePixels", "imageBytes", "imagesPerRequest", "requestBytes", "maxOutput", "inputs"} {
 		if !strings.HasPrefix(l.Sources[field], "https://") {
 			t.Errorf("limits/%s.json has no doc URL for %s", a.Name, field)
 		}
@@ -596,6 +688,22 @@ func checkLimits(t *testing.T, a Adapter, _ *schemas, _ *server, l limitsFile) {
 		check("ImagesPerRequest", m.ImagesPerRequest, doc.ImagesPerRequest)
 		if m.RequestBytes <= 0 || m.RequestBytes > doc.RequestBytes {
 			t.Errorf("%s RequestBytes = %d, the docs (as of %s, %s) say at most %d", m.Name, m.RequestBytes, l.AsOf, l.Sources["requestBytes"], doc.RequestBytes)
+		}
+		inputs := api.Modality(0)
+		for _, kind := range doc.Inputs {
+			switch kind {
+			case "text":
+				inputs |= api.ModalityText
+			case "image":
+				inputs |= api.ModalityImage
+			case "document":
+				inputs |= api.ModalityDocument
+			default:
+				t.Errorf("limits/%s.json: %s reads %q, which is not text, image or document", a.Name, m.Name, kind)
+			}
+		}
+		if m.Inputs != inputs {
+			t.Errorf("%s Inputs = %b, the docs (as of %s, %s) say %v", m.Name, m.Inputs, l.AsOf, l.Sources["inputs"], doc.Inputs)
 		}
 		enc := base64.StdEncoding.EncodedLen
 		switch doc.ImageEncoding {

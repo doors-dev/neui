@@ -26,9 +26,9 @@
 // model declared here New refuses a setting DeepSeek would reject or ignore,
 // so a Provider that was built sends what it was given; for any other model it
 // checks no combination and every option is sent as configured. Thinking is on by default and streams back as
-// readable reasoning. Images go to deepseek-flash in user messages and tool
-// results; every other model gets a short note in place of each image. A
-// document of a text type goes as plain text in every message and tool result
+// readable reasoning. Images go in user messages and tool results; a thread
+// replays a note in their place for a model whose Inputs leaves images out,
+// such as V4Pro. A document of a text type goes as plain text in every message and tool result
 // when its bytes are UTF-8; any other document gets a note. Caching is automatic and needs no options:
 // keep the tools, system prompt and history stable between turns to hit it.
 // Failures reach the thread as api.EventErr with an api.ErrCode, and a failure
@@ -114,13 +114,12 @@ type Conf struct {
 // and is not checked; a missing or wrong key ends the turn with
 // api.CodeAccess. A nil option is skipped. New returns the
 // first option error, and an error for an empty Model.Name. The model rules follow the exact id: deepseek-flash and its
-// legacy ids deepseek-v4-flash and deepseek-v4-flash-vision-exp take images
-// and honor top_p with thinking on; deepseek-v4-pro takes no images and honors
-// top_p with thinking off. On those models New also returns an error for an
-// Effort outside the declared levels, WithTemperature without
-// WithEffort(EffortNone), WithTopP where the model ignores it, and
-// WithMaxTokens over the documented ceiling. Any other id takes no images, and
-// New checks nothing more for it: every option is sent as configured. The
+// legacy ids deepseek-v4-flash and deepseek-v4-flash-vision-exp honor top_p
+// with thinking on; deepseek-v4-pro honors top_p with thinking off. On those
+// models New also returns an error for an Effort outside the declared levels,
+// WithTemperature without WithEffort(EffortNone), WithTopP where the model
+// ignores it, and WithMaxTokens over the documented ceiling. For any other id
+// New checks nothing: every option is sent as configured. The
 // default HTTP client has no timeout, because DeepSeek may queue a request for
 // minutes before answering; WithTransport bounds a dead connection instead.
 func New(conf Conf, opts ...Option) (*Provider, error) {

@@ -50,7 +50,7 @@ func main() {
 		if name == "" {
 			name = "local"
 		}
-		provider, err = compat.New(compat.Conf{Model: api.Model{Name: name, Context: window}, BaseURL: os.Getenv("LOCAL_LLM_URL")},
+		provider, err = compat.New(compat.Conf{Model: api.Model{Name: name, Context: window, Inputs: api.ModalityText}, BaseURL: os.Getenv("LOCAL_LLM_URL")},
 			compat.WithAPIKey(os.Getenv("LOCAL_LLM_KEY")))
 	case os.Getenv("DEEPSEEK_API_KEY") != "":
 		provider, err = deepseek.New(deepseek.Conf{Model: deepseek.Flash})

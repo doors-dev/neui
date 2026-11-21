@@ -6,14 +6,15 @@
     "imageBytes": "https://aistudio.google.com/docs/file-input-methods#method-comparison",
     "imagesPerRequest": "https://aistudio.google.com/docs/image-understanding#file-limit",
     "requestBytes": "https://aistudio.google.com/docs/file-input-methods#method-comparison",
-    "maxOutput": "https://aistudio.google.com/docs/long-decode#output-limits"
+    "maxOutput": "https://aistudio.google.com/docs/long-decode#output-limits",
+    "inputs": "https://aistudio.google.com/docs/models/gemini-4-hydrogen"
   },
   "models": {
-    "gemini-4-hydrogen": {"context": 1048576, "imagePixels": 0, "imageBytes": 0, "imageEncoding": "", "imagesPerRequest": 3600, "requestBytes": 100000000, "maxOutput": 65536, "note": "unified window: input, thinking and output share it; no pixel or per-image byte limit published"},
-    "gemini-4-neon": {"context": 1048576, "imagePixels": 0, "imageBytes": 0, "imageEncoding": "", "imagesPerRequest": 3600, "requestBytes": 100000000, "maxOutput": 65536},
-    "gemini-4-carbon": {"context": 1048576, "imagePixels": 0, "imageBytes": 0, "imageEncoding": "", "imagesPerRequest": 3600, "requestBytes": 100000000, "maxOutput": 65536, "note": "32,768 is the non-streaming cap; this adapter streams"},
-    "gemini-4-argon": {"context": 1048576, "imagePixels": 0, "imageBytes": 0, "imageEncoding": "", "imagesPerRequest": 3600, "requestBytes": 100000000, "maxOutput": 65536, "note": "32,768 is the non-streaming cap; this adapter streams"},
-    "gemini-3.8-flash": {"context": 1114112, "imagePixels": 0, "imageBytes": 0, "imageEncoding": "", "imagesPerRequest": 3600, "requestBytes": 100000000, "maxOutput": 65536, "note": "separate budgets: 1,048,576 input plus 65,536 output"},
-    "gemini-3.5-flash-lite": {"context": 1114112, "imagePixels": 0, "imageBytes": 0, "imageEncoding": "", "imagesPerRequest": 3600, "requestBytes": 100000000, "maxOutput": 65536, "note": "separate budgets: 1,048,576 input plus 65,536 output"}
+    "gemini-4-hydrogen": {"context": 1048576, "imagePixels": 0, "imageBytes": 0, "imageEncoding": "", "imagesPerRequest": 3600, "requestBytes": 100000000, "inputs": ["text", "image", "document"], "maxOutput": 65536, "note": "unified window: input, thinking and output share it; no pixel or per-image byte limit published"},
+    "gemini-4-neon": {"context": 1048576, "imagePixels": 0, "imageBytes": 0, "imageEncoding": "", "imagesPerRequest": 3600, "requestBytes": 100000000, "inputs": ["text", "image", "document"], "maxOutput": 65536},
+    "gemini-4-carbon": {"context": 1048576, "imagePixels": 0, "imageBytes": 0, "imageEncoding": "", "imagesPerRequest": 3600, "requestBytes": 100000000, "inputs": ["text", "image", "document"], "maxOutput": 65536, "note": "32,768 is the non-streaming cap; this adapter streams"},
+    "gemini-4-argon": {"context": 1048576, "imagePixels": 0, "imageBytes": 0, "imageEncoding": "", "imagesPerRequest": 3600, "requestBytes": 100000000, "inputs": ["text", "image", "document"], "maxOutput": 65536, "note": "32,768 is the non-streaming cap; this adapter streams"},
+    "gemini-3.8-flash": {"context": 1114112, "imagePixels": 0, "imageBytes": 0, "imageEncoding": "", "imagesPerRequest": 3600, "requestBytes": 100000000, "inputs": ["text", "image", "document"], "maxOutput": 65536, "note": "separate budgets: 1,048,576 input plus 65,536 output"},
+    "gemini-3.5-flash-lite": {"context": 1114112, "imagePixels": 0, "imageBytes": 0, "imageEncoding": "", "imagesPerRequest": 3600, "requestBytes": 100000000, "inputs": ["text", "image", "document"], "maxOutput": 65536, "note": "separate budgets: 1,048,576 input plus 65,536 output"}
   }
 }

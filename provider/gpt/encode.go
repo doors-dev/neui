@@ -436,7 +436,7 @@ func (b *inputBuilder) assistant(m api.Message, at int) error {
 		case api.ContentImage:
 			parts = append(parts, omitted(c, "the Responses API has no attachment part for the assistant role"))
 		case api.ContentDocument:
-			if len(c.Data) == 0 || !lib.TextMime(strings.ToLower(strings.TrimSpace(c.Mime))) || !utf8.Valid(c.Data) {
+			if len(c.Data) == 0 || !api.DocumentMime(strings.ToLower(strings.TrimSpace(c.Mime))).IsText() || !utf8.Valid(c.Data) {
 				parts = append(parts, omitted(c, "the Responses API has no attachment part for the assistant role, so only a text document whose bytes are UTF-8 goes there, as text"))
 				continue
 			}

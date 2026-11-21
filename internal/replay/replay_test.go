@@ -1626,3 +1626,121 @@ func TestCompactionReloadsTheImageCut(t *testing.T) {
 	}
 	matchesLoad(t, s, r)
 }
+
+func TestWithheldKindsBecomeNotes(t *testing.T) {
+	const (
+		text     = api.ModalityText
+		image    = api.ModalityImage
+		document = api.ModalityDocument
+	)
+	png := api.ContentImage{Data: []byte("img"), Mime: "image/png"}
+	pdf := api.ContentDocument{Data: pdfDoc(3), Mime: string(api.DocumentPDF), Name: "a.pdf"}
+	csv := api.ContentDocument{Data: []byte("a,b\n1,2\n"), Mime: " Text/CSV", Name: "t.csv"}
+	latin := api.ContentDocument{Data: []byte{0xff, 'a'}, Mime: string(api.DocumentText), Name: "l.txt"}
+	empty := api.ContentDocument{Mime: string(api.DocumentText), Name: "e.txt"}
+	noImage := api.ContentText{Text: `<noimage mime="image/png" bytes=3 reason="this model reads no images"/>`}
+	noPDF := api.ContentText{Text: fmt.Sprintf(`<nodocument name="a.pdf" mime="application/pdf" bytes=%d reason="this model reads no documents of type application/pdf"/>`, len(pdf.Data))}
+	csvText := api.ContentText{Text: "a,b\n1,2\n"}
+	noLatin := api.ContentText{Text: `<nodocument name="l.txt" mime="text/plain" bytes=2 reason="this model reads no documents of type text/plain"/>`}
+	noEmpty := api.ContentText{Text: `<nodocument name="e.txt" mime="text/plain" bytes=0 reason="this model reads no documents of type text/plain"/>`}
+	sent := api.UserContents{png, pdf, csv, latin, empty}
+	for _, tc := range []struct {
+		name   string
+		inputs api.Modality
+		want   api.UserContents
+	}{
+		{"unknown", 0, sent},
+		{"every kind", text | image | document, sent},
+		{"text only", text, api.UserContents{noImage, noPDF, csvText, noLatin, noEmpty}},
+		{"no images", text | document, api.UserContents{noImage, pdf, csv, latin, empty}},
+		{"no documents", text | image, api.UserContents{png, noPDF, csvText, noLatin, noEmpty}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			model := api.Model{Inputs: tc.inputs}
+			wantMessage := make([]api.Content, len(tc.want))
+			for i, block := range tc.want {
+				wantMessage[i] = block
+			}
+			g, _ := json.Marshal(omitOversizedMedia([]api.Content{png, pdf, csv, latin, empty}, model))
+			w, _ := json.Marshal(wantMessage)
+			if !bytes.Equal(g, w) {
+				t.Fatalf("a user message replays as\n%s\nwant\n%s", g, w)
+			}
+			s := local.NewMessageStorage()
+			r := NewReplay(context.Background(), "a", s, unboundedConfig, model)
+			mustCreate(t, r)
+			toolRound(t, r, "first", "start", sent...)
+			toolRound(t, r, "second", "", sent...)
+			matchesLoad(t, s, r)
+			_, messages, err := r.RoundInit(api.Input{})
+			if err != nil {
+				t.Fatalf("RoundInit: %v", err)
+			}
+			for _, at := range []struct {
+				where string
+				got   api.Content
+				id    string
+			}{
+				{"a stored round", messages[2].Content[0], "first"},
+				{"the pending results", messages[4].Content[0], "second"},
+			} {
+				g, _ := json.Marshal(at.got)
+				w, _ := json.Marshal(api.ContentToolResult{ID: at.id, Content: tc.want})
+				if !bytes.Equal(g, w) {
+					t.Fatalf("%s replays as\n%s\nwant\n%s", at.where, g, w)
+				}
+			}
+		})
+	}
+}
+
+func TestUnreadPDFChargesNoPages(t *testing.T) {
+	pdf := api.ContentDocument{Data: pdfDoc(5), Mime: string(api.DocumentPDF), Name: "a.pdf"}
+	for _, tc := range []struct {
+		inputs api.Modality
+		cut    bool
+	}{
+		{api.ModalityText | api.ModalityImage, false},
+		{api.ModalityText | api.ModalityImage | api.ModalityDocument, true},
+	} {
+		s := local.NewMessageStorage()
+		r := NewReplay(context.Background(), "a", s, unboundedConfig, api.Model{ImagesPerRequest: 4, Inputs: tc.inputs})
+		mustCreate(t, r)
+		toolRound(t, r, "first", "start", append(shots("first", 2), pdf)...)
+		toolRound(t, r, "second", "", append(shots("second", 1), pdf)...)
+		_, messages, err := r.RoundInit(api.Input{})
+		if err != nil {
+			t.Fatalf("RoundInit: %v", err)
+		}
+		raw, _ := json.Marshal(messages)
+		cut := bytes.Contains(raw, []byte("media removed"))
+		if cut != tc.cut {
+			t.Fatalf("Inputs %b: the 3 images and two 5-page PDFs against a cap of 4 cut media: %v, want %v\n%s", tc.inputs, cut, tc.cut, raw)
+		}
+		if !tc.cut && requestImages(messages) != 3 {
+			t.Fatalf("Inputs %b: the request charges %d images, want the 3 images alone", tc.inputs, requestImages(messages))
+		}
+	}
+}
+
+func TestSwitchToAReadingModelReplaysTheMedia(t *testing.T) {
+	png := api.ContentImage{Data: []byte("img"), Mime: "image/png"}
+	pdf := api.ContentDocument{Data: pdfDoc(1), Mime: string(api.DocumentPDF), Name: "a.pdf"}
+	s := local.NewMessageStorage()
+	r := NewReplay(context.Background(), "a", s, unboundedConfig, api.Model{Inputs: api.ModalityText})
+	mustCreate(t, r)
+	toolRound(t, r, "first", "start", png, pdf)
+	toolRound(t, r, "second", "", api.ContentText{Text: "done"})
+	if _, messages, err := r.RoundInit(api.Input{}); err != nil || requestImages(messages) != 0 {
+		t.Fatalf("the text-only model is sent %d images (err %v), want none", requestImages(messages), err)
+	}
+	reading := NewReplay(context.Background(), "a", s, unboundedConfig, api.Model{Inputs: api.ModalityText | api.ModalityImage | api.ModalityDocument})
+	if err := reading.Load(); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	g, _ := json.Marshal(reading.messages.rounds[1].user)
+	w, _ := json.Marshal([]api.Content{api.ContentToolResult{ID: "first", Content: api.UserContents{png, pdf}}})
+	if !bytes.Equal(g, w) {
+		t.Fatalf("after a switch to a model that reads both kinds the stored result replays as\n%s\nwant\n%s", g, w)
+	}
+}

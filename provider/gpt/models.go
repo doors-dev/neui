@@ -34,13 +34,13 @@ import "neui.dev/api"
 // WithMaxTokens is checked against. For a gateway-prefixed id such as
 // "openai/gpt-6-sol" or a newer model, declare your own api.Model.
 var (
-	GPT56Sol   = api.Model{Name: "gpt-5.6-sol", Context: 1_050_000, ImagePixels: imagePixels, ImageSide: imageSide, ImageBytes: imageBytes, ImagesPerRequest: 1500, RequestBytes: requestBytes}
-	GPT56Luna  = api.Model{Name: "gpt-5.6-luna", Context: 1_050_000, ImagePixels: imagePixels, ImageSide: imageSide, ImageBytes: imageBytes, ImagesPerRequest: 1500, RequestBytes: requestBytes}
-	GPT6Astra  = api.Model{Name: "gpt-6-astra", Context: 1_050_000, ImagePixels: imagePixels, ImageSide: 65_535, ImageBytes: imageBytes, ImagesPerRequest: 1500, RequestBytes: requestBytes}
-	GPT6Sol    = api.Model{Name: "gpt-6-sol", Context: 1_050_000, ImagePixels: imagePixels, ImageSide: imageSide, ImageBytes: imageBytes, ImagesPerRequest: 1500, RequestBytes: requestBytes}
-	GPT6Luna   = api.Model{Name: "gpt-6-luna", Context: 1_050_000, ImagePixels: imagePixels, ImageSide: imageSide, ImageBytes: imageBytes, ImagesPerRequest: 1500, RequestBytes: requestBytes}
-	GPT61Sol   = api.Model{Name: "gpt-6.1-sol", Context: 1_050_000, ImagePixels: imagePixels, ImageSide: imageSide, ImageBytes: imageBytes, ImagesPerRequest: 1500, RequestBytes: requestBytes}
-	GPT61Terra = api.Model{Name: "gpt-6.1-terra", Context: 1_050_000, ImagePixels: imagePixels, ImageSide: imageSide, ImageBytes: imageBytes, ImagesPerRequest: 1500, RequestBytes: requestBytes}
+	GPT56Sol   = api.Model{Name: "gpt-5.6-sol", Context: 1_050_000, ImagePixels: imagePixels, ImageSide: imageSide, ImageBytes: imageBytes, ImagesPerRequest: 1500, RequestBytes: requestBytes, Inputs: inputs}
+	GPT56Luna  = api.Model{Name: "gpt-5.6-luna", Context: 1_050_000, ImagePixels: imagePixels, ImageSide: imageSide, ImageBytes: imageBytes, ImagesPerRequest: 1500, RequestBytes: requestBytes, Inputs: inputs}
+	GPT6Astra  = api.Model{Name: "gpt-6-astra", Context: 1_050_000, ImagePixels: imagePixels, ImageSide: 65_535, ImageBytes: imageBytes, ImagesPerRequest: 1500, RequestBytes: requestBytes, Inputs: inputs}
+	GPT6Sol    = api.Model{Name: "gpt-6-sol", Context: 1_050_000, ImagePixels: imagePixels, ImageSide: imageSide, ImageBytes: imageBytes, ImagesPerRequest: 1500, RequestBytes: requestBytes, Inputs: inputs}
+	GPT6Luna   = api.Model{Name: "gpt-6-luna", Context: 1_050_000, ImagePixels: imagePixels, ImageSide: imageSide, ImageBytes: imageBytes, ImagesPerRequest: 1500, RequestBytes: requestBytes, Inputs: inputs}
+	GPT61Sol   = api.Model{Name: "gpt-6.1-sol", Context: 1_050_000, ImagePixels: imagePixels, ImageSide: imageSide, ImageBytes: imageBytes, ImagesPerRequest: 1500, RequestBytes: requestBytes, Inputs: inputs}
+	GPT61Terra = api.Model{Name: "gpt-6.1-terra", Context: 1_050_000, ImagePixels: imagePixels, ImageSide: imageSide, ImageBytes: imageBytes, ImagesPerRequest: 1500, RequestBytes: requestBytes, Inputs: inputs}
 )
 
 const (
@@ -49,6 +49,7 @@ const (
 	imageBytes             = (20_971_520 - len("data:image/jpeg;base64,")) / 4 * 3
 	requestBytes           = 512_000_000
 	maxOutputTokensCeiling = 128_000
+	inputs                 = api.ModalityText | api.ModalityImage | api.ModalityDocument
 )
 
 type rules struct {

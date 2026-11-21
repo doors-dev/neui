@@ -30,6 +30,6 @@ import "neui.dev/api"
 // base64 or external URL image, which the guide does not say is counted
 // before or after base64, so ImageBytes is the raw size that encodes to it.
 var (
-	Flash = api.Model{Name: "deepseek-flash", Context: 1_048_576, ImagePixels: 1300 * 1300, ImageSide: 8192, ImageBytes: 24 * 1024 * 1024, ImagesPerRequest: 600, RequestBytes: 48 * 1024 * 1024}
-	V4Pro = api.Model{Name: "deepseek-v4-pro", Context: 1_048_576, RequestBytes: 48 * 1024 * 1024}
+	Flash = api.Model{Name: "deepseek-flash", Context: 1_048_576, ImagePixels: 1300 * 1300, ImageSide: 8192, ImageBytes: 24 * 1024 * 1024, ImagesPerRequest: 600, RequestBytes: 48 * 1024 * 1024, Inputs: api.ModalityText | api.ModalityImage}
+	V4Pro = api.Model{Name: "deepseek-v4-pro", Context: 1_048_576, RequestBytes: 48 * 1024 * 1024, Inputs: api.ModalityText}
 )

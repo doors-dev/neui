@@ -37,12 +37,12 @@ import "neui.dev/api"
 // For a model not listed, build an api.Model with its id and limits; New then
 // checks none of its settings.
 var (
-	Hydrogen4   = api.Model{Name: "gemini-4-hydrogen", Context: contextGemini4, ImagesPerRequest: imagesPerRequest, RequestBytes: requestBytes}
-	Neon4       = api.Model{Name: "gemini-4-neon", Context: contextGemini4, ImagesPerRequest: imagesPerRequest, RequestBytes: requestBytes}
-	Carbon4     = api.Model{Name: "gemini-4-carbon", Context: contextGemini4, ImagesPerRequest: imagesPerRequest, RequestBytes: requestBytes}
-	Argon4      = api.Model{Name: "gemini-4-argon", Context: contextGemini4, ImagesPerRequest: imagesPerRequest, RequestBytes: requestBytes}
-	Flash38     = api.Model{Name: "gemini-3.8-flash", Context: contextGemini3, ImagesPerRequest: imagesPerRequest, RequestBytes: requestBytes}
-	FlashLite35 = api.Model{Name: "gemini-3.5-flash-lite", Context: contextGemini3, ImagesPerRequest: imagesPerRequest, RequestBytes: requestBytes}
+	Hydrogen4   = api.Model{Name: "gemini-4-hydrogen", Context: contextGemini4, ImagesPerRequest: imagesPerRequest, RequestBytes: requestBytes, Inputs: inputs}
+	Neon4       = api.Model{Name: "gemini-4-neon", Context: contextGemini4, ImagesPerRequest: imagesPerRequest, RequestBytes: requestBytes, Inputs: inputs}
+	Carbon4     = api.Model{Name: "gemini-4-carbon", Context: contextGemini4, ImagesPerRequest: imagesPerRequest, RequestBytes: requestBytes, Inputs: inputs}
+	Argon4      = api.Model{Name: "gemini-4-argon", Context: contextGemini4, ImagesPerRequest: imagesPerRequest, RequestBytes: requestBytes, Inputs: inputs}
+	Flash38     = api.Model{Name: "gemini-3.8-flash", Context: contextGemini3, ImagesPerRequest: imagesPerRequest, RequestBytes: requestBytes, Inputs: inputs}
+	FlashLite35 = api.Model{Name: "gemini-3.5-flash-lite", Context: contextGemini3, ImagesPerRequest: imagesPerRequest, RequestBytes: requestBytes, Inputs: inputs}
 )
 
 const (
@@ -51,6 +51,7 @@ const (
 	maxOutput        = 65_536
 	imagesPerRequest = 3_600
 	requestBytes     = 100_000_000
+	inputs           = api.ModalityText | api.ModalityImage | api.ModalityDocument
 )
 
 type rules struct {

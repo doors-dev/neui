@@ -358,13 +358,27 @@ func omitOversizedMedia(content []api.Content, m api.Model) []api.Content {
 				continue
 			}
 			out = append(out, block)
+		case api.ContentDocument:
+			if !m.Inputs.Has(api.ModalityDocument) {
+				changed = true
+				out = append(out, documentText(b))
+				continue
+			}
+			out = append(out, block)
 		case api.ContentToolResult:
 			inner := make(api.UserContents, 0, len(b.Content))
 			for _, nested := range b.Content {
-				if n, ok := nested.(api.ContentImage); ok {
+				switch n := nested.(type) {
+				case api.ContentImage:
 					if reason := imageReason(n, m); reason != "" {
 						changed = true
 						inner = append(inner, noImage(n, reason))
+						continue
+					}
+				case api.ContentDocument:
+					if !m.Inputs.Has(api.ModalityDocument) {
+						changed = true
+						inner = append(inner, documentText(n))
 						continue
 					}
 				}
@@ -382,6 +396,9 @@ func omitOversizedMedia(content []api.Content, m api.Model) []api.Content {
 }
 
 func imageReason(c api.ContentImage, m api.Model) string {
+	if !m.Inputs.Has(api.ModalityImage) {
+		return "this model reads no images"
+	}
 	if m.ImageBytes > 0 && len(c.Data) > m.ImageBytes {
 		return fmt.Sprintf("%d bytes is over the %d this model takes in one image", len(c.Data), m.ImageBytes)
 	}
@@ -400,4 +417,11 @@ func imageReason(c api.ContentImage, m api.Model) string {
 
 func noImage(c api.ContentImage, reason string) api.ContentText {
 	return api.ContentText{Text: fmt.Sprintf("<noimage mime=%q bytes=%d reason=%q/>", c.Mime, len(c.Data), reason)}
+}
+
+func documentText(c api.ContentDocument) api.ContentText {
+	if len(c.Data) != 0 && api.DocumentMime(strings.ToLower(strings.TrimSpace(c.Mime))).IsText() && utf8.Valid(c.Data) {
+		return api.ContentText{Text: string(c.Data)}
+	}
+	return api.ContentText{Text: fmt.Sprintf("<nodocument name=%q mime=%q bytes=%d reason=%q/>", c.Name, c.Mime, len(c.Data), "this model reads no documents of type "+c.Mime)}
 }

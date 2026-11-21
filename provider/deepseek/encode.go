@@ -30,8 +30,8 @@ import (
 // encode turns an api.Request into the request body.
 //
 // The shape it targets is the plain OpenAI one: content is a bare string on
-// every role unless a user or tool message carries an image to deepseek-flash,
-// so a message holding several blocks collapses into one string and the blocks
+// every role unless a user or tool message carries an image, so a message
+// holding several blocks collapses into one string and the blocks
 // that are not text become separate fields or separate messages. A block this wire has no field for leaves a note
 // in its place and the turn goes out, stated at the arm it happens in, and so
 // does a block this wire does carry, filled with something it does not take.
@@ -193,9 +193,9 @@ func (p *Provider) encodeUser(msgs []message, m api.Message, at int, noted map[s
 				parts = append(parts, note(c, "a tool result with no tool call id, or one answering a call that went out as a note, answers no call, and a tool message that answers none is refused by the server"))
 				continue
 			}
-			results = append(results, p.toolResult(c))
+			results = append(results, toolResult(c))
 		case api.ContentImage:
-			parts = append(parts, p.image(c))
+			parts = append(parts, image(c))
 		case api.ContentDocument:
 			parts = append(parts, document(c))
 		case api.ContentToolUse:
@@ -336,14 +336,14 @@ func (p *Provider) encodeAssistant(msgs []message, m api.Message, at int, discar
 // block of a message does: refusing here costs the whole request and delivers
 // the image no more than the note does, and the result is the answer a call is
 // waiting on, so failing it fails the conversation too.
-func (p *Provider) toolResult(c api.ContentToolResult) message {
+func toolResult(c api.ContentToolResult) message {
 	parts := make([]any, 0, len(c.Content))
 	for _, rc := range c.Content {
 		switch rc := rc.(type) {
 		case api.ContentText:
 			parts = append(parts, textPart{Type: "text", Text: rc.Text})
 		case api.ContentImage:
-			parts = append(parts, p.image(rc))
+			parts = append(parts, image(rc))
 		case api.ContentDocument:
 			parts = append(parts, document(rc))
 		default:
@@ -364,10 +364,7 @@ func (p *Provider) toolResult(c api.ContentToolResult) message {
 	return message{Role: "tool", ToolCallID: c.ID, Content: body}
 }
 
-func (p *Provider) image(c api.ContentImage) any {
-	if p.family != familyFlash {
-		return note(c, "only deepseek-flash reads images")
-	}
+func image(c api.ContentImage) any {
 	if len(c.Data) == 0 {
 		return note(c, "an image with no bytes in it is refused by the server")
 	}
@@ -387,7 +384,7 @@ func document(c api.ContentDocument) textPart {
 	if len(c.Data) == 0 {
 		return note(c, "a document with no bytes in it has nothing to send")
 	}
-	if !lib.TextMime(strings.ToLower(strings.TrimSpace(c.Mime))) {
+	if !api.DocumentMime(strings.ToLower(strings.TrimSpace(c.Mime))).IsText() {
 		return note(c, "this wire has no document form and carries only the text types, as text")
 	}
 	if !utf8.Valid(c.Data) {

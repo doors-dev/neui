@@ -6,15 +6,16 @@
     "imageBytes": "https://developers.openai.com/api/reference/resources/responses/methods/create",
     "imagesPerRequest": "https://developers.openai.com/api/docs/guides/images-vision",
     "requestBytes": "https://developers.openai.com/api/docs/guides/images-vision",
-    "maxOutput": "https://developers.openai.com/api/docs/models"
+    "maxOutput": "https://developers.openai.com/api/docs/models",
+    "inputs": "https://developers.openai.com/api/docs/guides/file-inputs"
   },
   "models": {
-    "gpt-5.6-sol": {"context": 1050000, "imagePixels": 2560000, "imageBytes": 20971520, "imageEncoding": "data-url", "imagesPerRequest": 1500, "requestBytes": 512000000, "maxOutput": 128000, "note": "context is the total window; max input is 922,000. imagePixels is detail high: 2,500 patches of 32x32 px. RequestBytes 512 MB read as decimal (UNVERIFIED)"},
-    "gpt-5.6-luna": {"context": 1050000, "imagePixels": 2560000, "imageBytes": 20971520, "imageEncoding": "data-url", "imagesPerRequest": 1500, "requestBytes": 512000000, "maxOutput": 128000},
-    "gpt-6-astra": {"context": 1050000, "imagePixels": 2560000, "imageBytes": 20971520, "imageEncoding": "data-url", "imagesPerRequest": 1500, "requestBytes": 512000000, "maxOutput": 128000},
-    "gpt-6-sol": {"context": 1050000, "imagePixels": 2560000, "imageBytes": 20971520, "imageEncoding": "data-url", "imagesPerRequest": 1500, "requestBytes": 512000000, "maxOutput": 128000, "note": "publishes no sizing of its own; declared at the gpt-5.6 limits (UNVERIFIED)"},
-    "gpt-6-luna": {"context": 1050000, "imagePixels": 2560000, "imageBytes": 20971520, "imageEncoding": "data-url", "imagesPerRequest": 1500, "requestBytes": 512000000, "maxOutput": 128000, "note": "publishes no sizing of its own; declared at the gpt-5.6 limits (UNVERIFIED)"},
-    "gpt-6.1-sol": {"context": 1050000, "imagePixels": 2560000, "imageBytes": 20971520, "imageEncoding": "data-url", "imagesPerRequest": 1500, "requestBytes": 512000000, "maxOutput": 128000, "note": "publishes no sizing of its own; declared at the gpt-5.6 limits (UNVERIFIED)"},
-    "gpt-6.1-terra": {"context": 1050000, "imagePixels": 2560000, "imageBytes": 20971520, "imageEncoding": "data-url", "imagesPerRequest": 1500, "requestBytes": 512000000, "maxOutput": 128000, "note": "publishes no sizing of its own; declared at the gpt-5.6 limits (UNVERIFIED)"}
+    "gpt-5.6-sol": {"context": 1050000, "imagePixels": 2560000, "imageBytes": 20971520, "imageEncoding": "data-url", "imagesPerRequest": 1500, "requestBytes": 512000000, "inputs": ["text", "image", "document"], "maxOutput": 128000, "note": "context is the total window; max input is 922,000. imagePixels is detail high: 2,500 patches of 32x32 px. RequestBytes 512 MB read as decimal (UNVERIFIED)"},
+    "gpt-5.6-luna": {"context": 1050000, "imagePixels": 2560000, "imageBytes": 20971520, "imageEncoding": "data-url", "imagesPerRequest": 1500, "requestBytes": 512000000, "inputs": ["text", "image", "document"], "maxOutput": 128000},
+    "gpt-6-astra": {"context": 1050000, "imagePixels": 2560000, "imageBytes": 20971520, "imageEncoding": "data-url", "imagesPerRequest": 1500, "requestBytes": 512000000, "inputs": ["text", "image", "document"], "maxOutput": 128000},
+    "gpt-6-sol": {"context": 1050000, "imagePixels": 2560000, "imageBytes": 20971520, "imageEncoding": "data-url", "imagesPerRequest": 1500, "requestBytes": 512000000, "inputs": ["text", "image", "document"], "maxOutput": 128000, "note": "publishes no sizing of its own; declared at the gpt-5.6 limits (UNVERIFIED)"},
+    "gpt-6-luna": {"context": 1050000, "imagePixels": 2560000, "imageBytes": 20971520, "imageEncoding": "data-url", "imagesPerRequest": 1500, "requestBytes": 512000000, "inputs": ["text", "image", "document"], "maxOutput": 128000, "note": "publishes no sizing of its own; declared at the gpt-5.6 limits (UNVERIFIED)"},
+    "gpt-6.1-sol": {"context": 1050000, "imagePixels": 2560000, "imageBytes": 20971520, "imageEncoding": "data-url", "imagesPerRequest": 1500, "requestBytes": 512000000, "inputs": ["text", "image", "document"], "maxOutput": 128000, "note": "publishes no sizing of its own; declared at the gpt-5.6 limits (UNVERIFIED)"},
+    "gpt-6.1-terra": {"context": 1050000, "imagePixels": 2560000, "imageBytes": 20971520, "imageEncoding": "data-url", "imagesPerRequest": 1500, "requestBytes": 512000000, "inputs": ["text", "image", "document"], "maxOutput": 128000, "note": "publishes no sizing of its own; declared at the gpt-5.6 limits (UNVERIFIED)"}
   }
 }

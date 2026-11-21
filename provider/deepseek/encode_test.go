@@ -120,9 +120,7 @@ func TestEncodeMaxTokens(t *testing.T) {
 	}
 }
 
-// deepseek-v4-pro reads text and nothing else, and a turn carrying anything else
-// is a thread that touched another provider or an adapter that never grew a
-// path for it. The note goes out in the block's place: refusing would end
+// The note goes out in the block's place: refusing would end
 // the conversation over stored history the caller cannot rewrite, and dropping
 // the block silently would tell the model a turn it cannot see never happened.
 func TestEncodeNotesWhatItCannotSend(t *testing.T) {
@@ -133,7 +131,6 @@ func TestEncodeNotesWhatItCannotSend(t *testing.T) {
 		msg  api.Message
 		want string
 	}{
-		{"image in a user turn", api.Message{Role: api.RoleUser, Content: api.Contents{image}}, "[image omitted]"},
 		{"document in a user turn", api.Message{Role: api.RoleUser, Content: api.Contents{doc}}, "[document omitted]"},
 		// An attachment whose bytes are gone reaches the same arm rather than any
 		// part of this wire, which is what keeps one stored block from failing
@@ -182,8 +179,8 @@ func TestEncodeNotesWhatItCannotSend(t *testing.T) {
 		},
 		{
 			"the rest of the turn survives beside the note",
-			api.Message{Role: api.RoleUser, Content: api.Contents{image, api.ContentText{Text: "what is it"}}},
-			"[image omitted]\n\nwhat is it",
+			api.Message{Role: api.RoleUser, Content: api.Contents{doc, api.ContentText{Text: "what is it"}}},
+			"[document omitted]\n\nwhat is it",
 		},
 		{
 			"an assistant note stands on its own line rather than against the model's words",
@@ -206,19 +203,17 @@ func TestEncodeNotesWhatItCannotSend(t *testing.T) {
 	}
 }
 
-// deepseek-v4-pro takes a result as text only, so an attachment inside one goes
-// the way an attachment in a message goes: the note in its place. Refusing
-// delivers the image no more than the note does, and the result is the answer a
-// call is waiting on, so failing it fails the conversation as well.
+// An attachment a result cannot carry goes the way an attachment in a message
+// goes: the note in its place. Refusing delivers the attachment no more than
+// the note does, and the result is the answer a call is waiting on, so failing
+// it fails the conversation as well.
 func TestEncodeNotesAttachmentsInAToolResult(t *testing.T) {
-	image := api.ContentImage{Data: []byte("x"), Mime: "image/png"}
 	doc := api.ContentDocument{Data: []byte("x"), Mime: "application/pdf"}
 	tests := []struct {
 		name string
 		rc   api.UserContent
 		want string
 	}{
-		{"image", image, "the chart:\n\n[image omitted]\n\nthat is all"},
 		{"document", doc, "the chart:\n\n[document omitted]\n\nthat is all"},
 		{"an image with no bytes", api.ContentImage{Mime: "image/png"}, "the chart:\n\n[image omitted]\n\nthat is all"},
 		{"a document with no bytes", api.ContentDocument{Mime: "application/pdf"}, "the chart:\n\n[document omitted]\n\nthat is all"},
@@ -811,8 +806,18 @@ func TestEncodeEffortAndSampling(t *testing.T) {
 	}
 }
 
-func TestEncodeFlashImages(t *testing.T) {
+func TestEncodeImages(t *testing.T) {
 	flash := mustNew(t, Conf{Model: Flash}, WithAPIKey("k"))
+	for _, m := range []api.Model{Flash, V4Pro, {Name: "my-flash-proxy"}} {
+		t.Run(m.Name, func(t *testing.T) {
+			raw := encodeJSON(t, mustNew(t, Conf{Model: m}, WithAPIKey("k")), api.Request{Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{
+				api.ContentImage{Data: []byte("img"), Mime: "image/png"},
+			}}}})
+			if !strings.Contains(raw, `{"type":"image_url","image_url":{"url":"data:image/png;base64,aW1n"}}`) {
+				t.Fatalf("body %s does not carry the image", raw)
+			}
+		})
+	}
 	for _, mime := range []string{"image/jpeg", "image/png", "image/gif", "image/webp", " IMAGE/PNG ", "image/jpg"} {
 		t.Run(mime, func(t *testing.T) {
 			raw := encodeJSON(t, flash, api.Request{Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{
@@ -831,8 +836,6 @@ func TestEncodeFlashImages(t *testing.T) {
 		p    *Provider
 		img  api.ContentImage
 	}{
-		{"pro reads no images", mustNew(t, Conf{Model: V4Pro}, WithAPIKey("k")), api.ContentImage{Data: []byte("img"), Mime: "image/png"}},
-		{"an unknown id reads no images", mustNew(t, Conf{Model: api.Model{Name: "my-flash-proxy"}}, WithAPIKey("k")), api.ContentImage{Data: []byte("img"), Mime: "image/png"}},
 		{"an unsupported type", flash, api.ContentImage{Data: []byte("img"), Mime: "image/bmp"}},
 		{"no bytes", flash, api.ContentImage{Mime: "image/png"}},
 	}
@@ -962,7 +965,7 @@ func TestEncodeLogsNothingForAnOmission(t *testing.T) {
 	slog.SetDefault(slog.New(counts))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 	req := api.Request{Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{
-		api.ContentImage{Data: []byte{1}, Mime: "image/png"},
+		api.ContentImage{Mime: "image/png"},
 		api.ContentDocument{Data: []byte("PK"), Mime: string(api.DocumentDOCX)},
 		api.ContentText{Text: "look"},
 	}}}}
@@ -993,14 +996,13 @@ func TestEncodeLogsAnUnknownTypeOnce(t *testing.T) {
 	}
 }
 
-func TestFlashImageURLMatchesConcatenation(t *testing.T) {
-	flash := mustNew(t, Conf{Model: Flash}, WithAPIKey("k"))
+func TestImageURLMatchesConcatenation(t *testing.T) {
 	for _, n := range []int{1, 2, 3, 4, 5, 57, 1000, 1<<20 + 1} {
 		data := make([]byte, n)
 		for i := range data {
 			data[i] = byte(i*7 + i>>8)
 		}
-		part, ok := flash.image(api.ContentImage{Data: data, Mime: " Image/PNG "}).(imagePart)
+		part, ok := image(api.ContentImage{Data: data, Mime: " Image/PNG "}).(imagePart)
 		if !ok {
 			t.Fatalf("%d bytes: the image was noted instead of sent", n)
 		}
@@ -1010,14 +1012,10 @@ func TestFlashImageURLMatchesConcatenation(t *testing.T) {
 	}
 }
 
-func BenchmarkFlashImageURL(b *testing.B) {
-	flash, err := New(Conf{Model: Flash}, WithAPIKey("k"))
-	if err != nil {
-		b.Fatal(err)
-	}
-	image := api.ContentImage{Data: make([]byte, 1<<20), Mime: "image/png"}
+func BenchmarkImageURL(b *testing.B) {
+	img := api.ContentImage{Data: make([]byte, 1<<20), Mime: "image/png"}
 	b.ReportAllocs()
 	for b.Loop() {
-		flash.image(image)
+		image(img)
 	}
 }

@@ -21,7 +21,7 @@
 // takes precedence over WithProvider if any:
 //
 //	p, err := compat.New(compat.Conf{
-//		Model:   api.Model{Name: "qwen3.8-27b", Context: 131_072},
+//		Model:   api.Model{Name: "qwen3.8-27b", Context: 131_072, Inputs: api.ModalityText},
 //		BaseURL: "http://127.0.0.1:8080/v1",
 //	}, compat.WithEffort(compat.EffortLow))
 //
@@ -36,11 +36,14 @@
 // server writes, and goes back on later turns in the same field; reasoning
 // another provider wrote is left out, and reasoning a server leaves in the
 // text as <think> tags stays text. Images go as data URLs in user messages and
-// tool results, and a server whose model reads no images refuses such a turn.
-// A document of a text type goes as its text when its bytes are UTF-8, and any
-// other document gets a short note. Caching is the server's: keep the tools,
-// system prompt and history stable between turns, and cache reads arrive in
-// the usage where the server reports prompt_tokens_details.cached_tokens.
+// tool results. Set Model.Inputs to what the server's model reads: a thread
+// replays a note in place of each image for a model without
+// api.ModalityImage, and with Inputs zero every image goes, which a server
+// whose model reads none refuses. A document of a text type goes as its text
+// when its bytes are UTF-8, and any other document gets a short note. Caching
+// is the server's: keep the tools, system prompt and history stable between
+// turns, and cache reads arrive in the usage where the server reports
+// prompt_tokens_details.cached_tokens.
 // Failures reach the thread as api.EventErr with an api.ErrCode, and a failure
 // the server reported carries an *APIError, read with errors.As.
 package compat
@@ -105,8 +108,8 @@ type Option func(*Provider) error
 // Conf holds what a Provider has no default for.
 type Conf struct {
 	// Model is the model every turn is sent to, named as the server lists it.
-	// Set Context and the other limits the server has; none is read from the
-	// server. New refuses an empty Model.Name.
+	// Set Context, Inputs and the other limits the server has; none is read
+	// from the server. New refuses an empty Model.Name.
 	Model api.Model `json:"model"`
 	// BaseURL is the server's OpenAI-compatible root, such as
 	// http://127.0.0.1:8080/v1 or https://openrouter.ai/api/v1, without the

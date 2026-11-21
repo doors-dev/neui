@@ -6,14 +6,15 @@
     "imageBytes": "https://platform.claude.com/docs/en/build-with-claude/vision",
     "imagesPerRequest": "https://platform.claude.com/docs/en/build-with-claude/vision",
     "requestBytes": "https://platform.claude.com/docs/en/api/overview#request-size-limits",
-    "maxOutput": "https://platform.claude.com/docs/en/build-with-claude/thinking"
+    "maxOutput": "https://platform.claude.com/docs/en/build-with-claude/thinking",
+    "inputs": "https://platform.claude.com/docs/en/build-with-claude/pdf-support"
   },
   "models": {
-    "claude-fable-5-1": {"context": 1000000, "imagePixels": 3750656, "imageBytes": 10000000, "imageEncoding": "base64", "imagesPerRequest": 600, "requestBytes": 128000000, "maxOutput": 128000, "note": "high-resolution tier: 4784 visual tokens of 28x28 px"},
-    "claude-opus-5-5": {"context": 1000000, "imagePixels": 3750656, "imageBytes": 10000000, "imageEncoding": "base64", "imagesPerRequest": 600, "requestBytes": 128000000, "maxOutput": 128000},
-    "claude-sonnet-5-5": {"context": 1000000, "imagePixels": 3750656, "imageBytes": 10000000, "imageEncoding": "base64", "imagesPerRequest": 600, "requestBytes": 128000000, "maxOutput": 128000},
-    "claude-haiku-5-5": {"context": 1000000, "imagePixels": 3750656, "imageBytes": 10000000, "imageEncoding": "base64", "imagesPerRequest": 600, "requestBytes": 128000000, "maxOutput": 128000},
-    "claude-sonnet-5": {"context": 1000000, "imagePixels": 3750656, "imageBytes": 10000000, "imageEncoding": "base64", "imagesPerRequest": 600, "requestBytes": 128000000, "maxOutput": 128000, "note": "legacy"},
-    "claude-haiku-4-5-20251001": {"context": 200000, "imagePixels": 1229312, "imageBytes": 10000000, "imageEncoding": "base64", "imagesPerRequest": 100, "requestBytes": 128000000, "maxOutput": 64000, "note": "legacy; standard resolution tier: 1568 visual tokens of 28x28 px"}
+    "claude-fable-5-1": {"context": 1000000, "imagePixels": 3750656, "imageBytes": 10000000, "imageEncoding": "base64", "imagesPerRequest": 600, "requestBytes": 128000000, "inputs": ["text", "image", "document"], "maxOutput": 128000, "note": "high-resolution tier: 4784 visual tokens of 28x28 px"},
+    "claude-opus-5-5": {"context": 1000000, "imagePixels": 3750656, "imageBytes": 10000000, "imageEncoding": "base64", "imagesPerRequest": 600, "requestBytes": 128000000, "inputs": ["text", "image", "document"], "maxOutput": 128000},
+    "claude-sonnet-5-5": {"context": 1000000, "imagePixels": 3750656, "imageBytes": 10000000, "imageEncoding": "base64", "imagesPerRequest": 600, "requestBytes": 128000000, "inputs": ["text", "image", "document"], "maxOutput": 128000},
+    "claude-haiku-5-5": {"context": 1000000, "imagePixels": 3750656, "imageBytes": 10000000, "imageEncoding": "base64", "imagesPerRequest": 600, "requestBytes": 128000000, "inputs": ["text", "image", "document"], "maxOutput": 128000},
+    "claude-sonnet-5": {"context": 1000000, "imagePixels": 3750656, "imageBytes": 10000000, "imageEncoding": "base64", "imagesPerRequest": 600, "requestBytes": 128000000, "inputs": ["text", "image", "document"], "maxOutput": 128000, "note": "legacy"},
+    "claude-haiku-4-5-20251001": {"context": 200000, "imagePixels": 1229312, "imageBytes": 10000000, "imageEncoding": "base64", "imagesPerRequest": 100, "requestBytes": 128000000, "inputs": ["text", "image", "document"], "maxOutput": 64000, "note": "legacy; standard resolution tier: 1568 visual tokens of 28x28 px"}
   }
 }

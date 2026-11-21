@@ -72,18 +72,3 @@ func ImageMime(mime string) (string, bool) {
 	mime = strings.ToLower(strings.TrimSpace(mime))
 	return mime, mime == "image/jpg" || api.ImageMime(mime).IsValid()
 }
-
-// TextMime reports whether mime is one of the text document types: text/plain,
-// text/markdown, text/csv, text/html, text/xml, application/json,
-// application/yaml and application/rtf. It compares mime as given, so lower-case
-// and trim it first to accept other spellings. An adapter sends a document of a
-// text type as plain text where its wire has no document form for it, and a
-// note in place of one whose bytes are not UTF-8.
-func TextMime(mime string) bool {
-	switch api.DocumentMime(mime) {
-	case api.DocumentText, api.DocumentMarkdown, api.DocumentCSV, api.DocumentHTML,
-		api.DocumentXML, api.DocumentJSON, api.DocumentYAML, api.DocumentRTF:
-		return true
-	}
-	return false
-}

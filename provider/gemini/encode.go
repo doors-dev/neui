@@ -276,7 +276,7 @@ func documentBlock(c api.ContentDocument) any {
 	switch {
 	case nativeDocuments[mime]:
 		return documentContent{Type: "document", Data: c.Data, MimeType: mime}
-	case lib.TextMime(mime):
+	case api.DocumentMime(mime).IsText():
 		if !utf8.Valid(c.Data) {
 			return note(c, "the text document is not UTF-8")
 		}

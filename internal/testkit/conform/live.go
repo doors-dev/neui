@@ -174,8 +174,8 @@ func liveGenerate(t *testing.T, a Adapter, key string) {
 		ended(t, events)
 	})
 	t.Run("image", func(t *testing.T) {
-		if m.ImagesPerRequest == 0 {
-			t.Skip("the model declares no image input")
+		if !m.Inputs.Has(api.ModalityImage) {
+			t.Skip("the model reads no images")
 		}
 		events, _ := turn(t, m, cheap, api.Request{Messages: []api.Message{user(text("What colour is this square? One word."), api.ContentImage{Data: tinyPNG(), Mime: "image/png"})}})
 		ended(t, events)

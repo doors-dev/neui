@@ -125,19 +125,48 @@ func (f *fuzzRun) sameRequest(got, want []api.Message, op string) {
 	if limit := f.model.ImagesPerRequest; limit > 0 && requestImages(want) > limit {
 		f.fail("%s sends %d images, over the cap %d", op, requestImages(want), limit)
 	}
+	if kinds := sentKinds(want); !f.model.Inputs.Has(kinds) {
+		f.fail("%s sends kinds %b to a model whose Inputs are %b", op, kinds, f.model.Inputs)
+	}
+}
+
+func sentKinds(messages []api.Message) api.Modality {
+	kinds := api.Modality(0)
+	for _, m := range messages {
+		for _, block := range m.Content {
+			blocks := []api.Content{block}
+			if res, ok := block.(api.ContentToolResult); ok {
+				blocks = make([]api.Content, len(res.Content))
+				for i, c := range res.Content {
+					blocks[i] = c
+				}
+			}
+			for _, c := range blocks {
+				switch c.(type) {
+				case api.ContentImage:
+					kinds |= api.ModalityImage
+				case api.ContentDocument:
+					kinds |= api.ModalityDocument
+				}
+			}
+		}
+	}
+	return kinds
 }
 
 func (f *fuzzRun) blocks() api.UserContents {
 	var out api.UserContents
 	for range f.rng.IntN(6) {
 		f.media++
-		switch f.rng.IntN(6) {
+		switch f.rng.IntN(7) {
 		case 0:
 			out = append(out, api.ContentText{Text: fmt.Sprintf("text %d", f.media)})
 		case 1:
 			out = append(out, api.ContentDocument{Data: pdfDoc(1 + f.rng.IntN(4)), Mime: "application/pdf", Name: fmt.Sprintf("d%d.pdf", f.media)})
 		case 2:
 			out = append(out, api.ContentDocument{Data: []byte(fmt.Sprintf("plain %d", f.media)), Mime: "text/plain", Name: fmt.Sprintf("d%d.txt", f.media)})
+		case 3:
+			out = append(out, api.ContentDocument{Data: []byte{0xff, byte(f.media)}, Mime: "text/csv", Name: fmt.Sprintf("d%d.csv", f.media)})
 		default:
 			out = append(out, api.ContentImage{Data: []byte(fmt.Sprintf("img %d", f.media)), Mime: "image/png"})
 		}
@@ -289,6 +318,7 @@ func (f *fuzzRun) step() {
 }
 
 func TestSessionMatchesLoadUnderRandomRounds(t *testing.T) {
+	inputs := []api.Modality{0, api.ModalityText, api.ModalityText | api.ModalityImage, api.ModalityText | api.ModalityDocument}
 	for seed := range uint64(300) {
 		t.Run(fmt.Sprint(seed), func(t *testing.T) {
 			rng := rand.New(rand.NewPCG(seed, 7))
@@ -297,7 +327,7 @@ func TestSessionMatchesLoadUnderRandomRounds(t *testing.T) {
 				rng:    rng,
 				s:      local.NewMessageStorage(),
 				config: api.ThreadConfig{ThreadMemoryLimit: []int64{-1, 300 + rng.Int64N(3000)}[seed%2], ReplayItemShare: 0.25, CompactionPreserve: 0.25},
-				model:  api.Model{ImagesPerRequest: []int{1, 2, 3, 5, 8, 13}[rng.IntN(6)]},
+				model:  api.Model{ImagesPerRequest: []int{1, 2, 3, 5, 8, 13}[rng.IntN(6)], Inputs: inputs[seed/2%4]},
 			}
 			f.r = NewReplay(context.Background(), "a", f.s, f.config, f.model)
 			mustCreate(t, f.r)
@@ -309,7 +339,7 @@ func TestSessionMatchesLoadUnderRandomRounds(t *testing.T) {
 			if f.r.lastRound.isActive() || len(f.calls) != 0 {
 				return
 			}
-			switched := NewReplay(context.Background(), "a", f.s, f.config, api.Model{ImagesPerRequest: 1 + rng.IntN(4)})
+			switched := NewReplay(context.Background(), "a", f.s, f.config, api.Model{ImagesPerRequest: 1 + rng.IntN(4), Inputs: inputs[rng.IntN(4)]})
 			if err := switched.Load(); err != nil {
 				t.Fatalf("Load under another model: %v", err)
 			}
@@ -319,6 +349,9 @@ func TestSessionMatchesLoadUnderRandomRounds(t *testing.T) {
 			}
 			if got := requestImages(messages); got > switched.model.ImagesPerRequest {
 				t.Fatalf("after a switch to a cap of %d the request carries %d images", switched.model.ImagesPerRequest, got)
+			}
+			if kinds := sentKinds(messages); !switched.model.Inputs.Has(kinds) {
+				t.Fatalf("after a switch to Inputs %b the request carries kinds %b", switched.model.Inputs, kinds)
 			}
 		})
 	}

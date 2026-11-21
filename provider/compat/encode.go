@@ -225,7 +225,7 @@ func document(c api.ContentDocument) textPart {
 	switch {
 	case len(c.Data) == 0:
 		return textPart{Type: "text", Text: lib.Omitted(c, "a document with no bytes has nothing to send")}
-	case !lib.TextMime(strings.ToLower(strings.TrimSpace(c.Mime))):
+	case !api.DocumentMime(strings.ToLower(strings.TrimSpace(c.Mime))).IsText():
 		return textPart{Type: "text", Text: lib.Omitted(c, "this wire has no document form and carries only the text types, as text")}
 	case !utf8.Valid(c.Data):
 		return textPart{Type: "text", Text: lib.Omitted(c, "a text document goes as a JSON string, which cannot carry bytes that are not UTF-8")}

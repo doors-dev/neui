@@ -81,9 +81,7 @@ func (i Image) ContentType() string {
 var _ Container = Image{}
 
 // ImageMime is an image type the Claude and GPT adapters both accept. The
-// DeepSeek adapter accepts them on Flash models only and leaves a note in
-// place of each image elsewhere. The Gemini adapter takes all four in messages
-// and tool results.
+// Gemini adapter takes all four in messages and tool results.
 type ImageMime string
 
 // The accepted image types.
@@ -138,6 +136,19 @@ func (m DocumentMime) IsValid() bool {
 		DocumentCSV, DocumentHTML, DocumentXML, DocumentYAML,
 		DocumentRTF, DocumentDOC, DocumentXLS, DocumentDOCX,
 		DocumentXLSX, DocumentPPTX:
+		return true
+	default:
+		return false
+	}
+}
+
+// IsText reports whether m is a text type: DocumentText, DocumentMarkdown,
+// DocumentCSV, DocumentHTML, DocumentXML, DocumentJSON, DocumentYAML or
+// DocumentRTF.
+func (m DocumentMime) IsText() bool {
+	switch m {
+	case DocumentText, DocumentMarkdown, DocumentCSV, DocumentHTML,
+		DocumentXML, DocumentJSON, DocumentYAML, DocumentRTF:
 		return true
 	default:
 		return false

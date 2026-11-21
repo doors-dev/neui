@@ -93,4 +93,30 @@ type Model struct {
 	// CodeTooLarge. Zero means unknown, and the body is sent without a size
 	// check.
 	RequestBytes int `json:"requestBytes"`
+	// Inputs is the set of kinds the model reads. On replay, an image it
+	// leaves out becomes a note. A document it leaves out goes as plain text
+	// if its type is a text type and its bytes are UTF-8, and becomes a note
+	// otherwise. Zero means unknown: every image and document goes to the
+	// adapter, which sends what its API carries.
+	Inputs Modality `json:"inputs"`
+}
+
+// Modality is a set of input kinds, combined with |.
+type Modality uint8
+
+// The input kinds.
+const (
+	// ModalityText is text, which every model reads. On its own it declares a
+	// model that reads text only.
+	ModalityText Modality = 1 << iota
+	// ModalityImage is a ContentImage.
+	ModalityImage
+	// ModalityDocument is a ContentDocument in the API's own document form,
+	// such as a PDF.
+	ModalityDocument
+)
+
+// Has reports whether m holds every kind in k. The zero set holds every kind.
+func (m Modality) Has(k Modality) bool {
+	return m == 0 || m&k == k
 }

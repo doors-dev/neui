@@ -343,7 +343,7 @@ func (p *Provider) encodeContent(c api.Content, role string, replay bool, discar
 			return omitted(c, "a document source with no bytes in it is refused by this API, and the block is stored, so it would be refused again on every later turn of the thread")
 		}
 		if role == string(api.RoleAssistant) {
-			if !lib.TextMime(strings.ToLower(strings.TrimSpace(c.Mime))) || !utf8.Valid(c.Data) || strings.TrimSpace(string(c.Data)) == "" {
+			if !api.DocumentMime(strings.ToLower(strings.TrimSpace(c.Mime))).IsText() || !utf8.Valid(c.Data) || strings.TrimSpace(string(c.Data)) == "" {
 				return omitted(c, "a document is a block of the user turn on this API, which refuses one placed directly in an assistant message, so only a text document whose bytes are UTF-8 and not blank goes there, as a text block")
 			}
 			b := &textBlock{Type: "text", Text: string(c.Data)}
@@ -418,7 +418,7 @@ func encodeDocument(c api.ContentDocument) (any, *cached, error) {
 	switch {
 	case mime == "application/pdf":
 		b.Source = &base64Source{Type: "base64", MediaType: mime, Data: c.Data}
-	case lib.TextMime(mime):
+	case api.DocumentMime(mime).IsText():
 		if !utf8.Valid(c.Data) {
 			return omitted(c, fmt.Sprintf("a document of type %q is sent as text, its bytes are not UTF-8, and the block is stored, so it would be refused again on every later turn of the thread", c.Mime))
 		}

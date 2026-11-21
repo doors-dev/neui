@@ -178,7 +178,7 @@ func TestDeclaredModels(t *testing.T) {
 		{Flash38, "gemini-3.8-flash", 1_114_112, []Effort{EffortLow, EffortMedium, EffortHigh}},
 		{FlashLite35, "gemini-3.5-flash-lite", 1_114_112, []Effort{EffortMinimal, EffortLow, EffortMedium, EffortHigh}},
 	} {
-		want := api.Model{Name: c.name, Context: c.context, ImagesPerRequest: 3_600, RequestBytes: 100_000_000}
+		want := api.Model{Name: c.name, Context: c.context, ImagesPerRequest: 3_600, RequestBytes: 100_000_000, Inputs: api.ModalityText | api.ModalityImage | api.ModalityDocument}
 		if c.m != want {
 			t.Errorf("%s = %+v, want %+v", c.name, c.m, want)
 		}
