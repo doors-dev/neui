@@ -32,7 +32,7 @@ import (
 )
 
 const (
-	goldenRequestsHash = "daaaf5c2f5735bea113579bff5bc138bb1b7121bc4a2b93b2a8c57b79d91c013"
+	goldenRequestsHash = "b35712a238331f51d8ee25bea5ec04a69ab9324eb2a65b3d4ff49a52f79b8c11"
 	goldenStreamsHash  = "6bd11aa8a7eb204ca52e6aa0e60ec2b1b8f77c4e6307c826b687e58001fdcdb5"
 )
 

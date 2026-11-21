@@ -1,0 +1,41 @@
+{
+  "model": "gemini-4-hydrogen",
+  "stream": true,
+  "store": false,
+  "input": [
+    {
+      "type": "user_input",
+      "content": [
+        {
+          "type": "text",
+          "text": "hi"
+        }
+      ]
+    },
+    {
+      "type": "model_output",
+      "content": [
+        {
+          "type": "text",
+          "text": "[reasoning omitted]"
+        },
+        {
+          "type": "text",
+          "text": "hello"
+        }
+      ]
+    },
+    {
+      "type": "user_input",
+      "content": [
+        {
+          "type": "text",
+          "text": "again"
+        }
+      ]
+    }
+  ],
+  "generation_config": {
+    "thinking_summaries": "auto"
+  }
+}

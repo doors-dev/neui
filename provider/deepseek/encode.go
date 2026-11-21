@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 	"unsafe"
 
 	"neui.dev/api"
@@ -196,7 +197,7 @@ func (p *Provider) encodeUser(msgs []message, m api.Message, at int, noted map[s
 		case api.ContentImage:
 			parts = append(parts, p.image(c))
 		case api.ContentDocument:
-			parts = append(parts, note(c, "this adapter has no encoding for a document"))
+			parts = append(parts, document(c))
 		case api.ContentToolUse:
 			parts = append(parts, note(c, "a tool call is a field of the assistant message that made it"))
 		case api.ContentReasoning:
@@ -299,7 +300,7 @@ func (p *Provider) encodeAssistant(msgs []message, m api.Message, at int, discar
 		case api.ContentImage:
 			text = append(text, lib.Omitted(c, "DeepSeek refuses an image in an assistant message"))
 		case api.ContentDocument:
-			text = append(text, lib.Omitted(c, "this adapter has no encoding for a document"))
+			text = append(text, document(c).Text)
 		case api.ContentToolResult:
 			text = append(text, lib.Omitted(c, "a tool result is a message of the tool role and belongs to the user turn that answers the call"))
 		case api.ContentOpaque:
@@ -343,6 +344,8 @@ func (p *Provider) toolResult(c api.ContentToolResult) message {
 			parts = append(parts, textPart{Type: "text", Text: rc.Text})
 		case api.ContentImage:
 			parts = append(parts, p.image(rc))
+		case api.ContentDocument:
+			parts = append(parts, document(rc))
 		default:
 			parts = append(parts, note(rc, "a DeepSeek tool result carries text and images only"))
 		}
@@ -378,6 +381,19 @@ func (p *Provider) image(c api.ContentImage) any {
 	n += copy(url[n:], ";base64,")
 	base64.StdEncoding.Encode(url[n:], c.Data)
 	return imagePart{Type: "image_url", ImageURL: imageURL{URL: unsafe.String(&url[0], len(url))}}
+}
+
+func document(c api.ContentDocument) textPart {
+	if len(c.Data) == 0 {
+		return note(c, "a document with no bytes in it has nothing to send")
+	}
+	if !lib.TextMime(strings.ToLower(strings.TrimSpace(c.Mime))) {
+		return note(c, "this wire has no document form and carries only the text types, as text")
+	}
+	if !utf8.Valid(c.Data) {
+		return note(c, "a text document goes as a JSON string, which cannot carry bytes that are not UTF-8")
+	}
+	return textPart{Type: "text", Text: string(c.Data)}
 }
 
 func note(c api.Content, why string) textPart {

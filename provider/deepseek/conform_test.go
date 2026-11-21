@@ -106,6 +106,9 @@ func conformAdapter() conform.Adapter {
 			{Entry: "tools-text-turns", Carry: map[string]any{"/messages/1/reasoning_content": "greet back"}, Source: docThinking},
 			{Entry: "reasoning-unsigned", Omit: []string{"/messages/1/reasoning_content"}, Source: docThinking},
 			{Entry: "tool-error", Carry: map[string]any{"/messages/2/role": "tool", "/messages/2/content": "Error: lookup is down"}, Source: docCreate},
+			{Entry: "documents", Carry: map[string]any{"/messages/0/content": "summarize these\n\n[document omitted]\n\nplain words"}, Source: docCreate},
+			{Entry: "document-csv", Carry: map[string]any{"/messages/0/content": "summarize\n\na,b\n1,2\n"}, Source: docCreate},
+			{Entry: "tool-result-document", Carry: map[string]any{"/messages/2/content": "[document omitted]"}, Source: docCreate},
 		},
 		Live: conform.Live{
 			Env:    "DEEPSEEK_API_KEY",

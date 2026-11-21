@@ -3,7 +3,7 @@
   "messages": [
     {
       "role": "user",
-      "content": "summarize these\n\n[document omitted]\n\n[document omitted]"
+      "content": "summarize these\n\n[document omitted]\n\nplain words"
     }
   ],
   "stream": true,

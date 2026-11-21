@@ -82,7 +82,8 @@ var _ Container = Image{}
 
 // ImageMime is an image type the Claude and GPT adapters both accept. The
 // DeepSeek adapter accepts them on Flash models only and leaves a note in
-// place of each image elsewhere.
+// place of each image elsewhere. The Gemini adapter takes all four in messages
+// and tool results.
 type ImageMime string
 
 // The accepted image types.
@@ -103,17 +104,16 @@ func (m ImageMime) IsValid() bool {
 	}
 }
 
-// DocumentMime is a document type at least one provider accepts. The GPT
-// adapter takes them all. The Claude adapter, in a user message or a tool
-// result, sends DocumentPDF as a PDF, sends the text types (DocumentText,
+// DocumentMime is a document type at least one provider accepts. An adapter
+// sends a document in the best form its provider's API carries: a document
+// where the API takes the type, plain text for a text type (DocumentText,
 // DocumentMarkdown, DocumentCSV, DocumentHTML, DocumentXML, DocumentJSON,
-// DocumentYAML, DocumentRTF) as plain text, and leaves a note in place of the
-// binary Office types and of text that is not UTF-8. The DeepSeek adapter takes
-// no documents and leaves a note in place of each.
+// DocumentYAML, DocumentRTF) where it has no document form, and a note in its
+// place when nothing fits, such as text whose bytes are not UTF-8.
 type DocumentMime string
 
-// The accepted document types. Only DocumentPDF and the text types reach both
-// the Claude and GPT adapters.
+// The accepted document types. Only the text types with UTF-8 bytes reach the
+// model on every provider, in a user message or a tool result.
 const (
 	DocumentPDF      DocumentMime = "application/pdf"
 	DocumentText     DocumentMime = "text/plain"

@@ -211,7 +211,7 @@ func liveGenerate(t *testing.T, a Adapter, key string) {
 	})
 }
 
-var scrubbed = regexp.MustCompile(`"(signature|encrypted_content)":"[^"]*"`)
+var scrubbed = regexp.MustCompile(`"(signature|encrypted_content|continuation_token)":"[^"]*"`)
 
 func recorder(t *testing.T, base string, name *string) string {
 	target, err := url.Parse(base)
@@ -224,6 +224,7 @@ func recorder(t *testing.T, base string, name *string) string {
 	proxy := &httputil.ReverseProxy{
 		Rewrite: func(r *httputil.ProxyRequest) {
 			r.SetURL(target)
+			r.Out.Header.Del("Accept-Encoding")
 		},
 		ModifyResponse: func(resp *http.Response) error {
 			if !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {

@@ -148,7 +148,23 @@ func TestEncodeNotesWhatItCannotSend(t *testing.T) {
 			api.Message{Role: api.RoleUser, Content: api.Contents{api.ContentDocument{Mime: "application/pdf"}}},
 			"[document omitted]",
 		},
+		{
+			"a text document with no bytes in a user turn",
+			api.Message{Role: api.RoleUser, Content: api.Contents{api.ContentDocument{Mime: "text/plain"}}},
+			"[document omitted]",
+		},
+		{
+			"a text document that is not UTF-8 in a user turn",
+			api.Message{Role: api.RoleUser, Content: api.Contents{api.ContentDocument{Data: []byte{0xff, 0xfe, 'a'}, Mime: "text/plain"}}},
+			"[document omitted]",
+		},
 		{"image in an assistant turn", api.Message{Role: api.RoleAssistant, Content: api.Contents{image}}, "[image omitted]"},
+		{"document in an assistant turn", api.Message{Role: api.RoleAssistant, Content: api.Contents{doc}}, "[document omitted]"},
+		{
+			"text document in an assistant turn goes as its text",
+			api.Message{Role: api.RoleAssistant, Content: api.Contents{api.ContentDocument{Data: []byte("x"), Mime: " Text/Plain"}, api.ContentText{Text: "here"}}},
+			"x\n\nhere",
+		},
 		{
 			"tool call in a user turn",
 			api.Message{Role: api.RoleUser, Content: api.Contents{api.ContentToolUse{ID: "t1", Name: "x"}}},
@@ -206,6 +222,7 @@ func TestEncodeNotesAttachmentsInAToolResult(t *testing.T) {
 		{"document", doc, "the chart:\n\n[document omitted]\n\nthat is all"},
 		{"an image with no bytes", api.ContentImage{Mime: "image/png"}, "the chart:\n\n[image omitted]\n\nthat is all"},
 		{"a document with no bytes", api.ContentDocument{Mime: "application/pdf"}, "the chart:\n\n[document omitted]\n\nthat is all"},
+		{"a text document that is not UTF-8", api.ContentDocument{Data: []byte{0xff, 0xfe, 'a'}, Mime: "text/csv"}, "the chart:\n\n[document omitted]\n\nthat is all"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -229,6 +246,40 @@ func TestEncodeNotesAttachmentsInAToolResult(t *testing.T) {
 				t.Fatalf("content %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestEveryDocumentMimeEncodes(t *testing.T) {
+	p := mustNew(t, Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, WithAPIKey("k"))
+	asText := map[api.DocumentMime]bool{
+		api.DocumentText: true, api.DocumentJSON: true, api.DocumentMarkdown: true, api.DocumentCSV: true,
+		api.DocumentHTML: true, api.DocumentXML: true, api.DocumentYAML: true, api.DocumentRTF: true,
+	}
+	for _, mime := range []api.DocumentMime{
+		api.DocumentPDF, api.DocumentText, api.DocumentJSON, api.DocumentMarkdown,
+		api.DocumentCSV, api.DocumentHTML, api.DocumentXML, api.DocumentYAML,
+		api.DocumentRTF, api.DocumentDOC, api.DocumentXLS, api.DocumentDOCX,
+		api.DocumentXLSX, api.DocumentPPTX, "application/zip", " Text/Markdown ",
+	} {
+		doc := api.ContentDocument{Data: []byte("a,b\n1,2"), Mime: string(mime), Name: "a.bin"}
+		want := "[document omitted]"
+		if asText[mime] || mime == " Text/Markdown " {
+			want = "a,b\n1,2"
+		}
+		body := encodeBody(t, p, api.Request{Messages: []api.Message{{Role: api.RoleUser, Content: api.Contents{
+			api.ContentToolResult{ID: "t1", Content: api.UserContents{doc}},
+			api.ContentText{Text: "read it"},
+			doc,
+		}}}})
+		if len(body.Messages) != 2 {
+			t.Fatalf("%q: messages %+v", mime, body.Messages)
+		}
+		if got := body.Messages[0].Content.(string); got != want {
+			t.Fatalf("%q: tool content %q, want %q", mime, got, want)
+		}
+		if got := body.Messages[1].Content.(string); got != "read it\n\n"+want {
+			t.Fatalf("%q: user content %q, want %q", mime, got, "read it\n\n"+want)
+		}
 	}
 }
 

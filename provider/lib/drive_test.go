@@ -322,6 +322,32 @@ func TestIdleCoversTheWaitForHeaders(t *testing.T) {
 	}
 }
 
+// Only the caller's own ctx ending reaches End as the bare context error; a
+// transport timeout that wraps context.DeadlineExceeded reaches it as itself.
+func TestEndTellsTheCallerDeadlineFromATransportTimeout(t *testing.T) {
+	seen := make(chan error, 1)
+	c := echo(func(err error) []api.Event { seen <- err; return nil })
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	held := func(w http.ResponseWriter, r *http.Request) {
+		io.Copy(io.Discard, r.Body)
+		stall(r)
+	}
+	serve(t, ctx, c, Options{}, held)
+	if err := <-seen; err != context.DeadlineExceeded {
+		t.Fatalf("End got %v, want context.DeadlineExceeded itself", err)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(held))
+	defer srv.Close()
+	req, _ := http.NewRequest(http.MethodPost, srv.URL, strings.NewReader("{}"))
+	for range Stream(context.Background(), &http.Client{Timeout: 50 * time.Millisecond}, req, c, Options{}) {
+	}
+	if err := <-seen; err == context.DeadlineExceeded || !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("End got %v, want the client's own timeout error", err)
+	}
+}
+
 // Keepalives are bytes on the wire without being events, and holding the
 // deadline open is the whole of what they are for.
 func TestKeepalivesHoldTheDeadline(t *testing.T) {

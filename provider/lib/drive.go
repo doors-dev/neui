@@ -43,12 +43,14 @@ type Converter interface {
 
 	// End is every other ending, never called with nil: io.EOF for a body that
 	// ended between events, io.ErrUnexpectedEOF for one cut mid event, an
-	// *HTTPError for a non-200 response, ErrIdle (or the read error it caused)
-	// for the idle deadline, the cancellation error when parentCtx is
-	// cancelled, or whatever reading failed with, including an oversized
-	// frame. Only the adapter can classify any of them, so only the adapter
-	// builds the event; returning nothing ends the turn with no terminal event,
-	// which says the reply is incomplete.
+	// *HTTPError for a non-200 response, ErrIdle for the idle deadline,
+	// parentCtx.Err() itself when parentCtx has ended, or whatever the request
+	// or the reading failed with, including an oversized frame. Only parentCtx
+	// ending arrives as the bare context.Canceled or context.DeadlineExceeded,
+	// so compare with == to recognise it: a transport timeout can wrap either.
+	// Only the adapter can classify any of them, so only the adapter builds the
+	// event; returning nothing ends the turn with no terminal event, which says
+	// the reply is incomplete.
 	End(err error) []api.Event
 }
 
@@ -79,8 +81,7 @@ const DefaultIdle = 2 * time.Minute
 const DefaultMaxFrame = 64 << 20
 
 // ErrIdle is the cancellation cause Stream sets when Options.Idle elapses,
-// and what End is usually handed then; a read that fails from the same
-// cancellation can reach End first with its own error.
+// and what End is handed then, whatever the request or the read failed with.
 var ErrIdle = errors.New("neui: stream went idle")
 
 // maxErrorBody bounds what is read off a response that was not 200. At a
@@ -182,10 +183,7 @@ func (s *streamer) run(req *http.Request) {
 	}
 	resp, err := s.client.Do(req.WithContext(s.ctx))
 	if err != nil {
-		if context.Cause(s.ctx) == ErrIdle {
-			err = ErrIdle
-		}
-		s.append(s.conv.End(err))
+		s.end(err)
 		return
 	}
 	s.resetTimer()
@@ -211,15 +209,11 @@ func (s *streamer) read(body io.Reader) {
 		}
 		select {
 		case <-s.ctx.Done():
-			err := s.ctx.Err()
-			if context.Cause(s.ctx) == ErrIdle {
-				err = ErrIdle
-			}
-			s.append(s.conv.End(err))
+			s.end(s.ctx.Err())
 			return
 		case fr := <-read:
 			if fr.err != nil {
-				s.append(s.conv.End(fr.err))
+				s.end(fr.err)
 				return
 			}
 			s.resetTimer()
@@ -239,6 +233,16 @@ func (s *streamer) read(body io.Reader) {
 			s.queue.PopFront()
 		}
 	}
+}
+
+func (s *streamer) end(err error) {
+	switch {
+	case s.parentCtx.Err() != nil:
+		err = s.parentCtx.Err()
+	case context.Cause(s.ctx) == ErrIdle:
+		err = ErrIdle
+	}
+	s.append(s.conv.End(err))
 }
 
 func (s *streamer) drain() {

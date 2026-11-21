@@ -179,6 +179,26 @@ func TestEncodeInput(t *testing.T) {
 				{"role":"user","content":[{"type":"input_text","text":"again"}]}]`,
 		},
 		{
+			name: "an assistant text document goes as output_text and any other attachment leaves a note",
+			req: api.Request{Messages: []api.Message{
+				assistant(
+					api.ContentDocument{Data: []byte("plain words"), Mime: " Text/Plain "},
+					api.ContentDocument{Data: []byte(`{"a":1}`), Mime: string(api.DocumentJSON)},
+					api.ContentDocument{Data: []byte("%PDF"), Mime: string(api.DocumentPDF)},
+					api.ContentDocument{Data: []byte{0xff, 0xfe}, Mime: string(api.DocumentText)},
+					api.ContentDocument{Mime: string(api.DocumentText)},
+					api.ContentImage{Data: []byte{0x89, 0x50}, Mime: "image/png"},
+				),
+			}},
+			want: `[{"role":"assistant","content":[
+					{"type":"output_text","text":"plain words"},
+					{"type":"output_text","text":"{\"a\":1}"},
+					{"type":"output_text","text":"[document omitted]"},
+					{"type":"output_text","text":"[document omitted]"},
+					{"type":"output_text","text":"[document omitted]"},
+					{"type":"output_text","text":"[image omitted]"}]}]`,
+		},
+		{
 			name: "one text block is one part, and a call splits the run without joining anything",
 			req: api.Request{Messages: []api.Message{
 				assistant(

@@ -1,0 +1,47 @@
+{
+  "model": "gemini-4-hydrogen",
+  "stream": true,
+  "store": false,
+  "tools": [
+    {
+      "type": "function",
+      "name": "lookup",
+      "description": "Look a word up.",
+      "parameters": {
+        "properties": {
+          "q": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "q"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "type": "function",
+      "name": "clock",
+      "description": "Read the time.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ],
+  "input": [
+    {
+      "type": "user_input",
+      "content": [
+        {
+          "type": "text",
+          "text": "hi"
+        }
+      ]
+    }
+  ],
+  "generation_config": {
+    "thinking_summaries": "auto",
+    "tool_choice": "none"
+  }
+}

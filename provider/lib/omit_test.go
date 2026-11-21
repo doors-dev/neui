@@ -82,6 +82,34 @@ func TestOmittedLogsNothing(t *testing.T) {
 	}
 }
 
+func TestTextMime(t *testing.T) {
+	for mime, want := range map[string]bool{
+		string(api.DocumentText):     true,
+		string(api.DocumentMarkdown): true,
+		string(api.DocumentCSV):      true,
+		string(api.DocumentHTML):     true,
+		string(api.DocumentXML):      true,
+		string(api.DocumentJSON):     true,
+		string(api.DocumentYAML):     true,
+		string(api.DocumentRTF):      true,
+		string(api.DocumentPDF):      false,
+		string(api.DocumentDOC):      false,
+		string(api.DocumentXLS):      false,
+		string(api.DocumentDOCX):     false,
+		string(api.DocumentXLSX):     false,
+		string(api.DocumentPPTX):     false,
+		"":                           false,
+		"application/xml":            false,
+		"text/x-go":                  false,
+		" text/plain":                false,
+		"Text/Plain":                 false,
+	} {
+		if got := TextMime(mime); got != want {
+			t.Errorf("TextMime(%q) = %v, want %v", mime, got, want)
+		}
+	}
+}
+
 func TestUnknownLogsOncePerProviderAndType(t *testing.T) {
 	unknownSeen.Clear()
 	r := record(t)

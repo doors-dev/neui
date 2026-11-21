@@ -27,8 +27,9 @@
 // so a Provider that was built sends what it was given; for any other model it
 // checks no combination and every option is sent as configured. Thinking is on by default and streams back as
 // readable reasoning. Images go to deepseek-flash in user messages and tool
-// results; every other model gets a short note in place of each image, and
-// every model gets one in place of a document. Caching is automatic and needs no options:
+// results; every other model gets a short note in place of each image. A
+// document of a text type goes as plain text in every message and tool result
+// when its bytes are UTF-8; any other document gets a note. Caching is automatic and needs no options:
 // keep the tools, system prompt and history stable between turns to hit it.
 // Failures reach the thread as api.EventErr with an api.ErrCode, and a failure
 // DeepSeek reported carries an *APIError, read with errors.As.

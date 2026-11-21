@@ -1,0 +1,74 @@
+{
+  "model": "gemini-4-hydrogen",
+  "stream": true,
+  "store": false,
+  "tools": [
+    {
+      "type": "function",
+      "name": "lookup",
+      "description": "Look a word up.",
+      "parameters": {
+        "properties": {
+          "q": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "q"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "type": "function",
+      "name": "clock",
+      "description": "Read the time.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ],
+  "input": [
+    {
+      "type": "user_input",
+      "content": [
+        {
+          "type": "text",
+          "text": "look up cat"
+        }
+      ]
+    },
+    {
+      "type": "thought",
+      "signature": "skip_thought_signature_validator"
+    },
+    {
+      "type": "function_call",
+      "id": "call_1",
+      "name": "lookup",
+      "arguments": {
+        "q": "cat"
+      }
+    },
+    {
+      "type": "function_result",
+      "name": "lookup",
+      "call_id": "call_1",
+      "result": [
+        {
+          "type": "text",
+          "text": "a picture"
+        },
+        {
+          "type": "image",
+          "data": "iVBORw0KGgoAAAANSUhEUg==",
+          "mime_type": "image/png"
+        }
+      ]
+    }
+  ],
+  "generation_config": {
+    "thinking_summaries": "auto"
+  }
+}

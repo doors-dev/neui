@@ -285,8 +285,9 @@ func replayThinking(m api.Message) bool {
 // attached to it, the field the marker goes in. Content this API cannot send becomes the note omitted returns,
 // in the place the block held: a text block with no non whitespace content in
 // it, an image or a document that arrived with no bytes in it, an image of a
-// type this API does not take, a document in an assistant message or one
-// encodeDocument cannot send, thinking the message does not replay, a payload
+// type this API does not take, a document in an assistant message that is not
+// a UTF-8 text type with non whitespace content, or one encodeDocument cannot
+// send, thinking the message does not replay, a payload
 // this API did not issue, a payload whose streamed fragments never parsed back
 // into it, a tool result
 // in an assistant message or with no tool use id, a tool call with no name or
@@ -338,11 +339,15 @@ func (p *Provider) encodeContent(c api.Content, role string, replay bool, discar
 		b := &imageBlock{Type: "image", Source: base64Source{Type: "base64", MediaType: mime, Data: c.Data}}
 		return b, &b.cached, nil
 	case api.ContentDocument:
-		if role == string(api.RoleAssistant) {
-			return omitted(c, "a document is a block of the user turn on this API, which refuses one placed directly in an assistant message")
-		}
 		if len(c.Data) == 0 {
 			return omitted(c, "a document source with no bytes in it is refused by this API, and the block is stored, so it would be refused again on every later turn of the thread")
+		}
+		if role == string(api.RoleAssistant) {
+			if !lib.TextMime(strings.ToLower(strings.TrimSpace(c.Mime))) || !utf8.Valid(c.Data) || strings.TrimSpace(string(c.Data)) == "" {
+				return omitted(c, "a document is a block of the user turn on this API, which refuses one placed directly in an assistant message, so only a text document whose bytes are UTF-8 and not blank goes there, as a text block")
+			}
+			b := &textBlock{Type: "text", Text: string(c.Data)}
+			return b, &b.cached, nil
 		}
 		return encodeDocument(c)
 	case api.ContentToolUse:
@@ -409,11 +414,11 @@ func omitted(c api.Content, why string) (any, *cached, error) {
 // nowhere on this API for those bytes to go, so it becomes the note as well.
 func encodeDocument(c api.ContentDocument) (any, *cached, error) {
 	b := &documentBlock{Type: "document", Title: c.Name}
-	switch c.Mime {
-	case "application/pdf":
-		b.Source = &base64Source{Type: "base64", MediaType: c.Mime, Data: c.Data}
-	case "text/plain", "text/markdown", "text/csv", "text/html", "text/xml",
-		"application/json", "application/yaml", "application/rtf":
+	mime := strings.ToLower(strings.TrimSpace(c.Mime))
+	switch {
+	case mime == "application/pdf":
+		b.Source = &base64Source{Type: "base64", MediaType: mime, Data: c.Data}
+	case lib.TextMime(mime):
 		if !utf8.Valid(c.Data) {
 			return omitted(c, fmt.Sprintf("a document of type %q is sent as text, its bytes are not UTF-8, and the block is stored, so it would be refused again on every later turn of the thread", c.Mime))
 		}

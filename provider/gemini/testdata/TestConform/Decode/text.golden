@@ -1,0 +1,27 @@
+event: interaction.created
+data: {"event_type":"interaction.created","interaction":{"model":"gemini-4-hydrogen","object":"interaction"}}
+
+event: interaction.status_update
+data: {"event_type":"interaction.status_update","status":"in_progress"}
+
+event: step.start
+data: {"event_type":"step.start","index":0,"step":{"type":"thought"}}
+
+event: step.stop
+data: {"event_type":"step.stop","index":0}
+
+event: step.start
+data: {"event_type":"step.start","index":1,"step":{"type":"model_output"}}
+
+event: step.delta
+data: {"delta":{"text":"Hello there.","type":"text"},"event_type":"step.delta","index":1}
+
+event: step.stop
+data: {"event_type":"step.stop","index":1}
+
+event: interaction.completed
+data: {"event_type":"interaction.completed","interaction":{"created":"2026-11-19T00:00:00Z","model":"gemini-4-hydrogen","object":"interaction","service_tier":"standard","status":"completed","updated":"2026-11-19T00:00:00Z","usage":{"total_cached_tokens":0,"total_input_tokens":11,"total_output_tokens":7,"total_thought_tokens":0,"total_tokens":18}}}
+
+event: done
+data: [DONE]
+

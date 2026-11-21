@@ -31,7 +31,21 @@
       "upstreamSha256": "067ff996bab83b5945551b0c14ce3a3e567781182a1e6b176115eaea3657ff86",
       "sha256": "bd18eaaab478888ee1bc1124131e7bec457f4bee52e56306836ec0382fa07d1f",
       "fetched": "2026-11-06"
+    },
+    {
+      "file": "gemini.json.gz",
+      "source": "https://aistudio.google.com/api-reference/interactions-v1.openapi.json",
+      "commit": "",
+      "apiVersion": "2026-05-20",
+      "roots": [
+        "/components/schemas/CreateModelInteractionParams",
+        "/components/schemas/InteractionSseEvent",
+        "/paths/~1{api_version}~1interactions/post/responses/4XX/content/application~1json/schema"
+      ],
+      "upstreamSha256": "03fa4a5bee4fb8617b1f042e15335577f8a15111a97bf2ec524df36a61c30477",
+      "sha256": "d6d9369c1bc8b476b3f7f82728c0c8c554e3bbe50c83bfd741b4c16e1523ae67",
+      "fetched": "2026-11-19"
     }
   ],
-  "update": "Regenerate with: go run ./internal/testkit/conform/fetchspec. To move a pin, change its commit in fetchspec/main.go and commit the new specs and SPECS together. The Anthropic pin must describe the anthropic-version the claude adapter sends (its defaultVersion); anthropic-sdk-go b98ff33 is release 2.7.0, which sends 2026-10-21. A pin is never replaced silently: the suite checks sha256 of the decompressed spec against this file."
+  "update": "Regenerate with: go run ./internal/testkit/conform/fetchspec. To move a pin, change its commit in fetchspec/main.go and commit the new specs and SPECS together. The Anthropic pin must describe the anthropic-version the claude adapter sends (its defaultVersion); anthropic-sdk-go b98ff33 is release 2.7.0, which sends 2026-10-21. Pass pin files as arguments to refresh only those; the others keep their committed spec and SPECS entry. The Gemini pin is a URL Google replaces in place, pinned by its upstream sha256, and must describe the Api-Revision the gemini adapter sends (its defaultRevision). A pin is never replaced silently: the suite checks sha256 of the decompressed spec against this file."
 }

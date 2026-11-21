@@ -151,7 +151,7 @@ func (c *converter) End(err error) []api.Event {
 	switch {
 	case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
 		return nil
-	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+	case err == context.Canceled, err == context.DeadlineExceeded:
 		return nil
 	}
 	return []api.Event{api.EventErr{Code: api.CodeNetwork, Err: err}}

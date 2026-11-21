@@ -82,13 +82,16 @@ func TestGrammar(t *testing.T) {
 }
 
 func TestSpecsArePinned(t *testing.T) {
-	for _, file := range []string{"anthropic.json.gz", "openai.json.gz"} {
+	for _, file := range []string{"anthropic.json.gz", "openai.json.gz", "gemini.json.gz"} {
 		s, err := loadSpec(file, false, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if s.sum() != s.pin.Sha256 {
 			t.Errorf("%s: sha256 %s, SPECS pins %s", file, s.sum(), s.pin.Sha256)
+		}
+		if s.pin.Commit == "" && s.pin.Upstream == "" {
+			t.Errorf("%s: pinned by neither a commit nor an upstream sha256", file)
 		}
 		if !strings.Contains(s.pin.Source, s.pin.Commit) {
 			t.Errorf("%s: source %s is not at the pinned commit %s", file, s.pin.Source, s.pin.Commit)

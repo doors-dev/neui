@@ -1147,19 +1147,26 @@ func TestNewRefusesInvalidSettings(t *testing.T) {
 	mustNew(t, model, WithThinking(Thinking{Type: ThinkingDisabled, Display: DisplayOmitted}))
 }
 
-func TestDocumentInAssistantMessageIsANote(t *testing.T) {
-	got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{
-		Messages: []api.Message{
-			userText("hi"),
-			{Role: api.RoleAssistant, Content: api.Contents{api.ContentDocument{Data: []byte("%PDF"), Mime: string(api.DocumentPDF)}, api.ContentText{Text: "here"}}},
-		},
-	})
-	msgs := string(got["messages"])
-	if strings.Contains(msgs, `"type":"document"`) {
-		t.Fatalf("a document went out in an assistant message:\n%s", msgs)
-	}
-	if !strings.Contains(msgs, `{"role":"assistant","content":[{"type":"text","text":"[`) {
-		t.Fatalf("no note in place of the document:\n%s", msgs)
+func TestDocumentInAssistantMessage(t *testing.T) {
+	for _, c := range []struct {
+		doc  api.ContentDocument
+		want string
+	}{
+		{api.ContentDocument{Data: []byte("%PDF"), Mime: string(api.DocumentPDF)}, "[document omitted]"},
+		{api.ContentDocument{Data: []byte{0xff, 0xfe}, Mime: string(api.DocumentMarkdown)}, "[document omitted]"},
+		{api.ContentDocument{Data: []byte("  "), Mime: string(api.DocumentText)}, "[document omitted]"},
+		{api.ContentDocument{Data: []byte("# notes"), Mime: " Text/Markdown"}, "# notes"},
+	} {
+		got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), api.Request{
+			Messages: []api.Message{
+				userText("hi"),
+				{Role: api.RoleAssistant, Content: api.Contents{c.doc, api.ContentText{Text: "here"}}},
+			},
+		})
+		want := `{"role":"assistant","content":[{"type":"text","text":"` + c.want + `"},{"type":"text","text":"here"}]}`
+		if msgs := string(got["messages"]); !strings.Contains(msgs, want) {
+			t.Fatalf("%q: messages =\n%s\nwant to contain\n%s", c.doc.Mime, msgs, want)
+		}
 	}
 }
 
@@ -1228,9 +1235,17 @@ func TestDocumentsInAMessage(t *testing.T) {
 			t.Fatalf("%s: a second turn encoded differently:\n%s\n%s", c.Mime, first["messages"], second["messages"])
 		}
 	}
-	got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), user(api.ContentDocument{Data: []byte("%PDF"), Mime: string(api.DocumentPDF)}))
-	if want := `{"type":"document","source":{"type":"base64","media_type":"application/pdf","data":"JVBERg=="}}`; !strings.Contains(string(got["messages"]), want) {
-		t.Fatalf("messages =\n%s\nwant to contain\n%s", got["messages"], want)
+	for _, mime := range []string{string(api.DocumentPDF), "APPLICATION/PDF", " application/pdf "} {
+		got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), user(api.ContentDocument{Data: []byte("%PDF"), Mime: mime}))
+		if want := `{"type":"document","source":{"type":"base64","media_type":"application/pdf","data":"JVBERg=="}}`; !strings.Contains(string(got["messages"]), want) {
+			t.Fatalf("%q: messages =\n%s\nwant to contain\n%s", mime, got["messages"], want)
+		}
+	}
+	for _, mime := range []string{"Text/Plain", " text/markdown", "TEXT/CSV "} {
+		got := mustEncode(t, mustNew(t, Conf{Model: api.Model{Name: testModel}}), user(api.ContentDocument{Data: []byte("# a,b"), Mime: mime}))
+		if want := `{"type":"document","source":{"type":"text","media_type":"text/plain","data":"# a,b"}}`; !strings.Contains(string(got["messages"]), want) {
+			t.Fatalf("%q: messages =\n%s\nwant to contain\n%s", mime, got["messages"], want)
+		}
 	}
 }
 

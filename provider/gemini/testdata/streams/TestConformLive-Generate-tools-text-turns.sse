@@ -1,0 +1,30 @@
+event: interaction.created
+data: {"interaction":{"object":"interaction","model":"gemini-4-hydrogen"},"event_type":"interaction.created"}
+
+event: interaction.status_update
+data: {"status":"in_progress","event_type":"interaction.status_update"}
+
+event: step.start
+data: {"index":0,"step":{"type":"thought"},"event_type":"step.start"}
+
+event: step.delta
+data: {"index":0,"delta":{"signature":"c2NydWJiZWQ=","type":"thought_signature"},"event_type":"step.delta"}
+
+event: step.stop
+data: {"index":0,"event_type":"step.stop"}
+
+event: step.start
+data: {"index":1,"step":{"id":"call_18277506474725153466","type":"function_call","name":"lookup","arguments":{}},"event_type":"step.start"}
+
+event: step.delta
+data: {"index":1,"delta":{"arguments":"{\"q\":\"cat\"}","type":"arguments_delta"},"event_type":"step.delta"}
+
+event: step.stop
+data: {"index":1,"event_type":"step.stop"}
+
+event: interaction.completed
+data: {"interaction":{"status":"requires_action","usage":{"total_tokens":146,"total_input_tokens":126,"input_tokens_by_modality":[{"modality":"text","tokens":126}],"total_cached_tokens":0,"total_output_tokens":20,"output_tokens_by_modality":[{"modality":"text","tokens":20}],"total_tool_use_tokens":0,"total_thought_tokens":0,"initial_input_tokens":126},"created":"2026-11-19T21:50:01Z","updated":"2026-11-19T21:50:01Z","service_tier":"standard","object":"interaction","model":"gemini-4-hydrogen"},"event_type":"interaction.completed"}
+
+event: done
+data: [DONE]
+

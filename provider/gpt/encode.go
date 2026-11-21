@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 	"unsafe"
 
 	"neui.dev/api"
@@ -432,8 +433,14 @@ func (b *inputBuilder) assistant(m api.Message, at int) error {
 			}
 			flush()
 			b.items = append(b.items, resultItem(c, at))
-		case api.ContentImage, api.ContentDocument:
+		case api.ContentImage:
 			parts = append(parts, omitted(c, "the Responses API has no attachment part for the assistant role"))
+		case api.ContentDocument:
+			if len(c.Data) == 0 || !lib.TextMime(strings.ToLower(strings.TrimSpace(c.Mime))) || !utf8.Valid(c.Data) {
+				parts = append(parts, omitted(c, "the Responses API has no attachment part for the assistant role, so only a text document whose bytes are UTF-8 goes there, as text"))
+				continue
+			}
+			parts = append(parts, inputText{Type: "input_text", Text: string(c.Data)})
 		default:
 			parts = append(parts, unknown(c, at))
 		}

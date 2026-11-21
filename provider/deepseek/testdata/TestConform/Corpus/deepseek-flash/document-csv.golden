@@ -3,7 +3,7 @@
   "messages": [
     {
       "role": "user",
-      "content": "summarize\n\n[document omitted]"
+      "content": "summarize\n\na,b\n1,2\n"
     }
   ],
   "stream": true,

@@ -1,0 +1,73 @@
+: keep-alive
+
+: keep-alive
+
+: keep-alive
+
+: keep-alive
+
+: keep-alive
+
+: keep-alive
+
+: keep-alive
+
+: keep-alive
+
+: keep-alive
+
+: keep-alive
+
+: keep-alive
+
+: keep-alive
+
+: keep-alive
+
+: keep-alive
+
+: keep-alive
+
+: keep-alive
+
+: keep-alive
+
+event: interaction.created
+data: {"interaction":{"object":"interaction","model":"gemini-4-hydrogen"},"event_type":"interaction.created"}
+
+event: interaction.status_update
+data: {"status":"in_progress","event_type":"interaction.status_update"}
+
+event: step.start
+data: {"index":0,"step":{"type":"thought"},"event_type":"step.start"}
+
+event: step.delta
+data: {"index":0,"delta":{"signature":"c2NydWJiZWQ=","type":"thought_signature"},"event_type":"step.delta"}
+
+event: step.stop
+data: {"index":0,"event_type":"step.stop"}
+
+event: step.start
+data: {"index":1,"step":{"id":"call_12884261009979762074","type":"function_call","name":"get_weather","arguments":{}},"event_type":"step.start"}
+
+event: step.delta
+data: {"index":1,"delta":{"arguments":"{\"city\":\"Paris\"}","type":"arguments_delta"},"event_type":"step.delta"}
+
+event: step.stop
+data: {"index":1,"event_type":"step.stop"}
+
+event: step.start
+data: {"index":2,"step":{"id":"call_12884261009979763007","type":"function_call","name":"get_weather","arguments":{}},"event_type":"step.start"}
+
+event: step.delta
+data: {"index":2,"delta":{"arguments":"{\"city\":\"Tokyo\"}","type":"arguments_delta"},"event_type":"step.delta"}
+
+event: step.stop
+data: {"index":2,"event_type":"step.stop"}
+
+event: interaction.completed
+data: {"interaction":{"status":"requires_action","usage":{"total_tokens":212,"total_input_tokens":119,"input_tokens_by_modality":[{"modality":"text","tokens":119}],"total_cached_tokens":0,"total_output_tokens":40,"output_tokens_by_modality":[{"modality":"text","tokens":40}],"total_tool_use_tokens":0,"total_thought_tokens":53,"initial_input_tokens":119},"created":"2026-11-19T17:53:24Z","updated":"2026-11-19T17:53:24Z","service_tier":"standard","object":"interaction","model":"gemini-4-hydrogen"},"event_type":"interaction.completed"}
+
+event: done
+data: [DONE]
+

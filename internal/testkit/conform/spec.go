@@ -39,6 +39,7 @@ type pinned struct {
 	Source     string `json:"source"`
 	Commit     string `json:"commit"`
 	APIVersion string `json:"apiVersion"`
+	Upstream   string `json:"upstreamSha256"`
 	Sha256     string `json:"sha256"`
 }
 

@@ -29,6 +29,7 @@ import (
 	"neui.dev/api"
 	"neui.dev/provider/claude"
 	"neui.dev/provider/deepseek"
+	"neui.dev/provider/gemini"
 	"neui.dev/provider/gpt"
 )
 
@@ -197,6 +198,57 @@ func deepseekCorpus() []corpusCase {
 	}
 }
 
+func geminiCorpus() []corpusCase {
+	created := `{"interaction":{"object":"interaction","model":"gemini-4-hydrogen"},"event_type":"interaction.created"}`
+	status := `{"status":"in_progress","event_type":"interaction.status_update"}`
+	completed := func(st string) string {
+		return `{"interaction":{"status":"` + st + `","usage":{"total_tokens":4420,"total_input_tokens":2000,"input_tokens_by_modality":[{"modality":"text","tokens":2000}],"total_cached_tokens":1500,"total_output_tokens":1186,"total_tool_use_tokens":10,"total_thought_tokens":1224,"initial_input_tokens":2000},"created":"2026-11-19T21:27:13Z","updated":"2026-11-19T21:27:13Z","service_tier":"standard","object":"interaction","model":"gemini-4-hydrogen"},"event_type":"interaction.completed"}`
+	}
+	long := filler("answer", 110000)
+	rich := ": keep-alive\n\n" + ": keep-alive\n\n" +
+		sseFrame("interaction.created", created) +
+		sseFrame("interaction.status_update", status) +
+		sseFrame("step.start", `{"index":0,"step":{"type":"thought"},"event_type":"step.start"}`) +
+		sseFrame("step.delta", `{"index":0,"delta":{"content":{"text":`+quoted(filler("summary", 70000))+`,"type":"text"},"type":"thought_summary"},"event_type":"step.delta"}`) +
+		sseFrame("step.delta", `{"index":0,"delta":{"content":{"text":"**Checking the map**\n\nDone.\n\n\n","type":"text"},"type":"thought_summary"},"event_type":"step.delta"}`) +
+		sseFrame("step.delta", `{"index":0,"delta":{"signature":`+quoted(filler("sig", 4000))+`,"type":"thought_signature"},"event_type":"step.delta"}`) +
+		sseFrame("step.stop", `{"index":0,"event_type":"step.stop"}`) +
+		sseFrame("step.start", `{"index":1,"step":{"type":"model_output"},"event_type":"step.start"}`) +
+		sseFrame("step.delta", `{"index":1,"delta":{"text":"Hello <b> & ","type":"text"},"event_type":"step.delta"}`) +
+		splitFrame("step.delta", `{"index":1,`, `"delta":{"text":`+quoted(long)+`,`, `"type":"text"},"event_type":"step.delta"}`) +
+		sseFrame("step.delta", `{"index":1,"delta":{"text":"é 😀 <b>&amp;</b>","type":"text"},"event_type":"step.delta"}`) +
+		sseFrame("step.stop", `{"index":1,"event_type":"step.stop"}`) +
+		sseFrame("step.start", `{"index":2,"step":{"id":"call_1","type":"function_call","name":"get_weather","arguments":{}},"event_type":"step.start"}`) +
+		sseFrame("step.delta", `{"index":2,"delta":{"arguments":`+quoted(`{"city":`+quoted(filler("city", 70000))+`}`)+`,"type":"arguments_delta"},"event_type":"step.delta"}`) +
+		sseFrame("step.stop", `{"index":2,"event_type":"step.stop"}`) +
+		sseFrame("step.start", `{"index":3,"step":{"id":"call_2","type":"function_call","name":"noop","arguments":{}},"event_type":"step.start"}`) +
+		sseFrame("step.stop", `{"index":3,"event_type":"step.stop"}`) +
+		sseFrame("step.start", `{"index":4,"step":{"id":"gs_1","signature":"","type":"google_search_call","arguments":{}},"event_type":"step.start"}`) +
+		sseFrame("step.delta", `{"index":4,"delta":{"type":"google_search_call","signature":"c2ln","arguments":{"queries":["weather <SF> & co"]}},"event_type":"step.delta"}`) +
+		sseFrame("step.stop", `{"index":4,"event_type":"step.stop"}`) +
+		sseFrame("interaction.completed", completed("requires_action")) +
+		sseFrame("done", "[DONE]")
+	capped := sseFrame("interaction.created", created) +
+		sseFrame("interaction.status_update", status) +
+		sseFrame("step.start", `{"index":0,"step":{"type":"thought"},"event_type":"step.start"}`) +
+		sseFrame("step.delta", `{"index":0,"delta":{"signature":"EoMNCoANAWkU","type":"thought_signature"},"event_type":"step.delta"}`) +
+		sseFrame("step.stop", `{"index":0,"event_type":"step.stop"}`) +
+		sseFrame("step.start", `{"index":1,"step":{"type":"model_output"},"event_type":"step.start"}`) +
+		sseFrame("step.delta", `{"index":1,"delta":{"text":"partial","type":"text"},"event_type":"step.delta"}`) +
+		sseFrame("step.stop", `{"index":1,"event_type":"step.stop"}`) +
+		sseFrame("interaction.completed", completed("incomplete")) +
+		sseFrame("done", "[DONE]")
+	failed := sseFrame("interaction.created", created) +
+		sseFrame("step.start", `{"index":0,"step":{"type":"model_output"},"event_type":"step.start"}`) +
+		sseFrame("step.delta", `{"index":0,"delta":{"text":"half","type":"text"},"event_type":"step.delta"}`) +
+		sseFrame("error", `{"error":{"message":"The model is overloaded <retry>.","code":"service_unavailable"},"event_type":"error"}`)
+	return []corpusCase{
+		{name: "gemini/rich", body: rich, want: "45631c22d2d615eef250d5eac615ed8f25a8c68fecc10afd1d585d476441de57"},
+		{name: "gemini/capped", body: capped, want: "b265acbdcc2ce0b4f9bdce28bcf0e01b18cd401fd1a72406bc1289b154406cb5"},
+		{name: "gemini/error", body: failed, want: "c5c26f8d7b4c5d2c319b7200e3ca6d11e8b777688c5dc78244c97cc7b6abd22d"},
+	}
+}
+
 func chunked(body string, done chan<- struct{}) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer close(done)
@@ -245,6 +297,8 @@ func corpusProvider(t *testing.T, name, url string) streamer {
 		p, err = gpt.New(gpt.Conf{Model: api.Model{Name: "gpt-5.6-sol"}}, gpt.WithAPIKey("k"), gpt.WithBaseURL(url))
 	case "deepseek":
 		p, err = deepseek.New(deepseek.Conf{Model: api.Model{Name: "deepseek-v4-pro"}}, deepseek.WithAPIKey("k"), deepseek.WithBaseURL(url))
+	case "gemini":
+		p, err = gemini.New(gemini.Conf{Model: api.Model{Name: "gemini-4-hydrogen"}}, gemini.WithAPIKey("k"), gemini.WithBaseURL(url))
 	}
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -253,7 +307,7 @@ func corpusProvider(t *testing.T, name, url string) streamer {
 }
 
 func corpus() []corpusCase {
-	return append(append(claudeCorpus(), gptCorpus()...), deepseekCorpus()...)
+	return append(append(append(claudeCorpus(), gptCorpus()...), deepseekCorpus()...), geminiCorpus()...)
 }
 
 func runCorpus(t *testing.T, c corpusCase, late bool) []api.Event {

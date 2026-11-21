@@ -30,6 +30,7 @@ import (
 	"neui.dev/nekit"
 	"neui.dev/provider/claude"
 	"neui.dev/provider/deepseek"
+	"neui.dev/provider/gemini"
 	"neui.dev/provider/gpt"
 )
 
@@ -59,8 +60,10 @@ func main() {
 		provider, err = claude.New(claude.Conf{Model: claude.Haiku55},
 			claude.WithThinking(claude.Thinking{Type: claude.ThinkingAdaptive, Display: claude.DisplaySummarized}),
 			claude.WithEffort(claude.EffortMedium))
+	case os.Getenv("GEMINI_API_KEY") != "":
+		provider, err = gemini.New(gemini.Conf{Model: gemini.Hydrogen4}, gemini.WithEffort(gemini.EffortMedium))
 	default:
-		log.Fatal("set LOCAL_LLM_URL, DEEPSEEK_API_KEY, OPENAI_API_KEY or ANTHROPIC_API_KEY")
+		log.Fatal("set LOCAL_LLM_URL, DEEPSEEK_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY or GEMINI_API_KEY")
 	}
 	if err != nil {
 		log.Fatal(err)
