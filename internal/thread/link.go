@@ -47,7 +47,7 @@ func newLink(thread *thread, backend *common.Backend, page page.Page, meta any) 
 	ctx, cancel := context.WithCancel(backend.Context())
 	toolkit := toolkit.NewToolkit(ctx, backend.Modules()...)
 	linkCtx, linkCancel := context.WithCancelCause(ctx)
-	pageModule := page.Module()
+	pageModule := page.Module(linkCtx)
 	linkToolkit := toolkit.Wrap(linkCtx, func(context.Context) common.Module { return pageModule })
 	return &link{
 		thread:      thread,
@@ -192,7 +192,7 @@ func (l *link) useTools(roundID api.RoundID, tools []api.ContentToolUse) (<-chan
 				size, mediaSize = size+len(note), 0
 			}
 			if size > budget {
-				note := replay.OmittedNote(size)
+				note := replay.OmittedNote(size, common.LightMode(l.ctx))
 				res = api.ContentToolResult{ID: res.ID, Content: api.UserContents{api.ContentText{Text: note}}, Error: res.Error}
 				size, mediaSize = len(note), 0
 			}
@@ -224,7 +224,7 @@ func (l *link) dispose() {
 func (l *link) inherit(page page.Page, meta any) *link {
 	l.linkCancel(common.ErrRelinked)
 	linkCtx, linkCancel := context.WithCancelCause(l.ctx)
-	pageModule := page.Module()
+	pageModule := page.Module(linkCtx)
 	linkToolkit := l.toolkit.Wrap(linkCtx, func(context.Context) common.Module { return pageModule })
 	return &link{
 		thread:      l.thread,

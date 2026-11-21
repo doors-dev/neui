@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"slices"
 	"strings"
 	"testing"
 
@@ -41,14 +42,16 @@ func content(t *testing.T, fs api.FS, name string) string {
 }
 
 func TestRegister(t *testing.T) {
-	m := tools.NewModule("files", "")
-	Register(m)
-	count := 0
-	for range m.List() {
-		count++
-	}
-	if count != 5 {
-		t.Fatalf("tools = %d, want 5", count)
+	for light, want := range map[bool][]string{false: {"append", "edit", "insert", "replace", "write"}, true: {"edit", "write"}} {
+		m := tools.NewModule("files", "")
+		Register(m, light)
+		var names []string
+		for _, tool := range m.List() {
+			names = append(names, tool.Name())
+		}
+		if !slices.Equal(names, want) {
+			t.Fatalf("light %v registers %v, want %v", light, names, want)
+		}
 	}
 }
 

@@ -119,7 +119,7 @@ func Module(c Config) common.ModuleFactory {
 	if backend != nil {
 		desc += searchModuleDesc
 	}
-	return func(context.Context) common.Module {
+	return func(ctx context.Context) common.Module {
 		m := tools.NewModule("web", desc)
 		w := &module{
 			conf:    c,
@@ -136,7 +136,7 @@ func Module(c Config) common.ModuleFactory {
 			panic(err)
 		}
 		if backend != nil {
-			if _, err := m.Add("search", searchDesc, w.search); err != nil {
+			if _, err := m.Add("search", searchDesc(common.LightMode(ctx)), w.search); err != nil {
 				panic(err)
 			}
 		}

@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"neui.dev/api"
+	"neui.dev/internal/common"
 )
 
 type fakeBackend struct {
@@ -173,5 +174,18 @@ func TestSearchForeignCancelIsUnavailable(t *testing.T) {
 	search, _ := searchTool(t, Config{Search: &fakeBackend{err: context.Canceled}})
 	if _, err := search(`{"query":"widgets"}`); err == nil || !strings.Contains(err.Error(), "unavailable") {
 		t.Errorf("a backend's own cancellation must be reported as a failure: %v", err)
+	}
+}
+
+func TestSearchDescNamesScriptsOutsideLightMode(t *testing.T) {
+	factory := Module(Config{Search: &fakeBackend{}})
+	for _, light := range []bool{false, true} {
+		search, ok := factory(context.WithValue(context.Background(), common.LightModeKey{}, light)).Get("search")
+		if !ok {
+			t.Fatal("no search tool")
+		}
+		if got := strings.Contains(search.Desc(), "script"); got == light {
+			t.Fatalf("light %v: the search description reads %q", light, search.Desc())
+		}
 	}
 }

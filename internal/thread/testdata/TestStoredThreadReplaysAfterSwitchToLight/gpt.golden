@@ -1,0 +1,94 @@
+{
+  "include": [
+    "reasoning.encrypted_content"
+  ],
+  "input": [
+    {
+      "content": [
+        {
+          "text": "run it",
+          "type": "input_text"
+        },
+        {
+          "text": "\u003c260 bytes\u003e",
+          "type": "input_text"
+        }
+      ],
+      "role": "user"
+    },
+    {
+      "arguments": "{\"code\":\"return 1 + 1\",\"comment\":\"adds\"}",
+      "call_id": "call-js__run",
+      "name": "js__run",
+      "type": "function_call"
+    },
+    {
+      "call_id": "call-js__run",
+      "output": [
+        {
+          "text": "{\"result\":2,\"logFile\":\"inline.log\"}",
+          "type": "input_text"
+        }
+      ],
+      "type": "function_call_output"
+    },
+    {
+      "arguments": "{\"code\":\"ui.draw()\",\"comment\":\"the board app\",\"path\":\"board\",\"revision\":\"0\"}",
+      "call_id": "call-page__island_begin",
+      "name": "page__island_begin",
+      "type": "function_call"
+    },
+    {
+      "call_id": "call-page__island_begin",
+      "output": [
+        {
+          "text": "Error:",
+          "type": "input_text"
+        },
+        {
+          "text": "space \"board\" under \"\": no such space: it was removed or renamed since you saw its path; call tree to see the current spaces",
+          "type": "input_text"
+        }
+      ],
+      "type": "function_call_output"
+    },
+    {
+      "content": [
+        {
+          "text": "done",
+          "type": "output_text"
+        }
+      ],
+      "role": "assistant"
+    },
+    {
+      "content": [
+        {
+          "text": "go on",
+          "type": "input_text"
+        }
+      ],
+      "role": "user"
+    }
+  ],
+  "instructions": "\u003c3057 bytes\u003e",
+  "model": "gpt-6-luna",
+  "store": false,
+  "stream": true,
+  "stream_options": {
+    "include_obfuscation": false
+  },
+  "tools": [
+    "page__click",
+    "page__focus",
+    "page__read",
+    "page__sync",
+    "page__tool",
+    "page__tree",
+    "page__write",
+    "time__cancel",
+    "time__client",
+    "time__now",
+    "time__timer"
+  ]
+}

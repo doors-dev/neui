@@ -944,6 +944,54 @@ func TestResultsFitTheRoundItemBudget(t *testing.T) {
 	}
 }
 
+func TestLightModeTexts(t *testing.T) {
+	tool := func(name string) map[string]any {
+		return map[string]any{"path": "big", "tool": name, "arg": map[string]any{}}
+	}
+	p := testkit.NewProvider(api.Model{Name: "fake", Context: 2000},
+		testkit.Call("page__sync", map[string]any{"path": "big"}),
+		testkit.Call("page__tool", tool("dump")),
+		testkit.Call("page__tool", tool("grow")),
+		testkit.Call("page__tool", tool("dump")),
+		testkit.Call("page__sync", map[string]any{"path": "big"}),
+		testkit.Say("done"),
+	)
+	c := stack.Page(t, stack.Host{Provider: p, Page: big(), Options: []common.Option{common.OptionLightMode(true)}})
+	c.Send("dump")
+	c.Wait()
+	result := func(i int) api.ContentToolResult { return testkit.Results(p.Request(t, i))[0] }
+	var synced struct {
+		Tools []struct{ Name, Desc string }
+	}
+	testkit.Decode(t, result(1), &synced)
+	if len(synced.Tools) != 2 || synced.Tools[0].Desc != "dumps" || synced.Tools[1].Desc != "grows" {
+		t.Fatalf("the sync listed %+v, want the tools' descriptions alone", synced.Tools)
+	}
+	var dumped toolOutput
+	testkit.Decode(t, result(2), &dumped)
+	if note, _ := dumped.Output.(string); note != "Result omitted: it was 2.9 KB, more than a turn's tool results can hold. Ask for less." {
+		t.Fatalf("the dump answered %+v, want the light omission note in output", dumped)
+	}
+	plain(t, result(4), "not done: this space has not been read as it is now, and it is too large to show in a result: tell the user this part of the page is out of your reach")
+	refused(t, result(5), "the space is too large for a result: tell the user this part of the page is out of your reach")
+	request := p.Request(t, 0)
+	for _, tool := range request.Tools {
+		if strings.HasPrefix(tool.Name, "page__island") || strings.Contains(tool.Desc, "Output schema") {
+			t.Fatalf("light mode offers %s: %s", tool.Name, tool.Desc)
+		}
+	}
+	if len(request.Tools) != 7 {
+		t.Fatalf("light mode offers %d page tools, want 7", len(request.Tools))
+	}
+	for i := 1; i <= 5; i++ {
+		for _, c := range result(i).Content {
+			if text, _ := c.(api.ContentText); strings.Contains(text.Text, "script") || strings.Contains(text.Text, "Output schema") {
+				t.Fatalf("result %d mentions scripts or output schemas: %s", i, text.Text)
+			}
+		}
+	}
+}
+
 func TestFailuresFitTheRoundItemBudget(t *testing.T) {
 	model := api.Model{Name: "fake", Context: 2000}
 	budget := replay.RoundItemBudget(common.ConfigDefaults(api.ThreadConfig{}), model)

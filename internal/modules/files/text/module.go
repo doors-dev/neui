@@ -31,7 +31,14 @@ import (
 	"neui.dev/internal/tools"
 )
 
-const writeDesc = `Write a whole text file, replacing existing content, creating parent directories. Content with \r keeps its line breaks as given.`
+func writeDesc(light bool) string {
+	desc := `Write a whole text file, replacing existing content`
+	if light {
+		return desc + `.`
+	}
+	return desc + `, creating parent directories. Content with \r keeps its line breaks as given.`
+}
+
 const appendDesc = `Append to the end of a text file, creating it if missing.`
 const editDesc = `Replace text in a file; read the file first.`
 const replaceDesc = `Replace text matching a regular expression.`
@@ -49,12 +56,14 @@ var (
 	locks   = map[string]*pathLock{}
 )
 
-func Register(m tools.Module) {
-	add(m, "write", writeDesc, writeTool)
-	add(m, "append", appendDesc, appendTool)
+func Register(m tools.Module, light bool) {
+	add(m, "write", writeDesc(light), writeTool)
 	add(m, "edit", editDesc, editTool)
-	add(m, "replace", replaceDesc, replaceTool)
-	add(m, "insert", insertDesc, insertTool)
+	if !light {
+		add(m, "append", appendDesc, appendTool)
+		add(m, "replace", replaceDesc, replaceTool)
+		add(m, "insert", insertDesc, insertTool)
+	}
 }
 
 func add[I any, O any](m tools.Module, name string, desc string, f func(ctx context.Context, input I) (O, error)) {

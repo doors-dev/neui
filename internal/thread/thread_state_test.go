@@ -55,17 +55,18 @@ func stubThread(t *testing.T, id api.ThreadID, p api.Provider, config api.Thread
 	th := &thread{id: id, ch: make(chan Command)}
 	pg := page.NewPage(ctx)
 	th.link = &link{
-		thread:     th,
-		backend:    backend,
-		fs:         fs,
-		ctx:        ctx,
-		cancel:     func() {},
-		linkCtx:    linkCtx,
-		linkCancel: linkCancel,
-		ch:         make(chan Message),
-		page:       pg,
-		pageModule: pg.Module(),
-		linkTasks:  &linkTasks{thread: th},
+		thread:      th,
+		backend:     backend,
+		fs:          fs,
+		ctx:         ctx,
+		cancel:      func() {},
+		linkCtx:     linkCtx,
+		linkCancel:  linkCancel,
+		ch:          make(chan Message),
+		linkToolkit: toolkit.NewToolkit(linkCtx),
+		page:        pg,
+		pageModule:  pg.Module(linkCtx),
+		linkTasks:   &linkTasks{thread: th},
 	}
 	r := replay.NewReplay(ctx, id, messages, backend.Config(), p.Model())
 	if _, err := r.Create(); err != nil {

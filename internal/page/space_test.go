@@ -75,7 +75,7 @@ func tree(paths ...string) *page {
 func (p *page) restamp() {
 	var walk func(s *space)
 	walk = func(s *space) {
-		s.digest = s.fresh()
+		s.digest, s.plain = s.fresh()
 		for _, c := range s.children {
 			walk(c)
 		}
@@ -84,7 +84,7 @@ func (p *page) restamp() {
 }
 
 func (p *page) at(path string) *space {
-	s, err := p.space.find(path)
+	s, err := p.space.find(path, false)
 	if err != nil {
 		panic(err)
 	}
@@ -109,7 +109,7 @@ func TestDigestTreatsDataAsSet(t *testing.T) {
 		t.Fatal("a duplicate changed the digest")
 	}
 	s.data = []*data{b, a, b}
-	if got := s.state().Data; len(got) != 2 || got[0].Text != "b" || got[1].Text != "a" {
+	if got := s.state(false).Data; len(got) != 2 || got[0].Text != "b" || got[1].Text != "a" {
 		t.Fatalf("the state lists %+v, want b and a once each", got)
 	}
 	s.count(2, b.hash, -1)
@@ -127,15 +127,15 @@ func TestDiffShowsWhatChanged(t *testing.T) {
 	s := p.at("cart")
 	s.data = []*data{note("one")}
 	p.restamp()
-	old := s.snapshot()
-	if d := s.diff(old); d == nil || !reflect.ValueOf(*d).IsZero() {
+	old := s.snapshot(false)
+	if d := s.diff(old, false); d == nil || !reflect.ValueOf(*d).IsZero() {
 		t.Fatalf("an unchanged space diffs as %+v, want an empty diff", d)
 	}
 	s.data = nil
 	s.children = s.children[:1]
 	s.children = append(s.children, &space{root: p, name: "zip", path: "cart.zip"})
 	p.restamp()
-	d := s.diff(old)
+	d := s.diff(old, false)
 	if d.Data == nil || len(d.Data) != 0 || d.Tools != nil || d.Inputs != nil {
 		t.Fatalf("the diff is %+v, want the emptied data list alone besides children", d)
 	}
@@ -172,9 +172,9 @@ func TestDiffAndChangesShowToolsAndInputs(t *testing.T) {
 	p.at("inputs").list = []input{field("x", RW)}
 	p.at("all").tools = []*tool{kit("t", 1)}
 	p.restamp()
-	old := form.snapshot()
+	old := form.snapshot(false)
 	before := map[string][4]uint64{}
-	p.space.digests(before)
+	p.space.digests(before, false)
 	form.tools = []*tool{kit("b", 2), kit("c", 1)}
 	form.list = []input{field("i2", R), field("i3", RW)}
 	p.at("tools").tools = []*tool{kit("t", 2)}
@@ -184,7 +184,7 @@ func TestDiffAndChangesShowToolsAndInputs(t *testing.T) {
 	all.list = []input{field("y", RW)}
 	all.data = []*data{note("new")}
 	p.restamp()
-	raw, err := json.Marshal(form.diff(old))
+	raw, err := json.Marshal(form.diff(old, false))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +192,7 @@ func TestDiffAndChangesShowToolsAndInputs(t *testing.T) {
 	if string(raw) != want {
 		t.Fatalf("the diff is %s, want %s: a changed tool or input is removed and added again", raw, want)
 	}
-	raw, err = json.Marshal(p.space.changes(before, "form"))
+	raw, err = json.Marshal(p.space.changes(before, "form", false))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,7 +232,7 @@ func TestTreeMarksWhatItLeavesOut(t *testing.T) {
 		paths = append(paths, fmt.Sprintf("list.r%02d", i))
 	}
 	p := tree(append(paths, "a.b.c.d.e")...)
-	root := p.space.tree(3)
+	root := p.space.tree(3, false)
 	if root.More != 0 || len(root.Children) != 2 {
 		t.Fatalf("the root shows %d children and more %d, want a and list", len(root.Children), root.More)
 	}
@@ -244,7 +244,7 @@ func TestTreeMarksWhatItLeavesOut(t *testing.T) {
 	if c.Name != "c" || c.Children != nil || c.More != 1 {
 		t.Fatalf("level 3 shows %+v, want c with more 1", c)
 	}
-	if alone := p.at("list").tree(0); alone.Name != "list" || alone.Children != nil || alone.More != 25 {
+	if alone := p.at("list").tree(0, false); alone.Name != "list" || alone.Children != nil || alone.More != 25 {
 		t.Fatalf("depth 0 shows %+v, want the node alone with more 25", alone)
 	}
 }
@@ -258,11 +258,11 @@ func TestTreeCountsWhatEachSpaceHolds(t *testing.T) {
 	field.hash = xxh3.Hash(field.raw)
 	form.list = []input{field, field}
 	form.data = []*data{note("x"), note("y"), note("x")}
-	got := p.space.tree(1).Children[0]
+	got := p.space.tree(1, false).Children[0]
 	if got.Tools != 2 || got.Inputs != 1 || got.Data != 2 {
 		t.Fatalf("form counts %d tools, %d inputs and %d data, want 2, 1 and 2: inputs and data that cannot be told apart are listed once", got.Tools, got.Inputs, got.Data)
 	}
-	if root := p.space.tree(0); root.Tools != 0 || root.Inputs != 0 || root.Data != 0 {
+	if root := p.space.tree(0, false); root.Tools != 0 || root.Inputs != 0 || root.Data != 0 {
 		t.Fatalf("the empty root counts %+v, want nothing", root)
 	}
 }
@@ -270,7 +270,7 @@ func TestTreeCountsWhatEachSpaceHolds(t *testing.T) {
 func TestChangesListOneEntryPerSubtree(t *testing.T) {
 	p := tree("a", "b.gone.deep", "c.x")
 	before := map[string][4]uint64{}
-	p.space.digests(before)
+	p.space.digests(before, false)
 	p.at("a").data = []*data{note("new")}
 	p.at("b").children = nil
 	p.at("c").children = append(p.at("c").children, &space{root: p, name: "y", path: "c.y"})
@@ -278,7 +278,7 @@ func TestChangesListOneEntryPerSubtree(t *testing.T) {
 	n.children = []*space{{root: p, name: "inner", path: "n.inner"}}
 	p.space.children = append(p.space.children, n)
 	p.restamp()
-	raw, err := json.Marshal(p.space.changes(before, "c"))
+	raw, err := json.Marshal(p.space.changes(before, "c", false))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -297,7 +297,7 @@ func TestChangesFoldPastFifty(t *testing.T) {
 	}
 	p := tree(append(paths, "header", "aside")...)
 	before := map[string][4]uint64{}
-	p.space.digests(before)
+	p.space.digests(before, false)
 	for _, path := range paths {
 		p.at(path).data = []*data{note(path)}
 	}
@@ -306,7 +306,7 @@ func TestChangesFoldPastFifty(t *testing.T) {
 		p.space.children = append(p.space.children, &space{root: p, name: fmt.Sprintf("toast%d", i), path: fmt.Sprintf("toast%d", i)})
 	}
 	p.restamp()
-	got := p.space.changes(before, "aside")
+	got := p.space.changes(before, "aside", false)
 	if len(got) > 50 {
 		t.Fatalf("%d entries, want at most 50", len(got))
 	}
@@ -339,14 +339,14 @@ func TestChangesFoldAddedWhenMoreThanTwentyFive(t *testing.T) {
 	}
 	p := tree(paths...)
 	before := map[string][4]uint64{}
-	p.space.digests(before)
+	p.space.digests(before, false)
 	orders := p.at("orders")
 	orders.children = nil
 	for i := range 60 {
 		orders.children = append(orders.children, &space{root: p, name: fmt.Sprintf("k%02d", i), path: fmt.Sprintf("orders.k%02d", i)})
 	}
 	p.restamp()
-	got := p.space.changes(before, "")
+	got := p.space.changes(before, "", false)
 	if len(got) != 1 || got[0].Path != "orders" || got[0].Spaces != 120 || !slices.Equal(got[0].Changed, []string{"children"}) {
 		t.Fatalf("a re-rendered list of 60 lists %+v, want one orders entry standing for 120 spaces", got)
 	}
@@ -365,12 +365,12 @@ func TestChangesFoldLargestClustersFirst(t *testing.T) {
 	}
 	p := tree(paths...)
 	before := map[string][4]uint64{}
-	p.space.digests(before)
+	p.space.digests(before, false)
 	for _, path := range paths {
 		p.at(path).data = []*data{note(path)}
 	}
 	p.restamp()
-	got := p.space.changes(before, "")
+	got := p.space.changes(before, "", false)
 	var folded, listed []string
 	for _, c := range got {
 		if c.Spaces > 0 {
@@ -392,7 +392,7 @@ func TestChangesKeepTwentyFiveAdded(t *testing.T) {
 		}
 		p := tree(append(paths, "list")...)
 		before := map[string][4]uint64{}
-		p.space.digests(before)
+		p.space.digests(before, false)
 		for _, path := range paths {
 			p.at(path).data = []*data{note(path)}
 		}
@@ -401,7 +401,7 @@ func TestChangesKeepTwentyFiveAdded(t *testing.T) {
 			list.children = append(list.children, &space{root: p, name: fmt.Sprintf("k%02d", i), path: fmt.Sprintf("list.k%02d", i)})
 		}
 		p.restamp()
-		got := p.space.changes(before, "")
+		got := p.space.changes(before, "", false)
 		added := 0
 		for _, c := range got {
 			if c.Added {
@@ -411,6 +411,20 @@ func TestChangesKeepTwentyFiveAdded(t *testing.T) {
 		want := map[int][2]int{25: {26, 25}, 26: {2, 0}}[n]
 		if len(got) != want[0] || added != want[1] {
 			t.Fatalf("%d added and 26 changed folded to %d entries with %d added listed, want %d and %d", n, len(got), added, want[0], want[1])
+		}
+	}
+}
+
+func TestTooLargeErrorsKeepTheirSentinels(t *testing.T) {
+	if got := refusedTooLarge(false).Error(); got != "not done: this space has not been read as it is now, and it is too large to show in a result: act on it from a script, syncing it there first; without a script tool, tell the user this part of the page is out of your reach" {
+		t.Fatalf("full-mode refusal reads %q", got)
+	}
+	if got := spaceTooLarge(false).Error(); got != "the space is too large for a result: sync it and act on it from a script, where results have no size limit" {
+		t.Fatalf("full-mode sync error reads %q", got)
+	}
+	for _, light := range []bool{false, true} {
+		if !errors.Is(refusedTooLarge(light), errRefusedTooLarge) || !errors.Is(spaceTooLarge(light), errSpaceTooLarge) {
+			t.Fatalf("light %v: an error lost its sentinel", light)
 		}
 	}
 }

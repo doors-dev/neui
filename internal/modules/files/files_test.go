@@ -30,6 +30,7 @@ import (
 	"testing"
 
 	"neui.dev/api"
+	"neui.dev/internal/common"
 	"neui.dev/internal/storage/local"
 	"neui.dev/internal/testkit"
 	"neui.dev/internal/tools"
@@ -64,6 +65,13 @@ func TestModuleBuilds(t *testing.T) {
 	}
 	if count != 19 {
 		t.Fatalf("tools = %d, want 19", count)
+	}
+	var names []string
+	for _, tool := range Module(context.WithValue(context.Background(), common.LightModeKey{}, true)).List() {
+		names = append(names, tool.Name())
+	}
+	if want := []string{"copy", "delete", "edit", "grep", "list", "read", "readDocument", "readImage", "write"}; !slices.Equal(names, want) {
+		t.Fatalf("light mode registers %v, want %v", names, want)
 	}
 }
 
@@ -102,6 +110,9 @@ func TestReadPaging(t *testing.T) {
 	write(t, fs, "bin", "a\x00b")
 	if _, err := read(c.Ctx(), readArg{Path: "bin"}); err == nil || !strings.Contains(err.Error(), "readBytes") {
 		t.Fatalf("binary: %v", err)
+	}
+	if _, err := read(context.WithValue(c.Ctx(), common.LightModeKey{}, true), readArg{Path: "bin"}); err == nil || strings.Contains(err.Error(), "readBytes") || !strings.Contains(err.Error(), "readDocument") {
+		t.Fatalf("binary in light mode: %v", err)
 	}
 }
 
@@ -858,7 +869,7 @@ func TestReadFromScriptIsTheText(t *testing.T) {
 	c := testkit.NewController(t, testkit.Setup{})
 	content := `{"cards":[1,2]}` + "\n" + strings.Repeat("y", 3000) + "\r\nlast"
 	write(t, c.FS(), "a.txt", content)
-	tool, err := tools.NewTool("read", readDesc, readTool, false)
+	tool, err := tools.NewTool("read", readDesc(false), readTool, false)
 	if err != nil {
 		t.Fatal(err)
 	}

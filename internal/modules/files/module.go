@@ -22,25 +22,33 @@ import (
 	"neui.dev/internal/tools"
 )
 
-const moduleDesc = `The workspace is your scratch filesystem: plain relative paths, wiped when the thread closes. Two flat virtual dirs at its root persist in file storage: user_uploads/ holds the user's attached files, read-only; agent_uploads/ is your persistent store — copy anything you may need later, such as MEMORY.md, notes or generated results, to agent_uploads/<name> to keep it across sessions. Copy a stored file into the workspace to edit it or when a tool needs a local path. Only stored files can be shared into the chat, so copy a workspace file to agent_uploads/<name> first. A markdown link like [report.pdf](file:///agent_uploads/report.pdf) or [notes.txt](file:///user_uploads/notes.txt) renders as a download, and ![chart](file:///agent_uploads/chart.png) renders an image inline. The read tool shows line breaks as \n; write, append, edit, replace and insert take them as \n, and a file they change keeps its own CRLF or LF endings and BOM.`
+func moduleDesc(light bool) string {
+	if light {
+		return `The workspace is temporary and takes plain relative paths, like report.md. user_uploads/ holds the files the user attached, read-only: an attachment arrives as a link like [notes.txt](file:///user_uploads/notes.txt), and its path is user_uploads/notes.txt. agent_uploads/ holds the files you give the user, and they stay with this conversation. Neither takes direct writes. To change an upload, copy it into the workspace and edit the copy. To give the user a file, write it in the workspace, copy it to agent_uploads/<name> and link it in your reply: [report.md](file:///agent_uploads/report.md) shows a download, ![chart](file:///agent_uploads/chart.png) shows the image.`
+	}
+	return `The workspace is your scratch filesystem: plain relative paths, wiped when the thread closes. Two flat virtual dirs at its root persist in file storage: user_uploads/ holds the user's attached files, read-only; agent_uploads/ is your persistent store — copy anything you may need later, such as MEMORY.md, notes or generated results, to agent_uploads/<name> to keep it across sessions. Copy a stored file into the workspace to edit it or when a tool needs a local path. Only stored files can be shared into the chat, so copy a workspace file to agent_uploads/<name> first. A markdown link like [report.pdf](file:///agent_uploads/report.pdf) or [notes.txt](file:///user_uploads/notes.txt) renders as a download, and ![chart](file:///agent_uploads/chart.png) renders an image inline. The read tool shows line breaks as \n; write, append, edit, replace and insert take them as \n, and a file they change keeps its own CRLF or LF endings and BOM.`
+}
 
-func Module(context.Context) common.Module {
-	m := tools.NewModule("files", moduleDesc)
+func Module(ctx context.Context) common.Module {
+	light := common.LightMode(ctx)
+	m := tools.NewModule("files", moduleDesc(light))
 	add(m, "list", listDesc, listTool)
-	add(m, "stat", statDesc, statTool)
-	add(m, "read", readDesc, readTool)
-	add(m, "readBytes", readBytesDesc, readBytesTool)
-	add(m, "writeBytes", writeBytesDesc, writeBytesTool)
+	add(m, "read", readDesc(light), readTool)
 	add(m, "readImage", readImageDesc, readImageTool)
-	add(m, "readDocument", readDocumentDesc, readDocumentTool)
+	add(m, "readDocument", readDocumentDesc(light), readDocumentTool)
 	add(m, "copy", copyDesc, copyTool)
-	add(m, "move", moveDesc, moveTool)
 	add(m, "delete", deleteDesc, deleteTool)
-	add(m, "zip", zipDesc, zipTool)
-	add(m, "unzip", unzipDesc, unzipTool)
 	add(m, "grep", grepDesc, grepTool)
-	add(m, "glob", globDesc, globTool)
-	text.Register(m)
+	if !light {
+		add(m, "stat", statDesc, statTool)
+		add(m, "readBytes", readBytesDesc, readBytesTool)
+		add(m, "writeBytes", writeBytesDesc, writeBytesTool)
+		add(m, "move", moveDesc, moveTool)
+		add(m, "zip", zipDesc, zipTool)
+		add(m, "unzip", unzipDesc, unzipTool)
+		add(m, "glob", globDesc, globTool)
+	}
+	text.Register(m, light)
 	return m
 }
 

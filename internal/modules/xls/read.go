@@ -29,7 +29,14 @@ const profileSampleRows = 5
 
 const sheetsDesc = `List a workbook's sheets with row and column counts, tables, merged ranges and the autofilter.`
 const profileDesc = `Profile a sheet or range: its header row, per-column types, data row count and a sample.`
-const readDesc = `Read cell values from a sheet, page by page. A merged cell reports its value at its top-left cell only.`
+
+func readDesc(light bool) string {
+	if light {
+		return `Read cell values from a sheet, a page of rows at a time; when truncated is true, call again with offset set to nextOffset. A merged cell shows its value in its top-left cell only.`
+	}
+	return `Read cell values from a sheet, page by page. A merged cell reports its value at its top-left cell only.`
+}
+
 const findDesc = `Find cells whose value contains a substring.`
 
 type sheetsArg struct {
@@ -70,6 +77,13 @@ type readArg struct {
 	Offset uint   `json:"offset" description:"0-based row within the range to start at; 0 is the range's first row, header included"`
 	Limit  uint   `json:"limit" description:"max rows to return; the server caps large values — rely on truncated and nextOffset to page"`
 	Raw    bool   `json:"raw" description:"underlying values instead of formatted ones: date serials, unformatted numbers, formulas"`
+}
+
+type lightReadArg struct {
+	Path   string `json:"path" required:"true"`
+	Sheet  string `json:"sheet" required:"true"`
+	Range  string `json:"range" description:"like A1:D20, header row included; default the whole sheet"`
+	Offset uint   `json:"offset" description:"0-based row within the range to start at; 0 is the range's first row, header included"`
 }
 
 type readResult struct {

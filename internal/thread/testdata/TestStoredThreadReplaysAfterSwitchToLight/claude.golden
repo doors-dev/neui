@@ -1,0 +1,131 @@
+{
+  "max_tokens": 16384,
+  "messages": [
+    {
+      "content": [
+        {
+          "text": "run it\n",
+          "type": "text"
+        },
+        {
+          "text": "\u003c260 bytes\u003e",
+          "type": "text"
+        }
+      ],
+      "role": "user"
+    },
+    {
+      "content": [
+        {
+          "id": "call-js__run",
+          "input": {
+            "code": "return 1 + 1",
+            "comment": "adds"
+          },
+          "name": "js__run",
+          "type": "tool_use"
+        }
+      ],
+      "role": "assistant"
+    },
+    {
+      "content": [
+        {
+          "content": [
+            {
+              "text": "{\"result\":2,\"logFile\":\"inline.log\"}",
+              "type": "text"
+            }
+          ],
+          "is_error": false,
+          "tool_use_id": "call-js__run",
+          "type": "tool_result"
+        }
+      ],
+      "role": "user"
+    },
+    {
+      "content": [
+        {
+          "id": "call-page__island_begin",
+          "input": {
+            "code": "ui.draw()",
+            "comment": "the board app",
+            "path": "board",
+            "revision": "0"
+          },
+          "name": "page__island_begin",
+          "type": "tool_use"
+        }
+      ],
+      "role": "assistant"
+    },
+    {
+      "content": [
+        {
+          "content": [
+            {
+              "text": "space \"board\" under \"\": no such space: it was removed or renamed since you saw its path; call tree to see the current spaces",
+              "type": "text"
+            }
+          ],
+          "is_error": true,
+          "tool_use_id": "call-page__island_begin",
+          "type": "tool_result"
+        }
+      ],
+      "role": "user"
+    },
+    {
+      "content": [
+        {
+          "text": "done",
+          "type": "text"
+        }
+      ],
+      "role": "assistant"
+    },
+    {
+      "content": [
+        {
+          "cache_control": {
+            "type": "ephemeral"
+          },
+          "text": "go on",
+          "type": "text"
+        }
+      ],
+      "role": "user"
+    }
+  ],
+  "model": "claude-haiku-5-5",
+  "stream": true,
+  "system": [
+    {
+      "cache_control": {
+        "type": "ephemeral"
+      },
+      "text": "\u003c3057 bytes\u003e",
+      "type": "text"
+    }
+  ],
+  "thinking": {
+    "block_binding": {
+      "prefix_mismatch_behavior": "drop_block"
+    },
+    "type": "adaptive"
+  },
+  "tools": [
+    "page__click",
+    "page__focus",
+    "page__read",
+    "page__sync",
+    "page__tool",
+    "page__tree",
+    "page__write",
+    "time__cancel",
+    "time__client",
+    "time__now",
+    "time__timer"
+  ]
+}

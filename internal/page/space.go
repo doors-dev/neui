@@ -48,6 +48,8 @@ type space struct {
 	within   island.Island
 	app      bool
 	digest   [4]uint64
+	plain    uint64
+	warned   bool
 	counts   [4]map[uint64]int
 	inputs
 }
@@ -104,6 +106,7 @@ func (s Space) addSpace(ctx context.Context, name string, desc string, island is
 	space.ctx = doors.DetachedContext(ctx)
 	if found {
 		s.children[index] = space
+		s.rehash(3)
 		return ctx, nil
 	}
 	s.children = slices.Insert(s.children, index, space)
@@ -139,13 +142,13 @@ func (s *space) searchTool(name string) (int, bool) {
 	})
 }
 
-func (s *space) find(path string) (*space, error) {
+func (s *space) find(path string, light bool) (*space, error) {
 	if path == "" {
 		return s, nil
 	}
 	for _, name := range strings.Split(path, ".") {
 		index, ok := s.search(name)
-		if !ok {
+		if !ok || s.children[index].hidden(light) {
 			return nil, fmt.Errorf("space %q under %q: %w", name, s.path, errSpaceNotFound)
 		}
 		s = s.children[index]
@@ -153,8 +156,19 @@ func (s *space) find(path string) (*space, error) {
 	return s, nil
 }
 
+func (s *space) hidden(light bool) bool {
+	if !light || s.island == nil {
+		return false
+	}
+	if !s.warned {
+		s.warned = true
+		doors.Logger(s.ctx).Warn("page: island hidden in light mode", "space", s.path)
+	}
+	return true
+}
+
 func (s *space) findIsland(path string) (island.Island, string, error) {
-	space, err := s.find(path)
+	space, err := s.find(path, false)
 	if err != nil {
 		return nil, "", err
 	}
@@ -180,6 +194,17 @@ func (s *space) count(set int, hash uint64, delta int) {
 }
 
 func (s *space) rehash(set int) {
+	sum := func(hashes []uint64) uint64 {
+		if len(hashes) == 0 {
+			return 0
+		}
+		slices.Sort(hashes)
+		h := xxh3.New()
+		for _, hash := range hashes {
+			h.Write(binary.LittleEndian.AppendUint64(nil, hash))
+		}
+		return h.Sum64()
+	}
 	var hashes []uint64
 	switch set {
 	case 0:
@@ -187,35 +212,46 @@ func (s *space) rehash(set int) {
 			hashes = append(hashes, t.hash)
 		}
 	case 3:
+		var plain []uint64
 		for _, c := range s.children {
-			hashes = append(hashes, xxh3.HashString(c.name))
+			hash := xxh3.HashString(c.name)
+			hashes = append(hashes, hash)
+			if c.island == nil {
+				plain = append(plain, hash)
+			}
 		}
+		s.plain = sum(plain)
 	default:
 		hashes = slices.Collect(maps.Keys(s.counts[set]))
 	}
-	s.digest[set] = 0
-	if len(hashes) == 0 {
-		return
-	}
-	slices.Sort(hashes)
-	h := xxh3.New()
-	for _, hash := range hashes {
-		h.Write(binary.LittleEndian.AppendUint64(nil, hash))
-	}
-	s.digest[set] = h.Sum64()
+	s.digest[set] = sum(hashes)
 }
 
-func (s *space) digests(out map[string][4]uint64) {
+func (s *space) digestFor(light bool) [4]uint64 {
+	digest := s.digest
+	if light {
+		digest[3] = s.plain
+	}
+	return digest
+}
+
+func (s *space) digests(out map[string][4]uint64, light bool) {
 	out[s.path] = s.digest
 	for _, c := range s.children {
-		c.digests(out)
+		if !c.hidden(light) {
+			c.digests(out, light)
+		}
 	}
 }
 
-func (s *space) state() state {
+func (s *space) state(light bool) state {
 	out := state{Path: s.path, Desc: s.desc, Island: s.island != nil}
 	for _, t := range s.tools {
-		out.Tools = append(out.Tools, *t)
+		t := *t
+		if light {
+			t.raw = t.light
+		}
+		out.Tools = append(out.Tools, t)
 	}
 	seen := map[uint64]bool{}
 	for _, in := range s.list {
@@ -231,21 +267,23 @@ func (s *space) state() state {
 		}
 	}
 	for _, c := range s.children {
-		out.Children = append(out.Children, child{Name: c.name, Desc: c.desc, Island: c.island != nil})
+		if !c.hidden(light) {
+			out.Children = append(out.Children, child{Name: c.name, Desc: c.desc, Island: c.island != nil})
+		}
 	}
 	return out
 }
 
-func (s *space) snapshot() snapshot {
-	return snapshot{digest: s.digest, state: s.state()}
+func (s *space) snapshot(light bool) snapshot {
+	return snapshot{digest: s.digestFor(light), state: s.state(light)}
 }
 
-func (s *space) diff(old snapshot) *diff {
-	now := s.digest
+func (s *space) diff(old snapshot, light bool) *diff {
+	now := s.digestFor(light)
 	if now == old.digest {
 		return &diff{}
 	}
-	cur := s.state()
+	cur := s.state(light)
 	out := &diff{}
 	if now[0] != old.digest[0] {
 		out.Tools = &toolsDiff{}
@@ -292,7 +330,7 @@ func (s *space) diff(old snapshot) *diff {
 	return out
 }
 
-func (s *space) tree(depth uint) node {
+func (s *space) tree(depth uint, light bool) node {
 	out := node{child: child{Name: s.name, Desc: s.desc, Island: s.island != nil}, Tools: len(s.tools)}
 	seen := map[uint64]bool{}
 	for _, in := range s.list {
@@ -307,16 +345,15 @@ func (s *space) tree(depth uint) node {
 			out.Data++
 		}
 	}
-	if depth == 0 {
-		out.More = len(s.children)
-		return out
-	}
-	for i, c := range s.children {
-		if i == 20 {
-			out.More = len(s.children) - i
-			break
+	for _, c := range s.children {
+		if c.hidden(light) {
+			continue
 		}
-		out.Children = append(out.Children, c.tree(depth-1))
+		if depth == 0 || len(out.Children) == 20 {
+			out.More++
+			continue
+		}
+		out.Children = append(out.Children, c.tree(depth-1, light))
 	}
 	return out
 }
@@ -355,7 +392,7 @@ func (s Space) AddTool(ctx context.Context, from common.Tool) error {
 	base := doors.DetachedContext(ctx)
 	t := &tool{
 		Name:   from.Name(),
-		Desc:   from.Desc() + "\nOutput schema: " + string(from.Output()),
+		Desc:   from.Desc(),
 		Input:  from.Params(),
 		decode: from.Decode,
 		call: func(ctx context.Context, input any) (any, error) {
@@ -387,11 +424,17 @@ func (s Space) AddTool(ctx context.Context, from common.Tool) error {
 		},
 	}
 	type bare tool
-	raw, err := json.Marshal(bare(*t))
+	light, err := json.Marshal(bare(*t))
 	if err != nil {
 		return err
 	}
-	t.raw, t.hash = raw, xxh3.Hash(raw)
+	full := bare(*t)
+	full.Desc += "\nOutput schema: " + string(from.Output())
+	raw, err := json.Marshal(full)
+	if err != nil {
+		return err
+	}
+	t.raw, t.light, t.hash = raw, light, xxh3.Hash(raw)
 	s.root.mu.Lock()
 	if ctx.Err() != nil {
 		s.root.mu.Unlock()

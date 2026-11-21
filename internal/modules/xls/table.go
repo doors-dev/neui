@@ -31,7 +31,13 @@ import (
 
 const maxFormatCells = 100000
 
-const tableDesc = `Create a new styled table with a header row, per-column number formats and banded rows; on a new sheet it also freezes the rows through the header. The table must be clear of other tables, the autofilter and merged cells. Column widths are set only on columns that are empty and keep the sheet default.`
+func tableDesc(light bool) string {
+	if light {
+		return `Create a styled table with a header row and per-column number formats.`
+	}
+	return `Create a new styled table with a header row, per-column number formats and banded rows; on a new sheet it also freezes the rows through the header. The table must be clear of other tables, the autofilter and merged cells. Column widths are set only on columns that are empty and keep the sheet default.`
+}
+
 const formatDesc = `Restyle a range; only the options you pass change.`
 
 var numText = regexp.MustCompile(`^[+-]?((\d{1,3}(,\d{3})+|\d+)(\.\d+)?|\.\d+)$`)

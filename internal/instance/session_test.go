@@ -112,3 +112,29 @@ func TestAppUploadStorageIsUsedAndSessionOptionOverridesIt(t *testing.T) {
 		t.Fatalf("the session's end touched the app file storage: %v", err)
 	}
 }
+
+func TestOptionLightModeOverridesTheApp(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	for _, app := range []bool{false, true} {
+		ctx := context.WithValue(context.Background(), common.LightModeKey{}, app)
+		s := &session{ctx: ctx, instances: make(map[*instance]struct{})}
+		if err := s.Enable([]common.Option{common.OptionProvider(stubProvider{})}); err != nil {
+			t.Fatalf("Enable: %v", err)
+		}
+		if got := common.LightMode(s.backend.Context()); got != app {
+			t.Fatalf("app light mode %v: the session runs with %v", app, got)
+		}
+		if err := s.Enable([]common.Option{common.OptionForce(), common.OptionProvider(stubProvider{}), common.OptionLightMode(!app)}); err != nil {
+			t.Fatalf("Enable: %v", err)
+		}
+		if got := common.LightMode(s.backend.Context()); got != !app {
+			t.Fatalf("app light mode %v, OptionLightMode(%v): the session runs with %v", app, !app, got)
+		}
+		if err := s.Enable([]common.Option{common.OptionForce(), common.OptionProvider(stubProvider{})}); err != nil {
+			t.Fatalf("Enable: %v", err)
+		}
+		if got := common.LightMode(s.backend.Context()); got != app {
+			t.Fatalf("app light mode %v: a forced Enable without the option runs with %v", app, got)
+		}
+	}
+}

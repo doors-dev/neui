@@ -42,6 +42,13 @@ type IslandScopeKey struct{}
 
 type IslandIDKey struct{}
 
+type LightModeKey struct{}
+
+func LightMode(ctx context.Context) bool {
+	light, _ := ctx.Value(LightModeKey{}).(bool)
+	return light
+}
+
 const IslandIDAttr = "data-neui-island"
 
 type ProviderKey struct{}

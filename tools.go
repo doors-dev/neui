@@ -121,12 +121,22 @@ func ToolFromAgent(ctx context.Context) bool {
 	return tools.FromAgent(ctx)
 }
 
+// LightMode reports whether the session runs in light mode (WithLightMode,
+// OptionLightMode). A ModuleFactory calls it on its ctx to register a
+// smaller module, or returns nil to add none. It also works on a tool call's
+// ctx and on ToolThreadContext; on other contexts it reports the app's
+// WithLightMode.
+func LightMode(ctx context.Context) bool {
+	return common.LightMode(ctx)
+}
+
 // ModuleFactory returns the module a thread uses: a fresh one or a shared
 // one. The runtime calls it each time a thread opens, with a context that
 // lasts while the thread stays open and carries no tool call. When two
 // modules of a thread share a name, the later one is skipped and an error is
-// logged; the built-in chat, time and files modules come first. Register
-// factories with WithModules or OptionModules.
+// logged; the built-in chat, time and files modules come first. It may
+// return nil to add no module. Register factories with WithModules or
+// OptionModules.
 type ModuleFactory = common.ModuleFactory
 
 // WithModules registers modules for every session the app serves, as an app
@@ -160,7 +170,8 @@ func NewModule(name string, desc string) Module {
 // synchronous functions (a tool can refuse script calls, as js's own tools
 // do), and js__stop cancels a run that outlived its call. Scripts run on
 // QuickJS (plain ES2023: no Node, browser APIs or promises), limited by
-// JSConfig.
+// JSConfig. In light mode it adds no module and logs an error, once per
+// process.
 var ModuleJS ModuleFactory = js.Module
 
 // JSConfig tunes the js runtime; a zero or negative field takes its default.

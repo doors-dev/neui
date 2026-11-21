@@ -104,6 +104,13 @@ func (c *Chat) Relink() {
 	c.listen()
 }
 
+func (c *Chat) Switch(options ...common.Option) {
+	c.t.Helper()
+	b := c.backend
+	c.backend = common.NewBackend(c.ctx, b.Storage(), b.WorkspaceStorage(), b.UploadStorage(), append([]common.Option{common.OptionProvider(b.Provider())}, options...))
+	c.Relink()
+}
+
 func (c *Chat) listen() {
 	receive, done := c.link.Receiver()
 	go func() {

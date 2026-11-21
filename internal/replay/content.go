@@ -57,8 +57,12 @@ func RoundMediaBudget(config api.ThreadConfig) int64 {
 	return int64(float32(config.ThreadMemoryLimit) * config.ReplayMediaShare / 2)
 }
 
-func OmittedNote(size int) string {
-	return fmt.Sprintf("Result omitted: it was %s, more than a turn's tool results can hold. Ask for less, or process it in a script.", HumanSize(size))
+func OmittedNote(size int, light bool) string {
+	note := fmt.Sprintf("Result omitted: it was %s, more than a turn's tool results can hold. Ask for less", HumanSize(size))
+	if !light {
+		note += ", or process it in a script"
+	}
+	return note + "."
 }
 
 func OmittedMediaNote(size int) string {

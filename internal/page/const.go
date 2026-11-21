@@ -14,10 +14,37 @@
 
 package page
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 const moduleName = "page"
-const moduleDesc = `Your access to the live page the user has open: use it to help the user operate the application — navigate, fill inputs, press buttons, call the tools the page exposes, or focus an element to point the user at it. The page is a tree of spaces, UI regions carrying tools, inputs and child spaces. Only what the application chose to expose is there, so a missing element means unavailable to you, not absent from the page: say so instead of guessing. read, write, click, focus and tool need the space read first, with sync, by you or a script, and act only while it is as it was last read; otherwise they fail without acting. The user works the same page alongside you: a change you did not make, shown in a refusal's diff, in a call's diff or changes, or in a read that differs from what you or your script set, most often comes from them, so check what they did and build on it instead of redoing or undoing it. Every page call made as a tool call costs a round; for repetitive work — the same steps over several rows or items — write a script when the js module is available. In a script, a refused or failed page call throws, and its e.value holds what its error carries: diff, space, or the failed call's result. You are part of this page, and to the user you see what they see: reading it, and its spaces, paths, syncs, rerenders and refused calls, are your plumbing, invisible to them. Don't announce looking at the page or what you find on it, such as "I'll look at the page first" or "I see there are tools": read it and act. Report outcomes in page terms: what was filled, pressed or changed.`
+
+func moduleDesc(light bool) string {
+	desc := `Your access to the live page the user has open: use it to help the user operate the application — navigate, fill inputs, press buttons, call the tools the page exposes, or focus an element to point the user at it. The page is a tree of spaces, UI regions carrying tools, inputs and child spaces. Only what the application chose to expose is there, so a missing element means unavailable to you, not absent from the page: say so instead of guessing. read, write, click, focus and tool need the space read first, with sync, `
+	if !light {
+		desc += `by you or a script, `
+	}
+	desc += `and act only while it is as it was last read; otherwise they fail without acting. `
+	if light {
+		desc += `A write, click, focus or tool result carries diff, what changed in the called space while the call ran ({} when nothing did), and changes, the other spaces that changed; diff brings your read up to date, so no sync is needed after the call. handled: false in a write or click result is not a failure: the action was done on the page, and the application may use it later. `
+	}
+	desc += `The user works the same page alongside you: a change you did not make, shown in a refusal's diff, in a call's diff or changes, or in a read that differs from what you `
+	if !light {
+		desc += `or your script `
+	}
+	desc += `set, most often comes from them, so check what they did and build on it instead of redoing or undoing it. `
+	if !light {
+		desc += `Every page call made as a tool call costs a round; for repetitive work — the same steps over several rows or items — write a script when the js module is available. In a script, a refused or failed page call throws, and its e.value holds what its error carries: diff, space, or the failed call's result. `
+	}
+	desc += `You are part of this page, and to the user you see what they see: reading it, and its spaces, paths, syncs, rerenders and refused calls, are your plumbing, invisible to them. Don't announce looking at the page or what you find on it, such as "I'll look at the page first" or "I see there are tools": read it and act. Report outcomes in page terms: what was filled, pressed or changed.`
+	if !light {
+		desc += "\n\n" + islandsDesc
+	}
+	return desc
+}
+
 const toolName = "tool"
 const toolDesc = `Call a tool defined by the currently rendered page.`
 const readName = "read"
@@ -31,12 +58,20 @@ const focusDesc = `Focus a UI input and scroll it into view, to point the user a
 const syncName = "sync"
 const syncDesc = `Read one space of the currently rendered page whole.`
 const treeName = "tree"
-const treeDesc = `Show the spaces of the currently rendered page: names, descriptions and how many tools, inputs and data items each has, without their content. It does not count as reading them.`
+
+func treeDesc(light bool) string {
+	desc := `Show the spaces of the currently rendered page: names, descriptions and how many tools, inputs and data items each has, without their content. It does not count as reading them.`
+	if light {
+		desc += ` A space's more is how many of its children are not listed: call tree on it to go deeper, or sync it to see them all.`
+	}
+	return desc
+}
+
 const refusedUnreadMessage = "not done: this space has not been read; space shows it as it is now and counts as a read, so check it and call again"
 const refusedChangedMessage = "not done: the space changed since it was last read; diff shows what changed and brings the read up to date, so check it and call again"
 const refusedDuplicateMessage = "not done: more than one input in this space has this id, so no call can address any of them; use a tool of the space that does the same, or ask the user to do it on the page"
-const refusedTooLargeMessage = "not done: this space has not been read as it is now, and it is too large to show in a result: act on it from a script, syncing it there first; without a script tool, tell the user this part of the page is out of your reach"
-const spaceTooLargeMessage = "the space is too large for a result: sync it and act on it from a script, where results have no size limit"
+const refusedTooLargeMessage = "not done: this space has not been read as it is now, and it is too large to show in a result"
+const spaceTooLargeMessage = "the space is too large for a result"
 const islandRevisionMessage = "the island's spec changed since that revision: read island_spec again"
 const toolNotFoundMessage = "no such tool in the space: sync its path to see the current tools"
 const spaceNotFoundMessage = "no such space: it was removed or renamed since you saw its path; call tree to see the current spaces"
@@ -93,3 +128,17 @@ var errIslandSpecItem = errors.New(islandSpecItemMessage)
 var errIslandSchemaSize = errors.New(islandSchemaSizeMessage)
 var errFileOrCode = errors.New(fileOrCodeMessage)
 var errIslandFromJS = errors.New(islandFromJSMessage)
+
+func refusedTooLarge(light bool) error {
+	if light {
+		return fmt.Errorf("%w: tell the user this part of the page is out of your reach", errRefusedTooLarge)
+	}
+	return fmt.Errorf("%w: act on it from a script, syncing it there first; without a script tool, tell the user this part of the page is out of your reach", errRefusedTooLarge)
+}
+
+func spaceTooLarge(light bool) error {
+	if light {
+		return fmt.Errorf("%w: tell the user this part of the page is out of your reach", errSpaceTooLarge)
+	}
+	return fmt.Errorf("%w: sync it and act on it from a script, where results have no size limit", errSpaceTooLarge)
+}

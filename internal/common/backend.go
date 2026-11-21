@@ -26,7 +26,8 @@ import (
 // one. The runtime calls it each time a thread opens, with a context that
 // lasts while the thread stays open and carries no tool call. When two
 // modules of a thread share a name, the later one is skipped and an error is
-// logged; the built-in chat, time and files modules come first.
+// logged; the built-in chat, time and files modules come first. It may
+// return nil to add no module.
 type ModuleFactory = func(ctx context.Context) Module
 
 // Tool is one tool as the runtime sees it, the result of a Tool or Ask
@@ -39,7 +40,7 @@ type Tool interface {
 	// Desc is the description the tool was defined with.
 	Desc() string
 	// Summary is the description the agent sees: Desc with the output
-	// schema appended.
+	// schema appended; in light mode it sees Desc alone.
 	Summary() string
 	// Brief is Summary with the output schema's definitions left out, for
 	// when they are listed with the module.
@@ -154,6 +155,12 @@ func OptionFilesConfig(c api.FilesConfig) Option {
 	})
 }
 
+func OptionLightMode(on bool) Option {
+	return optionFunc(func(b *Backend) {
+		b.light = on
+	})
+}
+
 func BackendForced(opts []Option) bool {
 	for _, w := range opts {
 		if _, ok := w.(forcedEnable); ok {
@@ -178,6 +185,7 @@ func NewBackend(
 		uploadStorage:    uploadStorage,
 		config:           AppConfig(ctx),
 		filesConfig:      AppFilesConfig(ctx),
+		light:            LightMode(ctx),
 	}
 	if s := AppUploadStorage(ctx); s != nil {
 		b.uploadStorage = s
@@ -185,6 +193,7 @@ func NewBackend(
 	for _, w := range opts {
 		w.apply(b)
 	}
+	b.ctx = context.WithValue(b.ctx, LightModeKey{}, b.light)
 	return b
 }
 
@@ -198,6 +207,7 @@ type Backend struct {
 	modules          []ModuleFactory
 	config           api.ThreadConfig
 	filesConfig      api.FilesConfig
+	light            bool
 }
 
 func (b *Backend) Config() api.ThreadConfig {

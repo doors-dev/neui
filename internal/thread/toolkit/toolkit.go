@@ -41,6 +41,9 @@ func newToolkit(ctx context.Context, overwrite map[string]struct{}, factories []
 	block := make(map[string]struct{})
 	for _, factory := range factories {
 		m := factory(ctx)
+		if m == nil {
+			continue
+		}
 		name := m.Name()
 		i, found := searchModules(modules, name)
 		if found {
@@ -107,13 +110,14 @@ func (t Toolkit) Wrap(ctx context.Context, factories ...common.ModuleFactory) To
 }
 
 func (t Toolkit) System() iter.Seq[string] {
+	light := common.LightMode(t.ctx)
 	return func(yield func(string) bool) {
 		for m := range t.all() {
 			desc := m.Desc()
 			if desc == "" {
 				continue
 			}
-			if defs, _ := outputDefs(m); len(defs) > 0 {
+			if defs, _ := outputDefs(m); !light && len(defs) > 0 {
 				b := strings.Builder{}
 				b.WriteString(desc)
 				b.WriteString(outputDefsHead)
@@ -130,6 +134,7 @@ func (t Toolkit) System() iter.Seq[string] {
 }
 
 func (t Toolkit) Tools() iter.Seq[api.Tool] {
+	light := common.LightMode(t.ctx)
 	return func(yield func(api.Tool) bool) {
 		for m := range t.all() {
 			name := m.Name()
@@ -138,6 +143,9 @@ func (t Toolkit) Tools() iter.Seq[api.Tool] {
 				desc := tool.Summary()
 				if brief[tool.Name()] {
 					desc = tool.Brief()
+				}
+				if light {
+					desc = tool.Desc()
 				}
 				if !yield(api.Tool{
 					Name:   fmt.Sprintf("%s__%s", name, tool.Name()),

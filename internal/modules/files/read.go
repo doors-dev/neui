@@ -36,7 +36,14 @@ const (
 	bytesCap     = 8 << 20
 )
 
-const readDesc = `Read a text file as numbered lines; everything after "N: " is file content. Binary files are refused; use readBytes. Output stops at the line limit or the configured byte limit, whichever comes first, and its last line says where to continue. From a script it returns the file's text as it is, up to 8MB: no line numbers, no closing line, no truncated lines, and the whole file when limit is unset.`
+func readDesc(light bool) string {
+	desc := `Read a text file as numbered lines; everything after "N: " is file content.`
+	if light {
+		return desc + ` A long file comes in parts, and the last line says where to continue.`
+	}
+	return desc + ` Binary files are refused; use readBytes. Output stops at the line limit or the configured byte limit, whichever comes first, and its last line says where to continue. From a script it returns the file's text as it is, up to 8MB: no line numbers, no closing line, no truncated lines, and the whole file when limit is unset.`
+}
+
 const readBytesDesc = `Read raw bytes of a file, base64 in the result. Reads over 8MB must be ranged.`
 const writeBytesDesc = `Write raw bytes to a file, replacing existing content, creating parent directories. Plain text goes through write.`
 
@@ -67,6 +74,9 @@ func readTool(ctx context.Context, arg readArg) (string, error) {
 	br := bufio.NewReaderSize(ctxReader{ctx, rc}, 64<<10)
 	head, _ := br.Peek(4096)
 	if bytes.IndexByte(head, 0) >= 0 {
+		if common.LightMode(ctx) {
+			return "", fmt.Errorf("%q is not a text file: look at an image with readImage, read a PDF or Office file with readDocument", arg.Path)
+		}
 		return "", fmt.Errorf("%q is a binary file, use readBytes", arg.Path)
 	}
 	if bytes.HasPrefix(head, []byte("\ufeff")) {

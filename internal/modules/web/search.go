@@ -23,7 +23,13 @@ import (
 	"neui.dev/internal/tools"
 )
 
-const searchDesc = `Search the web and get back links with short extracts, not whole pages — fetch a result with web__fetch to read it. Results come from one backend the host configured, so it has one index and one ranking, and asking twice with different words is often better than asking for more results. Not accessible from a script.`
+func searchDesc(light bool) string {
+	desc := `Search the web and get back links with short extracts, not whole pages — fetch a result with web__fetch to read it. Results come from one backend the host configured, so it has one index and one ranking, and asking twice with different words is often better than asking for more results.`
+	if !light {
+		desc += ` Not accessible from a script.`
+	}
+	return desc
+}
 
 type Query struct {
 	Text    string

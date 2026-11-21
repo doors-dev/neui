@@ -451,7 +451,7 @@ func TestMediaNoteCountsTowardTheTextBudget(t *testing.T) {
 			h.Wait()
 			want := api.UserContents{api.ContentText{Text: text}, api.ContentText{Text: note}}
 			if !c.kept {
-				want = api.UserContents{api.ContentText{Text: replay.OmittedNote(c.text + len(note))}}
+				want = api.UserContents{api.ContentText{Text: replay.OmittedNote(c.text+len(note), false)}}
 			}
 			if results := testkit.Results(p.Request(t, 1)); len(results) != 1 || !reflect.DeepEqual(results[0].Content, want) {
 				t.Fatalf("the result went out as %#v, want %#v", results, want)

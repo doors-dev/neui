@@ -21,7 +21,7 @@ import (
 
 var groups = [3]string{"tools", "inputs", "data"}
 
-func (s *space) changes(before map[string][4]uint64, called string) []change {
+func (s *space) changes(before map[string][4]uint64, called string, light bool) []change {
 	var out []change
 	live := map[string]bool{}
 	var walk func(s *space)
@@ -46,7 +46,9 @@ func (s *space) changes(before map[string][4]uint64, called string) []change {
 			}
 		}
 		for _, c := range s.children {
-			walk(c)
+			if !c.hidden(light) {
+				walk(c)
+			}
 		}
 	}
 	walk(s)

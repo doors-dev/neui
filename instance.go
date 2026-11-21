@@ -96,6 +96,23 @@ func WithIslandConfig(c api.IslandConfig) doors.With {
 	return doors.WithValue(common.IslandConfigKey{}, common.IslandConfigDefaults(c))
 }
 
+// WithLightMode runs every session the app serves in light mode, as an app
+// option for doors.NewApp; OptionLightMode sets the mode for one session.
+// Light mode is for models that cannot write scripts: ModuleJS adds no
+// module, the agent does not see islands, tool descriptions and the system
+// prompt carry no output schemas, the files and xls modules offer smaller
+// tool sets, and no text neui adds points the agent at scripts or islands. A
+// ModuleFactory reads the mode with LightMode.
+func WithLightMode() doors.With {
+	return doors.WithValue(common.LightModeKey{}, true)
+}
+
+// OptionLightMode turns light mode on or off for one session, taking
+// precedence over the app's WithLightMode.
+func OptionLightMode(on bool) Option {
+	return common.OptionLightMode(on)
+}
+
 // OptionFilesConfig sets the session's workspace filesystem and files
 // module limits, taking precedence over the app's WithFilesConfig if there
 // is one. It is not merged with the app's config: a zero field takes the

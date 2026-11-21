@@ -17,6 +17,7 @@ package xls
 import (
 	"archive/zip"
 	"context"
+	"encoding/json"
 	"math"
 	"reflect"
 	"slices"
@@ -26,6 +27,7 @@ import (
 
 	"github.com/xuri/excelize/v2"
 	"neui.dev/api"
+	"neui.dev/internal/common"
 	"neui.dev/internal/testkit"
 )
 
@@ -481,5 +483,44 @@ func TestSheetsAutoFilter(t *testing.T) {
 	}
 	if len(infos) != 1 || infos[0].Filter != "A1:C9" {
 		t.Fatalf("infos = %+v", infos)
+	}
+}
+
+func TestLightModule(t *testing.T) {
+	factory := Module(Config{})
+	if n := len(factory(context.Background()).List()); n != 10 {
+		t.Fatalf("full mode registers %d tools, want 10", n)
+	}
+	light := factory(context.WithValue(context.Background(), common.LightModeKey{}, true))
+	var names []string
+	for _, tool := range light.List() {
+		names = append(names, tool.Name())
+	}
+	if want := []string{"chart", "find", "read", "sheets", "table", "write"}; !slices.Equal(names, want) {
+		t.Fatalf("light mode registers %v, want %v", names, want)
+	}
+	read, _ := light.Get("read")
+	if params := string(read.Params()); strings.Contains(params, `"raw"`) || strings.Contains(params, `"limit"`) {
+		t.Fatalf("light read takes %s, want no raw or limit", params)
+	}
+	c := testkit.NewController(t, testkit.Setup{})
+	buildBook(t, c.FS(), "book.xlsx")
+	ctx := context.WithValue(c.Ctx(), common.LightModeKey{}, true)
+	out, err := read.Agent(ctx, json.RawMessage(`{"path":"book.xlsx","sheet":"Data","offset":1,"raw":true}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var res readResult
+	if err := json.Unmarshal([]byte(out[0].(api.ContentText).Text), &res); err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Rows) != 3 || res.Rows[0][0] != "Alice" || res.Rows[0][2] == "45000" || res.Rows[0][3] != "" {
+		t.Fatalf("light read with raw set gave %v, want formatted values from Alice on", res.Rows)
+	}
+	if _, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "F1", Rows: [][]any{{1.0}}, Repeat: maxFormatCells + 1}); err == nil || strings.Contains(err.Error(), "script") {
+		t.Fatalf("light write refused with %v, want no script in it", err)
+	}
+	if _, err := writeTool(c.Ctx(), writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "F1", Rows: [][]any{{1.0}}, Repeat: maxFormatCells + 1}); err == nil || !strings.Contains(err.Error(), "such as from a js script") {
+		t.Fatalf("full write refused with %v, want the script hint", err)
 	}
 }

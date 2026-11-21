@@ -26,7 +26,13 @@ import (
 	"neui.dev/internal/common"
 )
 
-const writeDesc = `Write values or formulas row by row from a top-left cell. {row} in a formula becomes the row number of the cell it lands in, so one row repeated fills a column: cell E2, rows [["=B{row}*C{row}"]], repeat 19 fills E2:E20. The block must sit wholly inside or wholly outside each table and the sheet's autofilter; merged cells and array formulas are refused. Cells written next to a table stay outside it.`
+func writeDesc(light bool) string {
+	desc := `Write values or formulas row by row from a top-left cell. {row} in a formula becomes the row number of the cell it lands in, so one row repeated fills a column: cell E2, rows [["=B{row}*C{row}"]], repeat 19 fills E2:E20.`
+	if !light {
+		desc += ` The block must sit wholly inside or wholly outside each table and the sheet's autofilter; merged cells and array formulas are refused. Cells written next to a table stay outside it.`
+	}
+	return desc
+}
 
 var futureFn = map[string]bool{
 	"ACOT": true, "ACOTH": true, "AGGREGATE": true, "ARABIC": true, "ARRAYTOTEXT": true, "BASE": true, "BETA.DIST": true, "BETA.INV": true,
@@ -102,12 +108,16 @@ func writeTool(ctx context.Context, arg writeArg) (writeResult, error) {
 	if width == 0 {
 		return writeResult{}, fmt.Errorf("rows hold no cells")
 	}
+	split := "split it into several writes"
+	if !common.LightMode(ctx) {
+		split += ", such as from a js script"
+	}
 	if arg.Repeat > maxFormatCells {
-		return writeResult{}, fmt.Errorf("repeat %d is over the limit %d — split it into several writes, such as from a js script", arg.Repeat, maxFormatCells)
+		return writeResult{}, fmt.Errorf("repeat %d is over the limit %d — %s", arg.Repeat, maxFormatCells, split)
 	}
 	height := len(arg.Rows) * int(max(arg.Repeat, 1))
 	if cells := width * height; cells > maxFormatCells {
-		return writeResult{}, fmt.Errorf("block covers %d cells, limit %d — split it into several writes, such as from a js script", cells, maxFormatCells)
+		return writeResult{}, fmt.Errorf("block covers %d cells, limit %d — %s", cells, maxFormatCells, split)
 	}
 	start, err := excelize.CoordinatesToCellName(x1, y1)
 	if err != nil {

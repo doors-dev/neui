@@ -31,7 +31,7 @@ func AttachThread(ctx context.Context, from context.Context) context.Context {
 	if !ok {
 		return ctx
 	}
-	return context.WithValue(ctx, KeyController, c)
+	return context.WithValue(context.WithValue(ctx, KeyController, c), LightModeKey{}, LightMode(from))
 }
 
 // Task is a background task registered with ToolTask. Ok or Err delivers its

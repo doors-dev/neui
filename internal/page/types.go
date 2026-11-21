@@ -54,6 +54,7 @@ type tool struct {
 	decode func(arg json.RawMessage) (any, error)
 	call   func(ctx context.Context, input any) (any, error)
 	raw    json.RawMessage
+	light  json.RawMessage
 	hash   uint64
 }
 

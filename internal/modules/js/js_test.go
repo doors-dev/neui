@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"reflect"
 	"strings"
 	"testing"
@@ -577,5 +578,24 @@ func TestClearLogQuotaIsNotARuntimeFailure(t *testing.T) {
 	_, err := m.run(ctx, RunArg{File: "a.js"})
 	if !errors.Is(err, api.ErrQuota) || errors.Is(err, errRuntime) {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestLightModeAddsNoModule(t *testing.T) {
+	var logged strings.Builder
+	restore := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
+	t.Cleanup(func() { slog.SetDefault(restore) })
+	ctx := context.WithValue(context.Background(), common.LightModeKey{}, true)
+	for range 2 {
+		if m := Module(ctx); m != nil {
+			t.Fatalf("light mode added the js module %s", m.Name())
+		}
+	}
+	if n := strings.Count(logged.String(), "js: module not added in light mode"); n > 1 {
+		t.Fatalf("the error was logged %d times, want once per process", n)
+	}
+	if Module(context.Background()) == nil {
+		t.Fatal("full mode added no js module")
 	}
 }

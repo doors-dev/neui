@@ -21,8 +21,8 @@ import (
 	"github.com/zeebo/xxh3"
 )
 
-func (s *space) fresh() [4]uint64 {
-	var sets [4][]uint64
+func (s *space) fresh() ([4]uint64, uint64) {
+	var sets [5][]uint64
 	for _, t := range s.tools {
 		sets[0] = append(sets[0], t.hash)
 	}
@@ -34,8 +34,11 @@ func (s *space) fresh() [4]uint64 {
 	}
 	for _, c := range s.children {
 		sets[3] = append(sets[3], xxh3.HashString(c.name))
+		if c.island == nil {
+			sets[4] = append(sets[4], xxh3.HashString(c.name))
+		}
 	}
-	var out [4]uint64
+	var out [5]uint64
 	for i, set := range sets {
 		if len(set) == 0 {
 			continue
@@ -47,7 +50,7 @@ func (s *space) fresh() [4]uint64 {
 		}
 		out[i] = h.Sum64()
 	}
-	return out
+	return [4]uint64(out[:4]), out[4]
 }
 
 func StaleDigests(s Space) []string {
@@ -56,7 +59,7 @@ func StaleDigests(s Space) []string {
 	var stale []string
 	var walk func(s *space)
 	walk = func(s *space) {
-		if s.fresh() != s.digest {
+		if digest, plain := s.fresh(); digest != s.digest || plain != s.plain {
 			stale = append(stale, s.path)
 		}
 		for _, c := range s.children {
