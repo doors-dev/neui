@@ -124,7 +124,8 @@ func ToolFromAgent(ctx context.Context) bool {
 
 // Tier reports the session's model tier. A ModuleFactory calls it on its ctx
 // to register what that tier can use; it also works on a tool call's ctx. On
-// other contexts it reports the app's WithTier.
+// any other context, a render context included, it reports the app's
+// WithTier, not a session's OptionTier.
 func Tier(ctx context.Context) ModelTier {
 	return common.Tier(ctx)
 }

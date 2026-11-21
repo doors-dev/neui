@@ -91,17 +91,16 @@ type Tool[I any, O any] struct {
 	Desc string
 	// Handler runs the call with the input decoded from JSON into I; the
 	// input schema the agent sees comes from I, and what it sees of O is as
-	// Desc says. On a direct
-	// agent call to a module tool, a string or fmt.Stringer result reaches
-	// the agent as text, an api content value as itself and anything else as
-	// JSON; a script gets the result as JSON, and so does the agent from a
-	// page tool, together with what the call changed on the page. An error
-	// fails the call with its message as text; when it is or wraps an
-	// api.Container or api.MultiContainer, that content goes with it, as JSON
-	// to a script or from a page tool. ctx works with the Tool* functions;
-	// for a tool rendered on a page it is also a doors context of that
-	// render, so the handler can update the page, and it runs once the page
-	// has settled.
+	// Desc says. On a direct agent call to a module tool, a string or
+	// fmt.Stringer result reaches the agent as text, an api content value as
+	// itself and anything else as JSON; a script gets the result as JSON,
+	// and so does the agent from a page tool, together with what the call
+	// changed on the page. An error fails the call with its message as text;
+	// when it is or wraps an api.Container or api.MultiContainer, that
+	// content goes with it, as JSON to a script or from a page tool. ctx
+	// works with the Tool* functions; for a tool rendered on a page it is
+	// also a doors context of that render, so the handler can update the
+	// page, and it runs once the page has settled.
 	Handler func(ctx context.Context, i I) (O, error)
 }
 
