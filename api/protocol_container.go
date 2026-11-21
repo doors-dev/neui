@@ -103,11 +103,9 @@ func (m ImageMime) IsValid() bool {
 }
 
 // DocumentMime is a document type at least one provider accepts. An adapter
-// sends a document in the best form its provider's API carries: a document
-// where the API takes the type, plain text for a text type (DocumentText,
-// DocumentMarkdown, DocumentCSV, DocumentHTML, DocumentXML, DocumentJSON,
-// DocumentYAML, DocumentRTF) where it has no document form, and a note in its
-// place when nothing fits, such as text whose bytes are not UTF-8.
+// sends a document as a document where its API takes the type, as plain text
+// for a text type (see IsText) where it does not, and as a note in its place
+// when neither fits, such as for text whose bytes are not UTF-8.
 type DocumentMime string
 
 // The accepted document types. Only the text types with UTF-8 bytes reach the

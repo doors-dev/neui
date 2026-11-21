@@ -16,22 +16,13 @@ package gemini
 
 import "neui.dev/api"
 
-// The current Gemini models for Conf.Model, with the limits Google publishes,
-// read 2026-11-19 from the model cards
-// (https://aistudio.google.com/docs/models/gemini-4-hydrogen and its siblings),
-// the token guide (https://aistudio.google.com/docs/tokens#context-window), the
-// thinking guide (https://aistudio.google.com/docs/thinking#token-limits), the
-// image guide (https://aistudio.google.com/docs/image-understanding#file-limit)
-// and the file input guide
-// (https://aistudio.google.com/docs/file-input-methods#method-comparison).
-//
+// The current Gemini models for Conf.Model, with the limits Google publishes.
 // The Gemini 4 models share one 1,048,576-token window between input,
 // thinking and output. 3.8 Flash and 3.5 Flash-Lite take 1,048,576 input
 // tokens plus 65,536 output tokens, so Context is their sum. A request takes
-// up to 3,600 images and 100 MB inline. No pixel or per-image byte limit is
-// published; each image costs a fixed token budget whatever its size. Each
-// model returns at most 65,536 tokens in one streamed request, which
-// WithMaxTokens is checked against.
+// up to 3,600 images and 100 MB inline; no limit is set per image. Each model
+// returns at most 65,536 tokens in one streamed request, which WithMaxTokens
+// is checked against.
 //
 // For a model not listed, build an api.Model with its id and limits; New then
 // checks none of its settings.

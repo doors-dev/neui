@@ -95,7 +95,7 @@ func userText(s string) api.Message {
 }
 
 func TestEncodeRequestShape(t *testing.T) {
-	p := mustNew(t, Conf{Model: api.Model{Name: testModel}}, WithAPIKey("k"), WithMaxTokens(2048), WithEffort("medium"), WithThinkingDisplay("summarized"))
+	p := mustNew(t, Conf{Model: api.Model{Name: testModel}}, WithAPIKey("k"), WithMaxTokens(2048), WithEffort("medium"))
 	got := mustEncode(t, p, api.Request{
 		ToolChoice: api.ToolChoiceAny,
 		Tools: []api.Tool{{
@@ -149,10 +149,11 @@ func TestThinkingIsAlwaysAdaptiveWithDropBlock(t *testing.T) {
 		want  string
 		betas string
 	}{
-		{nil, `{"type":"adaptive","block_binding":{"prefix_mismatch_behavior":"drop_block"}}`, bindingBeta},
-		{[]Option{WithThinkingDisplay(DisplayOmitted)}, `{"type":"adaptive","display":"omitted","block_binding":{"prefix_mismatch_behavior":"drop_block"}}`, bindingBeta},
-		{[]Option{WithBeta("a-1"), WithEffort(EffortLow)}, `{"type":"adaptive","block_binding":{"prefix_mismatch_behavior":"drop_block"}}`, "a-1," + bindingBeta},
-		{[]Option{WithBeta(bindingBeta, "a-1")}, `{"type":"adaptive","block_binding":{"prefix_mismatch_behavior":"drop_block"}}`, bindingBeta + ",a-1"},
+		{nil, `{"type":"adaptive","display":"summarized","block_binding":{"prefix_mismatch_behavior":"drop_block"}}`, bindingBeta},
+		{[]Option{WithThinkingSummaries(false)}, `{"type":"adaptive","display":"omitted","block_binding":{"prefix_mismatch_behavior":"drop_block"}}`, bindingBeta},
+		{[]Option{WithThinkingSummaries(false), WithThinkingSummaries(true)}, `{"type":"adaptive","display":"summarized","block_binding":{"prefix_mismatch_behavior":"drop_block"}}`, bindingBeta},
+		{[]Option{WithBeta("a-1"), WithEffort(EffortLow)}, `{"type":"adaptive","display":"summarized","block_binding":{"prefix_mismatch_behavior":"drop_block"}}`, "a-1," + bindingBeta},
+		{[]Option{WithBeta(bindingBeta, "a-1")}, `{"type":"adaptive","display":"summarized","block_binding":{"prefix_mismatch_behavior":"drop_block"}}`, bindingBeta + ",a-1"},
 	} {
 		p := mustNew(t, Conf{Model: api.Model{Name: testModel}}, tc.opts...)
 		req := api.Request{Messages: []api.Message{userText("hi")}}
@@ -1142,7 +1143,7 @@ func TestNewRefusesInvalidSettings(t *testing.T) {
 	}
 
 	for _, m := range []api.Model{Fable52, Fable51, Opus55, Sonnet55, Haiku55, Sonnet5} {
-		mustNew(t, Conf{Model: m}, WithEffort(EffortMax), WithMaxTokens(128_000), WithThinkingDisplay(DisplaySummarized))
+		mustNew(t, Conf{Model: m}, WithEffort(EffortMax), WithMaxTokens(128_000))
 		mustRefuse(t, Conf{Model: m}, "over the 128000", WithMaxTokens(128_001))
 	}
 	mustNew(t, Conf{Model: api.Model{Name: "claude-opus-4-6"}}, WithEffort(EffortMax), WithMaxTokens(1_000_000))

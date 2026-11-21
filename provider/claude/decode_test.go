@@ -211,11 +211,10 @@ func TestStreamSequences(t *testing.T) {
 			want: []string{
 				"start msg_01 claude-opus-5",
 				"usage in=25 out=1 rsn=0 cr=0 cw=0",
-				// Thinking rather than a summary, because this provider was
-				// configured with no thinking display. There is one part on this
-				// wire and it is part zero.
-				`thinking 0 part=0 "1071 = 2 x 462 + 147"`,
-				`thinking 0 part=0 "\nGCD is 21."`,
+				// A summary, because summaries are on by default. There is one
+				// part on this wire and it is part zero.
+				`summary 0 part=0 "1071 = 2 x 462 + 147"`,
+				`summary 0 part=0 "\nGCD is 21."`,
 				// The signature arrives alone and is stored alone: it is what
 				// the block is replayed by, and the envelope around it is built
 				// on the way out, so no readable half is held back here.
@@ -246,7 +245,7 @@ func TestStreamSequences(t *testing.T) {
 				// A whole reasoning block carrying only the token that proves
 				// the thinking happened is the signature on its own, behind the
 				// empty event that says the block is reasoning at all.
-				`thinking 0 part=0 ""`,
+				`summary 0 part=0 ""`,
 				`meta 0 {"provider":"claude","data":"EosnCkYICxIMMb3"}`,
 				"close 0",
 				`text 1 "done"`,
@@ -598,13 +597,13 @@ func TestStreamSequences(t *testing.T) {
 	}
 }
 
-// TestThinkingDisplayDecidesTheEvent pins the one thing this wire does not say.
+// TestThinkingSummariesDecideTheEvent pins the one thing this wire does not say.
 // A summary and the thinking itself arrive as the same thinking_delta, so the
 // request is the only thing that knows which of the two the turn is streaming,
 // and which event carries it is how a consumer learns what it is holding. The
 // meta is the same either way, because the signature is what the block replays
 // by whichever of the two the readable half turns out to be.
-func TestThinkingDisplayDecidesTheEvent(t *testing.T) {
+func TestThinkingSummariesDecideTheEvent(t *testing.T) {
 	body := sse(
 		"message_start", fixStart,
 		"content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}`,
@@ -615,16 +614,16 @@ func TestThinkingDisplayDecidesTheEvent(t *testing.T) {
 		"message_stop", fixStopFrame,
 	)
 	tests := []struct {
-		name    string
-		display ThinkingDisplay
-		want    string
+		name      string
+		summaries bool
+		want      string
 	}{
-		{"summarized", "summarized", `summary 0 part=0 "1071 = 2 x 462 + 147"`},
-		{"left to the model", "", `thinking 0 part=0 "1071 = 2 x 462 + 147"`},
+		{"on", true, `summary 0 part=0 "1071 = 2 x 462 + 147"`},
+		{"off", false, `thinking 0 part=0 "1071 = 2 x 462 + 147"`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			p := testProvider(t, sseServer(body), WithThinkingDisplay(tc.display))
+			p := testProvider(t, sseServer(body), WithThinkingSummaries(tc.summaries))
 			got := collect(t, p, hello())
 			conform.CheckGrammar(t, got)
 			equalSeq(t, got, []string{

@@ -47,7 +47,7 @@ func conformAdapter() conform.Adapter {
 		return func(p conform.Params) bool { return p.MaxTokens == ceiling[model]+1 }
 	}
 	rules := []conform.Rule{{
-		Carry:  map[string]any{"/thinking": map[string]any{"type": "adaptive", "block_binding": map[string]any{"prefix_mismatch_behavior": "drop_block"}}},
+		Carry:  map[string]any{"/thinking": map[string]any{"type": "adaptive", "display": "omitted", "block_binding": map[string]any{"prefix_mismatch_behavior": "drop_block"}}},
 		Source: docBinding,
 	}}
 	for _, m := range []string{"opus-5-5", "sonnet-5-5", "fable-5-1", "fable-5-2"} {
@@ -98,7 +98,7 @@ func conformAdapter() conform.Adapter {
 			if key == "" {
 				key = "test-key"
 			}
-			opts := []Option{WithAPIKey(key), WithBaseURL(base)}
+			opts := []Option{WithAPIKey(key), WithBaseURL(base), WithThinkingSummaries(false)}
 			switch p.Effort {
 			case "":
 			case conform.EffortOff:

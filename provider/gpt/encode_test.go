@@ -1057,13 +1057,13 @@ func TestEncodeRejections(t *testing.T) {
 }
 
 func TestDeclaredModelsAreMatchedByExactName(t *testing.T) {
-	for _, m := range []api.Model{GPT56Sol, GPT56Luna, GPT6Astra, GPT6Sol, GPT6Luna, GPT61Sol, GPT61Terra} {
+	for _, m := range []api.Model{GPT56Sol, GPT56Luna, GPT6Astra, GPT6Sol, GPT6Luna, GPT61Sol, GPT61Terra, GPT62Astra, GPT62Sol} {
 		if _, ok := declared[m.Name]; !ok {
 			t.Errorf("%q is not declared", m.Name)
 		}
 	}
-	if len(declared) != 7 {
-		t.Errorf("%d models declared, want 7", len(declared))
+	if len(declared) != 9 {
+		t.Errorf("%d models declared, want 9", len(declared))
 	}
 	for _, m := range []string{
 		"gpt-5.6", "gpt-5", "gpt-5.1-codex-max", "gpt-5.4-2026-01-01", "o1", "o3-mini", "codex-mini-latest",
@@ -1176,7 +1176,7 @@ func TestProviderOptions(t *testing.T) {
 	})
 
 	t.Run("a cap over a declared model's output limit fails New", func(t *testing.T) {
-		for _, m := range []api.Model{GPT56Sol, GPT56Luna, GPT6Astra, GPT6Sol, GPT6Luna, GPT61Sol, GPT61Terra} {
+		for _, m := range []api.Model{GPT56Sol, GPT56Luna, GPT6Astra, GPT6Sol, GPT6Luna, GPT61Sol, GPT61Terra, GPT62Astra, GPT62Sol} {
 			if _, err := New(Conf{Model: m}, WithAPIKey("k"), WithMaxTokens(128_001)); err == nil {
 				t.Errorf("%s took 128,001 output tokens", m.Name)
 			}
@@ -1198,8 +1198,10 @@ func TestProviderOptions(t *testing.T) {
 			GPT6Luna.Name:   {EffortMinimal},
 			GPT61Sol.Name:   {EffortMinimal, EffortNone},
 			GPT61Terra.Name: {EffortMinimal},
+			GPT62Astra.Name: {EffortMinimal, EffortNone},
+			GPT62Sol.Name:   {EffortMinimal, EffortNone},
 		}
-		for _, m := range []api.Model{GPT56Sol, GPT56Luna, GPT6Astra, GPT6Sol, GPT6Luna, GPT61Sol, GPT61Terra} {
+		for _, m := range []api.Model{GPT56Sol, GPT56Luna, GPT6Astra, GPT6Sol, GPT6Luna, GPT61Sol, GPT61Terra, GPT62Astra, GPT62Sol} {
 			for _, e := range refused[m.Name] {
 				if _, err := New(Conf{Model: m}, WithAPIKey("k"), WithEffort(e)); err == nil {
 					t.Errorf("%s took effort %q", m.Name, e)
@@ -1289,7 +1291,7 @@ func TestRequestWire(t *testing.T) {
 // encodes to it; a request at 512 MB.
 func TestModelLimits(t *testing.T) {
 	const pixels = 2_500 * 32 * 32
-	for _, m := range []api.Model{GPT56Sol, GPT56Luna, GPT6Astra, GPT6Sol, GPT6Luna, GPT61Sol, GPT61Terra} {
+	for _, m := range []api.Model{GPT56Sol, GPT56Luna, GPT6Astra, GPT6Sol, GPT6Luna, GPT61Sol, GPT61Terra, GPT62Astra, GPT62Sol} {
 		if m.ImagePixels != pixels {
 			t.Errorf("%s declares %d pixels in an image, want the %d of the high-detail patch budget", m.Name, m.ImagePixels, pixels)
 		}

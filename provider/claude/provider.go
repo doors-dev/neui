@@ -25,18 +25,14 @@
 // prompt, which covers the tools before it, and the end of the last message.
 // WithCacheTTL sets how long entries live; WithoutCache turns caching off.
 //
-// Thinking is always adaptive: WithEffort sets how much the model thinks and
-// WithThinkingDisplay how its thinking streams back. Every request asks the
-// API, under the thinking-binding-controls-2026-08-01 beta, to drop a replayed
-// thinking block whose earlier conversation no longer matches instead of
-// refusing the request. A model without adaptive thinking cannot be served.
+// Thinking is always adaptive: WithEffort sets how much the model thinks, and
+// its summaries stream by default. Every request asks the API, under the
+// thinking-binding-controls-2026-08-01 beta, to drop a replayed thinking block
+// whose earlier conversation no longer matches instead of refusing the
+// request. A model without adaptive thinking cannot be served.
 //
 // The key comes from ANTHROPIC_API_KEY unless WithAPIKey sets it. A provider
-// serves one model with one set of options; build two for two settings. New
-// refuses an option it cannot apply and a setting the declared model does not
-// take, so a provider for a declared model that builds sends nothing the API
-// refuses for its configuration alone. For a model not declared here New
-// checks no combination and every option is sent as configured.
+// serves one model with one set of options; build two for two settings.
 //
 // Only the Anthropic API is supported: api.anthropic.com, or a gateway or proxy
 // that speaks it unchanged, set with WithBaseURL. Amazon Bedrock and Google
@@ -63,35 +59,13 @@ import (
 )
 
 const (
-	providerName   = "claude"
-	defaultBaseURL = "https://api.anthropic.com"
-	defaultVersion = "2026-10-21"
-	// max_tokens is required by this API, so every request carries one whether
-	// the caller configured it or not. This is well under the smallest output
-	// ceiling any current model has, because a value over a model's ceiling is a
-	// 400 while a value under it only truncates, and truncation comes back as
-	// CodeCapped naming its own fix where a 400 is just a failed turn. It also
-	// caps thinking, which is always on, so callers who want long answers raise
-	// it.
+	providerName     = "claude"
+	defaultBaseURL   = "https://api.anthropic.com"
+	defaultVersion   = "2026-10-21"
 	defaultMaxTokens = 16384
 )
 
 var errTooLarge = errors.New("claude: request too large")
-
-// ThinkingDisplay is how thinking streams back. The consts are the documented
-// values; the type does not validate, so a value a later API release adds
-// passes through unchanged.
-type ThinkingDisplay string
-
-// The documented display values.
-const (
-	// DisplaySummarized streams a summary of the thinking rather than the
-	// thinking itself.
-	DisplaySummarized ThinkingDisplay = "summarized"
-	// DisplayOmitted streams thinking blocks with no text, only their
-	// signatures; the default on Claude 5 and later.
-	DisplayOmitted ThinkingDisplay = "omitted"
-)
 
 // Provider is one configured Anthropic endpoint. It is safe for concurrent use
 // and holds no per turn state.
@@ -105,7 +79,7 @@ type Provider struct {
 	client      *http.Client
 	maxToken    int
 	stopSeqs    []string
-	display     ThinkingDisplay
+	summaries   bool
 	effort      string
 	noCache     bool
 	cacheTTL    string
@@ -116,8 +90,7 @@ type Provider struct {
 // New return it.
 type Option func(*Provider) error
 
-// Conf holds the provider's model. Model has no default: New refuses a Conf
-// whose Model.Name is empty.
+// Conf holds the provider's model.
 type Conf struct {
 	Model api.Model // the one model this provider streams with
 }
@@ -125,16 +98,17 @@ type Conf struct {
 // New builds a provider for one model. The key defaults to ANTHROPIC_API_KEY
 // and is not checked; a missing or wrong key ends the turn with
 // api.CodeAccess. A nil option is skipped. New returns the error of the first
-// option that fails, and an error for an empty Model.Name. On a model this package
-// declares it also returns one for a WithMaxTokens over its output ceiling. On
-// any other model nothing is checked.
+// option that fails, and an error for an empty Model.Name. On a model this
+// package declares it also returns one for a WithMaxTokens over its output
+// ceiling. On any other model nothing is checked.
 func New(conf Conf, opts ...Option) (*Provider, error) {
 	p := &Provider{
-		model:    conf.Model,
-		baseURL:  defaultBaseURL,
-		version:  defaultVersion,
-		client:   &http.Client{},
-		maxToken: defaultMaxTokens,
+		model:     conf.Model,
+		baseURL:   defaultBaseURL,
+		version:   defaultVersion,
+		client:    &http.Client{},
+		maxToken:  defaultMaxTokens,
+		summaries: true,
 	}
 	for _, opt := range opts {
 		if opt == nil {
@@ -224,9 +198,10 @@ func WithBeta(flags ...string) Option {
 
 // WithMaxTokens sets max_tokens, the response cap sent on every request; 0
 // keeps the default of 16384 and a negative value makes New fail. It caps
-// thinking too, so raise it for long answers. A turn that hits it ends with api.CodeCapped. New refuses a
-// value over the output ceiling of a model this package declares; on any other
-// model one over its ceiling fails each turn with api.CodeInvalid.
+// thinking too, so raise it for long answers. A turn that hits it ends with
+// api.CodeCapped. New refuses a value over the output ceiling of a model this
+// package declares; on any other model one over its ceiling fails each turn
+// with api.CodeInvalid.
 func WithMaxTokens(n int) Option {
 	return func(p *Provider) error {
 		if n < 0 {
@@ -252,12 +227,12 @@ func WithStopSequences(seqs ...string) Option {
 
 const bindingBeta = "thinking-binding-controls-2026-08-01"
 
-// WithThinkingDisplay sets how thinking streams back: DisplaySummarized as a
-// readable summary, DisplayOmitted as blocks with no text. Empty leaves the
-// model default.
-func WithThinkingDisplay(d ThinkingDisplay) Option {
+// WithThinkingSummaries sets thinking.display. On, the default, sends
+// summarized: summaries of the model's thinking stream as api.EventSummary.
+// Off sends omitted, and thinking blocks carry only their signatures.
+func WithThinkingSummaries(on bool) Option {
 	return func(p *Provider) error {
-		p.display = d
+		p.summaries = on
 		return nil
 	}
 }
@@ -277,10 +252,9 @@ const (
 	EffortMax    Effort = "max"
 )
 
-// WithEffort sets output_config.effort, which sets how much the model thinks;
-// empty leaves the model default. On a model not declared here a level the
-// model does not accept fails each turn with api.CodeInvalid. It is part of the
-// cached prompt.
+// WithEffort sets output_config.effort, how much the model thinks; empty
+// leaves the model default. A level the model does not accept fails each turn
+// with api.CodeInvalid. It is part of the cached prompt.
 func WithEffort(effort Effort) Option {
 	return func(p *Provider) error {
 		p.effort = string(effort)
@@ -356,7 +330,7 @@ func (p *Provider) Stream(ctx context.Context, req api.Request) <-chan api.Event
 	if err != nil {
 		return lib.Drain(api.EventErr{Code: api.CodeInvalid, Err: err})
 	}
-	return lib.Stream(ctx, p.client, httpReq, newConverter(p.model.Name, p.display == DisplaySummarized, sent, p.model.RequestBytes), p.transport)
+	return lib.Stream(ctx, p.client, httpReq, newConverter(p.model.Name, p.summaries, sent, p.model.RequestBytes), p.transport)
 }
 
 // request encodes the turn. http.NewRequestWithContext cannot fail on what is

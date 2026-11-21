@@ -29,8 +29,8 @@ var errTooLarge = errors.New("deepseek: request too large")
 
 // APIError is a failure DeepSeek reported, as opposed to one the connection
 // produced: a non 200 response, an error frame inside a stream that already
-// returned 200, or a finish_reason that ended the turn without a reply to
-// keep. Status is zero for the last two.
+// returned 200, or a finish_reason that ended the turn as a failure. Status is
+// zero for the last two.
 //
 // Type and Code are the error envelope's, Code as a string whichever way the
 // host sent it; for a finish_reason Code is the value as the server sent it.

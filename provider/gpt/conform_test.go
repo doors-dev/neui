@@ -42,7 +42,7 @@ func TestConform(t *testing.T) {
 func conformAdapter() conform.Adapter {
 	return conform.Adapter{
 		Name:   providerName,
-		Models: []api.Model{GPT56Sol, GPT56Luna, GPT6Astra, GPT6Sol, GPT6Luna, GPT61Sol, GPT61Terra},
+		Models: []api.Model{GPT56Sol, GPT56Luna, GPT6Astra, GPT6Sol, GPT6Luna, GPT61Sol, GPT62Astra, GPT62Sol, GPT61Terra},
 		New: func(base string, m api.Model, p conform.Params) (api.Provider, error) {
 			key := p.Key
 			if key == "" {
@@ -160,6 +160,18 @@ func conformAdapter() conform.Adapter {
 			},
 			{
 				Model:  "gpt-6.1-sol",
+				When:   func(p conform.Params) bool { return p.Effort == conform.EffortOff },
+				Want:   conform.RefuseNew,
+				Source: docReasoning,
+			},
+			{
+				Model:  "gpt-6.2-astra",
+				When:   func(p conform.Params) bool { return p.Effort == conform.EffortOff },
+				Want:   conform.RefuseNew,
+				Source: docReasoning,
+			},
+			{
+				Model:  "gpt-6.2-sol",
 				When:   func(p conform.Params) bool { return p.Effort == conform.EffortOff },
 				Want:   conform.RefuseNew,
 				Source: docReasoning,

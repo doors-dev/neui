@@ -54,10 +54,9 @@ func Meta(provider string, data json.RawMessage) json.RawMessage {
 	return append(out, '}')
 }
 
-// OwnMeta reads Meta in the form Meta writes. It returns the payload, nil when
-// there is none, and true when Meta names provider; for empty Meta, Meta in
-// another form or Meta naming another provider it returns false, and the
-// adapter skips the block.
+// OwnMeta reads Meta written by Meta: the data, nil when there is none, and
+// true when it names provider. Empty Meta, Meta in another form and Meta
+// naming another provider give false.
 func OwnMeta(meta json.RawMessage, provider string) (json.RawMessage, bool) {
 	if len(meta) == 0 {
 		return nil, false
@@ -100,10 +99,9 @@ func MarshalBody(v any) (*Body, error) {
 	return &Body{buf: buf, refs: 1}, nil
 }
 
-// AppendFields adds fields, members of a JSON object written without braces
-// such as "a":1,"b":true, at the end of the object the body holds. A provider
-// uses it for fields its host adds to every request. Call it before Request;
-// empty fields leave the body as it is.
+// AppendFields appends fields, JSON object members without braces such as
+// "a":1,"b":true, to the object the body holds. Call it before Request;
+// empty fields change nothing.
 func (b *Body) AppendFields(fields []byte) {
 	if len(fields) == 0 {
 		return

@@ -26,7 +26,7 @@ import (
 
 // APIError is a failure Google reported about the request: the body of a non
 // 200 response, an error event inside a stream, or an interaction that ended
-// without a reply to keep. Status is zero for the last two.
+// as a failure. Status is zero for the last two.
 //
 // Code is the API's snake_case error code, such as "invalid_request", the
 // reason of a key failure, such as "API_KEY_INVALID", or the interaction

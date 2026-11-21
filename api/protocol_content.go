@@ -56,9 +56,8 @@ func (i Indexed[T]) Ordered() []T {
 // adapter's own data, handed back to it unchanged on replay; folding a stream,
 // a non-empty Meta replaces the one before it. An adapter writes it as
 // {"provider":"<its Name>","data":<its payload>} and reads only Meta naming
-// itself. On user-authored blocks
-// (ContentText, ContentImage, ContentDocument) Meta is the caller's data, which
-// no adapter reads or sends.
+// itself. On user-authored blocks (ContentText, ContentImage, ContentDocument)
+// Meta is the caller's data, which no adapter reads or sends.
 //
 // An adapter whose wire takes one string for several blocks joins them with a
 // blank line, so lists, headings and code fences keep their framing.

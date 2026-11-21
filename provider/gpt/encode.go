@@ -419,16 +419,6 @@ var opaqueItemTypes = map[string]bool{
 	"custom_tool_call_output": true,
 }
 
-// call is the input item for a stored tool call. arguments is schema required
-// and must be a string, so the empty object stands for both a call that took no
-// arguments and a call whose arguments never parsed and were discarded.
-//
-// The result answering the call decides which: where it reports
-// api.ToolErrJSON the arguments are gone and Input is not read at all, and what
-// went wrong is in that result, which the model reads. Otherwise Input is sent
-// as it is, and a call carrying api.DiscardedArguments with no such result is
-// refused rather than sent as an empty object, which would replay as a
-// legitimate call that takes no arguments.
 func (b *inputBuilder) call(c api.ContentToolUse, at, j int) (inputItem, error) {
 	failure, answered := b.answer(at, j, c.ID)
 	if failure != api.ToolErrJSON && bytes.Equal(c.Input, api.DiscardedArguments) {

@@ -38,8 +38,11 @@ func (p *Provider) encode(req api.Request) (*request, error) {
 	}
 	w.Thinking = &thinkingWire{
 		Type:         "adaptive",
-		Display:      string(p.display),
+		Display:      "omitted",
 		BlockBinding: &blockBinding{PrefixMismatchBehavior: "drop_block"},
+	}
+	if p.summaries {
+		w.Thinking.Display = "summarized"
 	}
 	if p.effort != "" {
 		w.OutputConfig = &outputConfig{Effort: p.effort}

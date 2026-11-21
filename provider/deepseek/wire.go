@@ -106,7 +106,7 @@ type tool struct {
 type toolFunction struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
-	Parameters  any    `json:"parameters,omitempty"`
+	Parameters  any    `json:"parameters"`
 }
 
 type namedToolChoice struct {

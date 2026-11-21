@@ -26,9 +26,8 @@ import (
 // APIError is a failure Anthropic reported about the request itself, as opposed
 // to one the connection produced. It covers the three places the API puts
 // them: the body of a non 200 response, an error frame on a stream that already
-// returned 200, and a stop_reason that ended the turn without a reply to keep.
-// Status is zero for the last two, which carry neither a status code nor a
-// request id.
+// returned 200, and a stop_reason that ended the turn as a failure. Status is
+// zero for the last two, which carry neither a status code nor a request id.
 //
 // Type is the API's error type, such as "overloaded_error". Code is the
 // error's details.error_code, such as "enforced_spend_limit_reached", or the

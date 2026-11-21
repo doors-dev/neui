@@ -22,15 +22,12 @@
 //		gemini.WithEffort(gemini.EffortMedium))
 //
 // The key comes from GEMINI_API_KEY unless WithAPIKey sets it. A provider
-// serves one model with one set of options; build two for two settings. For a
-// model declared here New refuses a setting the API refuses on every request;
-// for any other model it checks no combination and every option is sent as
-// configured.
+// serves one model with one set of options; build two for two settings.
 //
 // It speaks the Interactions API of generativelanguage.googleapis.com, or of a
 // gateway that speaks it unchanged, set with WithBaseURL; Vertex AI is not
 // supported. Nothing is stored on the service: every turn sends the whole
-// thread with store off. Thought summaries stream by default. Caching is
+// thread with store off. Thinking summaries stream by default. Caching is
 // implicit and needs no option.
 //
 // Failures reach the thread as api.EventErr with an api.ErrCode, and a failure
@@ -63,14 +60,10 @@ const (
 
 var errTooLarge = errors.New("gemini: request too large")
 
-// Effort is a generation_config.thinking_level value for WithEffort. The
-// consts are the documented levels. On a model this package declares, New
-// refuses a level that model does not take, a value newer than these consts
-// included; on any other model the value is sent as is.
+// Effort is a generation_config.thinking_level value for WithEffort.
 type Effort string
 
-// The documented thinking levels, least to most. Which ones a model takes
-// differs by model; see WithEffort.
+// The documented thinking levels, least to most.
 const (
 	EffortMinimal Effort = "minimal"
 	EffortLow     Effort = "low"
@@ -99,8 +92,7 @@ type Provider struct {
 // New return it.
 type Option func(*Provider) error
 
-// Conf holds the provider's model. Model has no default: New refuses a Conf
-// whose Model.Name is empty.
+// Conf holds the provider's model.
 type Conf struct {
 	Model api.Model // the one model this provider streams with
 }
@@ -233,12 +225,11 @@ func WithMaxTokens(n int) Option {
 
 // WithEffort sets generation_config.thinking_level; empty leaves the model
 // default: high on Hydrogen and Neon, medium on Carbon, Argon and 3.8 Flash,
-// minimal on 3.5 Flash-Lite. Thinking cannot be turned off on Gemini 4 or 3.8
-// Flash. On a declared model New refuses a level the model does not take:
-// minimal on the Gemini 4 models and 3.8 Flash, xhigh on Carbon, Argon, 3.8
-// Flash and 3.5 Flash-Lite, and any value that is not a documented level. On
-// any other model the level is sent as is, and one the model refuses fails
-// each turn with api.CodeInvalid.
+// minimal on 3.5 Flash-Lite. No level turns thinking off. On a declared model
+// New refuses a level the model does not take: minimal on the Gemini 4 models
+// and 3.8 Flash, xhigh on Carbon, Argon, 3.8 Flash and 3.5 Flash-Lite, and any
+// value that is not a documented level. On any other model the level is sent
+// as is, and one the model refuses fails each turn with api.CodeInvalid.
 func WithEffort(e Effort) Option {
 	return func(p *Provider) error {
 		p.effort = string(e)
@@ -246,11 +237,11 @@ func WithEffort(e Effort) Option {
 	}
 }
 
-// WithThoughtSummaries sets generation_config.thinking_summaries: true, the
-// default, sends auto, and the model's summary paragraphs stream as
-// api.EventSummary while it thinks; short reasoning often has none. false
+// WithThinkingSummaries sets generation_config.thinking_summaries. On, the
+// default, sends auto: summaries of the model's thinking stream as
+// api.EventSummary while it thinks, and short reasoning often has none. Off
 // sends none, and the stream carries only keep-alives until thinking ends.
-func WithThoughtSummaries(on bool) Option {
+func WithThinkingSummaries(on bool) Option {
 	return func(p *Provider) error {
 		p.summaries = on
 		return nil

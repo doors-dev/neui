@@ -22,10 +22,7 @@
 //		gpt.WithEffort(gpt.EffortHigh))
 //
 // The key comes from OPENAI_API_KEY unless WithAPIKey sets it. A provider
-// serves one model with one set of options; build two for two settings. For a
-// model declared here New refuses a setting the API refuses on every request;
-// for any other model it checks no combination and every option is sent as
-// configured.
+// serves one model with one set of options; build two for two settings.
 //
 // WithBaseURL points it at a gateway or proxy that speaks the Responses API.
 // Responses are not stored on the service unless WithStore turns that on.
@@ -62,15 +59,13 @@ var errTooLarge = errors.New("gpt: request too large")
 type ReplayMode int
 
 const (
-	// ReplayAll sends every reasoning item this provider issued back where it
-	// was, before text and at the end of a turn included. With WithStore on, an
-	// item goes back only when a tool call or a tool the service ran follows it
-	// in its message. Default.
+	// ReplayAll, the default, sends every reasoning item this provider issued
+	// back where it was. With WithStore on, an item goes back only when a tool
+	// call or a tool the service ran follows it in its message.
 	ReplayAll ReplayMode = iota
 	// ReplayNever sends no reasoning items back; tool calls and results still
-	// travel. Use it for a gateway that refuses reasoning input items; OpenAI
-	// models that do not read them drop them unbilled. It costs quality on tool
-	// loops.
+	// go. Use it for a gateway that refuses reasoning input items. It costs
+	// quality on tool loops.
 	ReplayNever
 )
 
@@ -316,9 +311,9 @@ const (
 // WithEffort sets reasoning.effort; empty leaves the model default. Accepted
 // values differ per model. When Conf.Model is one of the models declared in
 // this package, New refuses the values its docs leave out: EffortMinimal on
-// all of them, and EffortNone on gpt-6-astra and gpt-6.1-sol. For any other
-// model nothing is checked, and an unsupported value fails the turn with
-// api.CodeInvalid.
+// all of them, and EffortNone on gpt-6-astra, gpt-6.1-sol, gpt-6.2-astra and
+// gpt-6.2-sol. For any other model nothing is checked, and an unsupported
+// value fails the turn with api.CodeInvalid.
 func WithEffort(effort Effort) Option {
 	return func(p *Provider) error {
 		p.set.effort = string(effort)

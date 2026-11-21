@@ -16,21 +16,16 @@ package claude
 
 import "neui.dev/api"
 
-// The current Claude lineup, Fable 5.1 and the legacy Sonnet 5, ready to pass
-// as Conf.Model, with the limits the models overview, the vision guide and the
-// API overview publish for the Anthropic API
-// (https://platform.claude.com/docs/en/about-claude/models/overview, read
-// 2026-11-21). Fable 5.2, Opus 5.5, Sonnet 5.5 and Haiku 5.5 are current;
-// Fable 5.1 and Sonnet 5 are earlier models, still served. Every id is a pinned
-// snapshot, and every model here takes adaptive thinking.
+// The current Claude models, Fable 5.2, Opus 5.5, Sonnet 5.5 and Haiku 5.5,
+// and the legacy Fable 5.1 and Sonnet 5, ready to pass as Conf.Model with the
+// Anthropic API's limits. Every id is a pinned snapshot, and every model here
+// takes adaptive thinking.
 //
-// ImageSide and ImagePixels are the vision guide's tier for Claude 4.7 and
-// later, a 2576 px long edge. ImageBytes is the raw size of
-// the API's 10 MB base64 limit per image, because the field is compared
-// against the image's raw bytes. RequestBytes is 32 MB, below the 128 MB the
-// API overview gives. These are the Anthropic API's limits only, the one API
-// this package supports. For a model not listed, build an api.Model with its id
-// and limits; New then checks none of its settings.
+// ImageSide and ImagePixels are the high-resolution tier, a 2576 px long edge.
+// ImageBytes is the raw size that encodes to the 10 MB base64 limit per image.
+// RequestBytes is 32 MB, below the API's 128 MB. For another platform or a
+// model not listed, build an api.Model with its id and limits; New then checks
+// none of its settings.
 var (
 	Fable52  = api.Model{Name: "claude-fable-5-2", Context: 1_000_000, ImagePixels: 4784 * 28 * 28, ImageSide: 2576, ImageBytes: 7_500_000, ImagesPerRequest: 600, RequestBytes: 32_000_000, Inputs: api.Modalities{api.ModalityImage, api.ModalityDocument}}
 	Fable51  = api.Model{Name: "claude-fable-5-1", Context: 1_000_000, ImagePixels: 4784 * 28 * 28, ImageSide: 2576, ImageBytes: 7_500_000, ImagesPerRequest: 600, RequestBytes: 32_000_000, Inputs: api.Modalities{api.ModalityImage, api.ModalityDocument}}

@@ -29,7 +29,7 @@ var errTooLarge = errors.New("generic: request too large")
 
 // APIError is a failure the server reported: a non 200 response, an error
 // frame inside a stream that already returned 200, or a finish_reason that
-// ended the turn without a reply to keep. Status is zero for the last two.
+// ended the turn as a failure. Status is zero for the last two.
 //
 // Type, Code and Param come from the error object, which servers send as
 // OpenAI's {"error":{...}} or as its fields at the top level. Code is

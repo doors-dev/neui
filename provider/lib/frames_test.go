@@ -324,7 +324,7 @@ func corpusProvider(t *testing.T, name, url string) streamer {
 	var err error
 	switch strings.Split(name, "/")[0] {
 	case "claude":
-		p, err = claude.New(claude.Conf{Model: api.Model{Name: "claude-opus-5"}}, claude.WithAPIKey("k"), claude.WithBaseURL(url))
+		p, err = claude.New(claude.Conf{Model: api.Model{Name: "claude-opus-5"}}, claude.WithAPIKey("k"), claude.WithBaseURL(url), claude.WithThinkingSummaries(false))
 	case "gpt":
 		p, err = gpt.New(gpt.Conf{Model: api.Model{Name: "gpt-5.6-sol"}}, gpt.WithAPIKey("k"), gpt.WithBaseURL(url))
 	case "deepseek":

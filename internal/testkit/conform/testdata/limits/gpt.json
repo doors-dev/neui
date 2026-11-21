@@ -1,5 +1,5 @@
 {
-  "asOf": "2026-11-06",
+  "asOf": "2026-11-21",
   "sources": {
     "context": "https://developers.openai.com/api/docs/models",
     "imagePixels": "https://developers.openai.com/api/docs/guides/images-vision",
@@ -16,6 +16,8 @@
     "gpt-6-sol": {"context": 1050000, "imagePixels": 2560000, "imageBytes": 20971520, "imageEncoding": "data-url", "imagesPerRequest": 1500, "requestBytes": 512000000, "inputs": ["image", "document"], "maxOutput": 128000, "note": "publishes no sizing of its own; declared at the gpt-5.6 limits (UNVERIFIED)"},
     "gpt-6-luna": {"context": 1050000, "imagePixels": 2560000, "imageBytes": 20971520, "imageEncoding": "data-url", "imagesPerRequest": 1500, "requestBytes": 512000000, "inputs": ["image", "document"], "maxOutput": 128000, "note": "publishes no sizing of its own; declared at the gpt-5.6 limits (UNVERIFIED)"},
     "gpt-6.1-sol": {"context": 1050000, "imagePixels": 2560000, "imageBytes": 20971520, "imageEncoding": "data-url", "imagesPerRequest": 1500, "requestBytes": 512000000, "inputs": ["image", "document"], "maxOutput": 128000, "note": "publishes no sizing of its own; declared at the gpt-5.6 limits (UNVERIFIED)"},
-    "gpt-6.1-terra": {"context": 1050000, "imagePixels": 2560000, "imageBytes": 20971520, "imageEncoding": "data-url", "imagesPerRequest": 1500, "requestBytes": 512000000, "inputs": ["image", "document"], "maxOutput": 128000, "note": "publishes no sizing of its own; declared at the gpt-5.6 limits (UNVERIFIED)"}
+    "gpt-6.1-terra": {"context": 1050000, "imagePixels": 2560000, "imageBytes": 20971520, "imageEncoding": "data-url", "imagesPerRequest": 1500, "requestBytes": 512000000, "inputs": ["image", "document"], "maxOutput": 128000, "note": "publishes no sizing of its own; declared at the gpt-5.6 limits (UNVERIFIED)"},
+    "gpt-6.2-astra": {"context": 1050000, "imagePixels": 2560000, "imageBytes": 20971520, "imageEncoding": "data-url", "imagesPerRequest": 1500, "requestBytes": 512000000, "inputs": ["image", "document"], "maxOutput": 128000, "note": "publishes no sizing of its own; declared at the gpt-5.6 limits (UNVERIFIED)"},
+    "gpt-6.2-sol": {"context": 1050000, "imagePixels": 2560000, "imageBytes": 20971520, "imageEncoding": "data-url", "imagesPerRequest": 1500, "requestBytes": 512000000, "inputs": ["image", "document"], "maxOutput": 128000, "note": "publishes no sizing of its own; declared at the gpt-5.6 limits (UNVERIFIED)"}
   }
 }

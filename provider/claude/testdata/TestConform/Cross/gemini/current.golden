@@ -161,6 +161,7 @@
   ],
   "thinking": {
     "type": "adaptive",
+    "display": "omitted",
     "block_binding": {
       "prefix_mismatch_behavior": "drop_block"
     }

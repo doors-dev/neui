@@ -369,15 +369,15 @@ func TestSettings(t *testing.T) {
 		want string
 	}{
 		{"defaults", nil, `{"thinking_summaries":"auto"}`},
-		{"summaries off", []Option{WithThoughtSummaries(false)}, `{"thinking_summaries":"none"}`},
-		{"summaries back on", []Option{WithThoughtSummaries(false), WithThoughtSummaries(true)}, `{"thinking_summaries":"auto"}`},
+		{"summaries off", []Option{WithThinkingSummaries(false)}, `{"thinking_summaries":"none"}`},
+		{"summaries back on", []Option{WithThinkingSummaries(false), WithThinkingSummaries(true)}, `{"thinking_summaries":"auto"}`},
 		{"level", []Option{WithEffort(EffortMedium)}, `{"thinking_level":"medium","thinking_summaries":"auto"}`},
 		{"empty level", []Option{WithEffort("")}, `{"thinking_summaries":"auto"}`},
 		{"stop", []Option{WithStopSequences("END", "\n\n")}, `{"stop_sequences":["END","\n\n"],"thinking_summaries":"auto"}`},
 		{"no stop", []Option{WithStopSequences()}, `{"thinking_summaries":"auto"}`},
 		{"max tokens", []Option{WithMaxTokens(4096)}, `{"max_output_tokens":4096,"thinking_summaries":"auto"}`},
 		{"zero max tokens", []Option{WithMaxTokens(0)}, `{"thinking_summaries":"auto"}`},
-		{"all", []Option{WithMaxTokens(9), WithStopSequences("x"), WithEffort(EffortLow), WithThoughtSummaries(false)}, `{"max_output_tokens":9,"stop_sequences":["x"],"thinking_level":"low","thinking_summaries":"none"}`},
+		{"all", []Option{WithMaxTokens(9), WithStopSequences("x"), WithEffort(EffortLow), WithThinkingSummaries(false)}, `{"max_output_tokens":9,"stop_sequences":["x"],"thinking_level":"low","thinking_summaries":"none"}`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			wantJSON(t, field(t, encodeBody(t, encoder(t, c.opts...), turn("hi")), "generation_config"), c.want)

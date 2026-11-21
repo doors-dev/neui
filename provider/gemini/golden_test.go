@@ -143,7 +143,7 @@ func goldenOptions(r *rand.Rand) []Option {
 	all := [][]Option{
 		{WithMaxTokens(goldenPick(r, 0, 1, 1000, 65_536, 65_537, -1))},
 		{WithEffort(goldenPick(r, EffortMinimal, EffortLow, EffortMedium, EffortHigh, EffortXHigh, Effort("max"), Effort("")))},
-		{WithThoughtSummaries(r.IntN(2) == 0)},
+		{WithThinkingSummaries(r.IntN(2) == 0)},
 		{WithStopSequences(goldenPick(r, []string{"END"}, []string{"a", "\n\n"}, nil)...)},
 		{WithRevision(goldenPick(r, "2026-05-20", "2026-07-01", ""))},
 	}
