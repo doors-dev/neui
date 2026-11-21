@@ -44,9 +44,7 @@ func Module(c Config) common.ModuleFactory {
 		}
 		add(m, c, "find", findDesc, findTool)
 		add(m, c, "table", tableDesc, tableTool)
-		add(m, c, "write", writeDesc, func(ctx context.Context, arg writeArg) (writeResult, error) {
-			return writeTool(ctx, arg, light)
-		})
+		add(m, c, "write", writeDesc, writeTool)
 		add(m, c, "chart", chartDesc, chartTool)
 		if !light {
 			add(m, c, "profile", profileDesc, profileTool)

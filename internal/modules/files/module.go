@@ -22,21 +22,13 @@ import (
 	"neui.dev/internal/tools"
 )
 
-func moduleDesc(light bool) string {
-	desc := `The workspace is temporary and takes plain relative paths, like report.md. user_uploads/ holds the files the user attached, read-only: an attachment arrives as a link like [notes.txt](file:///user_uploads/notes.txt), and its path is user_uploads/notes.txt. agent_uploads/ holds the files you give the user, and they stay with this conversation. Neither takes direct writes. To change an upload, copy it into the workspace and edit the copy. To give the user a file, write it in the workspace, copy it to agent_uploads/<name> and link it in your reply: [report.md](file:///agent_uploads/report.md) shows a download, ![chart](file:///agent_uploads/chart.png) shows the image.`
-	if !light {
-		desc += ` Copy anything you may need later, such as MEMORY.md or notes, to agent_uploads/<name> too. The read tool shows line breaks as \n; write, append, edit, replace and insert take them as \n, and a file they change keeps its own CRLF or LF endings and BOM.`
-	}
-	return desc
-}
+const moduleDesc = `The workspace is temporary and takes plain relative paths, like report.md. user_uploads/ holds the files the user attached, read-only: an attachment arrives as a link like [notes.txt](file:///user_uploads/notes.txt), and its path is user_uploads/notes.txt. agent_uploads/ holds the files you give the user, and they stay with this conversation. Neither takes direct writes. To change an upload, copy it into the workspace and edit the copy. To give the user a file, write it in the workspace, copy it to agent_uploads/<name> and link it in your reply: [report.md](file:///agent_uploads/report.md) shows a download, ![chart](file:///agent_uploads/chart.png) shows the image. Copy anything you may need later, such as notes or results, to agent_uploads/<name> too. read shows line breaks as \n, the tools that change a file take them as \n, and a changed file keeps its own CRLF or LF endings and BOM.`
 
 func Module(ctx context.Context) common.Module {
 	light := common.LightMode(ctx)
-	m := tools.NewModule("files", moduleDesc(light))
+	m := tools.NewModule("files", moduleDesc)
 	add(m, "list", listDesc, listTool)
-	add(m, "read", readDesc(light), func(ctx context.Context, arg readArg) (string, error) {
-		return readTool(ctx, arg, light)
-	})
+	add(m, "read", readDesc(light), readTool)
 	add(m, "readImage", readImageDesc, readImageTool)
 	add(m, "readDocument", readDocumentDesc, readDocumentTool)
 	add(m, "copy", copyDesc, copyTool)

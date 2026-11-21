@@ -75,7 +75,7 @@ type writeResult struct {
 	Range string   `json:"range"`
 }
 
-func writeTool(ctx context.Context, arg writeArg, light bool) (writeResult, error) {
+func writeTool(ctx context.Context, arg writeArg) (writeResult, error) {
 	x1, y1, err := excelize.CellNameToCoordinates(arg.Cell)
 	if err != nil {
 		return writeResult{}, fmt.Errorf("cell %q: %w", arg.Cell, err)
@@ -103,16 +103,12 @@ func writeTool(ctx context.Context, arg writeArg, light bool) (writeResult, erro
 	if width == 0 {
 		return writeResult{}, fmt.Errorf("rows hold no cells")
 	}
-	split := "split it into several writes"
-	if !light {
-		split += ", such as from a js script"
-	}
 	if arg.Repeat > maxFormatCells {
-		return writeResult{}, fmt.Errorf("repeat %d is over the limit %d — %s", arg.Repeat, maxFormatCells, split)
+		return writeResult{}, fmt.Errorf("repeat %d is over the limit %d — split it into several writes", arg.Repeat, maxFormatCells)
 	}
 	height := len(arg.Rows) * int(max(arg.Repeat, 1))
 	if cells := width * height; cells > maxFormatCells {
-		return writeResult{}, fmt.Errorf("block covers %d cells, limit %d — %s", cells, maxFormatCells, split)
+		return writeResult{}, fmt.Errorf("block covers %d cells, limit %d — split it into several writes", cells, maxFormatCells)
 	}
 	start, err := excelize.CoordinatesToCellName(x1, y1)
 	if err != nil {

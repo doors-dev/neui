@@ -81,7 +81,7 @@ func errorCode(status int, e *APIError) api.ErrCode {
 	if e.Code == "content_policy_violation" || e.Code == "refusal" {
 		return api.CodeRefused
 	}
-	if strings.Contains(text, "input is not supported") {
+	if strings.Contains(text, "input is not supported") || strings.Contains(text, "jinja exception") {
 		return api.CodeInvalid
 	}
 	switch status {

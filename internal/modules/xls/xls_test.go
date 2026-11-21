@@ -208,7 +208,7 @@ func TestWrittenFormulasHaveNoSavedValue(t *testing.T) {
 	fs := c.FS()
 	buildBook(t, fs, "book.xlsx")
 	ctx := c.Ctx()
-	if _, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "E2", Rows: [][]any{{"=B2*3", "=A2&\"-x\""}}}, false); err != nil {
+	if _, err := writeTool(ctx, writeArg{Path: "book.xlsx", Sheet: "Data", Cell: "E2", Rows: [][]any{{"=B2*3", "=A2&\"-x\""}}}); err != nil {
 		t.Fatal(err)
 	}
 	res, err := readTool(ctx, readArg{Path: "book.xlsx", Sheet: "Data", Range: "E2:F2"})
@@ -520,11 +520,11 @@ func TestLightModule(t *testing.T) {
 	}
 	over := json.RawMessage(fmt.Sprintf(`{"path":"book.xlsx","sheet":"Data","cell":"F1","rows":[[1]],"repeat":%d}`, maxFormatCells+1))
 	write, _ := light.Get("write")
-	if _, err := write.Agent(c.Ctx(), over); err == nil || strings.Contains(err.Error(), "script") {
-		t.Fatalf("light write refused with %v, want no script in it", err)
+	if _, err := write.Agent(ctx, over); err == nil || !strings.HasSuffix(err.Error(), "split it into several writes") {
+		t.Fatalf("light write refused with %v, want the split hint alone", err)
 	}
 	write, _ = factory(context.Background()).Get("write")
-	if _, err := write.Agent(ctx, over); err == nil || !strings.Contains(err.Error(), "such as from a js script") {
-		t.Fatalf("full write refused with %v, want the script hint", err)
+	if _, err := write.Agent(c.Ctx(), over); err == nil || !strings.HasSuffix(err.Error(), "split it into several writes") {
+		t.Fatalf("full write refused with %v, want the split hint alone", err)
 	}
 }

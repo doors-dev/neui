@@ -524,7 +524,7 @@ func (t *thread) rewind(cmd commandRewind) {
 	if wasPending {
 		t.link.send(newMessageEvent(nil, api.ChatEventInputPending{Pending: false}))
 	}
-	t.link.send(newMessageEvent(cmd.intoMessage(), api.ChatEventRoundStart{Round: round, Truncate: cmd.round, Usage: t.replay.Usage(), CanCompact: t.canCompact()}))
+	t.link.send(newMessageEvent(cmd.intoMessage(), api.ChatEventRoundStart{Round: round, Truncate: cmd.round, InputTaken: cmd.input.Len() != 0, Usage: t.replay.Usage(), CanCompact: t.canCompact()}))
 }
 
 func (t *thread) switchStateTools(round api.Round, calls []api.ContentToolUse) {

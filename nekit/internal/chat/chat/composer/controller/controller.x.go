@@ -258,10 +258,12 @@ func (s Controller) FS() api.FS {
 func (s Controller) FlushInput(ctx context.Context) {
 	s.origin.Mutate(ctx, func(d state) state {
 		d.pending = false
-		d.rewind = invalidRewind
+		d.input = api.Input{}
+		if d.rewind.isValid() {
+			return d
+		}
 		d.inputSeq += 1
 		d.uploading = 0
-		d.input = api.Input{}
 		d.textBytes = 0
 		d.attachBytes = 0
 		return d
@@ -438,9 +440,7 @@ func (s Controller) Send(ctx context.Context) {
 		if state.textBytes + state.attachBytes > s.inputLimit {
 			return
 		}
-		if s.thread.Rewind(ctx, state.rewind.round, state.rewind.input) == nil {
-			s.CancelRewind(ctx)
-		}
+		s.thread.Rewind(ctx, state.rewind.round, state.rewind.input)
 		return
 	}
 	if state.input.Len() == 0 || state.pending || state.textBytes + state.attachBytes > s.inputLimit {

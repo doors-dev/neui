@@ -39,6 +39,7 @@ type Host struct {
 	Island   api.IslandConfig
 	Options  []common.Option
 	Page     gox.Elem
+	Guard    time.Duration
 }
 
 type Chat struct {
@@ -87,6 +88,9 @@ func open(t *testing.T, h Host, ctx context.Context, p page.Page) *Chat {
 	}
 	c.send = func(input api.Input) error {
 		return c.Do(func(l thread.Link, op thread.Operation) thread.Command { return l.Send(op, input) })
+	}
+	if h.Guard > 0 {
+		c.guard = h.Guard
 	}
 	t.Cleanup(c.Close)
 	c.listen()

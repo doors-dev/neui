@@ -164,13 +164,15 @@ type ErrorCase struct {
 }
 
 type Live struct {
-	Env    string
-	Model  api.Model
-	Params Params
-	Base   string
-	Count  string
-	Strip  []string
-	Auth   func(r *http.Request, key string)
+	Env                   string
+	Model                 api.Model
+	Params                Params
+	Base                  string
+	Count                 string
+	Strip                 []string
+	Auth                  func(r *http.Request, key string)
+	AnyModel              bool
+	DropsEarlierReasoning bool
 }
 
 type Adapter struct {

@@ -243,6 +243,9 @@ func liveGenerate(t *testing.T, a Adapter, key string) {
 		t.Logf("quoted %q", answer.String())
 	})
 	t.Run("invalid", func(t *testing.T) {
+		if a.Live.AnyModel {
+			t.Skip("the server answers any model name")
+		}
 		bad := api.Model{Name: "no-such-model-conform"}
 		events, _ := turn(t, bad, cheap, entry(t, m.Name, "text"))
 		e, ok := events[len(events)-1].(api.EventErr)

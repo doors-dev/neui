@@ -215,7 +215,11 @@ func (c *chat) Update(ctx context.Context, e api.ChatEvent) {
 				return b
 			})
 			if e.InputTaken {
-				c.composer.FlushInput(ctx)
+				if e.Truncate != api.NoRoundID {
+					c.composer.CancelRewind(ctx)
+				} else {
+					c.composer.FlushInput(ctx)
+				}
 			}
 			c.list.RoundStart(ctx, e.Round, e.Truncate)
 		case api.ChatEventInputPending:

@@ -92,8 +92,12 @@ func (draftThread) Model() api.Model { return api.Model{Context: 10_000} }
 
 func (draftThread) Input(context.Context, api.Input) error { return nil }
 
-func TestRoundStartClearsTheComposerOnlyWhenTheRoundTookTheInput(t *testing.T) {
-	drafts := make(chan [2]string, 1)
+func TestRoundStartClearsOnlyWhatTheRoundTook(t *testing.T) {
+	type look struct {
+		name  string
+		state controller.InputState
+	}
+	looks := make(chan []look, 1)
 	app := doors.NewApp(func(ctx context.Context, r doors.Request) gox.Elem {
 		composer := controller.New(draftThread{}, api.ChatInput{}, true, api.EventUsage{}, nil, false, false, nil)
 		c := &chat{
@@ -102,11 +106,23 @@ func TestRoundStartClearsTheComposerOnlyWhenTheRoundTookTheInput(t *testing.T) {
 			list:     list.New(params.Params{}, nil, draftThread{}, composer, "t", nil, api.NoRoundID, func(context.Context, error) {}),
 			badge:    doors.NewSource(Badge{}),
 		}
-		composer.UpdateInputText(ctx, "typed during the resend")
+		var got []look
+		composer.UpdateInputText(ctx, "draft")
+		composer.InitRewind(ctx, 1, api.Input{Text: "edit"})
 		c.Update(ctx, api.ChatEventRoundStart{Round: api.Round{ID: 2, Input: api.Input{Text: "hi"}}, Truncate: 1})
-		resent := composer.Input().Get().Input.Text
-		c.Update(ctx, api.ChatEventRoundStart{Round: api.Round{ID: 3, Input: api.Input{Text: "typed during the resend"}}, Truncate: api.NoRoundID, InputTaken: true})
-		drafts <- [2]string{resent, composer.Input().Get().Input.Text}
+		got = append(got, look{"retry", composer.Input().Get()})
+		c.Update(ctx, api.ChatEventRoundStart{Round: api.Round{ID: 3, Input: api.Input{Text: "edit"}}, Truncate: 2, InputTaken: true})
+		got = append(got, look{"rewind", composer.Input().Get()})
+		c.Update(ctx, api.ChatEventRoundStart{Round: api.Round{ID: 4, Input: api.Input{Text: "draft"}}, Truncate: api.NoRoundID, InputTaken: true})
+		got = append(got, look{"send", composer.Input().Get()})
+		composer.UpdateInputText(ctx, "queued")
+		c.Update(ctx, api.ChatEventInputPending{Pending: true})
+		composer.InitRewind(ctx, 3, api.Input{Text: "edit again"})
+		c.Update(ctx, api.ChatEventRoundStart{Round: api.Round{ID: 5, Input: api.Input{Text: "queued"}}, Truncate: api.NoRoundID, InputTaken: true})
+		got = append(got, look{"queue taken while editing", composer.Input().Get()})
+		composer.CancelRewind(ctx)
+		got = append(got, look{"edit closed", composer.Input().Get()})
+		looks <- got
 		return c.body(failed)
 	})
 	srv := httptest.NewServer(app)
@@ -116,13 +132,22 @@ func TestRoundStartClearsTheComposerOnlyWhenTheRoundTookTheInput(t *testing.T) {
 		t.Fatalf("get: %v", err)
 	}
 	res.Body.Close()
+	want := []struct {
+		rewind bool
+		text   string
+	}{
+		{true, "edit"},
+		{false, "draft"},
+		{false, ""},
+		{true, "edit again"},
+		{false, ""},
+	}
 	select {
-	case d := <-drafts:
-		if d[0] != "typed during the resend" {
-			t.Fatalf("a resend of the user's round left the composer with %q, want the draft typed meanwhile", d[0])
-		}
-		if d[1] != "" {
-			t.Fatalf("a round that took the sent input left the composer with %q, want it cleared", d[1])
+	case got := <-looks:
+		for i, w := range want {
+			if s := got[i].state; s.Rewind != w.rewind || s.Input.Text != w.text || s.Pending {
+				t.Errorf("after the %s the composer shows %+v, want edit mode %v with %q and nothing pending", got[i].name, s, w.rewind, w.text)
+			}
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("the page never rendered")

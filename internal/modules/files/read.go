@@ -45,7 +45,7 @@ func readDesc(light bool) string {
 }
 
 const readBytesDesc = `Read raw bytes of a file.`
-const writeBytesDesc = `Write raw bytes to a file, replacing existing content. Plain text goes through write.`
+const writeBytesDesc = `Write raw bytes to a file, replacing existing content, creating parent directories. Plain text goes through write.`
 
 type readArg struct {
 	Path   string `json:"path" required:"true"`
@@ -64,7 +64,7 @@ type writeBytesArg struct {
 	Data []byte `json:"data" required:"true"`
 }
 
-func readTool(ctx context.Context, arg readArg, light bool) (string, error) {
+func readTool(ctx context.Context, arg readArg) (string, error) {
 	thread := common.GetController(ctx)
 	rc, err := thread.FS().ReadAll(ctx, arg.Path)
 	if err != nil {
@@ -74,7 +74,7 @@ func readTool(ctx context.Context, arg readArg, light bool) (string, error) {
 	br := bufio.NewReaderSize(ctxReader{ctx, rc}, 64<<10)
 	head, _ := br.Peek(4096)
 	if bytes.IndexByte(head, 0) >= 0 {
-		if light {
+		if common.LightMode(ctx) {
 			return "", fmt.Errorf("%q is not a text file: look at an image with readImage, read a PDF or Office file with readDocument", arg.Path)
 		}
 		return "", fmt.Errorf("%q is a binary file, use readBytes", arg.Path)

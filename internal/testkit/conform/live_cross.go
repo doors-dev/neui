@@ -194,7 +194,7 @@ func RunLiveCross(t *testing.T, a Adapter) {
 			_, without := send(t, stripped)
 			total := func(u api.EventUsage) int { return u.Input + u.CacheRead + u.CacheWrite }
 			t.Logf("input with own reasoning %d, without %d", total(with), total(without))
-			if total(with) <= total(without) {
+			if total(with) <= total(without) && !a.Live.DropsEarlierReasoning {
 				t.Errorf("own reasoning was not read after the switch back: %d input tokens with it, %d without", total(with), total(without))
 			}
 		})

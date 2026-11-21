@@ -1258,7 +1258,7 @@ func TestTaskNotifiesThenOkArriveInOrder(t *testing.T) {
 	}
 }
 
-func TestRoundStartTakesTheInputOnlyFromSendAndTheQueue(t *testing.T) {
+func TestRoundStartTakesTheInputOfSendTheQueueAndRewind(t *testing.T) {
 	release := make(chan struct{})
 	failed := testkit.Events(api.EventStart{ID: "down", Model: "fake"}, api.EventErr{Code: api.CodeNetwork, Err: errors.New("reset")})
 	tooLong := testkit.Events(api.EventStart{ID: "long", Model: "fake"}, api.EventErr{Code: api.CodeContextLength, Err: errors.New("prompt is too long")})
@@ -1267,7 +1267,7 @@ func TestRoundStartTakesTheInputOnlyFromSendAndTheQueue(t *testing.T) {
 		testkit.Call("probe__run", map[string]any{}), testkit.Say("ran"),
 		held(release, testkit.Say("busy")), testkit.Say("queued"),
 		failed, testkit.Say("retried"),
-		testkit.Say("rewound"),
+		testkit.Say("rewound"), testkit.Say("resumed"),
 		tooLong, testkit.Say("after the summary"),
 	)
 	p.OnCompaction(testkit.Say("the summary"))
@@ -1299,6 +1299,8 @@ func TestRoundStartTakesTheInputOnlyFromSendAndTheQueue(t *testing.T) {
 	collect(c.Wait())
 	c.Rewind(starts[len(starts)-1].Round.ID, "instead")
 	collect(c.Wait())
+	c.Rewind(starts[3].Round.ID, "")
+	collect(c.Wait())
 	c.Send("too long")
 	collect(c.Wait())
 	want := []struct {
@@ -1309,7 +1311,7 @@ func TestRoundStartTakesTheInputOnlyFromSendAndTheQueue(t *testing.T) {
 		{"tools", true}, {"", false},
 		{"busy", true}, {"queued", true},
 		{"fails", true}, {"fails", false},
-		{"instead", false},
+		{"instead", true}, {"", false},
 		{"too long", true}, {"too long", false},
 	}
 	if len(starts) != len(want) {

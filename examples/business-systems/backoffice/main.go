@@ -59,6 +59,13 @@ func main() {
 			}
 			opts = append(opts, generic.WithExtraBody(body))
 		}
+		if v := os.Getenv("LOCAL_LLM_MAX_TOKENS"); v != "" {
+			n, err := strconv.Atoi(v)
+			if err != nil || n < 0 {
+				log.Fatalf("LOCAL_LLM_MAX_TOKENS: %q is not a token count", v)
+			}
+			opts = append(opts, generic.WithMaxTokens(n))
+		}
 		provider, err = generic.New(generic.Conf{Model: api.Model{Name: name, Context: window}, BaseURL: os.Getenv("LOCAL_LLM_URL")}, opts...)
 	case os.Getenv("DEEPSEEK_API_KEY") != "":
 		provider, err = deepseek.New(deepseek.Conf{Model: deepseek.Flash})

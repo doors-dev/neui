@@ -102,7 +102,7 @@ Open one when it serves the user better than chat or direct page calls do:
 - Complex input: several fields, a choice from options, a confirmation, or a structured answer that would be clumsy to collect in prose.
 - A custom view: a table, summary, comparison or overview built from app data that the app itself doesn't show.
 
-Don't open one when a script alone does the job and you have the js module; for example, when bulk work on the page needs nothing from the user, such as the same steps over many rows.
+Don't open one when a script alone does the job and you have the js module; for example, when bulk work on the page needs nothing from the user.
 
 An island's app functions are also tools of its app child space: call one directly for a single change instead of starting an app, and to read records the page shows a page at a time instead of paging through them; call them from a js script when you have that module and the task needs no UI.
 

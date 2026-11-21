@@ -669,6 +669,14 @@ func TestRecordedStreams(t *testing.T) {
 		{"openrouter-gptoss-upstream-error.sse", `reasoning[reasoning] "Need to call tool." | usage in=107 out=0 rsn=5 cr=0 cw=0 | err network`},
 		{"openrouter-qwen-cache-2.sse", `text "ok" | usage in=48 out=2 rsn=0 cr=9920 cw=0 | ok turn`},
 		{"openrouter-mistral-tools.sse", `reasoning[reasoning] "The user wants to know the current weather in Paris and Rome. I need to use the get_weather tool for each city. Let me make two separate calls - one for Paris and one for Rome." | text "I'll get the current weather for both Paris and Rome for you." | tool I77MZpriD get_weather {"city": "Paris"} | tool bAk2mbhvM get_weather {"city": "Rome"} | opaque generic.fields reasoning_details | usage in=94 out=39 rsn=41 cr=0 cw=0 | ok turn`},
+		{"llamacpp-weather-tools.sse", `reasoning[reasoning_content] "The user is asking for the current weather in two cities: Paris and Rome. They specifically want me to use the tool for each city. I have a get_weather function that takes a city parameter. I need to call this function twice, once for Paris and once for Rome." | tool EbJNSsMDTpz1hWF7LnV5DjEKzWHX1x6p get_weather {"city":"Paris"} | tool lku4tuMDAPTHMZiTmb8fb8dF36jBw9Pi get_weather {"city":"Rome"} | usage in=286 out=112 rsn=0 cr=0 cw=0 | ok turn`},
+		{"llamacpp-tools.sse", `reasoning[reasoning_content] "The user is asking me to look up the code of item \"alpha\" using the lookup tool. I need to call the lookup function with the item parameter set to \"alpha\"." | tool t9Obof2b5xOfzVwv4E4fUivinD9O4L7G lookup {"item":"alpha"} | usage in=287 out=64 rsn=0 cr=0 cw=0 | ok turn`},
+		{"llamacpp-result-rc.sse", `reasoning[reasoning_content] "The lookup function returned \"alpha: 58\", which means the code for item \"alpha\" is 58. The user asked me to reply with the code only, so I should just return \"58\"." | text "58" | usage in=21 out=51 rsn=0 cr=350 cw=0 | ok turn`},
+		{"llamacpp-cache-2.sse", `text "ok" | usage in=4 out=2 rsn=0 cr=3147 cw=0 | ok turn`},
+		{"llamacpp-cap.sse", `reasoning[reasoning_content] "Thinking Process:\n\n1.  **Analyze the Request:**\n    *   Topic: Tea.\n    *" | usage in=4 out=24 rsn=0 cr=14 cw=0 | err capped`},
+		{"llamacpp-stop-off.sse", `text "1, 2, 3, 4, 5, 6, " | usage in=27 out=19 rsn=0 cr=0 cw=0 | ok turn`},
+		{"llamacpp-stop-thinking.sse", `reasoning[reasoning_content] "Thinking Process:\n\n1.  **Analyze the Request:**\n    *   Task: Count from 1 to 10.\n    *   Format: Comma-separated.\n    *   Constraint: Nothing else (no intro, no outro, no explanations).\n\n2.  **Generate the Content:**\n    *   Numbers: 1, 2, 3, 4, 5, 6, " | usage in=2 out=91 rsn=0 cr=23 cw=0 | ok turn`},
+		{"llamacpp-empty.sse", `text "ok" | usage in=35 out=2 rsn=0 cr=0 cw=0 | ok turn`},
 	} {
 		t.Run(tc.file, func(t *testing.T) {
 			data, err := os.ReadFile(filepath.Join("testdata", "streams", tc.file))

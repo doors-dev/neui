@@ -32,7 +32,7 @@ import (
 )
 
 func writeDesc(light bool) string {
-	desc := `Write a whole text file, replacing existing content.`
+	desc := `Write a whole text file, replacing existing content, creating parent directories.`
 	if !light {
 		desc += ` Content with \r keeps its line breaks as given.`
 	}
