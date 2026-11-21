@@ -74,7 +74,7 @@ func (s *messages) pendingContent(input api.Input) []api.Content {
 	}
 	input.Text = trimText(api.ContentText{Text: input.Text}, budget).Text
 	content = append(content, input.Content()...)
-	return omitOversizedMedia(content, s.model)
+	return omitOversizedMedia(content, s.model, budget)
 }
 
 func (s *messages) replay(input api.Input) ([]api.Message, error) {
@@ -207,7 +207,7 @@ func (s *messages) appendRound(r api.Round) {
 			s.resultStash = append(s.resultStash, call.LostResult())
 		}
 	}
-	user := s.cut(omitOversizedMedia(userContent, s.model))
+	user := s.cut(omitOversizedMedia(userContent, s.model, budget))
 	if opening {
 		user = append(user, api.ContentText{Text: nameInstruction})
 	}

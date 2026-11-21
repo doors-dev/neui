@@ -24,6 +24,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"unicode/utf8"
 
 	"github.com/doors-dev/doors"
 
@@ -114,8 +115,13 @@ func (l *link) useTools(roundID api.RoundID, tools []api.ContentToolUse) (<-chan
 	var running context.CancelCauseFunc
 	config := l.backend.Config()
 	limit := config.ToolCallLimit
-	budget := replay.RoundItemBudget(config, l.backend.Provider().Model())
+	model := l.backend.Provider().Model()
+	budget := replay.RoundItemBudget(config, model)
 	mediaBudget := replay.RoundMediaBudget(config)
+	asText := func(c api.Content) bool {
+		d, ok := c.(api.ContentDocument)
+		return ok && !model.Inputs.Has(api.ModalityDocument) && api.DocumentMime(strings.ToLower(strings.TrimSpace(d.Mime))).IsText() && utf8.Valid(d.Data)
+	}
 	go func() {
 		defer close(ch)
 		total, media := 0, int64(0)
@@ -170,7 +176,11 @@ func (l *link) useTools(roundID api.RoundID, tools []api.ContentToolUse) (<-chan
 				case api.ContentImage:
 					mediaSize += int64(len(c.Data))
 				case api.ContentDocument:
-					mediaSize += int64(len(c.Data))
+					if asText(c) {
+						size += len(c.Data)
+					} else {
+						mediaSize += int64(len(c.Data))
+					}
 				}
 			}
 			if mediaBudget > 0 && media+mediaSize > mediaBudget {
@@ -180,13 +190,15 @@ func (l *link) useTools(roundID api.RoundID, tools []api.ContentToolUse) (<-chan
 				for _, c := range res.Content {
 					switch c.(type) {
 					case api.ContentImage, api.ContentDocument:
-						if !noted {
-							content = append(content, api.ContentText{Text: note})
-							noted = true
+						if !asText(c) {
+							if !noted {
+								content = append(content, api.ContentText{Text: note})
+								noted = true
+							}
+							continue
 						}
-					default:
-						content = append(content, c)
 					}
+					content = append(content, c)
 				}
 				res = api.ContentToolResult{ID: res.ID, Content: content, Error: res.Error}
 				size, mediaSize = size+len(note), 0

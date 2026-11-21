@@ -460,6 +460,56 @@ func TestMediaNoteCountsTowardTheTextBudget(t *testing.T) {
 	}
 }
 
+func TestTextDocumentIsTextForAModelWithoutDocuments(t *testing.T) {
+	textOnly := api.Model{Name: "stub", Context: 1000, Inputs: api.Modalities{api.ModalityText}}
+	reading := api.Model{Name: "stub", Context: 1000, Inputs: api.Modalities{api.ModalityText, api.ModalityDocument}}
+	ok := api.ContentText{Text: "ok"}
+	doc := func(size int, mime string) api.ContentDocument {
+		return api.ContentDocument{Data: []byte(strings.Repeat("x", size)), Mime: mime, Name: "a.txt"}
+	}
+	latin := api.ContentDocument{Data: []byte(strings.Repeat("\xff", 500)), Mime: "text/plain", Name: "l.txt"}
+	pdf := api.ContentDocument{Data: []byte("%PDF-1.4\n" + strings.Repeat(" ", 500)), Mime: string(api.DocumentPDF), Name: "a.pdf"}
+	image := api.ContentImage{Data: make([]byte, 30000), Mime: "image/png"}
+	noDocument := func(d api.ContentDocument) api.ContentText {
+		return api.ContentText{Text: fmt.Sprintf(`<nodocument name=%q mime=%q bytes=%d reason="this model reads no documents of type %s"/>`, d.Name, d.Mime, len(d.Data), d.Mime)}
+	}
+	for _, c := range []struct {
+		name   string
+		model  api.Model
+		result api.UserContents
+		stored api.UserContents
+		sent   api.UserContents
+	}{
+		{"fits the budget", textOnly, api.UserContents{ok, doc(398, "text/plain")}, api.UserContents{ok, doc(398, "text/plain")}, api.UserContents{ok, api.ContentText{Text: strings.Repeat("x", 398)}}},
+		{"over the budget", textOnly, api.UserContents{ok, doc(399, "text/plain")}, api.UserContents{api.ContentText{Text: replay.OmittedNote(401, false)}}, api.UserContents{api.ContentText{Text: replay.OmittedNote(401, false)}}},
+		{"mime as written", textOnly, api.UserContents{ok, doc(399, " Text/Markdown")}, api.UserContents{api.ContentText{Text: replay.OmittedNote(401, false)}}, api.UserContents{api.ContentText{Text: replay.OmittedNote(401, false)}}},
+		{"reading model", reading, api.UserContents{ok, doc(399, "text/plain")}, api.UserContents{ok, doc(399, "text/plain")}, api.UserContents{ok, doc(399, "text/plain")}},
+		{"not UTF-8", textOnly, api.UserContents{ok, latin}, api.UserContents{ok, latin}, api.UserContents{ok, noDocument(latin)}},
+		{"not a text type", textOnly, api.UserContents{ok, pdf}, api.UserContents{ok, pdf}, api.UserContents{ok, noDocument(pdf)}},
+		{"media noted around it", textOnly, api.UserContents{image, doc(100, "text/plain")}, api.UserContents{api.ContentText{Text: replay.OmittedMediaNote(30000)}, doc(100, "text/plain")}, api.UserContents{api.ContentText{Text: replay.OmittedMediaNote(30000)}, api.ContentText{Text: strings.Repeat("x", 100)}}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			run := probe(t, func(context.Context, json.RawMessage) (any, error) { return c.result, nil })
+			s := local.NewMessageStorage()
+			p := testkit.NewProvider(c.model, testkit.Call("probe__run", struct{}{}), testkit.Say("done"))
+			h := stack.Headless(t, stack.Host{Provider: p, Config: mediaConfig, Options: []common.Option{run, common.OptionMessageStorage(s)}})
+			h.Send("call")
+			h.Wait()
+			for round, err := range s.RoundRange(context.Background(), h.State().ID, api.NoRoundID, api.NoRoundID) {
+				if err != nil {
+					t.Fatalf("RoundRange: %v", err)
+				}
+				if round.ID == 0 && (len(round.Results) != 1 || !reflect.DeepEqual(round.Results["call-probe__run"].Content, c.stored)) {
+					t.Fatalf("the result is stored as %#v, want %#v", round.Results, c.stored)
+				}
+			}
+			if results := testkit.Results(p.Request(t, 1)); len(results) != 1 || !reflect.DeepEqual(results[0].Content, c.sent) {
+				t.Fatalf("the result went out as %#v, want %#v", results, c.sent)
+			}
+		})
+	}
+}
+
 func TestMediaBudgetIsOffWithoutAThreadLimit(t *testing.T) {
 	var ran atomic.Int64
 	p := testkit.NewProvider(mediaModel, sizedCalls(30000, 30000), testkit.Say("done"))

@@ -1666,7 +1666,7 @@ func TestWithheldKindsBecomeNotes(t *testing.T) {
 			for i, block := range tc.want {
 				wantMessage[i] = block
 			}
-			g, _ := json.Marshal(omitOversizedMedia([]api.Content{png, pdf, csv, latin, empty}, model))
+			g, _ := json.Marshal(omitOversizedMedia([]api.Content{png, pdf, csv, latin, empty}, model, RoundItemBudget(unboundedConfig, model)))
 			w, _ := json.Marshal(wantMessage)
 			if !bytes.Equal(g, w) {
 				t.Fatalf("a user message replays as\n%s\nwant\n%s", g, w)
@@ -1747,5 +1747,69 @@ func TestSwitchToAReadingModelReplaysTheMedia(t *testing.T) {
 	w, _ := json.Marshal([]api.Content{api.ContentToolResult{ID: "first", Content: api.UserContents{png, pdf}}})
 	if !bytes.Equal(g, w) {
 		t.Fatalf("after a switch to a model that reads both kinds the stored result replays as\n%s\nwant\n%s", g, w)
+	}
+}
+
+func TestSwitchToATextOnlyModelCutsAStoredTextDocument(t *testing.T) {
+	var lines strings.Builder
+	for i := range 400 {
+		fmt.Fprintf(&lines, "line %d\n", i)
+	}
+	text := api.ContentDocument{Data: []byte(lines.String()), Mime: string(api.DocumentMarkdown), Name: "a.md"}
+	pdf := api.ContentDocument{Data: pdfDoc(1), Mime: string(api.DocumentPDF), Name: "a.pdf"}
+	noPDF := api.ContentText{Text: fmt.Sprintf(`<nodocument name="a.pdf" mime="application/pdf" bytes=%d reason="this model reads no documents of type application/pdf"/>`, len(pdf.Data))}
+	s := local.NewMessageStorage()
+	r := NewReplay(context.Background(), "a", s, unboundedConfig, api.Model{Context: 1000, Inputs: api.Modalities{api.ModalityText, api.ModalityDocument}})
+	mustCreate(t, r)
+	toolRound(t, r, "first", "start", text, pdf)
+	toolRound(t, r, "second", "", text, pdf)
+	g, _ := json.Marshal(r.messages.rounds[1].user)
+	w, _ := json.Marshal([]api.Content{api.ContentToolResult{ID: "first", Content: api.UserContents{text, pdf}}})
+	if !bytes.Equal(g, w) {
+		t.Fatalf("the document-reading model replays the stored result as\n%s\nwant\n%s", g, w)
+	}
+	model := api.Model{Context: 1000, Inputs: api.Modalities{api.ModalityText}}
+	budget := RoundItemBudget(unboundedConfig, model)
+	cut := trimText(api.ContentText{Text: string(text.Data)}, budget)
+	if len(text.Data) <= budget || !strings.HasPrefix(cut.Text, "line 0\n") || !strings.HasSuffix(cut.Text, "line 399\n") || !strings.Contains(cut.Text, "<truncated>") {
+		t.Fatalf("a %d-byte document cut to %d bytes reads %q, want its head and tail around the cut mark", len(text.Data), budget, cut.Text)
+	}
+	textOnly := NewReplay(context.Background(), "a", s, unboundedConfig, model)
+	if err := textOnly.Load(); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	_, messages, err := textOnly.RoundInit(api.Input{})
+	if err != nil {
+		t.Fatalf("RoundInit: %v", err)
+	}
+	for _, at := range []struct {
+		where string
+		got   api.Content
+		id    string
+	}{
+		{"a stored round", messages[2].Content[0], "first"},
+		{"the pending results", messages[4].Content[0], "second"},
+	} {
+		g, _ := json.Marshal(at.got)
+		w, _ := json.Marshal(api.ContentToolResult{ID: at.id, Content: api.UserContents{cut, noPDF}})
+		if !bytes.Equal(g, w) {
+			t.Fatalf("after a switch to a text-only model %s replays as\n%s\nwant\n%s", at.where, g, w)
+		}
+	}
+	matchesLoad(t, s, textOnly)
+	if _, err := textOnly.RoundOk(api.EventUsage{Input: 10}, api.Indexed[api.Content]{0: api.ContentText{Text: "read"}}); err != nil {
+		t.Fatalf("RoundOk: %v", err)
+	}
+	matchesLoad(t, s, textOnly)
+	whole, _ := json.Marshal(api.UserContents{text, pdf})
+	for round, err := range s.RoundRange(context.Background(), "a", api.NoRoundID, api.NoRoundID) {
+		if err != nil {
+			t.Fatalf("RoundRange: %v", err)
+		}
+		for _, res := range round.Results {
+			if g, _ := json.Marshal(res.Content); !bytes.Equal(g, whole) {
+				t.Fatalf("round %d stores its result as\n%s\nwant the documents whole", round.ID, g)
+			}
+		}
 	}
 }

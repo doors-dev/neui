@@ -350,7 +350,7 @@ func omitMedia(content []api.Content, n int, placeholder string) []api.Content {
 	return out
 }
 
-func omitOversizedMedia(content []api.Content, m api.Model) []api.Content {
+func omitOversizedMedia(content []api.Content, m api.Model, budget int) []api.Content {
 	changed := false
 	out := make([]api.Content, 0, len(content))
 	for _, block := range content {
@@ -365,7 +365,7 @@ func omitOversizedMedia(content []api.Content, m api.Model) []api.Content {
 		case api.ContentDocument:
 			if !m.Inputs.Has(api.ModalityDocument) {
 				changed = true
-				out = append(out, documentText(b))
+				out = append(out, documentText(b, budget))
 				continue
 			}
 			out = append(out, block)
@@ -382,7 +382,7 @@ func omitOversizedMedia(content []api.Content, m api.Model) []api.Content {
 				case api.ContentDocument:
 					if !m.Inputs.Has(api.ModalityDocument) {
 						changed = true
-						inner = append(inner, documentText(n))
+						inner = append(inner, documentText(n, budget))
 						continue
 					}
 				}
@@ -423,9 +423,9 @@ func noImage(c api.ContentImage, reason string) api.ContentText {
 	return api.ContentText{Text: fmt.Sprintf("<noimage mime=%q bytes=%d reason=%q/>", c.Mime, len(c.Data), reason)}
 }
 
-func documentText(c api.ContentDocument) api.ContentText {
+func documentText(c api.ContentDocument, budget int) api.ContentText {
 	if len(c.Data) != 0 && api.DocumentMime(strings.ToLower(strings.TrimSpace(c.Mime))).IsText() && utf8.Valid(c.Data) {
-		return api.ContentText{Text: string(c.Data)}
+		return trimText(api.ContentText{Text: string(c.Data)}, budget)
 	}
 	return api.ContentText{Text: fmt.Sprintf("<nodocument name=%q mime=%q bytes=%d reason=%q/>", c.Name, c.Mime, len(c.Data), "this model reads no documents of type "+c.Mime)}
 }

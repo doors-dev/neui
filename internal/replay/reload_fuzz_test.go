@@ -195,7 +195,7 @@ func (f *fuzzRun) blocks() api.UserContents {
 		case 1:
 			out = append(out, api.ContentDocument{Data: pdfDoc(1 + f.rng.IntN(4)), Mime: "application/pdf", Name: fmt.Sprintf("d%d.pdf", f.media)})
 		case 2:
-			out = append(out, api.ContentDocument{Data: []byte(fmt.Sprintf("plain %d", f.media)), Mime: "text/plain", Name: fmt.Sprintf("d%d.txt", f.media)})
+			out = append(out, api.ContentDocument{Data: []byte(strings.Repeat(fmt.Sprintf("plain %d\n", f.media), 1+f.rng.IntN(60))), Mime: "text/plain", Name: fmt.Sprintf("d%d.txt", f.media)})
 		case 3:
 			out = append(out, api.ContentDocument{Data: []byte{0xff, byte(f.media)}, Mime: "text/csv", Name: fmt.Sprintf("d%d.csv", f.media)})
 		default:
@@ -367,7 +367,7 @@ func TestSessionMatchesLoadUnderRandomRounds(t *testing.T) {
 				rng:    rng,
 				s:      local.NewMessageStorage(),
 				config: api.ThreadConfig{ThreadMemoryLimit: []int64{-1, 300 + rng.Int64N(3000)}[seed%2], ReplayItemShare: 0.25, CompactionPreserve: 0.25},
-				model:  api.Model{ImagesPerRequest: []int{1, 2, 3, 5, 8, 13}[rng.IntN(6)], Inputs: inputs[seed/2%4]},
+				model:  api.Model{ImagesPerRequest: []int{1, 2, 3, 5, 8, 13}[rng.IntN(6)], Inputs: inputs[seed/2%4], Context: []int{0, 250}[seed/8%2]},
 			}
 			f.r = NewReplay(context.Background(), "a", f.s, f.config, f.model)
 			mustCreate(t, f.r)
@@ -379,7 +379,7 @@ func TestSessionMatchesLoadUnderRandomRounds(t *testing.T) {
 			if f.r.lastRound.isActive() || len(f.calls) != 0 {
 				return
 			}
-			switched := NewReplay(context.Background(), "a", f.s, f.config, api.Model{ImagesPerRequest: 1 + rng.IntN(4), Inputs: inputs[rng.IntN(4)]})
+			switched := NewReplay(context.Background(), "a", f.s, f.config, api.Model{ImagesPerRequest: 1 + rng.IntN(4), Inputs: inputs[rng.IntN(4)], Context: []int{0, 250}[rng.IntN(2)]})
 			if err := switched.Load(); err != nil {
 				t.Fatalf("Load under another model: %v", err)
 			}
@@ -392,6 +392,12 @@ func TestSessionMatchesLoadUnderRandomRounds(t *testing.T) {
 			}
 			if kinds := sentKinds(messages); slices.ContainsFunc(kinds, func(k api.Modality) bool { return !switched.model.Inputs.Has(k) }) {
 				t.Fatalf("after a switch to Inputs %v the request carries kinds %v", switched.model.Inputs, kinds)
+			}
+			f.r, f.model = switched, switched.model
+			f.log = append(f.log, fmt.Sprintf("switch to %v context %d", f.model.Inputs, f.model.Context))
+			for range 20 {
+				f.step()
+				f.same(f.clone())
 			}
 		})
 	}
