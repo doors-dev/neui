@@ -22,6 +22,7 @@ import (
 
 	"neui.dev/api"
 	"neui.dev/internal/island"
+	"neui.dev/internal/tools"
 )
 
 func TestTooler(t *testing.T) {
@@ -38,7 +39,7 @@ func TestTooler(t *testing.T) {
 		t.Fatal(err)
 	}
 	tool, ok := m.Get("pick")
-	if !ok || !strings.HasSuffix(tool.Desc(), "do not restate it in your reply.") {
+	if !ok || !strings.HasSuffix(tool.Desc(), tools.AskDesc) {
 		t.Fatalf("ask desc: %v", ok)
 	}
 	l := Library{inner: island.NewLibrary()}

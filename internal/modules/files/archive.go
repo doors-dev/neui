@@ -31,21 +31,22 @@ import (
 const unzipListCap = 100
 
 const zipDesc = `Zip files and directories into one archive, keeping their paths as given.`
-const unzipDesc = `Extract a zip archive into a directory. Copy an uploaded archive into the workspace first.`
+const unzipDesc = `Extract a zip archive into a directory.`
 
 type zipArg struct {
-	Paths []string `json:"paths" required:"true" description:"files or directories to include; walking a directory skips the uploads dirs, so list them here to include their files"`
+	Paths []string `json:"paths" required:"true" description:"walking a directory skips the uploads dirs, so list them here to include their files"`
 	Dst   string   `json:"dst" required:"true" description:"path of the archive to create"`
 }
 
 type unzipArg struct {
 	Src string `json:"src" required:"true"`
-	Dst string `json:"dst" description:"directory to extract into, empty string is the workspace root"`
+	Dst string `json:"dst" description:"absent or \"\" extracts into the workspace root"`
 }
 
 type unzipResult struct {
-	Count     int      `json:"count" description:"files extracted"`
-	Extracted []string `json:"extracted" description:"first 100 extracted paths"`
+	_         struct{} `description:"count files were extracted, the first 100 listed in extracted; truncated: more exist"`
+	Count     int      `json:"count"`
+	Extracted []string `json:"extracted"`
 	Truncated bool     `json:"truncated,omitempty"`
 }
 

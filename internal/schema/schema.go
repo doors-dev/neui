@@ -34,8 +34,8 @@ import (
 
 var (
 	ErrInvalidInput     = errors.New("invalid input: argument is not valid JSON")
-	ErrInvalidArguments = errors.New("invalid input: argument do not match the schema")
-	ErrNoInput          = errors.New(`invalid input: arguments must be {"input": <value>}`)
+	ErrInvalidArguments = errors.New("invalid input: argument does not match the schema")
+	ErrNoInput          = errors.New(`invalid input: argument must be {"input": <value>}`)
 	errCallShape        = errors.New("schema: x-neui-call without allOf[0].properties arg and returns")
 )
 
@@ -163,10 +163,13 @@ func (s Schema[T]) Validate(v any) error {
 		}
 	}
 	if err := s.Schema.Validate(v); err != nil {
-		if verr, ok := err.(*jsonvalid.ValidationError); ok {
-			verr.Causes = pruneAnyOf(verr.Causes)
+		verr, ok := err.(*jsonvalid.ValidationError)
+		if !ok {
+			return fmt.Errorf("%w: %v", ErrInvalidArguments, err)
 		}
-		return fmt.Errorf("%w: %v", ErrInvalidArguments, err)
+		verr.Causes = pruneAnyOf(verr.Causes)
+		_, causes, _ := strings.Cut(verr.Error(), "\n")
+		return fmt.Errorf("%w:\n%s", ErrInvalidArguments, causes)
 	}
 	return nil
 }
@@ -273,7 +276,7 @@ var anySchema = []byte(`{"description":"any JSON value"}`)
 
 var objectSchema = []byte(`{"type":"object","properties":{}}`)
 
-var blocksSchema = []byte(`{"type":"array","description":"content blocks, in order","items":{"oneOf":[` +
+var blocksSchema = []byte(`{"type":"array","items":{"oneOf":[` +
 	`{"type":"object","properties":{"type":{"const":"text"},"text":{"type":"string"}},"required":["type","text"]},` +
 	`{"type":"object","properties":{"type":{"const":"image"},"data":{"type":"string","contentEncoding":"base64"},"mimeType":{"type":"string"}},"required":["type","data","mimeType"]},` +
 	`{"type":"object","properties":{"type":{"const":"document"},"data":{"type":"string","contentEncoding":"base64"},"mimeType":{"type":"string"},"name":{"type":"string"}},"required":["type","data","mimeType"]}` +

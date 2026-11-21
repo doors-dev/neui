@@ -37,10 +37,10 @@ const (
 
 type input struct {
 	ID        string                   `json:"id"`
-	Kind      kind                     `json:"kind" description:"button, link, input or radio; button and link take click, input and radio take write; a radio entry stands for its whole same-name group"`
-	Type      string                   `json:"type" description:"html flavor of the element"`
+	Kind      kind                     `json:"kind"`
+	Type      string                   `json:"type"`
 	Desc      string                   `json:"desc"`
-	Rights    Rights                   `json:"rights" description:"RW allows every call, R only read and focus, W only click, write and focus"`
+	Rights    Rights                   `json:"rights"`
 	ctx       context.Context          `json:"-"`
 	elementID string                   `json:"-"`
 	members   map[uint]context.Context `json:"-"`
@@ -247,7 +247,7 @@ func (s *space) getInput(id string, action string) (input, error) {
 		if in.Rights == W {
 			return input{}, fmt.Errorf("%q on input %q with rights %s: %w", action, id, in.Rights, errRights)
 		}
-	case "click", "input":
+	case "click", "write":
 		if in.Rights == R {
 			return input{}, fmt.Errorf("%q on input %q with rights %s: %w", action, id, in.Rights, errRights)
 		}

@@ -37,31 +37,31 @@ const (
 )
 
 func readDesc(light bool) string {
-	desc := `Read a text file as numbered lines; everything after "N: " is file content.`
-	if light {
-		return desc + ` A long file comes in parts, and the last line says where to continue.`
+	desc := `Read a text file as numbered lines; everything after "N: " is file content. A long file comes in parts, and the last line says where to continue.`
+	if !light {
+		desc += ` From a script it returns the file's text as it is, up to 8MB, without line numbers, the closing line or cut lines, and the whole file when limit is unset.`
 	}
-	return desc + ` Binary files are refused; use readBytes. Output stops at the line limit or the configured byte limit, whichever comes first, and its last line says where to continue. From a script it returns the file's text as it is, up to 8MB: no line numbers, no closing line, no truncated lines, and the whole file when limit is unset.`
+	return desc
 }
 
-const readBytesDesc = `Read raw bytes of a file, base64 in the result. Reads over 8MB must be ranged.`
-const writeBytesDesc = `Write raw bytes to a file, replacing existing content, creating parent directories. Plain text goes through write.`
+const readBytesDesc = `Read raw bytes of a file.`
+const writeBytesDesc = `Write raw bytes to a file, replacing existing content. Plain text goes through write.`
 
 type readArg struct {
 	Path   string `json:"path" required:"true"`
-	Offset uint   `json:"offset" description:"1-based line to start from, for continuing a long file"`
+	Offset uint   `json:"offset" description:"1-based line to start from"`
 	Limit  uint   `json:"limit" description:"max lines to return, default 2000"`
 }
 
 type readBytesArg struct {
 	Path   string `json:"path" required:"true"`
 	Offset int64  `json:"offset" description:"byte offset to start from"`
-	N      int64  `json:"n" description:"bytes to read, 0 reads to the end of the file"`
+	N      int64  `json:"n" description:"bytes to read, at most 8MB; 0 reads to the end of the file"`
 }
 
 type writeBytesArg struct {
 	Path string `json:"path" required:"true"`
-	Data []byte `json:"data" required:"true" description:"base64 in direct calls"`
+	Data []byte `json:"data" required:"true"`
 }
 
 func readTool(ctx context.Context, arg readArg, light bool) (string, error) {

@@ -146,6 +146,41 @@ func TestHostModuleReadsLightMode(t *testing.T) {
 	}
 }
 
+type describedRows struct {
+	_    struct{} `description:"the rows; truncated: call again"`
+	Rows []string `json:"rows"`
+}
+
+func TestLightModeShowsResultDescriptions(t *testing.T) {
+	host := func(context.Context) neui.AnyModule {
+		m := neui.NewModule("crm", "")
+		if _, err := m.Tool("rows", "Read rows.", func(context.Context, struct{}) (describedRows, error) { return describedRows{}, nil }); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := m.Tool("text", "Read text.", func(context.Context, struct{}) (string, error) { return "", nil }); err != nil {
+			t.Fatal(err)
+		}
+		return m
+	}
+	for _, light := range []bool{false, true} {
+		p := testkit.NewProvider(api.Model{}, testkit.Say("hi"))
+		c := stack.Headless(t, stack.Host{Provider: p, Options: []common.Option{common.OptionModules([]common.ModuleFactory{host}), common.OptionLightMode(light)}})
+		c.Send("hello")
+		c.Wait()
+		descs := map[string]string{}
+		for _, tool := range p.Request(t, 0).Tools {
+			descs[tool.Name] = tool.Desc
+		}
+		rows, text := "Read rows.\nOutput schema: {\"description\":\"the rows; truncated: call again\",", "Read text.\nOutput schema: "
+		if light {
+			rows, text = "Read rows.\nResult: the rows; truncated: call again", "Read text."
+		}
+		if !strings.HasPrefix(descs["crm__rows"], rows) || !strings.HasPrefix(descs["crm__text"], text) || light && (descs["crm__rows"] != rows || descs["crm__text"] != text) {
+			t.Fatalf("light %v: the tools read %q and %q, want %q and %q", light, descs["crm__rows"], descs["crm__text"], rows, text)
+		}
+	}
+}
+
 func lightReplay(t *testing.T) api.Request {
 	t.Helper()
 	p := testkit.NewProvider(api.Model{},

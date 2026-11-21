@@ -24,24 +24,26 @@ elem element(id string) {
 			const failed = reports.reduce((n, r) => n + r.failed.length, 0)
 			const canceled = reports.reduce((n, r) => n + r.canceled, 0)
 			if (ok === 0 && failed > 0 && canceled > 0) {
-				throw new Error("its server handlers failed or were canceled")
+				throw new Error(
+					"the application failed on part of it and dropped the rest, as it does while an earlier action is still being handled",
+				)
 			}
 			if (ok === 0 && failed > 0) {
-				throw new Error("its server handlers failed")
+				throw new Error("the application failed to handle it")
 			}
 			if (ok === 0 && canceled > 0) {
 				throw new Error(
-					"the page canceled its server handlers, as it does while an earlier action is still being handled",
+					"the application dropped it, as it does while an earlier action is still being handled",
 				)
 			}
 			if (failed > 0 && canceled > 0) {
-				return { handled: true, note: "some of its server handlers failed and some were canceled" }
+				return { handled: true, note: "handled in part: the application failed on some of it and dropped some" }
 			}
 			if (failed > 0) {
-				return { handled: true, note: "some of its server handlers failed" }
+				return { handled: true, note: "handled in part: the application failed on some of it" }
 			}
 			if (canceled > 0) {
-				return { handled: true, note: "some of its server handlers were canceled" }
+				return { handled: true, note: "handled in part: the application dropped some of it, as it does while an earlier action is still being handled" }
 			}
 			return { handled: ok > 0 }
 		}
@@ -95,7 +97,7 @@ elem element(id string) {
 		$on(id, async ({ action, value }) => {
 			const el = document.querySelector('[data-neid="' + id + '"]')
 			if (!el) {
-				throw new Error("element is not rendered")
+				throw new Error("the input is not on the page")
 			}
 			const tag = el.tagName.toLowerCase()
 			const type = (el.getAttribute("type") || "").toLowerCase()
@@ -174,7 +176,7 @@ elem element(id string) {
 						tag === "button" ||
 						["submit", "button", "reset", "image"].includes(type)
 					) {
-						throw new Error("not an input")
+						throw new Error("a button or link takes click, not write")
 					}
 					if (type === "checkbox") {
 						if (typeof value !== "boolean") {
@@ -198,7 +200,7 @@ elem element(id string) {
 						const options = Array.from(el.options)
 						for (const v of values) {
 							if (!options.some((o) => o.value === String(v))) {
-								throw new Error("no option with value " + JSON.stringify(v))
+								throw new Error("no option with value " + JSON.stringify(v) + ": read the input to see its options")
 							}
 						}
 						if (el.multiple) {
@@ -255,24 +257,26 @@ elem radioGroup(id string) {
 			const failed = reports.reduce((n, r) => n + r.failed.length, 0)
 			const canceled = reports.reduce((n, r) => n + r.canceled, 0)
 			if (ok === 0 && failed > 0 && canceled > 0) {
-				throw new Error("its server handlers failed or were canceled")
+				throw new Error(
+					"the application failed on part of it and dropped the rest, as it does while an earlier action is still being handled",
+				)
 			}
 			if (ok === 0 && failed > 0) {
-				throw new Error("its server handlers failed")
+				throw new Error("the application failed to handle it")
 			}
 			if (ok === 0 && canceled > 0) {
 				throw new Error(
-					"the page canceled its server handlers, as it does while an earlier action is still being handled",
+					"the application dropped it, as it does while an earlier action is still being handled",
 				)
 			}
 			if (failed > 0 && canceled > 0) {
-				return { handled: true, note: "some of its server handlers failed and some were canceled" }
+				return { handled: true, note: "handled in part: the application failed on some of it and dropped some" }
 			}
 			if (failed > 0) {
-				return { handled: true, note: "some of its server handlers failed" }
+				return { handled: true, note: "handled in part: the application failed on some of it" }
 			}
 			if (canceled > 0) {
-				return { handled: true, note: "some of its server handlers were canceled" }
+				return { handled: true, note: "handled in part: the application dropped some of it, as it does while an earlier action is still being handled" }
 			}
 			return { handled: ok > 0 }
 		}
@@ -326,7 +330,7 @@ elem radioGroup(id string) {
 		$on(id, async ({ action, value }) => {
 			const els = Array.from(document.querySelectorAll('[data-neid="' + id + '"]'))
 			if (els.length === 0) {
-				throw new Error("element is not rendered")
+				throw new Error("the input is not on the page")
 			}
 			switch (action) {
 				case "focus": {
@@ -356,7 +360,7 @@ elem radioGroup(id string) {
 				case "input": {
 					const el = els.find((el) => el.value === String(value))
 					if (!el) {
-						throw new Error("no option with value " + JSON.stringify(value))
+						throw new Error("no option with value " + JSON.stringify(value) + ": read the input to see its options")
 					}
 					if (el.checked) {
 						return { handled: false }

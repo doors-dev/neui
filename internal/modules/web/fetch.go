@@ -49,16 +49,16 @@ const (
 
 var fetchedTag = regexp.MustCompile(`(?i)</?fetched`)
 
-const fetchDesc = `Fetch one http or https URL with a GET and return its content inside a <fetched> element whose attributes are url, status, contentType, title when the document had one, and fetchedAt; with saveAs the element is empty and carries savedAs and bytes instead. url is where the content actually came from after redirects — resolve relative links against it, and read it to notice a consent wall or a login page. fetchedAt is when the response was read, which on a paged call is the original fetch and not this call. Pages are converted to markdown unless format says otherwise; text and html are for when the markdown loses something you need. Navigation, sidebars and comments are dropped unless full is set. Long pages are paged by line, unnumbered: pass offset to continue from where the previous call stopped, which reads the same fetched copy rather than requesting the page again. saveAs streams the raw bytes into the workspace instead of converting them, which is how a PDF or an image is fetched.`
+const fetchDesc = `Fetch a URL. The result is a <fetched> element with the attributes url, status, contentType, title when the document has one, and fetchedAt, around the content as unnumbered lines; a long page comes in parts, and the last line says where to continue. With saveAs the element is empty and carries savedAs and bytes instead. url is the address after redirects: resolve relative links against it, and read it to notice a consent wall or a login page. Fetching the same URL again within about %s reads the copy already fetched, which fetchedAt dates. Nothing runs JavaScript, so a page rendered client-side comes back as an empty shell: fetch its API or a server-rendered URL instead.`
 
 type FetchArg struct {
-	URL     string `json:"url" required:"true" description:"absolute http or https URL, credentials not allowed in it"`
-	Format  string `json:"format" enum:"markdown,text,html" description:"markdown (default) converts the document, text strips it to prose, html returns the markup re-serialised, with scripts, styles, embeds, form controls, meta, link tags and comments removed; unless full is set it is the same main content the other formats pick, without navigation, headers, footers and sidebars"`
-	Full    bool   `json:"full" description:"the page as a whole, including navigation, sidebars and comments; use it when the default came back missing something you saw referenced"`
-	Offset  uint   `json:"offset" description:"1-based line of the converted content to start from, for continuing a long page"`
+	URL     string `json:"url" required:"true" description:"absolute, http or https"`
+	Format  string `json:"format" enum:"markdown,text,html" description:"default markdown; text keeps the prose alone, html the markup without scripts, styles, embeds, form controls, meta, link tags and comments; use them when markdown loses something you need"`
+	Full    bool   `json:"full" description:"keep navigation, headers, footers, sidebars and comments, dropped by default; set it when the default came back missing something you saw referenced"`
+	Offset  uint   `json:"offset" description:"1-based line to start from"`
 	Limit   uint   `json:"limit" description:"max lines to return, default 2000"`
-	Timeout uint   `json:"timeoutMs" description:"how long to wait for the whole exchange, in milliseconds; omitted, the host default applies, and the host caps how long it may be"`
-	SaveAs  string `json:"saveAs" description:"workspace path to stream the raw body to instead of converting it; the only way to fetch a binary, and no format applies"`
+	Timeout uint   `json:"timeoutMs" description:"for the whole exchange, up to the module's cap; absent, the module's default"`
+	SaveAs  string `json:"saveAs" description:"workspace path to save the raw body to, unconverted"`
 }
 
 func (m *module) fetch(ctx context.Context, arg FetchArg) (string, error) {

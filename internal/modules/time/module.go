@@ -34,19 +34,19 @@ const maxDelay = 24 * time.Hour
 
 var errCancelled = errors.New("cancelled by time__cancel")
 
-const moduleDesc = `The clock: read the date and time here, never assume them. time__now is the server's clock, time__client the clock of the browser the user has open — they differ in offset and may differ in wall time; quote the client's when talking to the user. time__timer waits until a moment: short waits complete inside the call, longer ones return deferred and arrive later as a <task_result> element in the conversation, so use it to continue work at a chosen moment, not to pause a conversation. One deferred timer at a time: another deferred call errors while one is pending; short waits always work. time__cancel drops a deferred one.`
-const nowDesc = `Current time of the machine this runs on, in its own zone. Use it for anything timestamped by the server; for what the user's clock says, call time__client.`
-const clientDesc = `Current time of the browser the user has the page open in, with the user's UTC offset. Errors when the browser does not answer. The reading carries no zone name, only the offset.`
+const moduleDesc = `The clock: read the date and time here, never assume them. time__client reads the user's browser clock, the one to quote when talking to the user; time__now reads the server's, for anything the server timestamps. They differ in offset and may differ in wall time.`
+const nowDesc = `Current time of the server.`
+const clientDesc = `Current time of the user's browser.`
 
 func timerDesc(light bool) string {
-	desc := `Wait until a moment. Pass afterMs, or at as an RFC 3339 instant — exactly one; at is resolved against the server clock. A wait of up to 10 s blocks the call and returns when the moment arrives. A longer one returns at once with deferred: true; when the moment arrives a <task_result> element (module time, name timer, comment as given) carrying the firing details appears and starts a round. One deferred timer at a time: another deferred call errors while one is pending; short waits always work. time__cancel drops a deferred one.`
+	desc := `Wait until a moment, to continue work then, not to pause the conversation. Pass exactly one of afterMs and at. A wait of up to 10 s returns when the moment arrives; a longer one returns at once, deferred. One deferred timer at a time; short waits always work.`
 	if !light {
-		desc += ` Called from a script, it blocks within the script's time limit and never defers; a moment past that limit errors at once, so wait that long with time__timer outside the script.`
+		desc += ` From a script it never defers: it blocks, within the script's time limit.`
 	}
 	return desc
 }
 
-const cancelDesc = `Drop the pending deferred timer; its task_result element reports the cancellation. Errors when none is pending.`
+const cancelDesc = `Drop the pending deferred timer; its task_result reports the cancellation.`
 
 func Module(ctx context.Context) common.Module {
 	m := tools.NewModule("time", moduleDesc)
@@ -78,10 +78,10 @@ type pending struct {
 }
 
 type NowResult struct {
-	Time   string `json:"time" description:"RFC 3339 local date-time with numeric UTC offset, milliseconds, e.g. 2026-09-28T14:03:05.123+02:00"`
-	UTC    string `json:"utc" description:"the same instant in UTC"`
-	Zone   string `json:"zone" description:"the server's zone abbreviation (e.g. CET), else its offset"`
-	Offset int    `json:"offsetMinutes" description:"minutes the local time is ahead of UTC; negative west of Greenwich"`
+	Time   string `json:"time" format:"date-time"`
+	UTC    string `json:"utc" format:"date-time"`
+	Zone   string `json:"zone" description:"abbreviation such as CET, else the offset"`
+	Offset int    `json:"offsetMinutes" description:"ahead of UTC"`
 }
 
 func (m *module) now(ctx context.Context, _ struct{}) (NowResult, error) {
@@ -99,10 +99,11 @@ func (m *module) now(ctx context.Context, _ struct{}) (NowResult, error) {
 }
 
 type ClientResult struct {
-	Time   string `json:"time" description:"RFC 3339 local date-time with the client's numeric UTC offset, milliseconds"`
-	UTC    string `json:"utc" description:"the same instant in UTC"`
-	Offset int    `json:"offsetMinutes" description:"minutes the client is ahead of UTC; negative west of Greenwich"`
-	Skew   int64  `json:"skewMs" description:"client instant minus server instant at the moment of the reading, round trip included; large values mean the user's clock is off"`
+	_      struct{} `description:"skewMs: the browser's clock minus the server's, round trip included; a large value means the user's clock is off"`
+	Time   string   `json:"time" format:"date-time"`
+	UTC    string   `json:"utc" format:"date-time"`
+	Offset int      `json:"offsetMinutes" description:"ahead of UTC"`
+	Skew   int64    `json:"skewMs"`
 }
 
 func (m *module) client(ctx context.Context, _ struct{}) (ClientResult, error) {
@@ -136,15 +137,16 @@ func (m *module) client(ctx context.Context, _ struct{}) (ClientResult, error) {
 }
 
 type TimerArg struct {
-	After   uint   `json:"afterMs" description:"fire this many milliseconds from now; mutually exclusive with at"`
-	At      string `json:"at" description:"RFC 3339 instant to fire at, e.g. 2026-09-28T16:00:00+02:00; mutually exclusive with afterMs"`
-	Comment string `json:"comment" required:"true" description:"short description of why you are waiting; shown to the user while a deferred timer is pending and echoed in its task_result element"`
+	After   uint   `json:"afterMs"`
+	At      string `json:"at" description:"RFC 3339 instant, e.g. 2026-09-28T16:00:00+02:00, by the server's clock"`
+	Comment string `json:"comment" required:"true" description:"why you are waiting, in a few words; shown to the user while a deferred timer is pending, and carried by its task_result"`
 }
 
 type TimerResult struct {
-	Async bool   `json:"deferred,omitempty" description:"the wait outlives the call: it continues in the background and its firing arrives as a <task_result> element (module time, name timer, comment as given) carrying the firing details; time__cancel drops it"`
-	Fires string `json:"firesAt" description:"server-clock instant the timer fires (or fired) at, RFC 3339 with milliseconds"`
-	Fired string `json:"firedAt,omitempty" description:"when the wait completed inside the call: the actual server-clock instant it returned"`
+	_     struct{} `description:"deferred: the wait goes on in the background, and when the moment arrives a <task_result> element starts a round"`
+	Async bool     `json:"deferred,omitempty"`
+	Fires string   `json:"firesAt" format:"date-time"`
+	Fired string   `json:"firedAt,omitempty" format:"date-time"`
 }
 
 func (m *module) timer(ctx context.Context, arg TimerArg) (TimerResult, error) {

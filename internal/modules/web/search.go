@@ -24,7 +24,7 @@ import (
 )
 
 func searchDesc(light bool) string {
-	desc := `Search the web and get back links with short extracts, not whole pages — fetch a result with web__fetch to read it. Results come from one backend the host configured, so it has one index and one ranking, and asking twice with different words is often better than asking for more results.`
+	desc := `Search the web. Results are links with short extracts, not whole pages: read one with web__fetch. When the results miss, ask again with different words rather than for more results; an empty result does not mean no such page exists. The search engine may ignore domains and recent.`
 	if !light {
 		desc += ` Not accessible from a script.`
 	}
@@ -43,18 +43,18 @@ type SearchBackend interface {
 }
 
 type Result struct {
-	Title     string `json:"title" description:"the backend's title for the page"`
-	URL       string `json:"url" description:"fetch it with web__fetch to read the page"`
-	Snippet   string `json:"snippet,omitempty" description:"the backend's own one- or two-sentence extract; empty when it returns content instead"`
-	Content   string `json:"content,omitempty" description:"passages from the page when the backend returns them, capped per result; ends with (content truncated) when cut. web__fetch the url for the rest."`
-	Published string `json:"published,omitempty" description:"publication date the backend reports; empty when it reports none"`
+	Title     string `json:"title"`
+	URL       string `json:"url"`
+	Snippet   string `json:"snippet,omitempty"`
+	Content   string `json:"content,omitempty"`
+	Published string `json:"published,omitempty" description:"as the search engine writes it; absent when unknown"`
 }
 
 type SearchArg struct {
-	Query   string   `json:"query" required:"true" description:"what to search for, as words rather than a URL; include the year when you want recent material"`
-	Num     uint     `json:"num" description:"results to return, default 8, at most 20"`
-	Domains []string `json:"domains" description:"hostnames to restrict results to, e.g. go.dev; some backends cannot filter on this and ignore it, so do not read an empty result as no such page existing"`
-	Recent  string   `json:"recent" enum:"day,week,month,year" description:"only pages published within this window; some backends cannot filter on this and ignore it"`
+	Query   string   `json:"query" required:"true" description:"words, not a URL; include the year when you want recent material"`
+	Num     uint     `json:"num" description:"default 8, at most 20"`
+	Domains []string `json:"domains" description:"hostnames to restrict results to, like go.dev"`
+	Recent  string   `json:"recent" enum:"day,week,month,year" description:"only pages published within it, counted back from now"`
 }
 
 func (m *module) search(ctx context.Context, arg SearchArg) ([]Result, error) {

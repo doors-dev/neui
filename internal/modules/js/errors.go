@@ -16,7 +16,7 @@ package js
 
 import "errors"
 
-const scriptErrorMessage = "the script failed: it did not parse, threw, or ran past the memory limit; a thrown error is also appended to the log file named in this error; fix the script and rerun, with a larger memoryMb if it ran out of memory"
+const scriptErrorMessage = "the script failed, fix it and rerun; a thrown error is also in the log file named here, with its stack; an out of memory error, or one that is just null, means the script needs a larger memoryMb"
 const runtimeErrorMessage = "the script runtime failed internally; the script itself may be valid, rerun it"
 
 var errScript = errors.New(scriptErrorMessage)

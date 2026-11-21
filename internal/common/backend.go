@@ -39,8 +39,8 @@ type Tool interface {
 	Name() string
 	// Desc is the description the tool was defined with.
 	Desc() string
-	// Summary is the description the agent sees: Desc with the output
-	// schema appended; in light mode it sees Desc alone.
+	// Summary is the description the agent sees outside light mode: Desc
+	// with the output schema appended.
 	Summary() string
 	// Brief is Summary with the output schema's definitions left out, for
 	// when they are listed with the module.

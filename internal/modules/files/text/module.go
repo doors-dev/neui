@@ -32,11 +32,11 @@ import (
 )
 
 func writeDesc(light bool) string {
-	desc := `Write a whole text file, replacing existing content`
-	if light {
-		return desc + `.`
+	desc := `Write a whole text file, replacing existing content.`
+	if !light {
+		desc += ` Content with \r keeps its line breaks as given.`
 	}
-	return desc + `, creating parent directories. Content with \r keeps its line breaks as given.`
+	return desc
 }
 
 const appendDesc = `Append to the end of a text file, creating it if missing.`
@@ -79,14 +79,14 @@ type writeArg struct {
 
 type writeResult struct {
 	Path string `json:"path"`
-	Size int64  `json:"size" description:"file size after the write"`
+	Size int64  `json:"size"`
 }
 
 type editArg struct {
 	Path       string `json:"path" required:"true"`
-	Old        string `json:"old" required:"true" description:"text to replace, matching the current content exactly, including whitespace and indentation"`
+	Old        string `json:"old" required:"true" description:"matches the current content exactly, whitespace and indentation included"`
 	New        string `json:"new" required:"true"`
-	ReplaceAll bool   `json:"replaceAll" description:"replace every occurrence; without it old must match exactly once"`
+	ReplaceAll bool   `json:"replaceAll" description:"without it, old must match exactly once"`
 }
 
 type editResult struct {
@@ -95,9 +95,9 @@ type editResult struct {
 
 type replaceArg struct {
 	Path        string `json:"path" required:"true"`
-	Pattern     string `json:"pattern" required:"true" description:"RE2 regular expression matched against the whole file, which it sees with lines ending in \n; (?s) lets . cross lines, (?m) makes ^ and $ match line boundaries"`
+	Pattern     string `json:"pattern" required:"true" description:"RE2, matched against the whole file; (?s) lets . cross lines, (?m) makes ^ and $ match line boundaries"`
 	Replacement string `json:"replacement" description:"may reference capture groups as $1, $2; write ${1} when a letter, digit or _ follows, e.g. ${1}_old; $$ is a literal dollar"`
-	All         bool   `json:"all" description:"replace every match; without it the pattern must match exactly once"`
+	All         bool   `json:"all" description:"without it, the pattern must match exactly once"`
 }
 
 type insertArg struct {

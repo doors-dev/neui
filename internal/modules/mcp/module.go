@@ -336,7 +336,7 @@ func (m *module) buildModule(list []*mcp.Tool) tools.Module {
 				case client = <-ch:
 				}
 				if client == nil {
-					return nil, errors.New("the MCP server is unreachable right now; calls fail until it reconnects. Do not retry now; tell the user.")
+					return nil, errors.New("this tool's server is unreachable and none of its tools work for now; do not retry, tell the user")
 				}
 				defer m.send(callDoneCommand{})
 				res, err := client.CallTool(

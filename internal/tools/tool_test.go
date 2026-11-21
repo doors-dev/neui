@@ -279,3 +279,53 @@ func TestModuleNameStartsWithALetter(t *testing.T) {
 		t.Errorf("a long name starting with a digit became %q, want at most 31 characters starting with x", long)
 	}
 }
+
+type describedPart struct {
+	_    struct{} `description:"the part's own description"`
+	Part int      `json:"part"`
+}
+
+type described struct {
+	Rows []string `json:"rows"`
+	describedPart
+	_ struct{} `description:"rows of the sheet; truncated: call again"`
+}
+
+type undescribed struct {
+	Rows []string `json:"rows"`
+}
+
+func TestLightDescAppendsTheOutputDescription(t *testing.T) {
+	m := NewModule("m", "")
+	_, err1 := m.Add("described", "Read rows.", func(context.Context, struct{}) (described, error) { return described{}, nil })
+	_, err2 := m.Add("pointer", "Read rows.", func(context.Context, struct{}) (*described, error) { return nil, nil })
+	_, err3 := m.Add("undescribed", "Read rows.", func(context.Context, struct{}) (undescribed, error) { return undescribed{}, nil })
+	_, err4 := m.Add("list", "Read rows.", func(context.Context, struct{}) ([]describedPart, error) { return nil, nil })
+	_, err5 := m.Add("string", "Read rows.", func(context.Context, struct{}) (string, error) { return "", nil })
+	_, err6 := m.Add("parts", "Read rows.", func(context.Context, struct{}) (parts, error) { return parts{}, nil })
+	_, err7 := m.AddRaw("any", "Read rows.", schema.AnyRawSchema, schema.AnyRawSchema, func(context.Context, json.RawMessage) (any, error) { return nil, nil })
+	raw, err8 := schema.NewRawSchema(json.RawMessage(`{"type":"object","description":"the server's rows","properties":{"rows":{"type":"array"}}}`))
+	_, err9 := m.AddRaw("raw", "Read rows.", schema.AnyRawSchema, raw, func(context.Context, json.RawMessage) (any, error) { return nil, nil })
+	if err := errors.Join(err1, err2, err3, err4, err5, err6, err7, err8, err9); err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]string{
+		"described":   "Read rows.\nResult: rows of the sheet; truncated: call again",
+		"pointer":     "Read rows.\nResult: rows of the sheet; truncated: call again",
+		"undescribed": "Read rows.",
+		"list":        "Read rows.",
+		"string":      "Read rows.",
+		"parts":       "Read rows.",
+		"any":         "Read rows.",
+		"raw":         "Read rows.\nResult: the server's rows",
+	} {
+		tool, _ := m.Get(name)
+		if got := LightDesc(tool); got != want {
+			t.Errorf("%s: light description %q, want %q", name, got, want)
+		}
+	}
+	tool, _ := m.Get("described")
+	if !strings.Contains(tool.Summary(), `"description":"rows of the sheet; truncated: call again"`) {
+		t.Errorf("the full description %q lacks the output description", tool.Summary())
+	}
+}

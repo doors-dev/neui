@@ -69,8 +69,12 @@ type Tool[I any, O any] struct {
 	// the same value replace each other, and a name must keep at least one
 	// letter or digit.
 	Name string
-	// Desc tells the agent what the tool does and when to call it; outside
-	// light mode the output schema is appended to it.
+	// Desc tells the agent what the tool does and when to call it. Outside
+	// light mode the output schema is appended to it; in light mode only O's
+	// description is, on a line starting "Result: ". Describe O with the
+	// description tag of a `_ struct{}` field placed after any embedded
+	// struct: what the result is and which of its fields steer the agent's
+	// next step.
 	Desc string
 	// Handler runs the call with the input decoded from JSON into I; the
 	// input and output schemas the agent sees come from I and O. On a direct

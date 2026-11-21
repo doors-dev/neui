@@ -41,10 +41,10 @@ const grepDesc = `Search file contents with a regular expression.`
 const globDesc = `Find files by path pattern.`
 
 type grepArg struct {
-	Pattern string `json:"pattern" required:"true" description:"RE2 regular expression matched against single lines"`
-	Path    string `json:"path" description:"file or directory to search; empty string searches the workspace but skips the uploads dirs. To search an uploads dir, name it or a file inside it; every file scanned there is downloaded whole"`
-	Glob    string `json:"glob" description:"only search files whose path relative to path matches, e.g. **/*.go"`
-	Limit   uint   `json:"limit" description:"max matches, default 100"`
+	Pattern string `json:"pattern" required:"true" description:"RE2, matched against single lines"`
+	Path    string `json:"path" description:"a file or directory; absent or \"\" searches the workspace without the uploads dirs. To search an uploads dir, name it or, faster, a file in it"`
+	Glob    string `json:"glob" description:"matched against each file's path relative to path, e.g. **/*.go"`
+	Limit   uint   `json:"limit" description:"max matches, default 100, up to 1000"`
 }
 
 type grepMatch struct {
@@ -54,18 +54,20 @@ type grepMatch struct {
 }
 
 type grepResult struct {
+	_         struct{}    `description:"matching lines, at most limit; truncated: more exist, narrow with path or glob"`
 	Matches   []grepMatch `json:"matches"`
-	Truncated bool        `json:"truncated,omitempty" description:"present when the limit cut the results, narrow with path or glob"`
+	Truncated bool        `json:"truncated,omitempty"`
 }
 
 type globArg struct {
 	Pattern string `json:"pattern" required:"true" description:"matched against paths relative to path, * stays within a path segment, ** crosses directories, e.g. **/*.csv"`
-	Path    string `json:"path" description:"directory to search under, empty string is everything"`
+	Path    string `json:"path" description:"absent or \"\" searches the whole workspace, the uploads dirs included"`
 }
 
 type globResult struct {
+	_         struct{} `description:"at most 100 paths; truncated: more match, narrow the pattern"`
 	Paths     []string `json:"paths"`
-	Truncated bool     `json:"truncated,omitempty" description:"present when over 100 paths match, narrow the pattern"`
+	Truncated bool     `json:"truncated,omitempty"`
 }
 
 func grepTool(ctx context.Context, arg grepArg) (grepResult, error) {

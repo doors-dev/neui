@@ -151,7 +151,7 @@ func (p *page) Module(ctx context.Context) Module {
 	}
 	_, err = m.Add(writeName, writeDesc, func(ctx context.Context, arg writeArg) (actionReport, error) {
 		a, err := m.act(ctx, arg.Path, func(s *space) (input, error) {
-			return s.getInput(arg.ID, "input")
+			return s.getInput(arg.ID, "write")
 		})
 		if err != nil {
 			return actionReport{}, err
@@ -204,7 +204,7 @@ func (p *page) Module(ctx context.Context) Module {
 	if err != nil {
 		panic(err)
 	}
-	_, err = m.Add(treeName, treeDesc(light), func(ctx context.Context, arg treeArg) (node, error) {
+	_, err = m.Add(treeName, treeDesc, func(ctx context.Context, arg treeArg) (node, error) {
 		p.mu.Lock()
 		defer p.mu.Unlock()
 		if ctx.Err() != nil {

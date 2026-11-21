@@ -47,7 +47,7 @@ func openRead(ctx context.Context, fs api.FS, name string) (*excelize.File, erro
 		return nil, err
 	}
 	if e.Size > c.MaxFileSize {
-		return nil, fmt.Errorf("file too large: %d bytes on disk, limit %d (MaxFileSize)", e.Size, c.MaxFileSize)
+		return nil, fmt.Errorf("%q is %d bytes, over the module's cap of %d", name, e.Size, c.MaxFileSize)
 	}
 	path, err := fs.LocalPath(ctx, name)
 	if err != nil {
@@ -70,7 +70,7 @@ func openRead(ctx context.Context, fs api.FS, name string) (*excelize.File, erro
 	}
 	z.Close()
 	if total > uint64(c.MaxUnzipSize) {
-		return nil, fmt.Errorf("workbook expands to %d bytes uncompressed, limit %d (MaxUnzipSize); the file itself is %d bytes, limit %d (MaxFileSize)", total, c.MaxUnzipSize, e.Size, c.MaxFileSize)
+		return nil, fmt.Errorf("%q expands to %d bytes uncompressed, over the module's cap of %d", name, total, c.MaxUnzipSize)
 	}
 	tmp, err := fs.TempDir()
 	if err != nil {

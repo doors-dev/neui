@@ -416,7 +416,9 @@ func (s Space) AddTool(ctx context.Context, from common.Tool) error {
 		},
 	}
 	type bare tool
-	light, err := json.Marshal(bare(*t))
+	lean := bare(*t)
+	lean.Desc = tools.LightDesc(from)
+	light, err := json.Marshal(lean)
 	if err != nil {
 		return err
 	}

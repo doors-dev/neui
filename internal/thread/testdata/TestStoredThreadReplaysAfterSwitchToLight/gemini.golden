@@ -89,7 +89,7 @@
   "model": "gemini-3.5-flash-lite",
   "store": false,
   "stream": true,
-  "system_instruction": "\u003c3057 bytes\u003e",
+  "system_instruction": "\u003c2650 bytes\u003e",
   "tools": [
     "page__click",
     "page__focus",

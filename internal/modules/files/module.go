@@ -23,10 +23,11 @@ import (
 )
 
 func moduleDesc(light bool) string {
-	if light {
-		return `The workspace is temporary and takes plain relative paths, like report.md. user_uploads/ holds the files the user attached, read-only: an attachment arrives as a link like [notes.txt](file:///user_uploads/notes.txt), and its path is user_uploads/notes.txt. agent_uploads/ holds the files you give the user, and they stay with this conversation. Neither takes direct writes. To change an upload, copy it into the workspace and edit the copy. To give the user a file, write it in the workspace, copy it to agent_uploads/<name> and link it in your reply: [report.md](file:///agent_uploads/report.md) shows a download, ![chart](file:///agent_uploads/chart.png) shows the image.`
+	desc := `The workspace is temporary and takes plain relative paths, like report.md. user_uploads/ holds the files the user attached, read-only: an attachment arrives as a link like [notes.txt](file:///user_uploads/notes.txt), and its path is user_uploads/notes.txt. agent_uploads/ holds the files you give the user, and they stay with this conversation. Neither takes direct writes. To change an upload, copy it into the workspace and edit the copy. To give the user a file, write it in the workspace, copy it to agent_uploads/<name> and link it in your reply: [report.md](file:///agent_uploads/report.md) shows a download, ![chart](file:///agent_uploads/chart.png) shows the image.`
+	if !light {
+		desc += ` Copy anything you may need later, such as MEMORY.md or notes, to agent_uploads/<name> too. The read tool shows line breaks as \n; write, append, edit, replace and insert take them as \n, and a file they change keeps its own CRLF or LF endings and BOM.`
 	}
-	return `The workspace is your scratch filesystem: plain relative paths, wiped when the thread closes. Two flat virtual dirs at its root persist in file storage: user_uploads/ holds the user's attached files, read-only; agent_uploads/ is your persistent store — copy anything you may need later, such as MEMORY.md, notes or generated results, to agent_uploads/<name> to keep it across sessions. Copy a stored file into the workspace to edit it or when a tool needs a local path. Only stored files can be shared into the chat, so copy a workspace file to agent_uploads/<name> first. A markdown link like [report.pdf](file:///agent_uploads/report.pdf) or [notes.txt](file:///user_uploads/notes.txt) renders as a download, and ![chart](file:///agent_uploads/chart.png) renders an image inline. The read tool shows line breaks as \n; write, append, edit, replace and insert take them as \n, and a file they change keeps its own CRLF or LF endings and BOM.`
+	return desc
 }
 
 func Module(ctx context.Context) common.Module {
@@ -37,7 +38,7 @@ func Module(ctx context.Context) common.Module {
 		return readTool(ctx, arg, light)
 	})
 	add(m, "readImage", readImageDesc, readImageTool)
-	add(m, "readDocument", readDocumentDesc(light), readDocumentTool)
+	add(m, "readDocument", readDocumentDesc, readDocumentTool)
 	add(m, "copy", copyDesc, copyTool)
 	add(m, "delete", deleteDesc, deleteTool)
 	add(m, "grep", grepDesc, grepTool)

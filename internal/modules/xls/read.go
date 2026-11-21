@@ -30,12 +30,7 @@ const profileSampleRows = 5
 const sheetsDesc = `List a workbook's sheets with row and column counts, tables, merged ranges and the autofilter.`
 const profileDesc = `Profile a sheet or range: its header row, per-column types, data row count and a sample.`
 
-func readDesc(light bool) string {
-	if light {
-		return `Read cell values from a sheet, a page of rows at a time; when truncated is true, call again with offset set to nextOffset. A merged cell shows its value in its top-left cell only.`
-	}
-	return `Read cell values from a sheet, page by page. A merged cell reports its value at its top-left cell only.`
-}
+const readDesc = `Read cell values from a sheet. A merged cell shows its value in its top-left cell only.`
 
 const findDesc = `Find cells whose value contains a substring.`
 
@@ -48,8 +43,8 @@ type sheetInfo struct {
 	Rows   int         `json:"rows"`
 	Cols   int         `json:"cols"`
 	Tables []tableInfo `json:"tables"`
-	Merges []string    `json:"merges" description:"merged ranges like A1:B2"`
-	Filter string      `json:"autoFilter,omitempty" description:"the sheet's autofilter range, like A1:F200; tables carry their own"`
+	Merges []string    `json:"merges"`
+	Filter string      `json:"autoFilter,omitempty" description:"the sheet's own, not a table's"`
 }
 
 type tableInfo struct {
@@ -65,7 +60,7 @@ type profileArg struct {
 
 type profileResult struct {
 	Headers  []string   `json:"headers"`
-	Types    []string   `json:"types" description:"per column: number, text, date, bool, formula, or mixed when the non-empty cells disagree; guessed from the first data rows, up to the read cap"`
+	Types    []string   `json:"types" items.enum:"number,text,date,bool,formula,mixed" description:"guessed from the first data rows, up to the module's cap; mixed when their non-empty cells disagree"`
 	RowCount int        `json:"rowCount" description:"non-empty data rows below the header"`
 	Sample   [][]string `json:"sample" description:"first 5 data rows, formatted"`
 }
@@ -73,29 +68,30 @@ type profileResult struct {
 type readArg struct {
 	Path   string `json:"path" required:"true"`
 	Sheet  string `json:"sheet" required:"true"`
-	Range  string `json:"range" description:"like A1:D20, header row included; default the whole sheet"`
-	Offset uint   `json:"offset" description:"0-based row within the range to start at; 0 is the range's first row, header included"`
-	Limit  uint   `json:"limit" description:"max rows to return; the server caps large values — rely on truncated and nextOffset to page"`
+	Range  string `json:"range" description:"like A1:D20; default the whole sheet"`
+	Offset uint   `json:"offset" description:"0-based row within the range to start at, a header row counted"`
+	Limit  uint   `json:"limit" description:"max rows to return, up to the module's cap, which is also the default"`
 	Raw    bool   `json:"raw" description:"underlying values instead of formatted ones: date serials, unformatted numbers, formulas"`
 }
 
 type lightReadArg struct {
 	Path   string `json:"path" required:"true"`
 	Sheet  string `json:"sheet" required:"true"`
-	Range  string `json:"range" description:"like A1:D20, header row included; default the whole sheet"`
-	Offset uint   `json:"offset" description:"0-based row within the range to start at; 0 is the range's first row, header included"`
+	Range  string `json:"range" description:"like A1:D20; default the whole sheet"`
+	Offset uint   `json:"offset" description:"0-based row within the range to start at, a header row counted"`
 }
 
 type readResult struct {
+	_          struct{}   `description:"a page of the range's rows from offset; truncated: more rows remain, call again with offset set to nextOffset"`
 	Rows       [][]string `json:"rows"`
-	NextOffset uint       `json:"nextOffset" description:"pass as offset to continue"`
-	Truncated  bool       `json:"truncated,omitempty" description:"more rows remain"`
+	NextOffset uint       `json:"nextOffset"`
+	Truncated  bool       `json:"truncated,omitempty"`
 }
 
 type findArg struct {
 	Path  string `json:"path" required:"true"`
-	Query string `json:"query" required:"true" description:"substring to look for in formatted cell values"`
-	Sheet string `json:"sheet" description:"restrict to one sheet; default all"`
+	Query string `json:"query" required:"true" description:"case-sensitive, matched against formatted values"`
+	Sheet string `json:"sheet" description:"default every sheet"`
 }
 
 type findHit struct {
@@ -105,8 +101,9 @@ type findHit struct {
 }
 
 type findResult struct {
+	_         struct{}  `description:"the matching cells, up to the module's cap; truncated: more may exist, narrow the query or restrict to one sheet"`
 	Hits      []findHit `json:"hits"`
-	Truncated bool      `json:"truncated,omitempty" description:"hit cap reached, more matches may exist; narrow the query or restrict to one sheet"`
+	Truncated bool      `json:"truncated,omitempty"`
 }
 
 type bounds struct {

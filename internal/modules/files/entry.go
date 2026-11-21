@@ -21,10 +21,10 @@ import (
 )
 
 type Entry struct {
-	Path    string    `json:"path" description:"pass to the other files tools"`
+	Path    string    `json:"path"`
 	Size    int64     `json:"size"`
-	Dir     bool      `json:"dir,omitempty" description:"present and true for a directory"`
-	MIME    string    `json:"mime,omitempty" description:"detected type, absent when unknown"`
+	Dir     bool      `json:"dir,omitempty"`
+	MIME    string    `json:"mime,omitempty" description:"absent when unknown"`
 	ModTime time.Time `json:"modTime,omitzero"`
 }
 

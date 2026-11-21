@@ -1028,7 +1028,7 @@ func TestIslandGuideIsReadWithIslandGuide(t *testing.T) {
 	c.Send("open the board")
 	c.Wait()
 	system := p.Request(t, 0).System
-	if !strings.Contains(system, "\n\nIslands\n\nAn island is a space where you run your own app for the user, ") || !strings.Contains(system, "Before your first app, read island_guide: it teaches how to write one. Before starting an app in an island, read its spec with island_spec: it lists the views, ") {
+	if !strings.Contains(system, "\n\nIslands\n\nAn island is a space where you run your own app for the user, ") || !strings.Contains(system, "Before your first app, read island_guide. Before starting an app in an island, read its spec with island_spec and the schemas of the items you use with island_spec_schema; ") {
 		t.Fatalf("the page module does not introduce islands and send the agent to island_guide and island_spec:\n%s", system)
 	}
 	headings := []string{"How an app runs", "The screen", "Views and controls", "App functions and your tools", "The typical loop", "Reading the reference"}

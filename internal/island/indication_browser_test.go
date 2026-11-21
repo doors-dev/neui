@@ -199,7 +199,7 @@ func TestIslandAgentClickOnASubmitBlockedByAPendingOneIsCanceled(t *testing.T) {
 	var s inputs
 	testkit.Decode(t, a.result("page__sync", map[string]any{"path": "board.screen.button_2"}), &s)
 	r := a.result("page__click", map[string]any{"path": "board.screen.button_2", "id": s.Inputs[0].ID})
-	if want := "the page canceled its server handlers, as it does while an earlier action is still being handled"; r.Error == api.ToolOk || !strings.Contains(fmt.Sprint(r.Content), want) {
+	if want := "the application dropped it, as it does while an earlier action is still being handled"; r.Error == api.ToolOk || !strings.Contains(fmt.Sprint(r.Content), want) {
 		t.Fatalf("the click on Plain answered %v, want an error saying %q", r.Content, want)
 	}
 }

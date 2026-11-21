@@ -686,7 +686,7 @@ func TestRadioWriteClicksTheOption(t *testing.T) {
 	expect(t, answers(t, p, 4),
 		`{"handled":true,"diff":{}}`,
 		`{"handled":false,"diff":{}}`,
-		failed(`no option with value "xl"`),
+		failed(`no option with value "xl": read the input to see its options`),
 		`{"value":"m","options":[{"value":"s","label":"","selected":false},{"value":"m","label":"","selected":true}]}`,
 	)
 	if got := <-changes; got != "m" || len(changes) != 0 {
@@ -728,9 +728,9 @@ func TestWriteFailsWhenTheFieldDropsTheValue(t *testing.T) {
 		`{"handled":false,"diff":{}}`,
 		failed("the field did not accept this value"),
 		`{"handled":false,"diff":{}}`,
-		failed(`no option with value "x"`),
+		failed(`no option with value "x": read the input to see its options`),
 		`{"value":"s","options":[{"value":"s","label":"s","selected":true},{"value":"m","label":"m","selected":false}]}`,
-		failed(`no option with value "x"`),
+		failed(`no option with value "x": read the input to see its options`),
 		`{"handled":false,"diff":{}}`,
 		`{"value":["a","c"],"label":"Tags","options":[{"value":"a","label":"a","selected":true},{"value":"b","label":"b","selected":false},{"value":"c","label":"c","selected":true}]}`,
 	)
@@ -843,9 +843,9 @@ func TestFailedHandlersAreReported(t *testing.T) {
 	c.Wait()
 	expect(t, answers(t, p, 4),
 		`{"handled":true,"diff":{}}`,
-		failed("its server handlers failed"),
+		failed("the application failed to handle it"),
 		`{"handled":true,"diff":{}}`,
-		`{"handled":true,"note":"some of its server handlers failed","diff":{}}`,
+		`{"handled":true,"note":"handled in part: the application failed on some of it","diff":{}}`,
 	)
 }
 

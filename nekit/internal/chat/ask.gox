@@ -38,7 +38,7 @@ const askOptionsDesc = `Ask the user to pick from a list. Use it for a choice th
 // AskOption is one answer the user can pick in an AskOptions question.
 type AskOption struct {
 	// Name is the answer as shown and as returned in AskOutput.Picked.
-	Name string `json:"name" required:"true" description:"the answer, a few words"`
+	Name string `json:"name" required:"true" description:"a few words"`
 	// Desc is an optional line under the name explaining the choice.
 	Desc string `json:"description" description:"one line on what picking it means; omit when the name says it"`
 }
@@ -47,23 +47,24 @@ type AskOption struct {
 // answers to offer.
 type AskInput struct {
 	// Question is shown above the options.
-	Question string `json:"question" required:"true" description:"the question, one sentence"`
+	Question string `json:"question" required:"true" description:"one sentence"`
 	// Options are listed in this order.
-	Options []AskOption `json:"options" required:"true" description:"the answers to pick from, in order"`
+	Options []AskOption `json:"options" required:"true"`
 	// Multiple shows checkboxes instead of radio buttons, so several answers can be picked.
-	Multiple bool `json:"multiple,omitempty" description:"allow several answers instead of one"`
+	Multiple bool `json:"multiple,omitempty"`
 	// Own adds a free-text row for an answer of the user's own, up to 256 KiB.
-	Own bool `json:"own,omitempty" description:"add a row for the user to type their own answer"`
+	Own bool `json:"own,omitempty" description:"let the user type an answer of their own"`
 }
 
 // AskOutput is the user's answer as the agent receives it. At least one of
 // Picked and Typed is set.
 type AskOutput struct {
+	_ struct{} `description:"picked: the names of the options the user chose; typed: their own answer; both can come when multiple is set"`
 	// Picked holds the names of the chosen options, in option order.
-	Picked []string `json:"picked,omitempty" description:"names of the options marked"`
+	Picked []string `json:"picked,omitempty"`
 	// Typed is the user's own answer, trimmed; empty unless the own row is
 	// selected and has text.
-	Typed string `json:"typed,omitempty" description:"the user's own typed answer; may come with picked when multiple"`
+	Typed string `json:"typed,omitempty"`
 }
 
 // ModuleAsk is the built-in module that lets the agent ask the user to pick

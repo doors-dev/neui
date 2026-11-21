@@ -70,7 +70,7 @@ func TestAnyOfReportsMatchingBranch(t *testing.T) {
 		t.Fatal(err)
 	}
 	err = s.ValidateString(`{"fields":[{"type":"text","name":"a"},{"type":"select","name":"b","required":true,"options":[1]}]}`)
-	want := "invalid input: argument do not match the schema: jsonschema validation failed with 'urn:neui:input#'\n" +
+	want := "invalid input: argument does not match the schema:\n" +
 		"- at '/fields/1': additional properties 'required' not allowed"
 	if err == nil || err.Error() != want {
 		t.Fatalf("got %v", err)
@@ -83,7 +83,7 @@ func TestAnyOfReportsNestedBranch(t *testing.T) {
 		t.Fatal(err)
 	}
 	err = s.ValidateString(`{"fields":[{"type":"list","field":{"type":"select","name":"b","options":[]}}]}`)
-	want := "invalid input: argument do not match the schema: jsonschema validation failed with 'urn:neui:input#'\n" +
+	want := "invalid input: argument does not match the schema:\n" +
 		"- at '/fields/0/field/options': minItems: got 0, want 1"
 	if err == nil || err.Error() != want {
 		t.Fatalf("got %v", err)

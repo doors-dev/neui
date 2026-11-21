@@ -742,14 +742,14 @@ func TestFetchNotesAPageTooLargeToKeep(t *testing.T) {
 	}
 }
 
-func TestModuleDescriptionNamesTheCacheTTL(t *testing.T) {
+func TestFetchDescriptionNamesTheCacheTTL(t *testing.T) {
 	for ttl, want := range map[time.Duration]string{0: "about 15 minutes", 40 * time.Minute: "about 40 minutes", 30 * time.Second: "about 30 seconds"} {
-		m, ok := Module(Config{CacheTTL: ttl})(context.Background()).(interface{ Desc() string })
+		fetch, ok := Module(Config{CacheTTL: ttl})(context.Background()).Get("fetch")
 		if !ok {
-			t.Fatal("web module has no description")
+			t.Fatal("web module registered no fetch tool")
 		}
-		if !strings.Contains(m.Desc(), "costs no second request for "+want+".") {
-			t.Errorf("ttl %s: description does not say %q: %s", ttl, want, m.Desc())
+		if !strings.Contains(fetch.Desc(), "within "+want+" reads the copy already fetched") {
+			t.Errorf("ttl %s: description does not say %q: %s", ttl, want, fetch.Desc())
 		}
 	}
 }

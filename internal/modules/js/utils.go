@@ -225,7 +225,7 @@ func readScript(ctx context.Context, fs api.FS, file string, code string, arg js
 		return "", err
 	}
 	if n > scriptLimit {
-		return "", fmt.Errorf("%q is over the %d MiB script size limit", label, scriptLimit>>20)
+		return "", fmt.Errorf("%q is over the %d MiB script size limit; move its data into arg or a file the script reads", label, scriptLimit>>20)
 	}
 	quoted, err := json.Marshal(string(arg))
 	if err != nil {

@@ -27,6 +27,7 @@ import (
 	"github.com/doors-dev/doors"
 	"neui.dev/api"
 	"neui.dev/internal/common"
+	"neui.dev/internal/tools"
 )
 
 type ToolFunc = func(ctx context.Context, arg json.RawMessage) (api.UserContents, error)
@@ -145,7 +146,7 @@ func (t Toolkit) Tools() iter.Seq[api.Tool] {
 					desc = tool.Brief()
 				}
 				if light {
-					desc = tool.Desc()
+					desc = tools.LightDesc(tool)
 				}
 				if !yield(api.Tool{
 					Name:   fmt.Sprintf("%s__%s", name, tool.Name()),

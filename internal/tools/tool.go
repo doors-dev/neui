@@ -162,6 +162,17 @@ func NewRawTool(
 	}, nil
 }
 
+func LightDesc(t common.Tool) string {
+	var root struct {
+		Type        any    `json:"type"`
+		Description string `json:"description"`
+	}
+	if json.Unmarshal(t.Output(), &root) != nil || root.Type != "object" || root.Description == "" {
+		return t.Desc()
+	}
+	return t.Desc() + "\nResult: " + root.Description
+}
+
 type tool struct {
 	name        string
 	desc        string
@@ -246,7 +257,7 @@ func (c tool) JS(ctx context.Context) quickjs.HostFunc {
 		case json.RawMessage:
 			output, err = c.rawCall(ctx, arg)
 		default:
-			return nil, fmt.Errorf("arg must be a JSON string")
+			return nil, fmt.Errorf("the argument does not serialize to JSON")
 		}
 		if err != nil {
 			return nil, err

@@ -28,14 +28,14 @@ import (
 const highlightDesc = `Add a conditional formatting rule to a range.`
 
 type highlightRule struct {
-	Type  string `json:"type" required:"true" description:"gt, lt, top, bottom, contains, colorScale or dataBar"`
-	Value string `json:"value" description:"threshold for gt/lt or count for top/bottom, as a string like \"500\"; substring for contains; ignored for colorScale and dataBar"`
+	Type  string `json:"type" required:"true" enum:"gt,lt,top,bottom,contains,colorScale,dataBar"`
+	Value string `json:"value" description:"threshold for gt and lt, count for top and bottom, as a string like \"500\"; substring for contains; unused by colorScale and dataBar"`
 }
 
 type highlightArg struct {
 	Path  string        `json:"path" required:"true"`
 	Sheet string        `json:"sheet" required:"true"`
-	Range string        `json:"range" required:"true" description:"cells to format, like B2:B20 — usually a column's data cells, header left out"`
+	Range string        `json:"range" required:"true" description:"like B2:B20, usually a column's data cells without the header"`
 	Rule  highlightRule `json:"rule" required:"true"`
 }
 

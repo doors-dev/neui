@@ -26,13 +26,7 @@ import (
 	"neui.dev/internal/common"
 )
 
-func writeDesc(light bool) string {
-	desc := `Write values or formulas row by row from a top-left cell. {row} in a formula becomes the row number of the cell it lands in, so one row repeated fills a column: cell E2, rows [["=B{row}*C{row}"]], repeat 19 fills E2:E20.`
-	if !light {
-		desc += ` The block must sit wholly inside or wholly outside each table and the sheet's autofilter; merged cells and array formulas are refused. Cells written next to a table stay outside it.`
-	}
-	return desc
-}
+const writeDesc = `Write a block of values or formulas. One row repeated fills a column: cell E2, rows [["=B{row}*C{row}"]], repeat 19 fills E2:E20.`
 
 var futureFn = map[string]bool{
 	"ACOT": true, "ACOTH": true, "AGGREGATE": true, "ARABIC": true, "ARRAYTOTEXT": true, "BASE": true, "BETA.DIST": true, "BETA.INV": true,
@@ -72,12 +66,13 @@ type writeArg struct {
 	Path   string  `json:"path" required:"true"`
 	Sheet  string  `json:"sheet" required:"true"`
 	Cell   string  `json:"cell" required:"true" description:"top-left cell of the block, like E1"`
-	Rows   [][]any `json:"rows" required:"true" description:"one array per row: numbers, booleans and text are stored as given, a string starting with = is a formula, null leaves the cell empty"`
+	Rows   [][]any `json:"rows" required:"true" description:"one array per row: numbers, booleans and text are stored as given, null leaves the cell empty"`
 	Repeat uint    `json:"repeat" description:"write rows this many times, stacked downward; default 1"`
 }
 
 type writeResult struct {
-	Range string `json:"range" description:"the block written, like E2:E20"`
+	_     struct{} `description:"range: the block written"`
+	Range string   `json:"range"`
 }
 
 func writeTool(ctx context.Context, arg writeArg, light bool) (writeResult, error) {

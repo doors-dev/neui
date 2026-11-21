@@ -490,8 +490,9 @@ func TestInputRightsRefused(t *testing.T) {
 	if len(results) != 3 {
 		t.Fatalf("the rights round answered %d calls, want 3", len(results))
 	}
-	for _, r := range results {
-		refused(t, r, "rights do not allow")
+	for i, call := range []string{"write", "click", "read"} {
+		refused(t, results[i], fmt.Sprintf("%q on input ", call))
+		refused(t, results[i], "rights do not allow")
 	}
 }
 
@@ -1113,7 +1114,7 @@ return ["jam", "stick"].map(tool => { try { page__tool({path: "counter", tool, a
 			t.Fatalf("call %d failed with %+v and changes %s, want the count at %d and the row listed", i+1, out, out.Changes, i+1)
 		}
 	}
-	plain(t, testkit.Results(p.Request(t, 8))[0], "invalid input: argument do not match the schema")
+	plain(t, testkit.Results(p.Request(t, 8))[0], schema.ErrInvalidArguments.Error())
 	var scripted struct{ Result json.RawMessage }
 	testkit.Decode(t, testkit.Results(p.Request(t, 9))[0], &scripted)
 	if want := `[["jammed","changes,diff",null],["jam: stuck","changes,diff,output",{"count":7}]]`; string(scripted.Result) != want {
@@ -1424,4 +1425,36 @@ func TestPageToolDuringRelinkReportsTheRelink(t *testing.T) {
 	c.Wait()
 	r := testkit.Results(p.Request(t, 2))[0]
 	plain(t, r, "the chat moved to a new page, by a reload or in another tab, which ended what ran on the old page")
+}
+
+type describedRows struct {
+	_    struct{} `description:"the rows; truncated: call again"`
+	Rows []string `json:"rows"`
+}
+
+func TestLightModeShowsPageToolResultDescriptions(t *testing.T) {
+	page := func(cur gox.Cursor) error {
+		return (neui.Space{Name: "sheet", Desc: "a sheet"}).Proxy(cur, func(cur gox.Cursor) error {
+			return cur.Comp(neui.Tool[struct{}, describedRows]{Name: "rows", Desc: "reads rows", Handler: func(context.Context, struct{}) (describedRows, error) {
+				return describedRows{}, nil
+			}})
+		})
+	}
+	for _, light := range []bool{false, true} {
+		p := testkit.NewProvider(api.Model{}, testkit.Call("page__sync", map[string]any{"path": "sheet"}), testkit.Say("done"))
+		c := stack.Page(t, stack.Host{Provider: p, Page: page, Options: []common.Option{common.OptionLightMode(light)}})
+		c.Send("read")
+		c.Wait()
+		var synced struct {
+			Tools []struct{ Name, Desc string }
+		}
+		testkit.Decode(t, testkit.Results(p.Request(t, 1))[0], &synced)
+		want := "reads rows\nOutput schema: {\"description\":\"the rows; truncated: call again\","
+		if light {
+			want = "reads rows\nResult: the rows; truncated: call again"
+		}
+		if len(synced.Tools) != 1 || !strings.HasPrefix(synced.Tools[0].Desc, want) || light && synced.Tools[0].Desc != want {
+			t.Fatalf("light %v: the sync listed %+v, want the description %q", light, synced.Tools, want)
+		}
+	}
 }

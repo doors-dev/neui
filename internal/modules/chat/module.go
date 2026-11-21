@@ -28,11 +28,10 @@ import (
 
 const nameLimit = 80
 
-const moduleDesc = `The conversation this runs in; its name is what the user sees in the chat list and in the header above the messages.`
-const nameDesc = `Name the chat. Call it only when a system instruction asks for a name, or when the user asks for one; never rename on your own. Replaces the previous name.`
+const nameDesc = `Name this chat. Call it only when a system instruction or the user asks for a name.`
 
 func Module(context.Context) common.Module {
-	m := tools.NewModule("chat", moduleDesc)
+	m := tools.NewModule("chat", "")
 	if _, err := m.Add("name", nameDesc, nameTool); err != nil {
 		panic(err)
 	}
@@ -40,7 +39,7 @@ func Module(context.Context) common.Module {
 }
 
 type NameArg struct {
-	Name string `json:"name" required:"true" description:"the new name: 2–6 words of plain text naming the topic, not a sentence; no quotes, markup or line breaks"`
+	Name string `json:"name" required:"true" description:"2–6 words naming the topic, not a sentence; no quotes, markup or line breaks"`
 }
 
 func CheckName(name string) (string, error) {

@@ -130,7 +130,7 @@ func (m Module) AddRaw(
 	return m.AddTool(tool), nil
 }
 
-const AskDesc = "\n\nThis shows the user something in the chat and waits for them to answer, which can take a long time. They can dismiss it instead of answering, and then the call fails. What they answer with is the result; an answer that declines or says no is still a result, not a failure. The user is looking at it, so do not restate it in your reply."
+const AskDesc = "\n\nThis shows the user something in the chat and waits for them to answer, which can take a long time. Do not restate what it shows in your reply. They can dismiss it instead of answering, and then the call fails; an answer that declines or says no is still a result, not a failure."
 
 func Asking[I any, O any](f func(input I, reply common.Answer[O]) api.ChatAsk) func(ctx context.Context, input I) (O, error) {
 	return func(ctx context.Context, input I) (O, error) {

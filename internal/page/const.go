@@ -22,21 +22,18 @@ import (
 const moduleName = "page"
 
 func moduleDesc(light bool) string {
-	desc := `Your access to the live page the user has open: use it to help the user operate the application — navigate, fill inputs, press buttons, call the tools the page exposes, or focus an element to point the user at it. The page is a tree of spaces, UI regions carrying tools, inputs and child spaces. Only what the application chose to expose is there, so a missing element means unavailable to you, not absent from the page: say so instead of guessing. read, write, click, focus and tool need the space read first, with sync, `
+	desc := `Your access to the live page the user has open: use it to help the user operate the application — navigate, fill inputs, press buttons, call the tools the page exposes, or focus an element to point the user at it. The page is a tree of spaces, UI regions carrying tools, inputs and child spaces; a space's path is its child names from the root joined with dots, "" being the page root. Only what the application chose to expose is there, so a missing element means unavailable to you, not absent from the page: say so instead of guessing. read, write, click, focus and tool need the space read first, with sync, `
 	if !light {
 		desc += `by you or a script, `
 	}
-	desc += `and act only while it is as it was last read; otherwise they fail without acting. `
-	if light {
-		desc += `A write, click, focus or tool result carries diff, what changed in the called space while the call ran ({} when nothing did), and changes, the other spaces that changed; diff brings your read up to date, so no sync is needed after the call. handled: false in a write or click result is not a failure: the action was done on the page, and the application may use it later. `
-	}
+	desc += `and act only while it is as it was last read; otherwise they fail without acting. A write, click, focus or tool result carries diff, what changed in the called space while the call ran ({} when nothing did), and changes, the other spaces that changed; diff brings your read up to date, so no sync is needed after the call. `
 	desc += `The user works the same page alongside you: a change you did not make, shown in a refusal's diff, in a call's diff or changes, or in a read that differs from what you `
 	if !light {
 		desc += `or your script `
 	}
 	desc += `set, most often comes from them, so check what they did and build on it instead of redoing or undoing it. `
 	if !light {
-		desc += `Every page call made as a tool call costs a round; for repetitive work — the same steps over several rows or items — write a script when the js module is available. In a script, a refused or failed page call throws, and its e.value holds what its error carries: diff, space, or the failed call's result. `
+		desc += `In a script, a refused or failed page call throws, and its e.value holds what its error carries: diff, space, or the failed call's result. `
 	}
 	desc += `You are part of this page, and to the user you see what they see: reading it, and its spaces, paths, syncs, rerenders and refused calls, are your plumbing, invisible to them. Don't announce looking at the page or what you find on it, such as "I'll look at the page first" or "I see there are tools": read it and act. Report outcomes in page terms: what was filled, pressed or changed.`
 	if !light {
@@ -58,14 +55,7 @@ const focusDesc = `Focus a UI input and scroll it into view, to point the user a
 const syncName = "sync"
 const syncDesc = `Read one space of the currently rendered page whole.`
 const treeName = "tree"
-
-func treeDesc(light bool) string {
-	desc := `Show the spaces of the currently rendered page: names, descriptions and how many tools, inputs and data items each has, without their content. It does not count as reading them.`
-	if light {
-		desc += ` A space's more is how many of its children are not listed: call tree on it to go deeper, or sync it to see them all.`
-	}
-	return desc
-}
+const treeDesc = `Show the spaces of the currently rendered page: names, descriptions and how many tools, inputs and data items each has, without their content. It does not count as reading them.`
 
 const refusedUnreadMessage = "not done: this space had not been read. space shows it as it is now and counts as a read: check it and call again directly, no sync needed"
 const refusedChangedMessage = "not done: the space changed since your last read. diff shows what changed and brings your read up to date: check it and call again directly, no sync needed"
@@ -80,19 +70,19 @@ const inputNotFoundMessage = "no such input in the space: sync its path to see t
 const islandGuideName = "island_guide"
 const islandGuideDesc = `Read the guide to writing an island's app. It is the same for every island: read it once, and again only if it is no longer in the conversation. Not accessible from scripts.`
 const islandSpecName = "island_spec"
-const islandSpecDesc = `Read an island's spec: a catalog of the views, controls, layouts and app functions its app can use, the tools its script has, and where its logs and files go; island_spec_schema gives the schemas of the items you use. It seldom changes: reuse what you read until island_begin refuses its revision. Not accessible from scripts.`
+const islandSpecDesc = `Read an island's spec: a catalog of the views, controls, layouts and app functions its app can use, the tools its script has, and where its logs and files go. A long spec comes in pages, and each page's head says how to read the rest. It seldom changes: reuse what you read until island_begin refuses its revision. Not accessible from scripts.`
 const islandNotFoundMessage = "this space is not an island: call tree to see which spaces are islands"
 const islandSpecPageMessage = "no such page of the spec"
 const islandSpecItemMessage = "one item of the spec is larger than a page can hold, so the spec cannot be read and no app can start in this island"
 const islandSpecSchemaName = "island_spec_schema"
-const islandSpecSchemaDesc = `Read the schemas of items from an island's spec catalog: params, patch and output of views and controls, params of layouts, input and result of app functions, with the definitions they refer to. Read the ones your app uses before writing it. Islands often share items: one with the same name and description as in another island's catalog is most likely the same, so reuse the schema you already read. Not accessible from scripts.`
+const islandSpecSchemaDesc = `Read the schemas of items from an island's spec catalog: params, patch and output of views and controls, params of layouts, input and result of app functions, with the definitions they refer to. Islands often share items: one with the same name and description as in another island's catalog is most likely the same, so reuse the schema you already read. Not accessible from scripts.`
 const islandSchemaSizeMessage = "the schemas of these items are larger than a result can hold: ask for fewer items at a time"
 const islandBeginName = "island_begin"
-const islandBeginDesc = `Begin a new app in an island with the first part of its script. An app already running there is replaced: its task ends, its queued parts and the values it notified since its last ui.draw() are dropped, and its screen stays until the new app's first ui.draw(). Returns once the part is queued, before it runs. Not accessible from scripts.`
+const islandBeginDesc = `Begin a new app in an island with the first part of its script. An app already running there is replaced: its task ends, its queued parts and the values it notified since its last ui.draw() are dropped, and its screen stays until the new app's first ui.draw(). Returns once the part is queued, before it runs. Set exactly one of file and code. Not accessible from scripts.`
 const islandAppendName = "island_append"
-const islandAppendDesc = `Append the next part to the script of an island's running app: it runs once the parts before it have ended. Not accessible from scripts.`
+const islandAppendDesc = `Append the next part to the script of an island's running app: it runs once the parts before it have ended. Set exactly one of file and code. Not accessible from scripts.`
 const islandInterruptName = "island_interrupt"
-const islandInterruptDesc = `Send the next part to an island's running app to take over: the running part stops at its first ui.draw(), which still presents its frame, the parts queued behind it are dropped, and this part runs. Not accessible from scripts.`
+const islandInterruptDesc = `Send the next part to an island's running app to take over: the running part stops at its first ui.draw(), which still presents its frame, the parts queued behind it are dropped, and this part runs. Set exactly one of file and code. Not accessible from scripts.`
 const islandEndName = "island_end"
 const islandEndDesc = `End an island's app now, whether a part is running or not: the island replaces the app's screen with its own, and the values a running part notified since its last ui.draw() are dropped. Not accessible from scripts.`
 const fileOrCodeMessage = "set exactly one of file and code"
@@ -112,7 +102,7 @@ Don't open one when a script alone does the job and you have the js module; for 
 
 An island's app functions are also tools of its app child space: call one directly for a single change instead of starting an app, and to read records the page shows a page at a time instead of paging through them; call them from a js script when you have that module and the task needs no UI.
 
-Before your first app, read island_guide: it teaches how to write one. Before starting an app in an island, read its spec with island_spec: it lists the views, controls, layouts, app functions and tools the app can use; use only what it lists, and read the schemas of the items you use with island_spec_schema.`
+Before your first app, read island_guide. Before starting an app in an island, read its spec with island_spec and the schemas of the items you use with island_spec_schema; use only what the spec lists.`
 
 var errRefusedDuplicate = errors.New(refusedDuplicateMessage)
 var errRefusedTooLarge = errors.New(refusedTooLargeMessage)

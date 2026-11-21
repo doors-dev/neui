@@ -42,9 +42,7 @@ const acceptHeader = "text/markdown, text/html;q=0.9, text/plain;q=0.8, */*;q=0.
 const acceptLanguage = "en-US,en;q=0.9"
 const maxRedirects = 10
 
-const fetchModuleDesc = `The web, read-only. web__fetch gets one http or https URL and returns it as markdown (default), plain text or html stripped of scripts, styles, embeds, form controls, meta and comments. Nothing runs JavaScript, so a page that renders client-side comes back as an empty shell — fetch its API or a server-rendered URL instead. A long page arrives in line ranges: the content ends with a note naming the lines shown and the offset to continue with, and continuing costs no second request for about %s. Only text is returned; a PDF, an image or any other binary has to be fetched with saveAs into the workspace and read from there with the files tools.`
-
-const searchModuleDesc = ` web__search asks a search backend for pages worth fetching, and returns links with extracts, not whole pages.`
+const moduleDesc = `The web, read-only.`
 
 var guardian = ssrf.New(ssrf.WithAnyPort())
 
@@ -115,12 +113,9 @@ func Module(c Config) common.ModuleFactory {
 	if c.CacheTTL < 90*time.Second {
 		keep = strconv.Itoa(max(int(c.CacheTTL.Round(time.Second)/time.Second), 1)) + " seconds"
 	}
-	desc := fmt.Sprintf(fetchModuleDesc, keep)
-	if backend != nil {
-		desc += searchModuleDesc
-	}
+	desc := fmt.Sprintf(fetchDesc, keep)
 	return func(ctx context.Context) common.Module {
-		m := tools.NewModule("web", desc)
+		m := tools.NewModule("web", moduleDesc)
 		w := &module{
 			conf:    c,
 			client:  client,
@@ -132,7 +127,7 @@ func Module(c Config) common.ModuleFactory {
 			)),
 			cache: make(map[string]*entry),
 		}
-		if _, err := m.Add("fetch", fetchDesc, w.fetch); err != nil {
+		if _, err := m.Add("fetch", desc, w.fetch); err != nil {
 			panic(err)
 		}
 		if backend != nil {

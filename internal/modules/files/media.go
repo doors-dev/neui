@@ -32,12 +32,7 @@ import (
 
 const readImageDesc = `Look at an image file: PNG, JPEG, WebP or non-animated GIF; oversized images are downscaled.`
 
-func readDocumentDesc(light bool) string {
-	if light {
-		return `Read a PDF, Word or PowerPoint file; use read for plain text.`
-	}
-	return `Read a file, such as a PDF, as a document attachment; prefer read for plain text formats.`
-}
+const readDocumentDesc = `Read a PDF, Word or PowerPoint file; use read for plain text.`
 
 var documentExts = map[string]api.DocumentMime{
 	".pdf":      api.DocumentPDF,

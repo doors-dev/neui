@@ -113,7 +113,7 @@ func inputRequired(requests mcp.InputRequestMap) error {
 		case *mcp.CreateMessageParams, *mcp.CreateMessageWithToolsParams:
 			kinds = append(kinds, "an LLM completion")
 		case *mcp.ListRootsParams:
-			kinds = append(kinds, "the client's root directories")
+			kinds = append(kinds, "root directories")
 		default:
 			kinds = append(kinds, "unknown input")
 		}
@@ -121,9 +121,9 @@ func inputRequired(requests mcp.InputRequestMap) error {
 	slices.Sort(kinds)
 	kinds = slices.Compact(kinds)
 	if len(kinds) == 0 {
-		return errors.New("the server postponed this call and asked to retry it later")
+		return errors.New("this tool's server is busy; retry later")
 	}
-	return fmt.Errorf("this tool needs interactive input this client does not provide (%s), so the call cannot be completed here; do not retry it, tell the user", strings.Join(kinds, ", "))
+	return fmt.Errorf("this tool asked for input the application cannot give (%s); do not retry it, tell the user", strings.Join(kinds, ", "))
 }
 
 func resultError(res *mcp.CallToolResult) error {

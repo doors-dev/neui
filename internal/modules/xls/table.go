@@ -31,12 +31,7 @@ import (
 
 const maxFormatCells = 100000
 
-func tableDesc(light bool) string {
-	if light {
-		return `Create a styled table with a header row and per-column number formats.`
-	}
-	return `Create a new styled table with a header row, per-column number formats and banded rows; on a new sheet it also freezes the rows through the header. The table must be clear of other tables, the autofilter and merged cells. Column widths are set only on columns that are empty and keep the sheet default.`
-}
+const tableDesc = `Create a styled table with a header row and per-column number formats.`
 
 const formatDesc = `Restyle a range; only the options you pass change.`
 
@@ -44,32 +39,33 @@ var numText = regexp.MustCompile(`^[+-]?((\d{1,3}(,\d{3})+|\d+)(\.\d+)?|\.\d+)$`
 
 type columnSpec struct {
 	Header string `json:"header" required:"true"`
-	Format string `json:"format" description:"text, number, currency, percent, date or integer; default text. Number, currency, integer and percent columns take JSON numbers or numeric strings like 1,234.5 ($1,234.5 for currency); percent takes a fraction, 0.15 shows as 15%, and a string 15% is read as 0.15. Date columns take ISO 8601 strings (YYYY-MM-DD or YYYY-MM-DDThh:mm:ss, an offset is dropped and the wall clock kept) or Excel serial numbers. Any other string in a typed column is refused"`
+	Format string `json:"format" enum:"text,number,currency,percent,date,integer" description:"default text. number, currency, percent and integer cells take JSON numbers or numeric strings like 1,234.5 ($1,234.5 for currency); percent takes a fraction, 0.15 shows as 15%, and reads a string 15% as 0.15. date cells take ISO 8601 strings, YYYY-MM-DD or YYYY-MM-DDThh:mm:ss with any offset dropped and the wall clock kept, or Excel serial numbers"`
 }
 
 type tableArg struct {
 	Path    string       `json:"path" required:"true" description:"created when missing"`
 	Sheet   string       `json:"sheet" required:"true" description:"created when missing"`
-	Cell    string       `json:"cell" description:"top-left cell, where the header row starts; default A1"`
+	Cell    string       `json:"cell" description:"where the header row starts; default A1"`
 	Columns []columnSpec `json:"columns" required:"true"`
-	Rows    [][]any      `json:"rows" required:"true" description:"one array per data row, in column order; a string starting with = is a formula, {row} in it becomes the row number of its cell"`
-	Preset  string       `json:"preset" description:"plain, report or financial; default plain"`
-	Name    string       `json:"name" description:"table name, for sheets output and structured references"`
+	Rows    [][]any      `json:"rows" required:"true" description:"one array per data row, in column order"`
+	Preset  string       `json:"preset" enum:"plain,report,financial" description:"default plain"`
+	Name    string       `json:"name" description:"absent generates one"`
 }
 
 type tableResult struct {
-	Range string `json:"range" description:"the table, header row included, like A1:C20"`
-	Name  string `json:"name"`
+	_     struct{} `description:"range: the table, header row included; name: for formulas like =SUM(Sales[Amount])"`
+	Range string   `json:"range"`
+	Name  string   `json:"name"`
 }
 
 type formatArg struct {
 	Path         string `json:"path" required:"true"`
 	Sheet        string `json:"sheet" required:"true"`
-	Range        string `json:"range" required:"true" description:"the exact cells to restyle, like B2:D20"`
-	Bold         bool   `json:"bold" description:"set bold; false is a no-op — this tool cannot remove bold"`
-	Fill         string `json:"fill" description:"gray, blue, green, yellow or red"`
-	NumberFormat string `json:"numberFormat" description:"text, number, currency, percent, date or integer; changes display only, text cells stay text"`
-	Align        string `json:"align" description:"left, center or right"`
+	Range        string `json:"range" required:"true" description:"the exact cells, like B2:D20"`
+	Bold         bool   `json:"bold" description:"false leaves bold as it is"`
+	Fill         string `json:"fill" enum:"gray,blue,green,yellow,red"`
+	NumberFormat string `json:"numberFormat" enum:"text,number,currency,percent,date,integer" description:"changes display only, text cells stay text"`
+	Align        string `json:"align" enum:"left,center,right"`
 }
 
 type styleCache map[string]int

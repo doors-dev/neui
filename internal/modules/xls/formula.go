@@ -23,23 +23,24 @@ import (
 	"neui.dev/internal/common"
 )
 
-const totalDesc = `Add a summary row, bold with a top border, in the empty row right under a plain range: a SUBTOTAL per chosen column, each cell keeping its column's number format (counts excepted). A range that is or overlaps a table is refused, since total rows inside tables are not supported; total a table with write instead, like =SUBTOTAL(109,Sales[Amount]) in a cell clear of it. The summary row must be clear of tables, the autofilter and merged cells.`
+const totalDesc = `Add a summary row in the empty row right under a plain range: a SUBTOTAL per chosen column, bold and in its column's number format (counts excepted). Not for tables: total a table with write, like =SUBTOTAL(109,Sales[Amount]) in a cell clear of it.`
 
 type aggSpec struct {
 	Column string `json:"column" required:"true" description:"header of a column in the range, like Amount; a column letter inside the range, like B, also works"`
-	Fn     string `json:"fn" required:"true" description:"sum, avg, min, max, count (non-empty cells, text included — Excel Total Row 'Count', COUNTA) or count_nums (numeric cells only — 'Count Numbers', COUNT). All are SUBTOTAL 1xx, so filtered and hidden rows are skipped."`
+	Fn     string `json:"fn" required:"true" enum:"sum,avg,min,max,count,count_nums" description:"count is COUNTA, non-empty cells with text included; count_nums is COUNT, numeric cells only; each skips filtered and hidden rows"`
 }
 
 type totalArg struct {
 	Path  string    `json:"path" required:"true"`
 	Sheet string    `json:"sheet" required:"true"`
-	Range string    `json:"range" required:"true" description:"data range to summarize, header row included, like A1:C20"`
+	Range string    `json:"range" required:"true" description:"header row included, like A1:C20"`
 	Aggs  []aggSpec `json:"aggs" required:"true"`
 }
 
 type totalResult struct {
-	Row   int    `json:"row" description:"row number of the summary row"`
-	Range string `json:"range" description:"the summary row, like A21:C21"`
+	_     struct{} `description:"row and range: the summary row's number and cells"`
+	Row   int      `json:"row"`
+	Range string   `json:"range"`
 }
 
 var aggFns = map[string]int{

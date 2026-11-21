@@ -27,17 +27,18 @@ const listCap = 1000
 
 const listDesc = `List a directory.`
 const statDesc = `Read one entry's metadata.`
-const copyDesc = `Copy a file. Copying to a name already taken in agent_uploads/ is an error.`
-const moveDesc = `Move or rename a file or directory. The uploads dirs are read-only.`
+const copyDesc = `Copy a file.`
+const moveDesc = `Move or rename a file or directory.`
 const deleteDesc = `Delete a file or directory recursively; a missing path is not an error.`
 
 type listArg struct {
-	Path string `json:"path" description:"directory to list, empty string is the workspace root"`
+	Path string `json:"path" description:"absent or \"\" lists the workspace root"`
 }
 
 type listResult struct {
-	Entries   []Entry `json:"entries"`
-	Truncated bool    `json:"truncated,omitempty" description:"present when over 1000 entries exist, list a subdirectory instead"`
+	_         struct{} `description:"the directory's entries, at most 1000; truncated: more exist, list a subdirectory instead"`
+	Entries   []Entry  `json:"entries"`
+	Truncated bool     `json:"truncated,omitempty"`
 }
 
 type copyArg struct {
