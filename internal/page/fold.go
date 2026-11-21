@@ -17,11 +17,13 @@ package page
 import (
 	"slices"
 	"strings"
+
+	"neui.dev/internal/common"
 )
 
 var groups = [3]string{"tools", "inputs", "data"}
 
-func (s *space) changes(before map[string][4]uint64, called string, light bool) []change {
+func (s *space) changes(before map[string][4]uint64, called string, tier common.ModelTier) []change {
 	called = strings.ReplaceAll(called, "/", ".")
 	var out []change
 	live := map[string]bool{}
@@ -47,7 +49,7 @@ func (s *space) changes(before map[string][4]uint64, called string, light bool) 
 			}
 		}
 		for _, c := range s.children {
-			if !c.hidden(light) {
+			if !c.hidden(tier) {
 				walk(c)
 			}
 		}

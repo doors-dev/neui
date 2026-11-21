@@ -113,28 +113,34 @@ func TestAppUploadStorageIsUsedAndSessionOptionOverridesIt(t *testing.T) {
 	}
 }
 
-func TestOptionLightModeOverridesTheApp(t *testing.T) {
+func TestOptionTierOverridesTheApp(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
-	for _, app := range []bool{false, true} {
-		ctx := context.WithValue(context.Background(), common.LightModeKey{}, app)
-		s := &session{ctx: ctx, instances: make(map[*instance]struct{})}
-		if err := s.Enable([]common.Option{common.OptionProvider(stubProvider{})}); err != nil {
-			t.Fatalf("Enable: %v", err)
+	tiers := []common.ModelTier{common.TierArchitect, common.TierAgent, common.TierAssistant}
+	for _, app := range tiers {
+		for _, option := range tiers {
+			ctx := context.WithValue(context.Background(), common.TierKey{}, app)
+			s := &session{ctx: ctx, instances: make(map[*instance]struct{})}
+			if err := s.Enable([]common.Option{common.OptionProvider(stubProvider{})}); err != nil {
+				t.Fatalf("Enable: %v", err)
+			}
+			if got := common.Tier(s.backend.Context()); got != app {
+				t.Fatalf("app tier %d: the session runs at %d", app, got)
+			}
+			if err := s.Enable([]common.Option{common.OptionForce(), common.OptionProvider(stubProvider{}), common.OptionTier(option)}); err != nil {
+				t.Fatalf("Enable: %v", err)
+			}
+			if got := common.Tier(s.backend.Context()); got != option {
+				t.Fatalf("app tier %d, OptionTier(%d): the session runs at %d", app, option, got)
+			}
+			if err := s.Enable([]common.Option{common.OptionForce(), common.OptionProvider(stubProvider{})}); err != nil {
+				t.Fatalf("Enable: %v", err)
+			}
+			if got := common.Tier(s.backend.Context()); got != app {
+				t.Fatalf("app tier %d: a forced Enable without the option runs at %d", app, got)
+			}
 		}
-		if got := common.LightMode(s.backend.Context()); got != app {
-			t.Fatalf("app light mode %v: the session runs with %v", app, got)
-		}
-		if err := s.Enable([]common.Option{common.OptionForce(), common.OptionProvider(stubProvider{}), common.OptionLightMode(!app)}); err != nil {
-			t.Fatalf("Enable: %v", err)
-		}
-		if got := common.LightMode(s.backend.Context()); got != !app {
-			t.Fatalf("app light mode %v, OptionLightMode(%v): the session runs with %v", app, !app, got)
-		}
-		if err := s.Enable([]common.Option{common.OptionForce(), common.OptionProvider(stubProvider{})}); err != nil {
-			t.Fatalf("Enable: %v", err)
-		}
-		if got := common.LightMode(s.backend.Context()); got != app {
-			t.Fatalf("app light mode %v: a forced Enable without the option runs with %v", app, got)
-		}
+	}
+	if got := common.Tier(context.Background()); got != common.TierArchitect {
+		t.Fatalf("without WithTier the tier is %d, want TierArchitect", got)
 	}
 }

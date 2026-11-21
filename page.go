@@ -79,12 +79,12 @@ type Tool[I any, O any] struct {
 	// the same value replace each other, and a name must keep at least one
 	// letter or digit.
 	Name string
-	// Desc tells the agent what the tool does and when to call it. Outside
-	// light mode the output schema is appended to it; in light mode only O's
-	// description is, on a line starting "Result: ". Describe O with the
-	// description tag of a `_ struct{}` field placed after any embedded
-	// struct: what the result is and which of its fields steer the agent's
-	// next step.
+	// Desc tells the agent what the tool does and when to call it. At
+	// TierArchitect and TierAgent the output schema is appended to it; at
+	// TierAssistant only O's description is, on a line starting "Result: ".
+	// Describe O with the description tag of a `_ struct{}` field placed
+	// after any embedded struct: what the result is and which of its fields
+	// steer the agent's next step.
 	Desc string
 	// Handler runs the call with the input decoded from JSON into I; the
 	// input schema the agent sees comes from I, and what it sees of O is as
@@ -328,8 +328,8 @@ var _ gox.Proxy = Use{}
 // Island is a region of the page where the agent runs an app: a script that
 // draws a UI from the views, controls and layouts its Library offers and
 // reacts to what the user does there. It appears to the agent as a space
-// marked as an island; in light mode the agent sees neither the island nor
-// anything inside it. Template and Library are required.
+// marked as an island; at TierAgent and TierAssistant the agent sees neither
+// the island nor anything inside it. Template and Library are required.
 type Island struct {
 	// Name identifies the island among the spaces next to it; the agent sees
 	// it with Desc. Names are reduced to ASCII letters, digits and _ (runs of

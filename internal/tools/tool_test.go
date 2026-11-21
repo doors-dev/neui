@@ -295,7 +295,7 @@ type undescribed struct {
 	Rows []string `json:"rows"`
 }
 
-func TestLightDescAppendsTheOutputDescription(t *testing.T) {
+func TestResultDescAppendsTheOutputDescription(t *testing.T) {
 	m := NewModule("m", "")
 	_, err1 := m.Add("described", "Read rows.", func(context.Context, struct{}) (described, error) { return described{}, nil })
 	_, err2 := m.Add("pointer", "Read rows.", func(context.Context, struct{}) (*described, error) { return nil, nil })
@@ -320,8 +320,8 @@ func TestLightDescAppendsTheOutputDescription(t *testing.T) {
 		"raw":         "Read rows.\nResult: the server's rows",
 	} {
 		tool, _ := m.Get(name)
-		if got := LightDesc(tool); got != want {
-			t.Errorf("%s: light description %q, want %q", name, got, want)
+		if got := ResultDesc(tool); got != want {
+			t.Errorf("%s: result description %q, want %q", name, got, want)
 		}
 	}
 	tool, _ := m.Get("described")

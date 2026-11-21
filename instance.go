@@ -96,21 +96,46 @@ func WithIslandConfig(c api.IslandConfig) doors.With {
 	return doors.WithValue(common.IslandConfigKey{}, common.IslandConfigDefaults(c))
 }
 
-// WithLightMode runs every session the app serves in light mode, as an app
-// option for doors.NewApp; OptionLightMode sets the mode for one session.
-// Light mode is for models that cannot write scripts: ModuleJS adds no
-// module, the agent does not see islands, tool descriptions and the system
-// prompt carry no output schemas, the files and xls modules offer smaller
-// tool sets, and no text neui adds points the agent at scripts or islands. A
-// ModuleFactory reads the mode with LightMode.
-func WithLightMode() doors.With {
-	return doors.WithValue(common.LightModeKey{}, true)
+// ModelTier sets how much the agent is trusted to do, from calling functions
+// one at a time up to building apps on the page; choose it by the model you
+// run. Each tier includes everything of the tiers below it.
+type ModelTier = common.ModelTier
+
+const (
+	// TierArchitect: everything TierAgent does, plus it builds small apps for
+	// the user right on the page — a report, a form, an editor for a batch of
+	// records — that the user works with directly. The default. Suits models
+	// that can also write an interactive program: lay out a screen and
+	// respond to what the user does in it; 200k context is recommended.
+	TierArchitect = common.TierArchitect
+
+	// TierAgent: everything TierAssistant does, plus it writes scripts to
+	// automate work, such as changing many records in one go instead of
+	// repeating each step by hand. Suits models that plan multi-step work and
+	// follow each function's documented results in code, without seeing them
+	// first; at least 100k context is recommended, because it is given the
+	// full result format of every function, which makes each request larger.
+	TierAgent = common.TierAgent
+
+	// TierAssistant: the agent works in your app's UI the way a user does —
+	// reads what is on screen, fills inputs, presses buttons, follows links —
+	// and calls the functions you give it (neui.Tool, modules), one call at a
+	// time. It writes no code. Suits small models with reliable tool calling;
+	// at least 32k context, 64k recommended.
+	TierAssistant = common.TierAssistant
+)
+
+// WithTier sets the model tier for every session the app serves, as an app
+// option for doors.NewApp; OptionTier sets it for one session. Without it,
+// the tier is TierArchitect.
+func WithTier(t ModelTier) doors.With {
+	return doors.WithValue(common.TierKey{}, t)
 }
 
-// OptionLightMode turns light mode on or off for one session, taking
-// precedence over the app's WithLightMode.
-func OptionLightMode(on bool) Option {
-	return common.OptionLightMode(on)
+// OptionTier sets the model tier for one session, taking precedence over the
+// app's WithTier.
+func OptionTier(t ModelTier) Option {
+	return common.OptionTier(t)
 }
 
 // OptionFilesConfig sets the session's workspace filesystem and files

@@ -131,7 +131,7 @@ func Module(c Config) common.ModuleFactory {
 			panic(err)
 		}
 		if backend != nil {
-			if _, err := m.Add("search", searchDesc(common.LightMode(ctx)), w.search); err != nil {
+			if _, err := m.Add("search", searchDesc(common.Tier(ctx)), w.search); err != nil {
 				panic(err)
 			}
 		}

@@ -177,15 +177,15 @@ func TestSearchForeignCancelIsUnavailable(t *testing.T) {
 	}
 }
 
-func TestSearchDescNamesScriptsOutsideLightMode(t *testing.T) {
+func TestSearchDescNamesScriptsAboveTierAssistant(t *testing.T) {
 	factory := Module(Config{Search: &fakeBackend{}})
-	for _, light := range []bool{false, true} {
-		search, ok := factory(context.WithValue(context.Background(), common.LightModeKey{}, light)).Get("search")
+	for _, tier := range []common.ModelTier{common.TierArchitect, common.TierAgent, common.TierAssistant} {
+		search, ok := factory(context.WithValue(context.Background(), common.TierKey{}, tier)).Get("search")
 		if !ok {
 			t.Fatal("no search tool")
 		}
-		if got := strings.Contains(search.Desc(), "script"); got == light {
-			t.Fatalf("light %v: the search description reads %q", light, search.Desc())
+		if got := strings.Contains(search.Desc(), "script"); got == (tier == common.TierAssistant) {
+			t.Fatalf("tier %d: the search description reads %q", tier, search.Desc())
 		}
 	}
 }

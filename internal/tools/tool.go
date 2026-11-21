@@ -162,7 +162,7 @@ func NewRawTool(
 	}, nil
 }
 
-func LightDesc(t common.Tool) string {
+func ResultDesc(t common.Tool) string {
 	var root struct {
 		Type        any    `json:"type"`
 		Description string `json:"description"`

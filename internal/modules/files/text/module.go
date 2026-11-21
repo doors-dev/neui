@@ -31,9 +31,9 @@ import (
 	"neui.dev/internal/tools"
 )
 
-func writeDesc(light bool) string {
+func writeDesc(tier common.ModelTier) string {
 	desc := `Write a whole text file, replacing existing content, creating parent directories.`
-	if !light {
+	if tier != common.TierAssistant {
 		desc += ` Content with \r keeps its line breaks as given.`
 	}
 	return desc
@@ -56,10 +56,10 @@ var (
 	locks   = map[string]*pathLock{}
 )
 
-func Register(m tools.Module, light bool) {
-	add(m, "write", writeDesc(light), writeTool)
+func Register(m tools.Module, tier common.ModelTier) {
+	add(m, "write", writeDesc(tier), writeTool)
 	add(m, "edit", editDesc, editTool)
-	if !light {
+	if tier != common.TierAssistant {
 		add(m, "append", appendDesc, appendTool)
 		add(m, "replace", replaceDesc, replaceTool)
 		add(m, "insert", insertDesc, insertTool)

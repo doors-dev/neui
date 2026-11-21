@@ -111,14 +111,14 @@ func (t Toolkit) Wrap(ctx context.Context, factories ...common.ModuleFactory) To
 }
 
 func (t Toolkit) System() iter.Seq[string] {
-	light := common.LightMode(t.ctx)
+	tier := common.Tier(t.ctx)
 	return func(yield func(string) bool) {
 		for m := range t.all() {
 			desc := m.Desc()
 			if desc == "" {
 				continue
 			}
-			if defs, _ := outputDefs(m); !light && len(defs) > 0 {
+			if defs, _ := outputDefs(m); tier != common.TierAssistant && len(defs) > 0 {
 				b := strings.Builder{}
 				b.WriteString(desc)
 				b.WriteString(outputDefsHead)
@@ -135,7 +135,7 @@ func (t Toolkit) System() iter.Seq[string] {
 }
 
 func (t Toolkit) Tools() iter.Seq[api.Tool] {
-	light := common.LightMode(t.ctx)
+	tier := common.Tier(t.ctx)
 	return func(yield func(api.Tool) bool) {
 		for m := range t.all() {
 			name := m.Name()
@@ -145,8 +145,8 @@ func (t Toolkit) Tools() iter.Seq[api.Tool] {
 				if brief[tool.Name()] {
 					desc = tool.Brief()
 				}
-				if light {
-					desc = tools.LightDesc(tool)
+				if tier == common.TierAssistant {
+					desc = tools.ResultDesc(tool)
 				}
 				if !yield(api.Tool{
 					Name:   fmt.Sprintf("%s__%s", name, tool.Name()),

@@ -36,9 +36,9 @@ const (
 	bytesCap     = 8 << 20
 )
 
-func readDesc(light bool) string {
+func readDesc(tier common.ModelTier) string {
 	desc := `Read a text file as numbered lines; everything after "N: " is file content. A long file comes in parts, and the last line says where to continue.`
-	if !light {
+	if tier != common.TierAssistant {
 		desc += ` From a script it returns the file's text as it is, up to 8MB, without line numbers, the closing line or cut lines, and the whole file when limit is unset.`
 	}
 	return desc
@@ -74,7 +74,7 @@ func readTool(ctx context.Context, arg readArg) (string, error) {
 	br := bufio.NewReaderSize(ctxReader{ctx, rc}, 64<<10)
 	head, _ := br.Peek(4096)
 	if bytes.IndexByte(head, 0) >= 0 {
-		if common.LightMode(ctx) {
+		if common.Tier(ctx) == common.TierAssistant {
 			return "", fmt.Errorf("%q is not a text file: look at an image with readImage, read a PDF or Office file with readDocument", arg.Path)
 		}
 		return "", fmt.Errorf("%q is a binary file, use readBytes", arg.Path)

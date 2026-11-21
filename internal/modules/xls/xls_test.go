@@ -487,26 +487,33 @@ func TestSheetsAutoFilter(t *testing.T) {
 	}
 }
 
-func TestLightModule(t *testing.T) {
+func TestTierModule(t *testing.T) {
 	factory := Module(Config{})
-	if n := len(factory(context.Background()).List()); n != 10 {
-		t.Fatalf("full mode registers %d tools, want 10", n)
+	for _, tier := range []common.ModelTier{common.TierArchitect, common.TierAgent} {
+		m := factory(context.WithValue(context.Background(), common.TierKey{}, tier))
+		if n := len(m.List()); n != 10 {
+			t.Fatalf("tier %d registers %d tools, want 10", tier, n)
+		}
+		read, _ := m.Get("read")
+		if params := string(read.Params()); !strings.Contains(params, `"raw"`) || !strings.Contains(params, `"limit"`) {
+			t.Fatalf("tier %d read takes %s, want raw and limit", tier, params)
+		}
 	}
-	light := factory(context.WithValue(context.Background(), common.LightModeKey{}, true))
+	assistant := factory(context.WithValue(context.Background(), common.TierKey{}, common.TierAssistant))
 	var names []string
-	for _, tool := range light.List() {
+	for _, tool := range assistant.List() {
 		names = append(names, tool.Name())
 	}
 	if want := []string{"chart", "find", "read", "sheets", "table", "write"}; !slices.Equal(names, want) {
-		t.Fatalf("light mode registers %v, want %v", names, want)
+		t.Fatalf("TierAssistant registers %v, want %v", names, want)
 	}
-	read, _ := light.Get("read")
+	read, _ := assistant.Get("read")
 	if params := string(read.Params()); strings.Contains(params, `"raw"`) || strings.Contains(params, `"limit"`) {
-		t.Fatalf("light read takes %s, want no raw or limit", params)
+		t.Fatalf("TierAssistant read takes %s, want no raw or limit", params)
 	}
 	c := testkit.NewController(t, testkit.Setup{})
 	buildBook(t, c.FS(), "book.xlsx")
-	ctx := context.WithValue(c.Ctx(), common.LightModeKey{}, true)
+	ctx := context.WithValue(c.Ctx(), common.TierKey{}, common.TierAssistant)
 	out, err := read.Agent(ctx, json.RawMessage(`{"path":"book.xlsx","sheet":"Data","offset":1,"raw":true}`))
 	if err != nil {
 		t.Fatal(err)
@@ -516,15 +523,15 @@ func TestLightModule(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(res.Rows) != 3 || res.Rows[0][0] != "Alice" || res.Rows[0][2] == "45000" || res.Rows[0][3] != "" {
-		t.Fatalf("light read with raw set gave %v, want formatted values from Alice on", res.Rows)
+		t.Fatalf("TierAssistant read with raw set gave %v, want formatted values from Alice on", res.Rows)
 	}
 	over := json.RawMessage(fmt.Sprintf(`{"path":"book.xlsx","sheet":"Data","cell":"F1","rows":[[1]],"repeat":%d}`, maxFormatCells+1))
-	write, _ := light.Get("write")
+	write, _ := assistant.Get("write")
 	if _, err := write.Agent(ctx, over); err == nil || !strings.HasSuffix(err.Error(), "split it into several writes") {
-		t.Fatalf("light write refused with %v, want the split hint alone", err)
+		t.Fatalf("TierAssistant write refused with %v, want the split hint alone", err)
 	}
 	write, _ = factory(context.Background()).Get("write")
 	if _, err := write.Agent(c.Ctx(), over); err == nil || !strings.HasSuffix(err.Error(), "split it into several writes") {
-		t.Fatalf("full write refused with %v, want the split hint alone", err)
+		t.Fatalf("TierArchitect write refused with %v, want the split hint alone", err)
 	}
 }

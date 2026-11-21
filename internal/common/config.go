@@ -42,11 +42,22 @@ type IslandScopeKey struct{}
 
 type IslandIDKey struct{}
 
-type LightModeKey struct{}
+type TierKey struct{}
 
-func LightMode(ctx context.Context) bool {
-	light, _ := ctx.Value(LightModeKey{}).(bool)
-	return light
+// ModelTier sets how much the agent is trusted to do, from calling functions
+// one at a time up to building apps on the page; choose it by the model you
+// run. Each tier includes everything of the tiers below it.
+type ModelTier int
+
+const (
+	TierArchitect ModelTier = iota
+	TierAgent
+	TierAssistant
+)
+
+func Tier(ctx context.Context) ModelTier {
+	tier, _ := ctx.Value(TierKey{}).(ModelTier)
+	return tier
 }
 
 const IslandIDAttr = "data-neui-island"

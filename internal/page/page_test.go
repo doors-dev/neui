@@ -963,49 +963,69 @@ func TestResultsFitTheRoundItemBudget(t *testing.T) {
 	}
 }
 
-func TestLightModeTexts(t *testing.T) {
+func TestTierTexts(t *testing.T) {
 	tool := func(name string) map[string]any {
 		return map[string]any{"path": "big", "tool": name, "arg": map[string]any{}}
 	}
-	p := testkit.NewProvider(api.Model{Name: "fake", Context: 2000},
-		testkit.Call("page__sync", map[string]any{"path": "big"}),
-		testkit.Call("page__tool", tool("dump")),
-		testkit.Call("page__tool", tool("grow")),
-		testkit.Call("page__tool", tool("dump")),
-		testkit.Call("page__sync", map[string]any{"path": "big"}),
-		testkit.Say("done"),
-	)
-	c := stack.Page(t, stack.Host{Provider: p, Page: big(), Options: []common.Option{common.OptionLightMode(true)}})
-	c.Send("dump")
-	c.Wait()
-	result := func(i int) api.ContentToolResult { return testkit.Results(p.Request(t, i))[0] }
-	var synced struct {
-		Tools []struct{ Name, Desc string }
-	}
-	testkit.Decode(t, result(1), &synced)
-	if len(synced.Tools) != 2 || synced.Tools[0].Desc != "dumps" || synced.Tools[1].Desc != "grows" {
-		t.Fatalf("the sync listed %+v, want the tools' descriptions alone", synced.Tools)
-	}
-	var dumped toolOutput
-	testkit.Decode(t, result(2), &dumped)
-	if note, _ := dumped.Output.(string); note != "Result omitted: it was 2.9 KB, more than a turn's tool results can hold. Ask for less." {
-		t.Fatalf("the dump answered %+v, want the light omission note in output", dumped)
-	}
-	plain(t, result(4), "not done: this space has not been read as it is now, and it is too large to show in a result: tell the user this part of the page is out of your reach")
-	refused(t, result(5), "the space is too large for a result: tell the user this part of the page is out of your reach")
-	request := p.Request(t, 0)
-	for _, tool := range request.Tools {
-		if strings.HasPrefix(tool.Name, "page__island") || strings.Contains(tool.Desc, "Output schema") {
-			t.Fatalf("light mode offers %s: %s", tool.Name, tool.Desc)
+	for _, tier := range []common.ModelTier{common.TierAgent, common.TierAssistant} {
+		assistant := tier == common.TierAssistant
+		p := testkit.NewProvider(api.Model{Name: "fake", Context: 2000},
+			testkit.Call("page__sync", map[string]any{"path": "big"}),
+			testkit.Call("page__tool", tool("dump")),
+			testkit.Call("page__tool", tool("grow")),
+			testkit.Call("page__tool", tool("dump")),
+			testkit.Call("page__sync", map[string]any{"path": "big"}),
+			testkit.Say("done"),
+		)
+		c := stack.Page(t, stack.Host{Provider: p, Page: big(), Options: []common.Option{common.OptionTier(tier)}})
+		c.Send("dump")
+		c.Wait()
+		result := func(i int) api.ContentToolResult { return testkit.Results(p.Request(t, i))[0] }
+		var synced struct {
+			Tools []struct{ Name, Desc string }
 		}
-	}
-	if len(request.Tools) != 7 {
-		t.Fatalf("light mode offers %d page tools, want 7", len(request.Tools))
-	}
-	for i := 1; i <= 5; i++ {
-		for _, c := range result(i).Content {
-			if text, _ := c.(api.ContentText); strings.Contains(text.Text, "script") || strings.Contains(text.Text, "Output schema") {
-				t.Fatalf("result %d mentions scripts or output schemas: %s", i, text.Text)
+		testkit.Decode(t, result(1), &synced)
+		if assistant && (len(synced.Tools) != 2 || synced.Tools[0].Desc != "dumps" || synced.Tools[1].Desc != "grows") {
+			t.Fatalf("tier %d: the sync listed %+v, want the tools' descriptions alone", tier, synced.Tools)
+		}
+		if !assistant && (len(synced.Tools) != 2 || !strings.HasPrefix(synced.Tools[0].Desc, "dumps\nOutput schema: ") || !strings.HasPrefix(synced.Tools[1].Desc, "grows\nOutput schema: ")) {
+			t.Fatalf("tier %d: the sync listed %+v, want the descriptions with their output schemas", tier, synced.Tools)
+		}
+		note, tooLarge, syncTooLarge := "Result omitted: it was 2.9 KB, more than a turn's tool results can hold. Ask for less, or process it in a script.",
+			"not done: this space has not been read as it is now, and it is too large to show in a result: act on it from a script, syncing it there first; without a script tool, tell the user this part of the page is out of your reach",
+			"the space is too large for a result: sync it and act on it from a script, where results have no size limit"
+		if assistant {
+			note, tooLarge, syncTooLarge = "Result omitted: it was 2.9 KB, more than a turn's tool results can hold. Ask for less.",
+				"not done: this space has not been read as it is now, and it is too large to show in a result: tell the user this part of the page is out of your reach",
+				"the space is too large for a result: tell the user this part of the page is out of your reach"
+		}
+		var dumped toolOutput
+		testkit.Decode(t, result(2), &dumped)
+		if got, _ := dumped.Output.(string); got != note {
+			t.Fatalf("tier %d: the dump answered %+v, want the omission note %q in output", tier, dumped, note)
+		}
+		plain(t, result(4), tooLarge)
+		refused(t, result(5), syncTooLarge)
+		request := p.Request(t, 0)
+		for _, tool := range request.Tools {
+			if strings.HasPrefix(tool.Name, "page__island") || assistant == strings.Contains(tool.Desc, "Output schema") {
+				t.Fatalf("tier %d offers %s: %s", tier, tool.Name, tool.Desc)
+			}
+		}
+		if len(request.Tools) != 7 {
+			t.Fatalf("tier %d offers %d page tools, want 7", tier, len(request.Tools))
+		}
+		if strings.Contains(strings.ReplaceAll(request.System, `"island":{"type":"boolean"}`, ""), "island") || assistant == strings.Contains(request.System, "script") {
+			t.Fatalf("tier %d: the system text reads %q", tier, request.System)
+		}
+		if !assistant {
+			continue
+		}
+		for i := 1; i <= 5; i++ {
+			for _, c := range result(i).Content {
+				if text, _ := c.(api.ContentText); strings.Contains(text.Text, "script") || strings.Contains(text.Text, "Output schema") {
+					t.Fatalf("result %d mentions scripts or output schemas: %s", i, text.Text)
+				}
 			}
 		}
 	}
@@ -1450,7 +1470,7 @@ type describedRows struct {
 	Rows []string `json:"rows"`
 }
 
-func TestLightModeShowsPageToolResultDescriptions(t *testing.T) {
+func TestTierShowsPageToolResultDescriptions(t *testing.T) {
 	page := func(cur gox.Cursor) error {
 		return (neui.Space{Name: "sheet", Desc: "a sheet"}).Proxy(cur, func(cur gox.Cursor) error {
 			return cur.Comp(neui.Tool[struct{}, describedRows]{Name: "rows", Desc: "reads rows", Handler: func(context.Context, struct{}) (describedRows, error) {
@@ -1458,9 +1478,10 @@ func TestLightModeShowsPageToolResultDescriptions(t *testing.T) {
 			}})
 		})
 	}
-	for _, light := range []bool{false, true} {
+	for _, tier := range []common.ModelTier{common.TierArchitect, common.TierAgent, common.TierAssistant} {
+		assistant := tier == common.TierAssistant
 		p := testkit.NewProvider(api.Model{}, testkit.Call("page__sync", map[string]any{"path": "sheet"}), testkit.Say("done"))
-		c := stack.Page(t, stack.Host{Provider: p, Page: page, Options: []common.Option{common.OptionLightMode(light)}})
+		c := stack.Page(t, stack.Host{Provider: p, Page: page, Options: []common.Option{common.OptionTier(tier)}})
 		c.Send("read")
 		c.Wait()
 		var synced struct {
@@ -1468,11 +1489,11 @@ func TestLightModeShowsPageToolResultDescriptions(t *testing.T) {
 		}
 		testkit.Decode(t, testkit.Results(p.Request(t, 1))[0], &synced)
 		want := "reads rows\nOutput schema: {\"description\":\"the rows; truncated: call again\","
-		if light {
+		if assistant {
 			want = "reads rows\nResult: the rows; truncated: call again"
 		}
-		if len(synced.Tools) != 1 || !strings.HasPrefix(synced.Tools[0].Desc, want) || light && synced.Tools[0].Desc != want {
-			t.Fatalf("light %v: the sync listed %+v, want the description %q", light, synced.Tools, want)
+		if len(synced.Tools) != 1 || !strings.HasPrefix(synced.Tools[0].Desc, want) || assistant && synced.Tools[0].Desc != want {
+			t.Fatalf("tier %d: the sync listed %+v, want the description %q", tier, synced.Tools, want)
 		}
 	}
 }

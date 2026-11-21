@@ -39,8 +39,8 @@ type Tool interface {
 	Name() string
 	// Desc is the description the tool was defined with.
 	Desc() string
-	// Summary is the description the agent sees outside light mode: Desc
-	// with the output schema appended.
+	// Summary is the description the agent sees at TierArchitect and
+	// TierAgent: Desc with the output schema appended.
 	Summary() string
 	// Brief is Summary with the output schema's definitions left out, for
 	// when they are listed with the module.
@@ -155,9 +155,9 @@ func OptionFilesConfig(c api.FilesConfig) Option {
 	})
 }
 
-func OptionLightMode(on bool) Option {
+func OptionTier(t ModelTier) Option {
 	return optionFunc(func(b *Backend) {
-		b.light = on
+		b.tier = t
 	})
 }
 
@@ -185,7 +185,7 @@ func NewBackend(
 		uploadStorage:    uploadStorage,
 		config:           AppConfig(ctx),
 		filesConfig:      AppFilesConfig(ctx),
-		light:            LightMode(ctx),
+		tier:             Tier(ctx),
 	}
 	if s := AppUploadStorage(ctx); s != nil {
 		b.uploadStorage = s
@@ -193,7 +193,7 @@ func NewBackend(
 	for _, w := range opts {
 		w.apply(b)
 	}
-	b.ctx = context.WithValue(b.ctx, LightModeKey{}, b.light)
+	b.ctx = context.WithValue(b.ctx, TierKey{}, b.tier)
 	return b
 }
 
@@ -207,7 +207,7 @@ type Backend struct {
 	modules          []ModuleFactory
 	config           api.ThreadConfig
 	filesConfig      api.FilesConfig
-	light            bool
+	tier             ModelTier
 }
 
 func (b *Backend) Config() api.ThreadConfig {

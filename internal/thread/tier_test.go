@@ -43,10 +43,12 @@ import (
 	"neui.dev/provider/gpt"
 )
 
-var scriptWords = regexp.MustCompile(`(?i)\bscripts?\b|island|js__|Output schema|Output definitions`)
+var scriptWords = regexp.MustCompile(`(?i)\bscripts?\b|js__|Output schema|Output definitions`)
 
-func TestLightModeToolsAndSystem(t *testing.T) {
-	for _, light := range []bool{false, true} {
+var islandWords = regexp.MustCompile(`(?i)island`)
+
+func TestTierToolsAndSystem(t *testing.T) {
+	for _, tier := range []common.ModelTier{common.TierArchitect, common.TierAgent, common.TierAssistant} {
 		p := testkit.NewProvider(api.Model{}, testkit.Say("hi"))
 		c := stack.Headless(t, stack.Host{Provider: p, Options: []common.Option{
 			common.OptionModule(chatmod.Module),
@@ -54,13 +56,13 @@ func TestLightModeToolsAndSystem(t *testing.T) {
 			common.OptionModule(files.Module),
 			common.OptionModule(js.Module),
 			common.OptionModule(xls.Module(xls.Config{})),
-			common.OptionLightMode(light),
+			common.OptionTier(tier),
 		}})
 		c.Send("hello")
 		c.Wait()
 		req := p.Request(t, 0)
 		var descs, schemas, outputs int
-		var found []string
+		var scripts, islands []string
 		for _, tool := range req.Tools {
 			schema, err := json.Marshal(tool.Schema)
 			if err != nil {
@@ -72,43 +74,54 @@ func TestLightModeToolsAndSystem(t *testing.T) {
 				outputs += len(output)
 			}
 			for _, text := range []string{tool.Name, tool.Desc, string(schema)} {
-				found = append(found, scriptWords.FindAllString(text, -1)...)
+				scripts = append(scripts, scriptWords.FindAllString(text, -1)...)
+				islands = append(islands, islandWords.FindAllString(strings.ReplaceAll(text, `"island":{"type":"boolean"}`, ""), -1)...)
 			}
 		}
-		found = append(found, scriptWords.FindAllString(req.System, -1)...)
-		t.Logf("light %v: %d tools, %.1f KB declared: system %.1f KB, names and descriptions %.1f KB (output schemas %.1f KB), input schemas %.1f KB",
-			light, len(req.Tools), float64(len(req.System)+descs+schemas)/1024, float64(len(req.System))/1024, float64(descs)/1024, float64(outputs)/1024, float64(schemas)/1024)
-		if !light {
-			if len(req.Tools) != 50 || len(found) == 0 {
-				t.Fatalf("full mode offers %d tools and mentions %d script words, want 50 tools and the full texts", len(req.Tools), len(found))
+		scripts = append(scripts, scriptWords.FindAllString(req.System, -1)...)
+		islands = append(islands, islandWords.FindAllString(strings.ReplaceAll(req.System, `"island":{"type":"boolean"}`, ""), -1)...)
+		t.Logf("tier %d: %d tools, %.1f KB declared: system %.1f KB, names and descriptions %.1f KB (output schemas %.1f KB), input schemas %.1f KB",
+			tier, len(req.Tools), float64(len(req.System)+descs+schemas)/1024, float64(len(req.System))/1024, float64(descs)/1024, float64(outputs)/1024, float64(schemas)/1024)
+		names := map[string]bool{}
+		for _, tool := range req.Tools {
+			names[tool.Name] = true
+		}
+		switch tier {
+		case common.TierArchitect:
+			if len(req.Tools) != 50 || len(scripts) == 0 || len(islands) == 0 {
+				t.Fatalf("TierArchitect offers %d tools and mentions %d script and %d island words, want 50 tools and the full texts", len(req.Tools), len(scripts), len(islands))
 			}
-			continue
-		}
-		if len(req.Tools) != 27 {
-			t.Fatalf("light mode offers %d tools, want 27", len(req.Tools))
-		}
-		if len(found) != 0 {
-			t.Fatalf("light mode texts mention %q", found)
+		case common.TierAgent:
+			if len(req.Tools) != 43 || len(scripts) == 0 || outputs == 0 || !names["js__run"] || !names["files__zip"] || !names["xls__format"] {
+				t.Fatalf("TierAgent offers %d tools with %d bytes of output schemas and mentions %d script words, want 43 tools with js, the full files and xls sets and the script texts", len(req.Tools), outputs, len(scripts))
+			}
+			if len(islands) != 0 {
+				t.Fatalf("TierAgent texts mention %q", islands)
+			}
+		case common.TierAssistant:
+			if len(req.Tools) != 27 {
+				t.Fatalf("TierAssistant offers %d tools, want 27", len(req.Tools))
+			}
+			if found := append(scripts, islands...); len(found) != 0 {
+				t.Fatalf("TierAssistant texts mention %q", found)
+			}
 		}
 	}
 }
 
-func TestHostModuleReadsLightMode(t *testing.T) {
+func TestHostModuleReadsTier(t *testing.T) {
+	names := map[common.ModelTier]string{common.TierArchitect: "architect", common.TierAgent: "agent", common.TierAssistant: "assistant"}
 	host := func(ctx context.Context) neui.AnyModule {
 		m := neui.NewModule("crm", "")
-		name := "full"
-		if neui.LightMode(ctx) {
-			name = "lite"
-		}
-		if _, err := m.Tool(name, "reports the mode", func(ctx context.Context, _ struct{}) (string, error) {
-			return fmt.Sprint(neui.LightMode(ctx), neui.LightMode(neui.ToolThreadContext(ctx))), nil
+		if _, err := m.Tool(names[neui.Tier(ctx)], "reports the tier", func(ctx context.Context, _ struct{}) (string, error) {
+			return fmt.Sprint(neui.Tier(ctx), neui.Tier(neui.ToolThreadContext(ctx))), nil
 		}); err != nil {
 			t.Fatal(err)
 		}
 		return m
 	}
 	extra := func(ctx context.Context) neui.AnyModule {
-		if neui.LightMode(ctx) {
+		if neui.Tier(ctx) == neui.TierAssistant {
 			return nil
 		}
 		m := neui.NewModule("extra", "")
@@ -117,31 +130,28 @@ func TestHostModuleReadsLightMode(t *testing.T) {
 		}
 		return m
 	}
-	for _, light := range []bool{false, true} {
-		name := "crm__full"
-		if light {
-			name = "crm__lite"
-		}
+	for _, tier := range []common.ModelTier{common.TierArchitect, common.TierAgent, common.TierAssistant} {
+		name := "crm__" + names[tier]
 		p := testkit.NewProvider(api.Model{}, testkit.Call(name, map[string]any{}), testkit.Say("done"))
-		c := stack.Headless(t, stack.Host{Provider: p, Options: []common.Option{common.OptionModules([]common.ModuleFactory{host, extra}), common.OptionLightMode(light)}})
-		c.Send("which mode")
+		c := stack.Headless(t, stack.Host{Provider: p, Options: []common.Option{common.OptionModules([]common.ModuleFactory{host, extra}), common.OptionTier(tier)}})
+		c.Send("which tier")
 		c.Wait()
-		var names []string
+		var offered []string
 		for _, tool := range p.Request(t, 0).Tools {
 			if !strings.HasPrefix(tool.Name, "page__") {
-				names = append(names, tool.Name)
+				offered = append(offered, tool.Name)
 			}
 		}
-		want := []string{"crm__full", "extra__more"}
-		if light {
-			want = []string{"crm__lite"}
+		want := []string{name, "extra__more"}
+		if tier == common.TierAssistant {
+			want = []string{name}
 		}
-		if !slices.Equal(names, want) {
-			t.Fatalf("light %v: the host modules offer %v, want %v", light, names, want)
+		if !slices.Equal(offered, want) {
+			t.Fatalf("tier %d: the host modules offer %v, want %v", tier, offered, want)
 		}
 		r := testkit.Results(p.Request(t, 1))[0]
-		if text, _ := r.Content[0].(api.ContentText); text.Text != fmt.Sprint(light, light) {
-			t.Fatalf("light %v: the tool call saw %#v", light, r.Content)
+		if text, _ := r.Content[0].(api.ContentText); text.Text != fmt.Sprint(tier, tier) {
+			t.Fatalf("tier %d: the tool call saw %#v", tier, r.Content)
 		}
 	}
 }
@@ -151,7 +161,7 @@ type describedRows struct {
 	Rows []string `json:"rows"`
 }
 
-func TestLightModeShowsResultDescriptions(t *testing.T) {
+func TestTierShowsResultDescriptions(t *testing.T) {
 	host := func(context.Context) neui.AnyModule {
 		m := neui.NewModule("crm", "")
 		if _, err := m.Tool("rows", "Read rows.", func(context.Context, struct{}) (describedRows, error) { return describedRows{}, nil }); err != nil {
@@ -162,9 +172,10 @@ func TestLightModeShowsResultDescriptions(t *testing.T) {
 		}
 		return m
 	}
-	for _, light := range []bool{false, true} {
+	for _, tier := range []common.ModelTier{common.TierArchitect, common.TierAgent, common.TierAssistant} {
+		assistant := tier == common.TierAssistant
 		p := testkit.NewProvider(api.Model{}, testkit.Say("hi"))
-		c := stack.Headless(t, stack.Host{Provider: p, Options: []common.Option{common.OptionModules([]common.ModuleFactory{host}), common.OptionLightMode(light)}})
+		c := stack.Headless(t, stack.Host{Provider: p, Options: []common.Option{common.OptionModules([]common.ModuleFactory{host}), common.OptionTier(tier)}})
 		c.Send("hello")
 		c.Wait()
 		descs := map[string]string{}
@@ -172,33 +183,33 @@ func TestLightModeShowsResultDescriptions(t *testing.T) {
 			descs[tool.Name] = tool.Desc
 		}
 		rows, text := "Read rows.\nOutput schema: {\"description\":\"the rows; truncated: call again\",", "Read text.\nOutput schema: "
-		if light {
+		if assistant {
 			rows, text = "Read rows.\nResult: the rows; truncated: call again", "Read text."
 		}
-		if !strings.HasPrefix(descs["crm__rows"], rows) || !strings.HasPrefix(descs["crm__text"], text) || light && (descs["crm__rows"] != rows || descs["crm__text"] != text) {
-			t.Fatalf("light %v: the tools read %q and %q, want %q and %q", light, descs["crm__rows"], descs["crm__text"], rows, text)
+		if !strings.HasPrefix(descs["crm__rows"], rows) || !strings.HasPrefix(descs["crm__text"], text) || assistant && (descs["crm__rows"] != rows || descs["crm__text"] != text) {
+			t.Fatalf("tier %d: the tools read %q and %q, want %q and %q", tier, descs["crm__rows"], descs["crm__text"], rows, text)
 		}
 	}
 }
 
-func lightReplay(t *testing.T) api.Request {
+func assistantReplay(t *testing.T) api.Request {
 	t.Helper()
 	p := testkit.NewProvider(api.Model{},
 		testkit.Call("js__run", map[string]any{"code": "return 1 + 1", "comment": "adds"}),
 		testkit.Call("page__island_begin", map[string]any{"path": "board", "revision": "0", "code": "ui.draw()", "comment": "the board app"}),
 		testkit.Say("done"),
-		testkit.Say("light"),
+		testkit.Say("assistant"),
 	)
 	c := stack.Headless(t, stack.Host{Provider: p, Options: []common.Option{common.OptionModule(timemod.Module), common.OptionModule(js.Module)}})
 	c.Send("run it")
 	c.Wait()
-	c.Switch(common.OptionModule(timemod.Module), common.OptionModule(js.Module), common.OptionLightMode(true))
+	c.Switch(common.OptionModule(timemod.Module), common.OptionModule(js.Module), common.OptionTier(common.TierAssistant))
 	c.Send("go on")
 	c.Wait()
 	req := p.Request(t, 3)
 	for _, tool := range req.Tools {
 		if tool.Name == "js__run" || strings.HasPrefix(tool.Name, "page__island") {
-			t.Fatalf("light mode offers %s", tool.Name)
+			t.Fatalf("TierAssistant offers %s", tool.Name)
 		}
 	}
 	var calls []string
@@ -213,13 +224,13 @@ func lightReplay(t *testing.T) api.Request {
 		}
 	}
 	if want := []string{"use js__run", "result call-js__run", "use page__island_begin", "result call-page__island_begin"}; !slices.Equal(calls, want) {
-		t.Fatalf("the light request replays %v, want %v", calls, want)
+		t.Fatalf("the TierAssistant request replays %v, want %v", calls, want)
 	}
 	return req
 }
 
-func TestStoredThreadReplaysAfterSwitchToLight(t *testing.T) {
-	req := lightReplay(t)
+func TestStoredThreadReplaysAfterSwitchToAssistant(t *testing.T) {
+	req := assistantReplay(t)
 	for _, a := range []struct {
 		name string
 		open func(url string) (api.Provider, error)

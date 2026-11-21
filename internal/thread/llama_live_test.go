@@ -172,7 +172,7 @@ func llamaReport(t *testing.T, rec *llamaRecorder, wire *llamaWire, events []api
 	}
 }
 
-func TestLiveLlamaLightFirstTurn(t *testing.T) {
+func TestLiveLlamaAssistantFirstTurn(t *testing.T) {
 	wire := &llamaWire{dir: os.Getenv("LLAMACPP_DUMP")}
 	rec := llamaProvider(t, api.Model{Context: 262_144}, wire)
 	c := stack.Headless(t, stack.Host{Provider: testkit.NewProvider(api.Model{}), Guard: 10 * time.Minute, Options: []common.Option{
@@ -180,7 +180,7 @@ func TestLiveLlamaLightFirstTurn(t *testing.T) {
 		common.OptionModule(timemod.Module),
 		common.OptionModule(files.Module),
 		common.OptionModule(xls.Module(xls.Config{})),
-		common.OptionLightMode(true),
+		common.OptionTier(common.TierAssistant),
 		common.OptionSystem([]string{"Back office of Kettle & Burr, a small coffee gear shop. " +
 			"The user works on the pages next to the chat: prefer acting there, so they see it happen. " +
 			"Deletions happen only when the user confirms them on the page."}),
@@ -223,7 +223,7 @@ func TestLiveLlamaToolImage(t *testing.T) {
 	rec := llamaProvider(t, api.Model{Context: 262_144}, wire, generic.WithMaxTokens(2048))
 	c := stack.Headless(t, stack.Host{Provider: testkit.NewProvider(api.Model{}), Guard: 4 * time.Minute, Options: []common.Option{
 		common.OptionModules([]common.ModuleFactory{host}),
-		common.OptionLightMode(true),
+		common.OptionTier(common.TierAssistant),
 		common.OptionProvider(rec),
 	}})
 	c.Send("Look at the product photo of the cold brew jar with shop__photo and tell me its colour in one word.")

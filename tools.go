@@ -121,13 +121,11 @@ func ToolFromAgent(ctx context.Context) bool {
 	return tools.FromAgent(ctx)
 }
 
-// LightMode reports whether the session runs in light mode (WithLightMode,
-// OptionLightMode). A ModuleFactory calls it on its ctx to register a
-// smaller module, or returns nil to add none. It also works on a tool call's
-// ctx and on ToolThreadContext; on other contexts it reports the app's
-// WithLightMode.
-func LightMode(ctx context.Context) bool {
-	return common.LightMode(ctx)
+// Tier reports the session's model tier. A ModuleFactory calls it on its ctx
+// to register what that tier can use; it also works on a tool call's ctx. On
+// other contexts it reports the app's WithTier.
+func Tier(ctx context.Context) ModelTier {
+	return common.Tier(ctx)
 }
 
 // ModuleFactory returns the module a thread uses: a fresh one or a shared
@@ -170,7 +168,7 @@ func NewModule(name string, desc string) Module {
 // synchronous functions (a tool can refuse script calls, as js's own tools
 // do), and js__stop cancels a run that outlived its call. Scripts run on
 // QuickJS (plain ES2023: no Node, browser APIs or promises), limited by
-// JSConfig. In light mode it adds no module and logs an error, once per
+// JSConfig. At TierAssistant it adds no module and logs an error, once per
 // process.
 var ModuleJS ModuleFactory = js.Module
 

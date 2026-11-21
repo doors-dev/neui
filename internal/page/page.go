@@ -62,7 +62,7 @@ type module struct {
 	tools.Module
 	page  *page
 	snaps map[string]snapshot
-	light bool
+	tier  common.ModelTier
 }
 
 type snapshot struct {
@@ -79,12 +79,12 @@ type permit[T any] struct {
 }
 
 func (p *page) Module(ctx context.Context) Module {
-	light := common.LightMode(ctx)
+	tier := common.Tier(ctx)
 	m := &module{
-		Module: tools.NewModule(moduleName, moduleDesc(light)),
+		Module: tools.NewModule(moduleName, moduleDesc(tier)),
 		page:   p,
 		snaps:  map[string]snapshot{},
-		light:  light,
+		tier:   tier,
 	}
 	_, err := m.Add(toolName, toolDesc, func(ctx context.Context, arg toolArg) (toolResult, error) {
 		a, err := m.act(ctx, arg.Path, func(s *space) (*tool, error) {
@@ -127,7 +127,7 @@ func (p *page) Module(ctx context.Context) Module {
 			if raw, merr := json.Marshal(value); value != nil && merr == nil {
 				res.Output = json.RawMessage(raw)
 				if !fits(ctx, "", res.Output) {
-					res.Output = replay.OmittedNote(len(raw), light)
+					res.Output = replay.OmittedNote(len(raw), tier)
 				}
 			}
 			return toolResult{}, a.fail(ctx, arg.Path, err, &res, &res.report)
@@ -139,7 +139,7 @@ func (p *page) Module(ctx context.Context) Module {
 		}
 		res := toolResult{Output: json.RawMessage(raw)}
 		if !fits(ctx, "", res.Output) {
-			res.Output = replay.OmittedNote(len(raw), light)
+			res.Output = replay.OmittedNote(len(raw), tier)
 		}
 		err = a.report(ctx, arg.Path, "", &res, &res.report)
 		return res, err
@@ -220,7 +220,7 @@ func (p *page) Module(ctx context.Context) Module {
 		if ctx.Err() != nil {
 			return node{}, context.Cause(ctx)
 		}
-		s, err := p.space.find(arg.Path, light)
+		s, err := p.space.find(arg.Path, tier)
 		if err != nil {
 			return node{}, err
 		}
@@ -228,7 +228,7 @@ func (p *page) Module(ctx context.Context) Module {
 		if arg.Depth != nil {
 			depth = *arg.Depth
 		}
-		return s.tree(depth, light), nil
+		return s.tree(depth, tier), nil
 	})
 	if err != nil {
 		panic(err)
@@ -239,13 +239,13 @@ func (p *page) Module(ctx context.Context) Module {
 		if ctx.Err() != nil {
 			return state{}, context.Cause(ctx)
 		}
-		s, err := p.space.find(arg.Path, light)
+		s, err := p.space.find(arg.Path, tier)
 		if err != nil {
 			return state{}, err
 		}
-		live := s.snapshot(light)
+		live := s.snapshot(tier)
 		if !fits(ctx, "", live.state) {
-			return state{}, fmt.Errorf("space %q: %w", s.path, spaceTooLarge(light))
+			return state{}, fmt.Errorf("space %q: %w", s.path, spaceTooLarge(tier))
 		}
 		m.store(s, live)
 		return live.state, nil
@@ -253,7 +253,7 @@ func (p *page) Module(ctx context.Context) Module {
 	if err != nil {
 		panic(err)
 	}
-	if light {
+	if tier != common.TierArchitect {
 		return m
 	}
 	_, err = m.Add(islandGuideName, islandGuideDesc, func(ctx context.Context, _ struct{}) (string, error) {
@@ -443,27 +443,27 @@ func (m *module) act[T any](ctx context.Context, path string, find func(s *space
 	if ctx.Err() != nil {
 		return permit[T]{}, context.Cause(ctx)
 	}
-	s, err := m.page.space.find(path, m.light)
+	s, err := m.page.space.find(path, m.tier)
 	if err != nil {
 		return permit[T]{}, err
 	}
 	old, ok := m.snaps[s.path]
-	if ok && old.digest == s.digestFor(m.light) {
+	if ok && old.digest == s.digestFor(m.tier) {
 		item, err := find(s)
 		if err != nil {
 			return permit[T]{}, err
 		}
 		before := map[string][4]uint64{}
-		m.page.space.digests(before, m.light)
+		m.page.space.digests(before, m.tier)
 		return permit[T]{module: m, item: item, old: old, before: before, island: s.within}, nil
 	}
-	live := s.snapshot(m.light)
+	live := s.snapshot(m.tier)
 	r := refusal{reason: refusedUnreadMessage, Space: &live.state}
 	if ok {
-		r = refusal{reason: refusedChangedMessage, Diff: s.diff(old, m.light)}
+		r = refusal{reason: refusedChangedMessage, Diff: s.diff(old, m.tier)}
 	}
 	if !fits(ctx, r.reason, r) {
-		return permit[T]{}, refusedTooLarge(m.light)
+		return permit[T]{}, refusedTooLarge(m.tier)
 	}
 	m.store(s, live)
 	return permit[T]{}, r
@@ -500,25 +500,25 @@ func (a permit[T]) leave() {
 }
 
 func (a permit[T]) report(ctx context.Context, path string, message string, res any, rep *report) error {
-	p, light := a.module.page, a.module.light
+	p, tier := a.module.page, a.module.tier
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if ctx.Err() != nil {
 		return context.Cause(ctx)
 	}
-	s, err := p.space.find(path, light)
+	s, err := p.space.find(path, tier)
 	if err != nil {
 		rep.Diff = &diff{Removed: true}
 	} else {
-		rep.Diff = s.diff(a.old, light)
+		rep.Diff = s.diff(a.old, tier)
 	}
-	rep.Changes = p.space.changes(a.before, path, light)
+	rep.Changes = p.space.changes(a.before, path, tier)
 	if !fits(ctx, message, res) {
 		*rep = report{}
 		return nil
 	}
 	if s != nil {
-		a.module.store(s, s.snapshot(light))
+		a.module.store(s, s.snapshot(tier))
 	}
 	return nil
 }

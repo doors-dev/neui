@@ -17,30 +17,32 @@ package page
 import (
 	"errors"
 	"fmt"
+
+	"neui.dev/internal/common"
 )
 
 const moduleName = "page"
 
-func moduleDesc(light bool) string {
+func moduleDesc(tier common.ModelTier) string {
 	desc := `Your access to the live page the user has open: use it to help the user operate the application — navigate, fill inputs, press buttons, call the tools the page exposes, or focus an element to point the user at it. Start from what the application already offers: when its pages have the view or form the task needs, such as a filtered and sorted list or an edit form, do it there, so the user sees it happen. `
-	if !light {
+	if tier == common.TierArchitect {
 		desc += `Open an island or call an island's app functions only for what the pages do not offer. `
 	}
 	desc += `The page is a tree of spaces, UI regions carrying tools, inputs and child spaces; a space's path is its child names from the root joined with dots, "" being the page root. Only what the application chose to expose is there, so a missing element means unavailable to you, not absent from the page: say so instead of guessing. read, write, click, focus and tool need the space read first, with sync, `
-	if !light {
+	if tier != common.TierAssistant {
 		desc += `by you or a script, `
 	}
 	desc += `and act only while it is as it was last read; otherwise they fail without acting. A write, click, focus or tool result carries diff, what changed in the called space while the call ran ({} when nothing did), and changes, the other spaces that changed; diff brings your read up to date, so no sync is needed after the call. `
 	desc += `The user works the same page alongside you: a change you did not make, shown in a refusal's diff, in a call's diff or changes, or in a read that differs from what you `
-	if !light {
+	if tier != common.TierAssistant {
 		desc += `or your script `
 	}
 	desc += `set, most often comes from them, so check what they did and build on it instead of redoing or undoing it. `
-	if !light {
+	if tier != common.TierAssistant {
 		desc += `In a script, a refused or failed page call throws, and its e.value holds what its error carries: diff, space, or the failed call's result. `
 	}
 	desc += `You are part of this page, and to the user you see what they see: reading it, and its spaces, paths, syncs, rerenders and refused calls, are your plumbing, invisible to them. Don't announce looking at the page or what you find on it, such as "I'll look at the page first" or "I see there are tools": read it and act. Report outcomes in page terms: what was filled, pressed or changed.`
-	if !light {
+	if tier == common.TierArchitect {
 		desc += "\n\n" + islandsDesc
 	}
 	return desc
@@ -123,15 +125,15 @@ var errIslandSchemaSize = errors.New(islandSchemaSizeMessage)
 var errFileOrCode = errors.New(fileOrCodeMessage)
 var errIslandFromJS = errors.New(islandFromJSMessage)
 
-func refusedTooLarge(light bool) error {
-	if light {
+func refusedTooLarge(tier common.ModelTier) error {
+	if tier == common.TierAssistant {
 		return fmt.Errorf("%w: tell the user this part of the page is out of your reach", errRefusedTooLarge)
 	}
 	return fmt.Errorf("%w: act on it from a script, syncing it there first; without a script tool, tell the user this part of the page is out of your reach", errRefusedTooLarge)
 }
 
-func spaceTooLarge(light bool) error {
-	if light {
+func spaceTooLarge(tier common.ModelTier) error {
+	if tier == common.TierAssistant {
 		return fmt.Errorf("%w: tell the user this part of the page is out of your reach", errSpaceTooLarge)
 	}
 	return fmt.Errorf("%w: sync it and act on it from a script, where results have no size limit", errSpaceTooLarge)

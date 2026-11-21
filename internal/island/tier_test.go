@@ -52,13 +52,13 @@ func (l *lockedLogs) String() string {
 	return l.Buffer.String()
 }
 
-type lightNode struct {
+type spaceNode struct {
 	Name     string
 	Island   bool
-	Children []lightNode
+	Children []spaceNode
 }
 
-func (n lightNode) names(prefix string) []string {
+func (n spaceNode) names(prefix string) []string {
 	var out []string
 	for _, c := range n.Children {
 		name := prefix + c.Name
@@ -71,10 +71,8 @@ func (n lightNode) names(prefix string) []string {
 	return out
 }
 
-func TestLightModeHidesIslands(t *testing.T) {
-	logged := &lockedLogs{}
+func TestTiersBelowArchitectHideIslands(t *testing.T) {
 	logger := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(logged, nil)))
 	t.Cleanup(func() { slog.SetDefault(logger) })
 	late := func(name string) gox.Elem {
 		return func(cur gox.Cursor) error {
@@ -89,8 +87,10 @@ func TestLightModeHidesIslands(t *testing.T) {
 			})
 		}
 	}
-	for _, light := range []bool{false, true} {
-		t.Run(fmt.Sprintf("light=%v", light), func(t *testing.T) {
+	for _, tier := range []common.ModelTier{common.TierArchitect, common.TierAgent, common.TierAssistant} {
+		t.Run(fmt.Sprintf("tier=%d", tier), func(t *testing.T) {
+			logged := &lockedLogs{}
+			slog.SetDefault(slog.New(slog.NewTextHandler(logged, nil)))
 			shown := doors.NewSource(false)
 			marks := make(chan int, 1)
 			when := func(name string) gox.Elem {
@@ -110,7 +110,7 @@ func TestLightModeHidesIslands(t *testing.T) {
 				if err := (neui.Space{Name: "panel", Desc: "the panel"}).Proxy(cur, func(cur gox.Cursor) error {
 					if err := cur.Comp(neui.Tool[struct{}, string]{Name: "open", Desc: "opens the late islands", Handler: func(ctx context.Context, _ struct{}) (string, error) {
 						shown.Mutate(ctx, func(bool) bool { return true })
-						return fmt.Sprint(neui.LightMode(ctx)), nil
+						return fmt.Sprint(neui.Tier(ctx)), nil
 					}}); err != nil {
 						return err
 					}
@@ -131,16 +131,16 @@ func TestLightModeHidesIslands(t *testing.T) {
 				testkit.Call("page__tree", map[string]any{"depth": 1}),
 				testkit.Say("done"),
 			)
-			c := stack.Page(t, stack.Host{Provider: p, Page: page, Options: []common.Option{common.OptionLightMode(light)}})
+			c := stack.Page(t, stack.Host{Provider: p, Page: page, Options: []common.Option{common.OptionTier(tier)}})
 			c.Send("look")
 			c.Wait()
 			result := func(i int) api.ContentToolResult { return testkit.Results(p.Request(t, i))[0] }
 			tree := func(i int) []string {
-				var root lightNode
+				var root spaceNode
 				testkit.Decode(t, result(i), &root)
 				return root.names("")
 			}
-			var root struct{ Children []lightNode }
+			var root struct{ Children []spaceNode }
 			testkit.Decode(t, result(2), &root)
 			var opened struct {
 				Output  string
@@ -148,21 +148,21 @@ func TestLightModeHidesIslands(t *testing.T) {
 				Changes json.RawMessage
 			}
 			testkit.Decode(t, result(7), &opened)
-			if opened.Output != fmt.Sprint(light) {
-				t.Fatalf("the page tool's handler saw light mode %s, want %v", opened.Output, light)
+			if opened.Output != fmt.Sprint(tier) {
+				t.Fatalf("the page tool's handler saw tier %s, want %d", opened.Output, tier)
 			}
-			if light {
+			if tier != common.TierArchitect {
 				if got := tree(1); !slices.Equal(got, []string{"panel"}) {
 					t.Fatalf("tree shows %v, want the panel alone", got)
 				}
-				if got := (lightNode{Children: root.Children}).names(""); !slices.Equal(got, []string{"panel"}) {
+				if got := (spaceNode{Children: root.Children}).names(""); !slices.Equal(got, []string{"panel"}) {
 					t.Fatalf("the root's children are %v, want the panel alone", got)
 				}
 				refused(t, result(3), "no space ")
 				refused(t, result(4), "no space ")
 				refused(t, result(5), "no space ")
 				if len(marks) != 0 {
-					t.Fatal("an island's app function ran in light mode")
+					t.Fatal("an island's app function ran below TierArchitect")
 				}
 				if string(opened.Diff) != "{}" || opened.Changes != nil {
 					t.Fatalf("opening answered diff %s and changes %s, want no change at all", opened.Diff, opened.Changes)
@@ -171,7 +171,7 @@ func TestLightModeHidesIslands(t *testing.T) {
 					t.Fatalf("tree after opening shows %v, want the panel alone", got)
 				}
 				for _, space := range []string{"board", "panel.inner", "outer"} {
-					if n := strings.Count(logged.String(), "msg=\"page: island hidden in light mode\" space="+space+"\n"); n != 1 {
+					if n := strings.Count(logged.String(), "msg=\"page: island hidden below TierArchitect\" space="+space+"\n"); n != 1 {
 						t.Fatalf("the warning for %s was logged %d times, want once:\n%s", space, n, logged)
 					}
 				}
@@ -180,7 +180,7 @@ func TestLightModeHidesIslands(t *testing.T) {
 			if got := tree(1); !slices.Equal(got, []string{"board*", "board.app", "board.screen", "panel"}) {
 				t.Fatalf("tree shows %v, want the board island and the panel", got)
 			}
-			if got := (lightNode{Children: root.Children}).names(""); !slices.Equal(got, []string{"board*", "panel"}) {
+			if got := (spaceNode{Children: root.Children}).names(""); !slices.Equal(got, []string{"board*", "panel"}) {
 				t.Fatalf("the root's children are %v, want the board island and the panel", got)
 			}
 			if r := result(3); r.Error != api.ToolOk {
@@ -195,8 +195,8 @@ func TestLightModeHidesIslands(t *testing.T) {
 			if got := tree(8); !slices.Equal(got, []string{"board*", "outer*", "panel"}) {
 				t.Fatalf("tree after opening shows %v, want both islands at the root", got)
 			}
-			if strings.Contains(logged.String(), "light mode") {
-				t.Fatalf("full mode logged a light-mode warning:\n%s", logged)
+			if strings.Contains(logged.String(), "island hidden") {
+				t.Fatalf("TierArchitect logged an island-hidden warning:\n%s", logged)
 			}
 		})
 	}

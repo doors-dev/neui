@@ -140,13 +140,13 @@ func (s *space) searchTool(name string) (int, bool) {
 	})
 }
 
-func (s *space) find(path string, light bool) (*space, error) {
+func (s *space) find(path string, tier common.ModelTier) (*space, error) {
 	if path == "" {
 		return s, nil
 	}
 	for _, name := range strings.Split(strings.ReplaceAll(path, "/", "."), ".") {
 		index, ok := s.search(name)
-		if !ok || s.children[index].hidden(light) {
+		if !ok || s.children[index].hidden(tier) {
 			if s.path == "" {
 				return nil, fmt.Errorf("no space %q at the page root: %w", name, errSpaceNotFound)
 			}
@@ -157,19 +157,19 @@ func (s *space) find(path string, light bool) (*space, error) {
 	return s, nil
 }
 
-func (s *space) hidden(light bool) bool {
-	if !light || s.island == nil {
+func (s *space) hidden(tier common.ModelTier) bool {
+	if tier == common.TierArchitect || s.island == nil {
 		return false
 	}
 	if !s.warned {
 		s.warned = true
-		doors.Logger(s.ctx).Warn("page: island hidden in light mode", "space", s.path)
+		doors.Logger(s.ctx).Warn("page: island hidden below TierArchitect", "space", s.path)
 	}
 	return true
 }
 
 func (s *space) findIsland(path string) (island.Island, string, error) {
-	space, err := s.find(path, false)
+	space, err := s.find(path, common.TierArchitect)
 	if err != nil {
 		return nil, "", err
 	}
@@ -228,29 +228,29 @@ func (s *space) rehash(set int) {
 	s.digest[set] = sum(hashes)
 }
 
-func (s *space) digestFor(light bool) [4]uint64 {
+func (s *space) digestFor(tier common.ModelTier) [4]uint64 {
 	digest := s.digest
-	if light {
+	if tier != common.TierArchitect {
 		digest[3] = s.plain
 	}
 	return digest
 }
 
-func (s *space) digests(out map[string][4]uint64, light bool) {
+func (s *space) digests(out map[string][4]uint64, tier common.ModelTier) {
 	out[s.path] = s.digest
 	for _, c := range s.children {
-		if !c.hidden(light) {
-			c.digests(out, light)
+		if !c.hidden(tier) {
+			c.digests(out, tier)
 		}
 	}
 }
 
-func (s *space) state(light bool) state {
+func (s *space) state(tier common.ModelTier) state {
 	out := state{Path: s.path, Desc: s.desc, Island: s.island != nil}
 	for _, t := range s.tools {
 		t := *t
-		if light {
-			t.raw = t.light
+		if tier == common.TierAssistant {
+			t.raw = t.lean
 		}
 		out.Tools = append(out.Tools, t)
 	}
@@ -268,23 +268,23 @@ func (s *space) state(light bool) state {
 		}
 	}
 	for _, c := range s.children {
-		if !c.hidden(light) {
+		if !c.hidden(tier) {
 			out.Children = append(out.Children, child{Name: c.name, Desc: c.desc, Island: c.island != nil})
 		}
 	}
 	return out
 }
 
-func (s *space) snapshot(light bool) snapshot {
-	return snapshot{digest: s.digestFor(light), state: s.state(light)}
+func (s *space) snapshot(tier common.ModelTier) snapshot {
+	return snapshot{digest: s.digestFor(tier), state: s.state(tier)}
 }
 
-func (s *space) diff(old snapshot, light bool) *diff {
-	now := s.digestFor(light)
+func (s *space) diff(old snapshot, tier common.ModelTier) *diff {
+	now := s.digestFor(tier)
 	if now == old.digest {
 		return &diff{}
 	}
-	cur := s.state(light)
+	cur := s.state(tier)
 	out := &diff{}
 	if now[0] != old.digest[0] {
 		out.Tools = &toolsDiff{}
@@ -331,7 +331,7 @@ func (s *space) diff(old snapshot, light bool) *diff {
 	return out
 }
 
-func (s *space) tree(depth uint, light bool) node {
+func (s *space) tree(depth uint, tier common.ModelTier) node {
 	out := node{child: child{Name: s.name, Desc: s.desc, Island: s.island != nil}, Tools: len(s.tools)}
 	seen := map[uint64]bool{}
 	for _, in := range s.list {
@@ -354,14 +354,14 @@ func (s *space) tree(depth uint, light bool) node {
 		}
 	}
 	for _, c := range s.children {
-		if c.hidden(light) {
+		if c.hidden(tier) {
 			continue
 		}
 		if depth == 0 || len(out.Children) == 20 {
 			out.More++
 			continue
 		}
-		out.Children = append(out.Children, c.tree(depth-1, light))
+		out.Children = append(out.Children, c.tree(depth-1, tier))
 	}
 	return out
 }
@@ -432,9 +432,9 @@ func (s Space) AddTool(ctx context.Context, from common.Tool) error {
 		},
 	}
 	type bare tool
-	lean := bare(*t)
-	lean.Desc = tools.LightDesc(from)
-	light, err := json.Marshal(lean)
+	short := bare(*t)
+	short.Desc = tools.ResultDesc(from)
+	lean, err := json.Marshal(short)
 	if err != nil {
 		return err
 	}
@@ -444,7 +444,7 @@ func (s Space) AddTool(ctx context.Context, from common.Tool) error {
 	if err != nil {
 		return err
 	}
-	t.raw, t.light, t.hash = raw, light, xxh3.Hash(raw)
+	t.raw, t.lean, t.hash = raw, lean, xxh3.Hash(raw)
 	s.root.mu.Lock()
 	if ctx.Err() != nil {
 		s.root.mu.Unlock()

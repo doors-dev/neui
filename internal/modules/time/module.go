@@ -38,9 +38,9 @@ const moduleDesc = `The clock: read the date and time here, never assume them. t
 const nowDesc = `Current time of the server.`
 const clientDesc = `Current time of the user's browser.`
 
-func timerDesc(light bool) string {
+func timerDesc(tier common.ModelTier) string {
 	desc := `Wait until a moment, to continue work then, not to pause the conversation. Pass exactly one of afterMs and at. A wait of up to 10 s returns when the moment arrives; a longer one returns at once, deferred. One deferred timer at a time; short waits always work.`
-	if !light {
+	if tier != common.TierAssistant {
 		desc += ` From a script it never defers: it blocks, within the script's time limit.`
 	}
 	return desc
@@ -57,7 +57,7 @@ func Module(ctx context.Context) common.Module {
 	if _, err := m.Add("client", clientDesc, t.client); err != nil {
 		panic(err)
 	}
-	if _, err := m.Add("timer", timerDesc(common.LightMode(ctx)), t.timer); err != nil {
+	if _, err := m.Add("timer", timerDesc(common.Tier(ctx)), t.timer); err != nil {
 		panic(err)
 	}
 	if _, err := m.Add("cancel", cancelDesc, t.cancel); err != nil {

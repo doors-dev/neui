@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"neui.dev/api"
+	"neui.dev/internal/common"
 	"neui.dev/internal/testkit"
 	"neui.dev/internal/tools"
 )
@@ -42,15 +43,16 @@ func content(t *testing.T, fs api.FS, name string) string {
 }
 
 func TestRegister(t *testing.T) {
-	for light, want := range map[bool][]string{false: {"append", "edit", "insert", "replace", "write"}, true: {"edit", "write"}} {
+	full := []string{"append", "edit", "insert", "replace", "write"}
+	for tier, want := range map[common.ModelTier][]string{common.TierArchitect: full, common.TierAgent: full, common.TierAssistant: {"edit", "write"}} {
 		m := tools.NewModule("files", "")
-		Register(m, light)
+		Register(m, tier)
 		var names []string
 		for _, tool := range m.List() {
 			names = append(names, tool.Name())
 		}
 		if !slices.Equal(names, want) {
-			t.Fatalf("light %v registers %v, want %v", light, names, want)
+			t.Fatalf("tier %d registers %v, want %v", tier, names, want)
 		}
 	}
 }

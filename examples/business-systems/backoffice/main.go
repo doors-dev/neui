@@ -89,15 +89,15 @@ func main() {
 			"Deletions happen only when the user confirms them on the page.",
 	)}
 	modules := []neui.ModuleFactory{neui.ModuleJS, neui.ModuleXLS(neui.XLSConfig{})}
-	if v := os.Getenv("LIGHT_MODE"); v != "" {
-		on, err := strconv.ParseBool(v)
-		if err != nil {
-			log.Fatalf("LIGHT_MODE: %v", err)
-		}
-		if on {
-			options = append(options, neui.WithLightMode())
-			modules = modules[1:]
-		}
+	switch v := os.Getenv("TIER"); v {
+	case "", "architect":
+	case "agent":
+		options = append(options, neui.WithTier(neui.TierAgent))
+	case "assistant":
+		options = append(options, neui.WithTier(neui.TierAssistant))
+		modules = modules[1:]
+	default:
+		log.Fatalf("TIER: %q is not architect, agent or assistant", v)
 	}
 	db, err := sql.Open("sqlite", "neui.db")
 	if err != nil {

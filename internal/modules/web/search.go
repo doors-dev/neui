@@ -20,12 +20,13 @@ import (
 	"fmt"
 	"time"
 
+	"neui.dev/internal/common"
 	"neui.dev/internal/tools"
 )
 
-func searchDesc(light bool) string {
+func searchDesc(tier common.ModelTier) string {
 	desc := `Search the web. Results are links with short extracts, not whole pages: read one with web__fetch. When the results miss, ask again with different words rather than for more results; an empty result does not mean no such page exists. The search engine may ignore domains and recent.`
-	if !light {
+	if tier != common.TierAssistant {
 		desc += ` Not accessible from a script.`
 	}
 	return desc

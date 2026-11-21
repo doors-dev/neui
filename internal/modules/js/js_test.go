@@ -582,22 +582,28 @@ func TestClearLogQuotaIsNotARuntimeFailure(t *testing.T) {
 	}
 }
 
-func TestLightModeAddsNoModule(t *testing.T) {
-	lightLogged = sync.Once{}
+func TestTierAssistantAddsNoModule(t *testing.T) {
+	notAddedLogged = sync.Once{}
 	var logged strings.Builder
 	restore := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
 	t.Cleanup(func() { slog.SetDefault(restore) })
-	ctx := context.WithValue(context.Background(), common.LightModeKey{}, true)
+	ctx := context.WithValue(context.Background(), common.TierKey{}, common.TierAssistant)
 	for range 2 {
 		if m := Module(ctx); m != nil {
-			t.Fatalf("light mode added the js module %s", m.Name())
+			t.Fatalf("TierAssistant added the js module %s", m.Name())
 		}
 	}
-	if n := strings.Count(logged.String(), "js: module not added in light mode"); n != 1 {
+	if n := strings.Count(logged.String(), "js: module not added at TierAssistant"); n != 1 {
 		t.Fatalf("the error was logged %d times, want once per process", n)
 	}
-	if Module(context.Background()) == nil {
-		t.Fatal("full mode added no js module")
+	for _, tier := range []common.ModelTier{common.TierArchitect, common.TierAgent} {
+		m := Module(context.WithValue(context.Background(), common.TierKey{}, tier))
+		if m == nil {
+			t.Fatalf("tier %d added no js module", tier)
+		}
+		if got := strings.Contains(m.Desc(), "island"); got != (tier == common.TierArchitect) {
+			t.Fatalf("tier %d: the module text reads %q", tier, m.Desc())
+		}
 	}
 }

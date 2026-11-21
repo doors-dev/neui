@@ -74,7 +74,7 @@ type readArg struct {
 	Raw    bool   `json:"raw" description:"underlying values instead of formatted ones: date serials, unformatted numbers, formulas"`
 }
 
-type lightReadArg struct {
+type assistantReadArg struct {
 	Path   string `json:"path" required:"true"`
 	Sheet  string `json:"sheet" required:"true"`
 	Range  string `json:"range" description:"like A1:D20; default the whole sheet"`

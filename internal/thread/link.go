@@ -203,7 +203,7 @@ func (l *link) useTools(roundID api.RoundID, tools []api.ContentToolUse) (<-chan
 				size, mediaSize = size+len(note), 0
 			}
 			if size > budget {
-				note := replay.OmittedNote(size, common.LightMode(l.ctx))
+				note := replay.OmittedNote(size, common.Tier(l.ctx))
 				res = api.ContentToolResult{ID: res.ID, Content: api.UserContents{api.ContentText{Text: note}}, Error: res.Error}
 				size, mediaSize = len(note), 0
 			}

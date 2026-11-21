@@ -34,6 +34,7 @@ import (
 	"rsc.io/pdf"
 
 	"neui.dev/api"
+	"neui.dev/internal/common"
 )
 
 const (
@@ -57,9 +58,9 @@ func RoundMediaBudget(config api.ThreadConfig) int64 {
 	return int64(float32(config.ThreadMemoryLimit) * config.ReplayMediaShare / 2)
 }
 
-func OmittedNote(size int, light bool) string {
+func OmittedNote(size int, tier common.ModelTier) string {
 	note := fmt.Sprintf("Result omitted: it was %s, more than a turn's tool results can hold. Ask for less", HumanSize(size))
-	if !light {
+	if tier != common.TierAssistant {
 		note += ", or process it in a script"
 	}
 	return note + "."

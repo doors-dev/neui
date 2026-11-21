@@ -29,8 +29,8 @@ import (
 	"neui.dev/provider/gpt"
 )
 
-func TestLiveLightReplay(t *testing.T) {
-	req := lightReplay(t)
+func TestLiveAssistantReplay(t *testing.T) {
+	req := assistantReplay(t)
 	for _, a := range []struct {
 		name string
 		env  string
@@ -66,7 +66,7 @@ func TestLiveLightReplay(t *testing.T) {
 				last = e
 			}
 			if _, ok := last.(api.EventOk); !ok {
-				t.Fatalf("the light replay ended with %#v", last)
+				t.Fatalf("the TierAssistant replay ended with %#v", last)
 			}
 		})
 	}
