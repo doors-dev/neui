@@ -207,28 +207,6 @@ type islandRunResult struct {
 	_      struct{} `description:"task identifies the app in its task_notify records and its task_result; script identifies this part in its notifications_list and script_error records and in an error that ends the app"`
 }
 
-type refusal struct {
-	reason string
-	Diff   *diff  `json:"diff,omitempty"`
-	Space  *state `json:"space,omitempty"`
-}
-
-func (r refusal) Error() string {
-	return r.reason
-}
-
-func (r refusal) Content() api.UserContent {
-	raw, err := json.Marshal(r)
-	if err != nil {
-		return api.ContentText{Text: r.reason}
-	}
-	return api.ContentText{Text: string(raw)}
-}
-
-func (r refusal) ContentType() string {
-	return "text"
-}
-
 type failure struct {
 	result any
 	err    error

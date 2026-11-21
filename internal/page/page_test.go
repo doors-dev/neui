@@ -100,13 +100,11 @@ type toolOutput struct {
 	report
 }
 
+const refusedUnread = "not done: this space had not been read: sync it, then call again"
+const refusedChanged = "not done: the space changed since your last read: sync it, then call again"
+
 func empty(d *diff) bool {
 	return d != nil && reflect.ValueOf(*d).IsZero()
-}
-
-type refusal struct {
-	Diff  *diff
-	Space *state
 }
 
 func shop() gox.Elem {
@@ -181,18 +179,6 @@ func refused(t *testing.T, r api.ContentToolResult, want string) {
 	if text, ok := r.Content[0].(api.ContentText); !ok || !strings.Contains(text.Text, want) {
 		t.Fatalf("call %s refused with %#v, want %q", r.ID, r.Content, want)
 	}
-}
-
-func refusedWith(t *testing.T, r api.ContentToolResult) refusal {
-	t.Helper()
-	var keys map[string]json.RawMessage
-	failedWith(t, r, "not done", &keys)
-	if len(keys) != 1 || (keys["diff"] == nil && keys["space"] == nil) {
-		t.Fatalf("call %s was refused with %#v, want diff or space alone", r.ID, r.Content)
-	}
-	var out refusal
-	testkit.Decode(t, api.ContentToolResult{ID: r.ID, Content: r.Content[1:]}, &out)
-	return out
 }
 
 func failedWith(t *testing.T, r api.ContentToolResult, message string, v any) {
@@ -361,29 +347,27 @@ func TestReadIsChecked(t *testing.T) {
 	c := stack.Page(t, stack.Host{Provider: p, Page: shop()})
 	c.Send("read the total")
 	c.Wait()
-	if r := refusedWith(t, testkit.Results(p.Request(t, 1))[0]); r.Space == nil || r.Space.Path != "cart" {
-		t.Fatalf("the read without a sync was refused with %+v, want the whole cart", r)
-	}
+	plain(t, testkit.Results(p.Request(t, 1))[0], refusedUnread)
 }
 
-func TestActionWithoutReadRefusedWithSpace(t *testing.T) {
+func TestActionWithoutReadRefusedUntilSynced(t *testing.T) {
 	add := map[string]any{"path": "cart", "tool": "add", "arg": map[string]any{}}
 	p := testkit.NewProvider(api.Model{},
 		round(call("tree", "page__tree", map[string]any{}), call("add", "page__tool", add)),
+		testkit.Call("page__tool", add),
+		testkit.Call("page__sync", map[string]any{"path": "cart"}),
 		testkit.Call("page__tool", add),
 		testkit.Say("done"),
 	)
 	c := stack.Page(t, stack.Host{Provider: p, Page: shop()})
 	c.Send("add an item")
 	c.Wait()
-	r := refusedWith(t, testkit.Results(p.Request(t, 1))[1])
-	if r.Diff != nil || r.Space == nil || r.Space.Path != "cart" || len(r.Space.Tools) != 1 || len(r.Space.Inputs) != 2 {
-		t.Fatalf("the add after only a tree was refused with %+v, want the whole cart", r)
-	}
+	plain(t, testkit.Results(p.Request(t, 1))[1], refusedUnread)
+	plain(t, testkit.Results(p.Request(t, 2))[0], refusedUnread)
 	var added toolOutput
-	testkit.Decode(t, testkit.Results(p.Request(t, 2))[0], &added)
+	testkit.Decode(t, testkit.Results(p.Request(t, 4))[0], &added)
 	if added.Output != "added" || added.Diff == nil || len(added.Diff.Data) != 1 || added.Diff.Data[0].Object != float64(2) || added.Diff.Inputs != nil {
-		t.Fatalf("the add after the refusal answered %+v, want it run with the new items count", added)
+		t.Fatalf("the add after the sync answered %+v, want it run with the new items count", added)
 	}
 }
 
@@ -405,12 +389,13 @@ func TestToolArgMayBeAbsentOrAJSONString(t *testing.T) {
 	}
 }
 
-func TestChangeByOtherCallRefusedWithDiff(t *testing.T) {
+func TestChangeByOtherCallRefusedUntilSynced(t *testing.T) {
 	add := map[string]any{"path": "cart", "tool": "add", "arg": map[string]any{}}
 	p := testkit.NewProvider(api.Model{},
 		round(call("cart", "page__sync", map[string]any{"path": "cart"}), call("notes", "page__sync", map[string]any{"path": "notes"})),
 		testkit.Call("page__tool", map[string]any{"path": "notes", "tool": "restock", "arg": map[string]any{}}),
 		testkit.Call("page__tool", add),
+		testkit.Call("page__sync", map[string]any{"path": "cart"}),
 		testkit.Call("page__tool", add),
 		testkit.Say("done"),
 	)
@@ -422,14 +407,11 @@ func TestChangeByOtherCallRefusedWithDiff(t *testing.T) {
 	if restocked.Output != "restocked" || !empty(restocked.Diff) || string(restocked.Changes) != `[{"path":"cart","changed":["data"]}]` {
 		t.Fatalf("the restock answered %+v with changes %s, want cart's data listed", restocked, restocked.Changes)
 	}
-	r := refusedWith(t, testkit.Results(p.Request(t, 3))[0])
-	if r.Space != nil || r.Diff == nil || len(r.Diff.Data) != 1 || r.Diff.Data[0].Object != float64(2) || r.Diff.Tools != nil {
-		t.Fatalf("the add after the restock was refused with %+v, want the data diff", r)
-	}
+	plain(t, testkit.Results(p.Request(t, 3))[0], refusedChanged)
 	var added toolOutput
-	testkit.Decode(t, testkit.Results(p.Request(t, 4))[0], &added)
+	testkit.Decode(t, testkit.Results(p.Request(t, 5))[0], &added)
 	if added.Output != "added" || len(added.Diff.Data) != 1 || added.Diff.Data[0].Object != float64(3) {
-		t.Fatalf("the retried add answered %+v, want it run", added)
+		t.Fatalf("the add after the sync answered %+v, want it run", added)
 	}
 }
 
@@ -776,8 +758,9 @@ func TestRefusalsFollowTheLastReadByAnyone(t *testing.T) {
 	p := testkit.NewProvider(api.Model{},
 		round(call("cart", "page__sync", map[string]any{"path": "cart"}), call("notes", "page__sync", map[string]any{"path": "notes"})),
 		testkit.Call("page__tool", map[string]any{"path": "notes", "tool": "restock", "arg": map[string]any{}}),
-		testkit.Call("js__run", map[string]any{"code": `const act = (path, tool) => { try { return ["ran", page__tool({path: path, tool: tool, arg: {}}).output] } catch (e) { return [e.message, Object.keys(e.value).join(",")] } }
+		testkit.Call("js__run", map[string]any{"code": `const act = (path, tool) => { try { return ["ran", page__tool({path: path, tool: tool, arg: {}}).output] } catch (e) { return [e.message] } }
 return [act("cart", "add"), act("", "checkout")]`, "comment": "adds and checks out"}),
+		round(call("cart", "page__sync", map[string]any{"path": "cart"}), call("root", "page__sync", map[string]any{"path": ""})),
 		round(call("add", "page__tool", map[string]any{"path": "cart", "tool": "add", "arg": map[string]any{}}), call("checkout", "page__tool", map[string]any{"path": "", "tool": "checkout", "arg": map[string]any{}})),
 		testkit.Say("done"),
 	)
@@ -786,16 +769,13 @@ return [act("cart", "add"), act("", "checkout")]`, "comment": "adds and checks o
 	c.Wait()
 	var script struct{ Result [][]string }
 	testkit.Decode(t, testkit.Results(p.Request(t, 3))[0], &script)
-	if len(script.Result) != 2 || len(script.Result[0]) != 2 || script.Result[0][0] != "not done: the space changed since your last read. diff shows what changed and brings your read up to date: check it and call again directly, no sync needed" || script.Result[0][1] != "diff" {
-		t.Fatalf("a script's add on the cart the agent read before the restock saw %q, want it refused with the diff", script.Result)
-	}
-	if len(script.Result[1]) != 2 || script.Result[1][0] != "not done: this space had not been read. space shows it as it is now and counts as a read: check it and call again directly, no sync needed" || script.Result[1][1] != "space" {
-		t.Fatalf("a script's checkout on the root nobody read saw %q, want it refused with the space", script.Result[1])
+	if fmt.Sprint(script.Result) != "[["+refusedChanged+"] ["+refusedUnread+"]]" {
+		t.Fatalf("the script's add on the cart the agent read before the restock and its checkout on the root nobody read saw %q, want both refused", script.Result)
 	}
 	for i, want := range []string{"added", "checking out"} {
-		r := testkit.Results(p.Request(t, 4))[i]
+		r := testkit.Results(p.Request(t, 5))[i]
 		if r.Error != api.ToolOk {
-			t.Fatalf("the agent's call %s after the script's refusals answered %#v, want it run", r.ID, r.Content)
+			t.Fatalf("the agent's call %s after its syncs answered %#v, want it run", r.ID, r.Content)
 		}
 		var out toolOutput
 		testkit.Decode(t, r, &out)
@@ -860,9 +840,7 @@ func TestRewindClearsReads(t *testing.T) {
 			})
 			c.Wait()
 			requests := p.Requests()
-			if r := refusedWith(t, testkit.Results(requests[len(requests)-1])[0]); r.Space == nil {
-				t.Fatalf("the add after a rewind while %s was refused with %+v, want the whole space", state.name, r)
-			}
+			plain(t, testkit.Results(requests[len(requests)-1])[0], refusedUnread)
 		})
 	}
 }
@@ -894,9 +872,7 @@ func TestCompactionClearsReads(t *testing.T) {
 	if !testkit.IsCompaction(p.Request(t, 3)) {
 		t.Fatal("request 3 is not the compaction")
 	}
-	if got := refusedWith(t, testkit.Results(p.Request(t, 5))[0]); got.Space == nil {
-		t.Fatalf("the add after the compaction was refused with %+v, want the whole space", got)
-	}
+	plain(t, testkit.Results(p.Request(t, 5))[0], refusedUnread)
 }
 
 func big() gox.Elem {
@@ -953,7 +929,7 @@ func TestResultsFitTheRoundItemBudget(t *testing.T) {
 		t.Fatalf("the grow answered %+v, want only its output: the diff does not fit", grew)
 	}
 	for i := 4; i <= 5; i++ {
-		plain(t, result(i), "not done: this space has not been read as it is now, and it is too large")
+		plain(t, result(i), refusedChanged)
 	}
 	refused(t, result(6), "too large for a result")
 	var scripted struct{ Result int }
@@ -991,12 +967,10 @@ func TestTierTexts(t *testing.T) {
 		if !assistant && (len(synced.Tools) != 2 || !strings.HasPrefix(synced.Tools[0].Desc, "dumps\nOutput schema: ") || !strings.HasPrefix(synced.Tools[1].Desc, "grows\nOutput schema: ")) {
 			t.Fatalf("tier %d: the sync listed %+v, want the descriptions with their output schemas", tier, synced.Tools)
 		}
-		note, tooLarge, syncTooLarge := "Result omitted: it was 2.9 KB, more than a turn's tool results can hold. Ask for less, or process it in a script.",
-			"not done: this space has not been read as it is now, and it is too large to show in a result: act on it from a script, syncing it there first; without a script tool, tell the user this part of the page is out of your reach",
+		note, syncTooLarge := "Result omitted: it was 2.9 KB, more than a turn's tool results can hold. Ask for less, or process it in a script.",
 			"the space is too large for a result: sync it and act on it from a script, where results have no size limit"
 		if assistant {
-			note, tooLarge, syncTooLarge = "Result omitted: it was 2.9 KB, more than a turn's tool results can hold. Ask for less.",
-				"not done: this space has not been read as it is now, and it is too large to show in a result: tell the user this part of the page is out of your reach",
+			note, syncTooLarge = "Result omitted: it was 2.9 KB, more than a turn's tool results can hold. Ask for less.",
 				"the space is too large for a result: tell the user this part of the page is out of your reach"
 		}
 		var dumped toolOutput
@@ -1004,7 +978,7 @@ func TestTierTexts(t *testing.T) {
 		if got, _ := dumped.Output.(string); got != note {
 			t.Fatalf("tier %d: the dump answered %+v, want the omission note %q in output", tier, dumped, note)
 		}
-		plain(t, result(4), tooLarge)
+		plain(t, result(4), refusedChanged)
 		refused(t, result(5), syncTooLarge)
 		request := p.Request(t, 0)
 		for _, tool := range request.Tools {
@@ -1036,7 +1010,6 @@ func TestFailuresFitTheRoundItemBudget(t *testing.T) {
 	budget := replay.RoundItemBudget(common.ConfigDefaults(api.ThreadConfig{}), model)
 	burst := doors.NewSource("")
 	loud := doors.NewSource(0)
-	edge := strings.Repeat("e", budget-10-len(`{"space":{"path":"edge","desc":"the edge","data":[{"object":""}]}}`))
 	shout := strings.Repeat("l", budget-20)
 	space := func(cur gox.Cursor, name string, content ...any) error {
 		return (neui.Space{Name: name, Desc: "the " + name}).Proxy(cur, func(cur gox.Cursor) error {
@@ -1062,17 +1035,14 @@ func TestFailuresFitTheRoundItemBudget(t *testing.T) {
 		}}); err != nil {
 			return err
 		}
-		if err := space(cur, "loud", neui.Tool[struct{}, string]{Name: "loud", Desc: "counts and fails at length", Handler: func(ctx context.Context, _ struct{}) (string, error) {
+		return space(cur, "loud", neui.Tool[struct{}, string]{Name: "loud", Desc: "counts and fails at length", Handler: func(ctx context.Context, _ struct{}) (string, error) {
 			loud.Mutate(ctx, func(n int) int { return n + 1 })
 			return "", errors.New(shout)
 		}}, neui.Tool[struct{}, string]{Name: "quiet", Desc: "does nothing", Handler: func(context.Context, struct{}) (string, error) {
 			return "quiet", nil
 		}}, loud.Bind(func(n int) gox.Elem {
 			return func(cur gox.Cursor) error { return cur.Comp(neui.Data{Object: n}) }
-		})); err != nil {
-			return err
-		}
-		return space(cur, "edge", neui.Data{Object: edge})
+		}))
 	}
 	tool := func(path string, name string) map[string]any {
 		return map[string]any{"path": path, "tool": name, "arg": map[string]any{}}
@@ -1085,8 +1055,6 @@ func TestFailuresFitTheRoundItemBudget(t *testing.T) {
 		testkit.Call("page__sync", map[string]any{"path": "loud"}),
 		testkit.Call("page__tool", tool("loud", "loud")),
 		testkit.Call("page__tool", tool("loud", "quiet")),
-		testkit.Call("page__tool", tool("edge", "noop")),
-		testkit.Call("page__tool", tool("edge", "noop")),
 		testkit.Say("done"),
 	)
 	c := stack.Page(t, stack.Host{Provider: p, Page: page})
@@ -1100,12 +1068,7 @@ func TestFailuresFitTheRoundItemBudget(t *testing.T) {
 		t.Fatalf("the heavy failure carried %+v, want the omission note in output and the diff", heavy)
 	}
 	plain(t, result(6), shout)
-	if r := refusedWith(t, result(7)); r.Diff == nil || len(r.Diff.Data) != 1 || r.Diff.Data[0].Object != float64(1) {
-		t.Fatalf("the call after the loud failure was refused with %+v, want the count it did not see", r)
-	}
-	for i := 8; i <= 9; i++ {
-		plain(t, result(i), "not done: this space has not been read as it is now, and it is too large")
-	}
+	plain(t, result(7), refusedChanged)
 }
 
 func TestFailedCallReports(t *testing.T) {
@@ -1245,9 +1208,7 @@ func TestStoredReadDropsReadsOfGoneChildren(t *testing.T) {
 			c.Wait()
 			results := testkit.Results(p.Request(t, 7))
 			for _, r := range results[:2] {
-				if got := refusedWith(t, r); got.Space == nil {
-					t.Fatalf("call %s was refused with %+v, want the whole space", r.ID, got)
-				}
+				plain(t, r, refusedUnread)
 			}
 			var out toolOutput
 			testkit.Decode(t, results[2], &out)

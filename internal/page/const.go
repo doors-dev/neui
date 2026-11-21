@@ -33,7 +33,7 @@ func moduleDesc(tier common.ModelTier) string {
 		desc += `by you or a script, `
 	}
 	desc += `and act only while it is as it was last read; otherwise they fail without acting. A write, click, focus or tool result carries diff, what changed in the called space while the call ran ({} when nothing did), and changes, the other spaces that changed; diff brings your read up to date, so no sync is needed after the call. `
-	desc += `The user works the same page alongside you: a change you did not make, shown in a refusal's diff, in a call's diff or changes, or in a read that differs from what you `
+	desc += `The user works the same page alongside you: a change you did not make, shown in a call's diff or changes, or in a read that differs from what you `
 	if tier != common.TierAssistant {
 		desc += `or your script `
 	}
@@ -63,10 +63,9 @@ const syncDesc = `Read one space of the currently rendered page whole.`
 const treeName = "tree"
 const treeDesc = `Show the spaces of the currently rendered page: names, descriptions and how many tools, inputs and data items each has, without their content. It does not count as reading them.`
 
-const refusedUnreadMessage = "not done: this space had not been read. space shows it as it is now and counts as a read: check it and call again directly, no sync needed"
-const refusedChangedMessage = "not done: the space changed since your last read. diff shows what changed and brings your read up to date: check it and call again directly, no sync needed"
+const refusedUnreadMessage = "not done: this space had not been read: sync it, then call again"
+const refusedChangedMessage = "not done: the space changed since your last read: sync it, then call again"
 const refusedDuplicateMessage = "not done: more than one input in this space has this id, so no call can address any of them; use a tool of the space that does the same, or ask the user to do it on the page"
-const refusedTooLargeMessage = "not done: this space has not been read as it is now, and it is too large to show in a result"
 const spaceTooLargeMessage = "the space is too large for a result"
 const islandRevisionMessage = "the island's spec changed since that revision: read island_spec again"
 const toolNotFoundMessage = "no such tool in the space: sync its path to see the current tools"
@@ -111,7 +110,8 @@ An island's app functions are also tools of its app child space: call one direct
 Before your first app, read island_guide. Before starting an app in an island, read its spec with island_spec and the schemas of the items you use with island_spec_schema; use only what the spec lists.`
 
 var errRefusedDuplicate = errors.New(refusedDuplicateMessage)
-var errRefusedTooLarge = errors.New(refusedTooLargeMessage)
+var errRefusedUnread = errors.New(refusedUnreadMessage)
+var errRefusedChanged = errors.New(refusedChangedMessage)
 var errSpaceTooLarge = errors.New(spaceTooLargeMessage)
 var errIslandRevision = errors.New(islandRevisionMessage)
 var errToolNotFound = errors.New(toolNotFoundMessage)
@@ -124,13 +124,6 @@ var errIslandSpecItem = errors.New(islandSpecItemMessage)
 var errIslandSchemaSize = errors.New(islandSchemaSizeMessage)
 var errFileOrCode = errors.New(fileOrCodeMessage)
 var errIslandFromJS = errors.New(islandFromJSMessage)
-
-func refusedTooLarge(tier common.ModelTier) error {
-	if tier == common.TierAssistant {
-		return fmt.Errorf("%w: tell the user this part of the page is out of your reach", errRefusedTooLarge)
-	}
-	return fmt.Errorf("%w: act on it from a script, syncing it there first; without a script tool, tell the user this part of the page is out of your reach", errRefusedTooLarge)
-}
 
 func spaceTooLarge(tier common.ModelTier) error {
 	if tier == common.TierAssistant {

@@ -457,16 +457,10 @@ func (m *module) act[T any](ctx context.Context, path string, find func(s *space
 		m.page.space.digests(before, m.tier)
 		return permit[T]{module: m, item: item, old: old, before: before, island: s.within}, nil
 	}
-	live := s.snapshot(m.tier)
-	r := refusal{reason: refusedUnreadMessage, Space: &live.state}
 	if ok {
-		r = refusal{reason: refusedChangedMessage, Diff: s.diff(old, m.tier)}
+		return permit[T]{}, errRefusedChanged
 	}
-	if !fits(ctx, r.reason, r) {
-		return permit[T]{}, refusedTooLarge(m.tier)
-	}
-	m.store(s, live)
-	return permit[T]{}, r
+	return permit[T]{}, errRefusedUnread
 }
 
 func (m *module) store(s *space, snap snapshot) {

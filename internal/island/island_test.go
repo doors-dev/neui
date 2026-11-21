@@ -793,6 +793,7 @@ func TestIslandAppFunctionNeedsARead(t *testing.T) {
 	marks := make(chan int, 2)
 	p := testkit.NewProvider(api.Model{},
 		testkit.Call("page__tool", map[string]any{"path": "board.app", "tool": "mark", "arg": map[string]any{"N": 7}}),
+		testkit.Call("page__sync", map[string]any{"path": "board.app"}),
 		testkit.Call("page__tool", map[string]any{"path": "board.app", "tool": "mark", "arg": map[string]any{"N": 7}}),
 		testkit.Say("marked"),
 	)
@@ -800,14 +801,14 @@ func TestIslandAppFunctionNeedsARead(t *testing.T) {
 	c := stack.Page(t, stack.Host{Provider: p, Page: page})
 	c.Send("mark 7")
 	c.Wait()
-	refused(t, testkit.Results(p.Request(t, 1))[0], "not done: this space had not been read. space shows it as it is now and counts as a read: check it and call again directly, no sync needed")
+	refused(t, testkit.Results(p.Request(t, 1))[0], "not done: this space had not been read: sync it, then call again")
 	if len(marks) != 1 {
 		t.Fatalf("mark ran %d times, want once: the refused call ran too", len(marks))
 	}
 	var out struct{ Output int }
-	testkit.Decode(t, testkit.Results(p.Request(t, 2))[0], &out)
+	testkit.Decode(t, testkit.Results(p.Request(t, 3))[0], &out)
 	if out.Output != 7 || <-marks != 7 {
-		t.Fatalf("the call after the refusal answered %d, want the refusal to count as a read and mark 7 to run", out.Output)
+		t.Fatalf("the call after the sync answered %d, want mark 7 to run", out.Output)
 	}
 }
 

@@ -455,15 +455,12 @@ func TestChangesKeepTwentyFiveAdded(t *testing.T) {
 
 func TestTooLargeErrorsKeepTheirSentinels(t *testing.T) {
 	for _, tier := range []common.ModelTier{common.TierArchitect, common.TierAgent} {
-		if got := refusedTooLarge(tier).Error(); got != "not done: this space has not been read as it is now, and it is too large to show in a result: act on it from a script, syncing it there first; without a script tool, tell the user this part of the page is out of your reach" {
-			t.Fatalf("tier %d: the refusal reads %q", tier, got)
-		}
 		if got := spaceTooLarge(tier).Error(); got != "the space is too large for a result: sync it and act on it from a script, where results have no size limit" {
 			t.Fatalf("tier %d: the sync error reads %q", tier, got)
 		}
 	}
 	for _, tier := range []common.ModelTier{common.TierArchitect, common.TierAgent, common.TierAssistant} {
-		if !errors.Is(refusedTooLarge(tier), errRefusedTooLarge) || !errors.Is(spaceTooLarge(tier), errSpaceTooLarge) {
+		if !errors.Is(spaceTooLarge(tier), errSpaceTooLarge) {
 			t.Fatalf("tier %d: an error lost its sentinel", tier)
 		}
 	}
