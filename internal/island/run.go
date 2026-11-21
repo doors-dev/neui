@@ -481,8 +481,8 @@ func (r *run) Library() core.Library {
 
 func (r *run) interrupt() {
 	r.vm.Interrupt()
-	vmCtx := *(*uintptr)(unsafe.Pointer(r.vm))
-	(*libquickjs.TJSContext)(unsafe.Pointer(vmCtx)).Finterrupt_counter = 1
+	vmCtx := *(*unsafe.Pointer)(unsafe.Pointer(r.vm))
+	(*libquickjs.TJSContext)(vmCtx).Finterrupt_counter = 1
 }
 
 func (r *run) Notify(script uint, data json.RawMessage, note string) {

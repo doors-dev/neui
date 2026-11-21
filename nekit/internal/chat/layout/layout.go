@@ -16,8 +16,8 @@ package layout
 
 type State struct {
 	Expanded bool
-	Aside bool
-	Dock bool
+	Aside    bool
+	Dock     bool
 }
 
 func Mode(s State, dock bool) string {
