@@ -96,3 +96,24 @@ func TestSummaryRowKeepsTheLatestSummary(t *testing.T) {
 		}
 	}
 }
+
+func TestBlankReasoningAfterTextOpensNoRow(t *testing.T) {
+	ctx := context.Background()
+	stored := NewResponse(ctx, params.Params{}, api.Indexed[api.Content]{
+		0: api.ContentText{Text: "The order has 12 lines."},
+		1: api.ContentReasoning{Thoughts: api.Indexed[string]{0: " \n "}},
+	}, nil, NewChips(params.Params{}, nil, false))
+	if stored.AfterText() != nil {
+		t.Fatal("stored blank reasoning after a text opened a chips row")
+	}
+	live := NewResponse(ctx, params.Params{}, nil, nil, NewChips(params.Params{}, nil, false))
+	live.On(ctx, api.EventText{Index: 0, Text: "The order has 12 lines."})
+	live.On(ctx, api.EventThinking{Index: 1, Text: " \n "})
+	if live.AfterText() != nil {
+		t.Fatal("streamed blank reasoning after a text opened a chips row")
+	}
+	live.On(ctx, api.EventThinking{Index: 1, Text: "Counting the draft"})
+	if live.AfterText() == nil {
+		t.Fatal("reasoning with text after a text opened no chips row")
+	}
+}

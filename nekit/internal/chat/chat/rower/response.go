@@ -55,6 +55,16 @@ func NewResponse(ctx context.Context, p params.Params, state api.Indexed[api.Con
 			chips := lead
 			if r.hasText {
 				if r.afterText == nil {
+					visible := false
+					for _, s := range c.Summary {
+						visible = visible || strings.TrimSpace(s) != ""
+					}
+					for _, s := range c.Thoughts {
+						visible = visible || strings.TrimSpace(s) != ""
+					}
+					if !visible {
+						continue
+					}
 					r.afterText = NewChips(p, nil, false)
 					content[index] = chipsRow{r.afterText}
 				}
@@ -135,6 +145,16 @@ func (r Response) On(ctx context.Context, e api.IndexedEvent) {
 			return
 		}
 		if r.afterText == nil {
+			text := ""
+			switch e := e.(type) {
+			case api.EventThinking:
+				text = e.Text
+			case api.EventSummary:
+				text = e.Text
+			}
+			if strings.TrimSpace(text) == "" {
+				return
+			}
 			r.afterText = NewChips(r.params, nil, false)
 			r.push(r.rower.Insert(e.At(), chipsRow{r.afterText}))
 		}
