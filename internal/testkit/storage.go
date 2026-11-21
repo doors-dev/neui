@@ -367,7 +367,7 @@ func storageRoundLifecycle(t *testing.T, s api.MessageStorage) {
 	th := createThread(t, s, "a")
 	seq := th.Seq
 
-	input := api.Input{Text: "question", Attachments: []string{"a.txt", "img/pic.png"}}
+	input := api.Input{Text: "question", Attachments: []string{"a.txt", "img/pic.png"}, Note: "harness note"}
 	rIn, seq, err := s.RoundInput(ctx, "a", seq, input)
 	if err != nil {
 		t.Fatalf("RoundInput: %v", err)

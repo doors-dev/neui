@@ -182,7 +182,7 @@ func (s threadWait) on(cmd any) {
 			cmd.Err(api.ErrWrongState)
 			return
 		}
-		round, truncate, replay, err := s.thread.replay.Retry()
+		round, truncate, replay, err := s.thread.replay.Retry(false)
 		if err != nil {
 			s.thread.criticalErr(cmd.intoMessage(), err)
 			return

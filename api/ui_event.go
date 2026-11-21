@@ -65,9 +65,10 @@ func (ChatEventAskDone) chatEvent() {}
 type ChatEventRoundStart struct {
 	// Round is the new round with its input and no response yet.
 	Round Round
-	// Truncate is NoRoundID for an ordinary round. After Rewind or Retry it
-	// names the round the new one replaces: drop it and every round after it
-	// from the view.
+	// Truncate is NoRoundID for an ordinary round. After Rewind or Retry, or
+	// when the thread sends a round again on its own (after a compaction or
+	// an empty response), it names the round the new one replaces: drop it
+	// and every round after it from the view.
 	Truncate RoundID
 	// Usage is ChatState.Usage after this event: after a Rewind, the usage of
 	// the history that remains; otherwise the value already reported.
@@ -78,10 +79,9 @@ type ChatEventRoundStart struct {
 
 func (ChatEventRoundStart) chatEvent() {}
 
-// ChatEventRoundEnd reports a round leaving the streaming state with the usage
-// the round spent in total. Final is true when no agent-driven continuation
-// follows; a round started by pending user input is a new activity, so it does
-// not clear final.
+// ChatEventRoundEnd reports a round leaving the streaming state. Final is true
+// when no agent-driven continuation follows; a round started by pending user
+// input is a new activity, so it does not clear final.
 type ChatEventRoundEnd struct {
 	// Round is the round that ended.
 	Round RoundID
@@ -90,7 +90,8 @@ type ChatEventRoundEnd struct {
 	// Error is the ErrCode as a string when State is RoundError, empty
 	// otherwise.
 	Error string
-	// Usage is what the round spent in total.
+	// Usage is what the round's last request spent, the usage stored with
+	// the round.
 	Usage EventUsage
 	// Final is true when the activity ends here; see Final.
 	Final bool
@@ -101,7 +102,8 @@ type ChatEventRoundEnd struct {
 func (ChatEventRoundEnd) chatEvent() {}
 
 // ChatEventRoundUsage reports the usage a streaming round has accumulated so
-// far; every event carries the running total, not an increment.
+// far, including the requests the thread sent again after empty responses;
+// every event carries the running total, not an increment.
 type ChatEventRoundUsage struct {
 	// Round is the streaming round.
 	Round RoundID

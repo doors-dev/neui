@@ -143,7 +143,7 @@ func (s *threadCompact) on(cmd any) {
 			s.thread.switchStateWait()
 			return
 		}
-		round, truncate, replay, err := s.thread.replay.Retry()
+		round, truncate, replay, err := s.thread.replay.Retry(false)
 		if err != nil {
 			s.thread.criticalErr(nil, err)
 			return

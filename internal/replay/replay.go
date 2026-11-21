@@ -271,9 +271,12 @@ func (r Replay) RoundInit(input api.Input) (api.Round, []api.Message, error) {
 	if err != nil {
 		return api.Round{}, nil, err
 	}
+	last := &messages[len(messages)-1]
 	if r.messages.first == api.NoRoundID && !r.messages.compaction.IsValid() && input.Len() != 0 {
-		last := &messages[len(messages)-1]
 		last.Content = append(last.Content, api.ContentText{Text: nameInstruction})
+	}
+	if input.Note != "" {
+		last.Content = append(last.Content, api.ContentText{Text: input.Note})
 	}
 	id, seq, err := r.storage.RoundInput(r.ctx, r.id, r.seq(), input)
 	if err != nil {
@@ -445,11 +448,64 @@ func (r Replay) Record(origin api.RoundID, kind string, attrs map[string]any, da
 	return nil
 }
 
-func (r Replay) Retry() (api.Round, api.RoundID, []api.Message, error) {
+func (r Replay) IsEmptyTurn(content api.Indexed[api.Content]) (bool, error) {
+	if !r.IsLoaded() || !r.lastRound.isActive() {
+		return false, nil
+	}
+	agent := content.Ordered()
+	if slices.ContainsFunc(agent, func(c api.Content) bool {
+		_, ok := c.(api.ContentToolUse)
+		return ok
+	}) {
+		return false, nil
+	}
+	visible := func(blocks []api.Content) bool {
+		return slices.ContainsFunc(blocks, func(c api.Content) bool {
+			text, ok := c.(api.ContentText)
+			return ok && strings.TrimSpace(text.Text) != ""
+		})
+	}
+	if visible(agent) {
+		return false, nil
+	}
+	rounds := r.messages.rounds
+	input := r.lastRound.input.Len() != 0
+	for i := len(rounds) - 1; !input && i >= 0; i-- {
+		if visible(rounds[i].agent) {
+			return false, nil
+		}
+		input = rounds[i].input
+	}
+	for start := r.messages.compaction.Target; !input && r.messages.compaction.IsValid(); {
+		before, err := r.storage.RoundBefore(r.ctx, r.id, start, 16)
+		if err != nil {
+			return false, err
+		}
+		if len(before) == 0 {
+			break
+		}
+		for i := len(before) - 1; !input && i >= 0; i-- {
+			if before[i].State != api.RoundOk {
+				continue
+			}
+			if visible(before[i].Response.Ordered()) {
+				return false, nil
+			}
+			input = before[i].Input.Len() != 0
+		}
+		start = before[0].ID
+	}
+	return true, nil
+}
+
+func (r Replay) Retry(note bool) (api.Round, api.RoundID, []api.Message, error) {
 	if !r.lastRound.isRetriable() {
 		return api.Round{}, api.NoRoundID, nil, errors.New("nothing to retry")
 	}
 	truncate, input := r.lastRound.id, r.lastRound.input
+	if note {
+		input.Note = continueInstruction
+	}
 	if _, err := r.storage.ThreadCut(r.ctx, r.id, r.seq(), truncate); err != nil {
 		return api.Round{}, api.NoRoundID, nil, err
 	}

@@ -16,6 +16,8 @@ package replay
 
 const nameInstruction = `<system_instruction>Name this chat with chat__name: if the user has asked for anything at all, call it along with whatever else you do this turn, without mentioning it; if they have only greeted you, name it later, once the topic is clear.</system_instruction>`
 
+const continueInstruction = `<system_instruction>Your previous response had no visible output. Please continue and give the user a visible response.</system_instruction>`
+
 const compactionInstruction = `<system_instruction>This is a system operation, not a message from the user: the conversation above is being compacted. Everything before this point will be replaced by the summary you write now; the conversation after this point stays verbatim. Do not call tools and do not address the user — write for yourself, so the work can continue without the original messages. If an earlier summary is present it is discarded too: carry forward what still matters from it, and where it conflicts with the conversation, the conversation wins.
 
 Sections, in this order, every one present — write "None" when there is nothing:

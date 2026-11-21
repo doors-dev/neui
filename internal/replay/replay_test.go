@@ -342,7 +342,7 @@ func TestRetryKeepsTheRecordsTheRoundCarried(t *testing.T) {
 	if len(round.PinnedRecords) != 1 {
 		t.Fatalf("the round carries %d records, want the 1 just stashed", len(round.PinnedRecords))
 	}
-	retried, _, messages, err := r.Retry()
+	retried, _, messages, err := r.Retry(false)
 	if err != nil {
 		t.Fatalf("Retry of a record-only round: %v", err)
 	}
@@ -1485,7 +1485,7 @@ func TestRejectedRoundRefusesItsResultsAcrossAReload(t *testing.T) {
 				t.Fatalf("a reloaded %s round is retriable %v, want %v", c.reason, loaded.IsRetriable(), !c.refused)
 			}
 			r.updateSeq(loaded.seq())
-			if _, _, _, err := r.Retry(); (err != nil) != c.refused {
+			if _, _, _, err := r.Retry(false); (err != nil) != c.refused {
 				t.Fatalf("Retry of a %s round answered %v", c.reason, err)
 			}
 			if !c.refused {
@@ -1517,7 +1517,7 @@ func TestRetryReplaysWhatALoadReplays(t *testing.T) {
 	if err := r.RoundError(errors.New(string(api.CodeNetwork)), api.EventUsage{}, nil); err != nil {
 		t.Fatalf("RoundError: %v", err)
 	}
-	if _, _, _, err := r.Retry(); err != nil {
+	if _, _, _, err := r.Retry(false); err != nil {
 		t.Fatalf("Retry: %v", err)
 	}
 	matchesLoad(t, s, r)

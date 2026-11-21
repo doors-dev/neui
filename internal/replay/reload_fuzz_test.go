@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"slices"
+	"strings"
 	"testing"
 
 	"neui.dev/api"
@@ -75,6 +76,35 @@ func (f *fuzzRun) same(l Replay) {
 	}
 	if l.messages.first != r.messages.first {
 		f.fail("first %d after Load, %d in session", l.messages.first, r.messages.first)
+	}
+	loaded, lerr := l.IsEmptyTurn(nil)
+	session, serr := r.IsEmptyTurn(nil)
+	if loaded != session || lerr != nil || serr != nil {
+		f.fail("an empty response ends an empty turn %v (%v) after Load, %v (%v) in session", loaded, lerr, session, serr)
+	}
+	if r.lastRound.isActive() {
+		var stored []api.Round
+		for round, err := range f.s.RoundRange(context.Background(), "a", api.NoRoundID, api.NoRoundID) {
+			if err != nil {
+				f.fail("RoundRange: %v", err)
+			}
+			stored = append(stored, round)
+		}
+		empty, input := true, r.lastRound.input.Len() != 0
+		for i := len(stored) - 1; empty && !input && i >= 0; i-- {
+			if stored[i].State != api.RoundOk {
+				continue
+			}
+			for _, c := range stored[i].Response {
+				if text, ok := c.(api.ContentText); ok && strings.TrimSpace(text.Text) != "" {
+					empty = false
+				}
+			}
+			input = stored[i].Input.Len() != 0
+		}
+		if session != empty {
+			f.fail("an empty response ends an empty turn %v in session, %v over every stored round", session, empty)
+		}
 	}
 	for _, pair := range [][2]any{
 		{l.messages.messages(0), r.messages.messages(0)},
@@ -198,7 +228,7 @@ func (f *fuzzRun) step() {
 	r := f.r
 	switch {
 	case r.lastRound.isActive():
-		switch f.rng.IntN(9) {
+		switch f.rng.IntN(10) {
 		case 0, 1, 2:
 			n := 1 + f.rng.IntN(3)
 			content := api.Indexed[api.Content]{}
@@ -208,7 +238,10 @@ func (f *fuzzRun) step() {
 				f.calls = append(f.calls, call)
 				content[i] = call
 			}
-			f.log = append(f.log, fmt.Sprintf("ok+%d calls", n))
+			if f.rng.IntN(2) == 0 {
+				content[n] = api.ContentText{Text: []string{"checking", " \n"}[f.rng.IntN(2)]}
+			}
+			f.log = append(f.log, fmt.Sprintf("ok+%d calls+%d text", n, len(content)-n))
 			if _, err := r.RoundOk(api.EventUsage{Input: 100 * len(f.log)}, content); err != nil {
 				f.fail("RoundOk: %v", err)
 			}
@@ -233,12 +266,18 @@ func (f *fuzzRun) step() {
 			if err := r.RoundAbort(api.EventUsage{}, nil); err != nil {
 				f.fail("RoundAbort: %v", err)
 			}
+		case 7:
+			note := f.rng.IntN(2) == 0
+			f.log = append(f.log, fmt.Sprintf("resend note=%v", note))
+			if _, _, _, err := r.Retry(note); err != nil {
+				f.fail("Retry: %v", err)
+			}
 		default:
 			if !f.compact(true) {
 				return
 			}
 			f.log = append(f.log, "retry after compaction")
-			if _, _, _, err := r.Retry(); err != nil {
+			if _, _, _, err := r.Retry(false); err != nil {
 				f.fail("Retry: %v", err)
 			}
 		}
@@ -263,12 +302,12 @@ func (f *fuzzRun) step() {
 				return
 			}
 			l := f.clone()
-			_, _, want, err := l.Retry()
+			_, _, want, err := l.Retry(false)
 			if err != nil {
 				f.fail("Retry after Load: %v", err)
 			}
 			f.log = append(f.log, "retry")
-			_, _, got, err := r.Retry()
+			_, _, got, err := r.Retry(false)
 			if err != nil {
 				f.fail("Retry: %v", err)
 			}

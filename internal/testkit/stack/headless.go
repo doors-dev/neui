@@ -208,6 +208,10 @@ func (c *Chat) Close() {
 	c.link.Close()
 }
 
+func (c *Chat) Backend() *common.Backend {
+	return c.backend
+}
+
 func Trace(events []api.ChatEvent) []string {
 	trace := make([]string, len(events))
 	for i, e := range events {

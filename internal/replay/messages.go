@@ -33,6 +33,7 @@ func newMessages(compaction api.Compaction, config api.ThreadConfig, model api.M
 
 type round struct {
 	id     api.RoundID
+	input  bool
 	user   []api.Content
 	agent  []api.Content
 	usage  api.EventUsage
@@ -209,9 +210,13 @@ func (s *messages) appendRound(r api.Round) {
 	if opening {
 		user = append(user, api.ContentText{Text: nameInstruction})
 	}
+	if r.Input.Note != "" {
+		user = append(user, api.ContentText{Text: r.Input.Note})
+	}
 	weight := weigh(user...) + weigh(response...)
 	s.rounds = append(s.rounds, round{
 		id:     r.ID,
+		input:  r.Input.Len() != 0,
 		user:   user,
 		agent:  response,
 		usage:  r.Usage,

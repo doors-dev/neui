@@ -95,6 +95,11 @@ func (r Builder) Abort() (usage api.EventUsage, content api.Indexed[api.Content]
 	return usage, content
 }
 
+func (r Builder) Discard() {
+	clear(r.blocks)
+	r.offset = 0
+}
+
 func (r Builder) Flush() (response Response) {
 	defer r.reset()
 	response.Usage = r.flushUsage()
@@ -192,9 +197,13 @@ func (r *builder) On(e api.Event) (api.Event, bool) {
 }
 
 func (r *builder) flushUsage() api.EventUsage {
+	usage := api.EventUsage{}
+	if r.usage != nil {
+		usage = *r.usage
+	}
 	r.spent = r.Spent()
 	r.usage = nil
-	return r.spent
+	return usage
 }
 
 func (r *builder) reset() {

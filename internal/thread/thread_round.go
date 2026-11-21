@@ -33,6 +33,7 @@ type threadRound struct {
 	guard    <-chan error
 	ch       <-chan api.Event
 	response response.Builder
+	resends  int
 }
 
 func (s *threadRound) tick() bool {
@@ -182,6 +183,23 @@ func (s *threadRound) ok(code api.OkCode, content api.Indexed[api.Content], usag
 	case api.CodeTurn:
 	default:
 		panic("unknown ok code")
+	}
+	empty, err := s.thread.replay.IsEmptyTurn(content)
+	if err != nil {
+		s.thread.criticalErr(nil, err)
+		return
+	}
+	if empty && s.resends < 2 {
+		round, truncate, replay, err := s.thread.replay.Retry(s.resends == 1)
+		if err != nil {
+			s.thread.criticalErr(nil, err)
+			return
+		}
+		s.response.Discard()
+		next := s.thread.switchStateRoundReplay(round, replay)
+		next.response, next.resends = s.response, s.resends+1
+		s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundStart{Round: round, Truncate: truncate, Usage: s.thread.replay.Usage(), CanCompact: s.thread.canCompact()}))
+		return
 	}
 	origin, err := s.thread.replay.RoundOk(usage, content)
 	if err != nil {

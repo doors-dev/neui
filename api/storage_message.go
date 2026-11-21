@@ -117,6 +117,11 @@ type Round struct {
 type Input struct {
 	Attachments []string `json:"attachments"` // e.g. "user_uploads/report.pdf"
 	Text        string   `json:"text"`        // "" for attachments only
+	// Note is a harness note the thread adds when it resends a round after
+	// empty responses. The model reads it after the input on every later
+	// request; the chat does not show it, and Len and Content leave it out.
+	// Send and Rewind drop it.
+	Note string `json:"note,omitempty"`
 }
 
 // Len returns the number of content parts the input may produce: one for

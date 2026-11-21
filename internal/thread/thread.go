@@ -445,6 +445,7 @@ func (t *thread) switchStateRound() (api.Round, error) {
 	input := api.Input{}
 	if t.pending {
 		input = t.input
+		input.Note = ""
 		t.input = api.Input{}
 		t.pending = false
 	}
@@ -469,9 +470,9 @@ func (t *thread) switchStateRound() (api.Round, error) {
 	return round, nil
 }
 
-func (t *thread) switchStateRoundReplay(round api.Round, replay []api.Message) {
+func (t *thread) switchStateRoundReplay(round api.Round, replay []api.Message) *threadRound {
 	ctx, cancel := context.WithCancelCause(t.link.ctx)
-	t.state = &threadRound{
+	state := &threadRound{
 		thread:   t,
 		round:    round,
 		ctx:      ctx,
@@ -480,6 +481,8 @@ func (t *thread) switchStateRoundReplay(round api.Round, replay []api.Message) {
 		guard:    t.link.backpressure(),
 		response: response.NewBulder(),
 	}
+	t.state = state
+	return state
 }
 
 func (t *thread) rewind(cmd commandRewind) {
@@ -493,6 +496,7 @@ func (t *thread) rewind(cmd commandRewind) {
 		cmd.Err(api.ErrInputTooLarge)
 		return
 	}
+	cmd.input.Note = ""
 	round, replay, removed, err := t.replay.Rewind(cmd.round, cmd.input)
 	if errors.Is(err, api.ErrWrongState) {
 		cmd.Err(err)
