@@ -187,6 +187,9 @@ func checkSplit[T any](t *testing.T, defs []string, valid []string, invalid []st
 	if err := json.Unmarshal(before, &want); err != nil {
 		t.Fatal(err)
 	}
+	if top, ok := want.(map[string]any); ok && top["type"] == "object" && top["properties"] == nil {
+		top["properties"] = map[string]any{}
+	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("raw differs:\n got %s\nwant %s", s.View().Raw, before)
 	}
@@ -393,5 +396,29 @@ func TestView(t *testing.T) {
 	}
 	if got := list.View(); string(got.Root) != `{"items":{"$ref":"#/definitions/SchemaViewRow"},"type":"array"}` || got.Desc != "" {
 		t.Fatalf("object mode changed the list to %+v", got)
+	}
+}
+
+func TestObjectSchemasGetProperties(t *testing.T) {
+	empty, err := NewSchema[struct{}]()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(empty.View().Raw); got != `{"type":"object","properties":{}}` {
+		t.Fatalf("an empty struct's schema is %s, want an empty properties object", got)
+	}
+	for raw, want := range map[string]string{
+		`{"type":"object","description":"rows found"}`: `{"type":"object","description":"rows found","properties":{}}`,
+		`{"type":"object","properties":{"a":{}}}`:      `{"type":"object","properties":{"a":{}}}`,
+		`{"type":["object","null"]}`:                   `{"type":["object","null"]}`,
+		`{"type":"string"}`:                            `{"type":"string"}`,
+	} {
+		s, err := NewRawSchema(json.RawMessage(raw))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := string(s.View().Raw); got != want {
+			t.Fatalf("raw schema %s became %s, want %s", raw, got, want)
+		}
 	}
 }

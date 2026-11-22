@@ -311,6 +311,9 @@ func NewRawSchema(s any) (Schema[any], error) {
 	if schema, ok := rawSchemas.get(hash); ok {
 		return schema, nil
 	}
+	if raw, err = withProperties(raw); err != nil {
+		return Schema[any]{}, err
+	}
 	doc, err := jsonvalid.UnmarshalJSON(bytes.NewReader(raw))
 	if err != nil {
 		return Schema[any]{}, err
@@ -402,6 +405,12 @@ func NewSchema[T any]() (Schema[T], error) {
 	if bytes.Equal(raw, []byte("{}")) {
 		root, raw, defs = anySchema, anySchema, nil
 	}
+	if raw, err = withProperties(raw); err != nil {
+		return Schema[T]{}, err
+	}
+	if root, err = withProperties(root); err != nil {
+		return Schema[T]{}, err
+	}
 	doc, err := jsonvalid.UnmarshalJSON(bytes.NewReader(raw))
 	if err != nil {
 		return Schema[T]{}, err
@@ -414,6 +423,18 @@ func NewSchema[T any]() (Schema[T], error) {
 	schema.defs = defs
 	schemas.Store(t, schema)
 	return schema, nil
+}
+
+func withProperties(raw []byte) ([]byte, error) {
+	var shape map[string]json.RawMessage
+	if json.Unmarshal(raw, &shape) != nil || string(shape["type"]) != `"object"` || shape["properties"] != nil {
+		return raw, nil
+	}
+	var b bytes.Buffer
+	if err := json.Compact(&b, raw); err != nil {
+		return nil, err
+	}
+	return append(bytes.TrimSuffix(b.Bytes(), []byte("}")), `,"properties":{}}`...), nil
 }
 
 func splitCalls(doc []byte) ([]byte, []byte, error) {

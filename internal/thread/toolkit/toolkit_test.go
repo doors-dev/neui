@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
-	"strings"
 	"testing"
 
 	"neui.dev/api"
@@ -68,12 +67,12 @@ func TestToolsAssembleTheTierText(t *testing.T) {
 		"bare__image":  "draws\nOutput schema: " + image + "\nOn a direct tool call the result arrives as an image block",
 		"bare__order":  "reads an order\nOutput schema: " + orderRaw,
 		"bare__parts":  "splits\nOutput schema: " + blocks + "\nOn a direct tool call the result arrives as content blocks",
-		"bare__rows":   "lists rows\nOutput schema: {\"type\":\"object\",\"description\":\"rows found\"}",
+		"bare__rows":   "lists rows\nOutput schema: {\"type\":\"object\",\"description\":\"rows found\",\"properties\":{}}",
 		"crm__blocks":  "fetches\nOutput schema: " + blocks + "\nOn a direct tool call the result arrives as content blocks",
 		"crm__image":   "draws\nOutput schema: " + image + "\nOn a direct tool call the result arrives as an image block",
 		"crm__order":   "reads an order\nOutput schema: " + order,
 		"crm__parts":   "splits\nOutput schema: " + blocks + "\nOn a direct tool call the result arrives as content blocks",
-		"crm__rows":    "lists rows\nOutput schema: {\"type\":\"object\",\"description\":\"rows found\"}",
+		"crm__rows":    "lists rows\nOutput schema: {\"type\":\"object\",\"description\":\"rows found\",\"properties\":{}}",
 	}
 	short := map[string]string{
 		"bare__blocks": "fetches",
@@ -100,10 +99,7 @@ func TestToolsAssembleTheTierText(t *testing.T) {
 			if tool.Desc != want[tool.Name] {
 				t.Errorf("tier %d: %s reads %q, want %q", tier, tool.Name, tool.Desc, want[tool.Name])
 			}
-			input := `{"type":"object"}`
-			if _, name, _ := strings.Cut(tool.Name, "__"); name == "rows" || name == "blocks" {
-				input = `{"type":"object","properties":{}}`
-			}
+			input := `{"type":"object","properties":{}}`
 			if string(tool.Schema.(json.RawMessage)) != input {
 				t.Errorf("tier %d: %s takes %s, want %s", tier, tool.Name, tool.Schema, input)
 			}
