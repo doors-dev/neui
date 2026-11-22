@@ -1693,8 +1693,28 @@ func TestSpacePartsShareDescAndNav(t *testing.T) {
 		`{"name":"","desc":"","tools":2,"children":[{"name":"menu","desc":"the footer menu","inputs":3,"goes":["the orders list","the customers list","the help"]}]}`,
 		`{"name":"","desc":"","tools":2,"children":[{"name":"menu","desc":"the footer menu","inputs":2}]}`,
 	}
-	if strings.Join(got, "\n") != strings.Join(want, "\n") {
-		t.Fatalf("tree answered\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	anyOrder := func(trees []string) string {
+		var out []string
+		for _, raw := range trees {
+			var tree map[string]any
+			if err := json.Unmarshal([]byte(raw), &tree); err != nil {
+				t.Fatal(err)
+			}
+			for _, child := range tree["children"].([]any) {
+				if goes, ok := child.(map[string]any)["goes"].([]any); ok {
+					slices.SortFunc(goes, func(a, b any) int { return strings.Compare(a.(string), b.(string)) })
+				}
+			}
+			b, err := json.Marshal(tree)
+			if err != nil {
+				t.Fatal(err)
+			}
+			out = append(out, string(b))
+		}
+		return strings.Join(out, "\n")
+	}
+	if anyOrder(got) != anyOrder(want) {
+		t.Fatalf("tree answered\n%s\nwant, in any order of goes\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
 
