@@ -23,6 +23,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/doors-dev/doors"
 	"neui.dev/api"
@@ -66,11 +67,12 @@ func newToolkit(ctx context.Context, overwrite map[string]struct{}, factories []
 }
 
 type Toolkit struct {
-	ctx     context.Context
-	names   map[string]struct{}
-	modules []common.Module
-	block   map[string]struct{}
-	inner   *Toolkit
+	ctx           context.Context
+	names         map[string]struct{}
+	modules       []common.Module
+	block         map[string]struct{}
+	inner         *Toolkit
+	SimpleSchemas bool
 }
 
 type Tool struct {
@@ -106,6 +108,7 @@ func (t Toolkit) Get(name string) (Tool, bool) {
 func (t Toolkit) Wrap(ctx context.Context, factories ...common.ModuleFactory) Toolkit {
 	toolkit := newToolkit(ctx, t.names, factories)
 	toolkit.inner = &t
+	toolkit.SimpleSchemas = t.SimpleSchemas
 	return toolkit
 }
 
@@ -156,10 +159,20 @@ func (t Toolkit) Tools() iter.Seq[api.Tool] {
 						desc += "\nOn a direct tool call the result arrives as " + hint
 					}
 				}
+				full := fmt.Sprintf("%s__%s", name, tool.Name())
+				input := tool.Input().Raw
+				if t.SimpleSchemas {
+					if input = tool.Input().Simple; input == nil {
+						if _, logged := unsimplified.LoadOrStore(full, struct{}{}); !logged {
+							doors.Logger(t.ctx).Error("thread: tool skipped, its input schema cannot be simplified", "tool", full)
+						}
+						continue
+					}
+				}
 				if !yield(api.Tool{
-					Name:   fmt.Sprintf("%s__%s", name, tool.Name()),
+					Name:   full,
 					Desc:   desc,
-					Schema: json.RawMessage(tool.Input().Raw),
+					Schema: json.RawMessage(input),
 				}) {
 					return
 				}
@@ -167,6 +180,8 @@ func (t Toolkit) Tools() iter.Seq[api.Tool] {
 		}
 	}
 }
+
+var unsimplified sync.Map
 
 const outputDefsHead = "\n\nOutput definitions, referred to as {\"$ref\":\"#/definitions/X\"} in this module's output schemas:"
 

@@ -44,6 +44,8 @@ type IslandIDKey struct{}
 
 type TierKey struct{}
 
+type SimpleSchemasKey struct{}
+
 // ModelTier sets how much the agent is trusted to do, from calling functions
 // one at a time up to building apps on the page; choose it by the model you
 // run. Each tier includes everything of the tiers below it.
