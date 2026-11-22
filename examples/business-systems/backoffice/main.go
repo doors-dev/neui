@@ -97,6 +97,13 @@ func main() {
 	default:
 		log.Fatalf("TIER: %q is not developer, agent or assistant", v)
 	}
+	switch v := os.Getenv("SIMPLE_SCHEMAS"); v {
+	case "", "0":
+	case "1":
+		options = append(options, neui.WithSimpleSchemas(true))
+	default:
+		log.Fatalf("SIMPLE_SCHEMAS: %q is not 0 or 1", v)
+	}
 	db, err := sql.Open("sqlite", "neui.db")
 	if err != nil {
 		log.Fatal(err)

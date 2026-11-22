@@ -50,6 +50,8 @@ llama-server -m Nanbeige4.2-3B-Q8_0.gguf -c 65536
 GENERIC_URL=http://127.0.0.1:8080/v1 GENERIC_CONTEXT=65536 TIER=assistant go run ./examples/business-systems/backoffice
 ```
 
+If a server refuses the tool schemas (LM Studio rejects `$ref`), add `SIMPLE_SCHEMAS=1` (`neui.WithSimpleSchemas`): references are inlined and every object gets `properties`.
+
 Each tier's prompts are below.
 
 ## Development
