@@ -6,8 +6,7 @@
       "name": "checkout",
       "desc": "starts the checkout\nOutput schema: {\"type\":\"string\"}",
       "inputSchema": {
-        "type": "object",
-        "properties": {}
+        "type": "object"
       }
     }
   ],
@@ -35,8 +34,7 @@
       "name": "add",
       "desc": "adds an item\nOutput schema: {\"type\":\"string\"}",
       "inputSchema": {
-        "type": "object",
-        "properties": {}
+        "type": "object"
       }
     }
   ],

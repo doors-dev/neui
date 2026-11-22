@@ -65,12 +65,14 @@ func newSchema[T any](raw []byte, doc any, defaultDraft *jsonvalid.Draft) (Schem
 	}
 	schema := Schema[T]{
 		raw:       raw,
+		simple:    simplify(raw),
 		root:      raw,
 		desc:      desc,
 		objectRaw: objectRaw,
 		Schema:    validSchema,
 	}
 	if objectRaw != nil {
+		schema.objectSimple = simplify(objectRaw)
 		objectDoc, err := jsonvalid.UnmarshalJSON(bytes.NewReader(objectRaw))
 		if err != nil {
 			return Schema[T]{}, err
@@ -123,10 +125,12 @@ func wrap(raw []byte) ([]byte, error) {
 
 type Schema[T any] struct {
 	raw          []byte
+	simple       []byte
 	root         []byte
 	defs         map[string]json.RawMessage
 	desc         string
 	objectRaw    []byte
+	objectSimple []byte
 	objectSchema *jsonvalid.Schema
 	object       bool
 	*jsonvalid.Schema
@@ -251,26 +255,28 @@ func (s Schema[T]) Decode(raw []byte) (T, error) {
 
 // View is a JSON schema in the forms the agent sees.
 type View struct {
-	Raw  []byte                     // the whole schema, its definitions included
-	Root []byte                     // Raw without Defs, referring to them as {"$ref":"#/definitions/X"}
-	Defs map[string]json.RawMessage // the definitions split out of Raw
-	Desc string                     // the root description of an object schema; "" otherwise
+	Raw    []byte                     // the whole schema, its definitions included
+	Simple []byte                     // Raw with every $ref inlined and "properties":{} on every object schema without one; nil when a $ref cannot be inlined
+	Root   []byte                     // Raw without Defs, referring to them as {"$ref":"#/definitions/X"}
+	Defs   map[string]json.RawMessage // the definitions split out of Raw
+	Desc   string                     // the root description of an object schema; "" otherwise
 }
 
 func (s Schema[T]) View() View {
 	if s.object {
 		return View{
-			Raw:  s.objectRaw,
-			Root: []byte(`{"type":"object","properties":{"input":` + string(s.root) + `},"required":["input"]}`),
-			Defs: s.defs,
+			Raw:    s.objectRaw,
+			Simple: s.objectSimple,
+			Root:   []byte(`{"type":"object","properties":{"input":` + string(s.root) + `},"required":["input"]}`),
+			Defs:   s.defs,
 		}
 	}
-	return View{Raw: s.raw, Root: s.root, Defs: s.defs, Desc: s.desc}
+	return View{Raw: s.raw, Simple: s.simple, Root: s.root, Defs: s.defs, Desc: s.desc}
 }
 
 var anySchema = []byte(`{"description":"any JSON value"}`)
 
-var objectSchema = []byte(`{"type":"object","properties":{}}`)
+var objectSchema = []byte(`{"type":"object"}`)
 
 var blocksSchema = []byte(`{"type":"array","items":{"oneOf":[` +
 	`{"type":"object","properties":{"type":{"const":"text"},"text":{"type":"string"}},"required":["type","text"]},` +
@@ -310,9 +316,6 @@ func NewRawSchema(s any) (Schema[any], error) {
 	hash := xxh3.Hash(raw)
 	if schema, ok := rawSchemas.get(hash); ok {
 		return schema, nil
-	}
-	if raw, err = withProperties(raw); err != nil {
-		return Schema[any]{}, err
 	}
 	doc, err := jsonvalid.UnmarshalJSON(bytes.NewReader(raw))
 	if err != nil {
@@ -405,12 +408,6 @@ func NewSchema[T any]() (Schema[T], error) {
 	if bytes.Equal(raw, []byte("{}")) {
 		root, raw, defs = anySchema, anySchema, nil
 	}
-	if raw, err = withProperties(raw); err != nil {
-		return Schema[T]{}, err
-	}
-	if root, err = withProperties(root); err != nil {
-		return Schema[T]{}, err
-	}
 	doc, err := jsonvalid.UnmarshalJSON(bytes.NewReader(raw))
 	if err != nil {
 		return Schema[T]{}, err
@@ -423,18 +420,6 @@ func NewSchema[T any]() (Schema[T], error) {
 	schema.defs = defs
 	schemas.Store(t, schema)
 	return schema, nil
-}
-
-func withProperties(raw []byte) ([]byte, error) {
-	var shape map[string]json.RawMessage
-	if json.Unmarshal(raw, &shape) != nil || string(shape["type"]) != `"object"` || shape["properties"] != nil {
-		return raw, nil
-	}
-	var b bytes.Buffer
-	if err := json.Compact(&b, raw); err != nil {
-		return nil, err
-	}
-	return append(bytes.TrimSuffix(b.Bytes(), []byte("}")), `,"properties":{}}`...), nil
 }
 
 func splitCalls(doc []byte) ([]byte, []byte, error) {

@@ -187,9 +187,6 @@ func checkSplit[T any](t *testing.T, defs []string, valid []string, invalid []st
 	if err := json.Unmarshal(before, &want); err != nil {
 		t.Fatal(err)
 	}
-	if top, ok := want.(map[string]any); ok && top["type"] == "object" && top["properties"] == nil {
-		top["properties"] = map[string]any{}
-	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("raw differs:\n got %s\nwant %s", s.View().Raw, before)
 	}
@@ -375,10 +372,11 @@ func TestView(t *testing.T) {
 	const row = `{"properties":{"id":{"type":"string"}},"type":"object"}`
 	const root = `{"description":"rows found","properties":{"rows":{"items":{"$ref":"#/definitions/SchemaViewRow"},"type":["array","null"]}},"type":"object"}`
 	want := View{
-		Raw:  []byte(`{"definitions":{"SchemaViewRow":` + row + `},` + root[1:]),
-		Root: []byte(root),
-		Defs: map[string]json.RawMessage{"SchemaViewRow": json.RawMessage(row)},
-		Desc: "rows found",
+		Raw:    []byte(`{"definitions":{"SchemaViewRow":` + row + `},` + root[1:]),
+		Simple: []byte(`{"description":"rows found","properties":{"rows":{"items":` + row + `,"type":["array","null"]}},"type":"object"}`),
+		Root:   []byte(root),
+		Defs:   map[string]json.RawMessage{"SchemaViewRow": json.RawMessage(row)},
+		Desc:   "rows found",
 	}
 	if got := rows.View(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("view %+v, want %+v", got, want)
@@ -387,9 +385,10 @@ func TestView(t *testing.T) {
 		t.Fatalf("an object schema in object mode shows %+v, want %+v", got, want)
 	}
 	want = View{
-		Raw:  []byte(`{"definitions":{"SchemaViewRow":` + row + `},"properties":{"input":{"items":{"$ref":"#/definitions/SchemaViewRow"},"type":"array"}},"required":["input"],"type":"object"}`),
-		Root: []byte(`{"type":"object","properties":{"input":{"items":{"$ref":"#/definitions/SchemaViewRow"},"type":"array"}},"required":["input"]}`),
-		Defs: map[string]json.RawMessage{"SchemaViewRow": json.RawMessage(row)},
+		Raw:    []byte(`{"definitions":{"SchemaViewRow":` + row + `},"properties":{"input":{"items":{"$ref":"#/definitions/SchemaViewRow"},"type":"array"}},"required":["input"],"type":"object"}`),
+		Simple: []byte(`{"properties":{"input":{"items":` + row + `,"type":"array"}},"required":["input"],"type":"object"}`),
+		Root:   []byte(`{"type":"object","properties":{"input":{"items":{"$ref":"#/definitions/SchemaViewRow"},"type":"array"}},"required":["input"]}`),
+		Defs:   map[string]json.RawMessage{"SchemaViewRow": json.RawMessage(row)},
 	}
 	if got := list.Object().View(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("a list in object mode shows %+v, want %+v", got, want)
@@ -399,26 +398,35 @@ func TestView(t *testing.T) {
 	}
 }
 
-func TestObjectSchemasGetProperties(t *testing.T) {
+func TestObjectSchemasKeepTheirShape(t *testing.T) {
 	empty, err := NewSchema[struct{}]()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := string(empty.View().Raw); got != `{"type":"object","properties":{}}` {
-		t.Fatalf("an empty struct's schema is %s, want an empty properties object", got)
+	if got := string(empty.View().Raw); got != `{"type":"object"}` {
+		t.Fatalf("an empty struct's schema is %s, want it as declared", got)
 	}
-	for raw, want := range map[string]string{
+	if got := string(empty.View().Simple); got != `{"type":"object","properties":{}}` {
+		t.Fatalf("an empty struct's simple schema is %s, want an empty properties object", got)
+	}
+	if got := string(ObjectRawSchema.View().Simple); got != `{"type":"object","properties":{}}` {
+		t.Fatalf("the object schema's simple form is %s, want an empty properties object", got)
+	}
+	for raw, simple := range map[string]string{
 		`{"type":"object","description":"rows found"}`: `{"type":"object","description":"rows found","properties":{}}`,
 		`{"type":"object","properties":{"a":{}}}`:      `{"type":"object","properties":{"a":{}}}`,
-		`{"type":["object","null"]}`:                   `{"type":["object","null"]}`,
+		`{"type":["object","null"]}`:                   `{"type":["object","null"],"properties":{}}`,
 		`{"type":"string"}`:                            `{"type":"string"}`,
 	} {
 		s, err := NewRawSchema(json.RawMessage(raw))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := string(s.View().Raw); got != want {
-			t.Fatalf("raw schema %s became %s, want %s", raw, got, want)
+		if got := string(s.View().Raw); got != raw {
+			t.Fatalf("raw schema %s became %s, want it as declared", raw, got)
+		}
+		if got := string(s.View().Simple); got != simple {
+			t.Fatalf("raw schema %s has the simple form %s, want %s", raw, got, simple)
 		}
 	}
 }
