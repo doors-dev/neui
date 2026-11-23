@@ -35,7 +35,7 @@ import (
 var (
 	ErrInvalidInput     = errors.New("invalid input: argument is not valid JSON")
 	ErrInvalidArguments = errors.New("invalid input: argument does not match the schema")
-	ErrNoInput          = errors.New(`invalid input: argument must be {"input": <value>}`)
+	ErrNoInput          = errors.New(`invalid input: argument must be {"value": <value>}`)
 	errCallShape        = errors.New("schema: x-neui-call without allOf[0].properties arg and returns")
 )
 
@@ -100,7 +100,7 @@ func wrap(raw []byte) ([]byte, error) {
 	}
 	doc := map[string]json.RawMessage{
 		"type":     json.RawMessage(`"object"`),
-		"required": json.RawMessage(`["input"]`),
+		"required": json.RawMessage(`["value"]`),
 	}
 	inner := raw
 	if top != nil {
@@ -115,12 +115,12 @@ func wrap(raw []byte) ([]byte, error) {
 			return nil, err
 		}
 	}
-	doc["properties"] = json.RawMessage(`{"input":` + string(inner) + `}`)
+	doc["properties"] = json.RawMessage(`{"value":` + string(inner) + `}`)
 	object, err := json.Marshal(doc)
 	if err != nil {
 		return nil, err
 	}
-	return bytes.ReplaceAll(object, []byte(`"$ref":"#"`), []byte(`"$ref":"#/properties/input"`)), nil
+	return bytes.ReplaceAll(object, []byte(`"$ref":"#"`), []byte(`"$ref":"#/properties/value"`)), nil
 }
 
 type Schema[T any] struct {
@@ -155,7 +155,7 @@ func (s Schema[T]) Unwrap(raw []byte) ([]byte, error) {
 		}
 		return nil, fmt.Errorf("%w: %v", ErrInvalidInput, err)
 	}
-	inner, ok := arg["input"]
+	inner, ok := arg["value"]
 	if !ok {
 		return nil, ErrNoInput
 	}
@@ -169,7 +169,7 @@ func (s Schema[T]) DecodeString(str string) (T, error) {
 func (s Schema[T]) Validate(v any) error {
 	if s.object {
 		arg, _ := v.(map[string]any)
-		if _, ok := arg["input"]; !ok {
+		if _, ok := arg["value"]; !ok {
 			return ErrNoInput
 		}
 	}
@@ -267,7 +267,7 @@ func (s Schema[T]) View() View {
 		return View{
 			Raw:    s.objectRaw,
 			Simple: s.objectSimple,
-			Root:   []byte(`{"type":"object","properties":{"input":` + string(s.root) + `},"required":["input"]}`),
+			Root:   []byte(`{"type":"object","properties":{"value":` + string(s.root) + `},"required":["value"]}`),
 			Defs:   s.defs,
 		}
 	}

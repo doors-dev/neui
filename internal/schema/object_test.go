@@ -58,21 +58,21 @@ func TestObjectWrapsAValue(t *testing.T) {
 	if err := json.Unmarshal(o.View().Raw, &shown); err != nil {
 		t.Fatal(err)
 	}
-	if shown.Type != "object" || len(shown.Required) != 1 || shown.Required[0] != "input" || !bytes.Equal(shown.Properties["input"], s.View().Raw) {
-		t.Fatalf("a string schema in object mode shows %s, want it under a required input", o.View().Raw)
+	if shown.Type != "object" || len(shown.Required) != 1 || shown.Required[0] != "value" || !bytes.Equal(shown.Properties["value"], s.View().Raw) {
+		t.Fatalf("a string schema in object mode shows %s, want it under a required value", o.View().Raw)
 	}
 	if !bytes.Equal(s.View().Raw, []byte(`{"type":"string"}`)) {
 		t.Fatalf("object mode changed the original schema to %s", s.View().Raw)
 	}
-	got, err := o.Decode([]byte(`{"input":"hello"}`))
+	got, err := o.Decode([]byte(`{"value":"hello"}`))
 	if err != nil || got != "hello" {
 		t.Fatalf("decoded %q, %v, want the inner value", got, err)
 	}
-	if _, err := o.Decode([]byte(`{"value":"hello"}`)); !errors.Is(err, ErrNoInput) {
+	if _, err := o.Decode([]byte(`{"input":"hello"}`)); !errors.Is(err, ErrNoInput) {
 		t.Fatalf("a call without input answered %v, want ErrNoInput", err)
 	}
-	if _, err := o.Decode([]byte(`{"input":1}`)); !errors.Is(err, ErrInvalidArguments) {
-		t.Fatalf("a wrong type under input answered %v, want the schema error", err)
+	if _, err := o.Decode([]byte(`{"value":1}`)); !errors.Is(err, ErrInvalidArguments) {
+		t.Fatalf("a wrong type under value answered %v, want the schema error", err)
 	}
 	if _, err := s.Decode([]byte(`"hello"`)); err != nil {
 		t.Fatalf("the original schema no longer decodes a bare value: %v", err)
@@ -95,7 +95,7 @@ func TestObjectHoistsDefinitions(t *testing.T) {
 	if shown["definitions"] == nil || bytes.Contains(shown["properties"], []byte(`"definitions"`)) {
 		t.Fatalf("definitions were not moved to the top: %s", o.View().Raw)
 	}
-	got, err := o.Decode([]byte(`{"input":[{"name":"a"}]}`))
+	got, err := o.Decode([]byte(`{"value":[{"name":"a"}]}`))
 	if err != nil || len(got) != 1 || got[0].Name != "a" {
 		t.Fatalf("decoded %+v, %v, want the list", got, err)
 	}
@@ -107,11 +107,11 @@ func TestObjectOnARawSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 	o := s.Object()
-	inner, err := o.Unwrap([]byte(`{"input":[1,2]}`))
+	inner, err := o.Unwrap([]byte(`{"value":[1,2]}`))
 	if err != nil || !bytes.Equal(inner, []byte(`[1,2]`)) {
 		t.Fatalf("Unwrap gave %s, %v, want the inner bytes", inner, err)
 	}
-	if err := o.ValidateRaw([]byte(`{"input":[1,2]}`)); err != nil {
+	if err := o.ValidateRaw([]byte(`{"value":[1,2]}`)); err != nil {
 		t.Fatalf("the object form failed in object mode: %v", err)
 	}
 	if err := o.ValidateRaw(inner); !errors.Is(err, ErrNoInput) {
@@ -193,34 +193,34 @@ func TestObjectMatchesDeclaredSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 	checkObjectMatchesRaw(t, "string", text, jsonvalid.Draft7, map[string]bool{
-		`{"input":"a"}`:       true,
-		`{"input":"a","x":1}`: true,
-		`{"input":1}`:         false,
-		`{"input":null}`:      false,
-		`{"INPUT":"a"}`:       false,
+		`{"value":"a"}`:       true,
+		`{"value":"a","x":1}`: true,
+		`{"value":1}`:         false,
+		`{"value":null}`:      false,
+		`{"VALUE":"a"}`:       false,
 		`{}`:                  false,
 		`"a"`:                 false,
 		`null`:                false,
 	})
 	checkObjectMatchesRaw(t, "slice of structs", items, jsonvalid.Draft7, map[string]bool{
-		`{"input":[]}`:             true,
-		`{"input":[{"name":"a"}]}`: true,
-		`{"input":[{"name":1}]}`:   false,
-		`{"input":{"name":"a"}}`:   false,
+		`{"value":[]}`:             true,
+		`{"value":[{"name":"a"}]}`: true,
+		`{"value":[{"name":1}]}`:   false,
+		`{"value":{"name":"a"}}`:   false,
 		`[{"name":"a"}]`:           false,
 	})
 	checkObjectMatchesRaw(t, "recursive list", list, jsonvalid.Draft7, map[string]bool{
-		`{"input":[{"name":"a","kids":[{"name":"b","kids":[{"name":"c"}]}]}]}`: true,
-		`{"input":[{"name":"a","kids":[{"name":1}]}]}`:                         false,
-		`{"input":[{"name":"a","kids":[{"name":"b","kids":[{"name":1}]}]}]}`:   false,
-		`{"input":[{"name":"a","kids":{"input":[]}}]}`:                         false,
+		`{"value":[{"name":"a","kids":[{"name":"b","kids":[{"name":"c"}]}]}]}`: true,
+		`{"value":[{"name":"a","kids":[{"name":1}]}]}`:                         false,
+		`{"value":[{"name":"a","kids":[{"name":"b","kids":[{"name":1}]}]}]}`:   false,
+		`{"value":[{"name":"a","kids":{"value":[]}}]}`:                         false,
 		`[{"name":"a"}]`: false,
 	})
 	for name, s := range map[string]Schema[any]{"any raw": AnyRawSchema, "any": anyValue} {
 		checkObjectMatchesRaw(t, name, s, jsonvalid.Draft2020, map[string]bool{
-			`{"input":1}`:       true,
-			`{"input":null}`:    true,
-			`{"input":{"a":1}}`: true,
+			`{"value":1}`:       true,
+			`{"value":null}`:    true,
+			`{"value":{"a":1}}`: true,
 			`{}`:                false,
 			`{"a":1}`:           false,
 			`"a"`:               false,
@@ -229,17 +229,17 @@ func TestObjectMatchesDeclaredSchema(t *testing.T) {
 		})
 	}
 	checkObjectMatchesRaw(t, "raw message", message, jsonvalid.Draft7, map[string]bool{
-		`{"input":1}`:  true,
-		`{"input":{}}`: true,
+		`{"value":1}`:  true,
+		`{"value":{}}`: true,
 		`{}`:           false,
 		`1`:            false,
 	})
 	checkObjectMatchesRaw(t, "raw $defs", defs, jsonvalid.Draft2020, map[string]bool{
-		`{"input":[]}`:                           true,
-		`{"input":[{"v":1,"kids":[{"v":2}]}]}`:   true,
-		`{"input":[{"v":1,"kids":[{"v":"x"}]}]}`: false,
-		`{"input":[{"v":1,"kids":{"v":2}}]}`:     false,
-		`{"input":[{"v":"x"}]}`:                  false,
+		`{"value":[]}`:                           true,
+		`{"value":[{"v":1,"kids":[{"v":2}]}]}`:   true,
+		`{"value":[{"v":1,"kids":[{"v":"x"}]}]}`: false,
+		`{"value":[{"v":1,"kids":{"v":2}}]}`:     false,
+		`{"value":[{"v":"x"}]}`:                  false,
 		`[{"v":1}]`:                              false,
 	})
 }
@@ -253,7 +253,7 @@ func TestObjectRewritesSelfReferencesInDefinitions(t *testing.T) {
 		t.Skipf("the reflected schema has no self reference: %s", s.View().Raw)
 	}
 	o := s.Object()
-	if bytes.Contains(o.View().Raw, []byte(`"$ref":"#"`)) || !bytes.Contains(o.View().Raw, []byte(`"$ref":"#/properties/input"`)) {
+	if bytes.Contains(o.View().Raw, []byte(`"$ref":"#"`)) || !bytes.Contains(o.View().Raw, []byte(`"$ref":"#/properties/value"`)) {
 		t.Fatalf("a self reference still points at the wrapper: %s", o.View().Raw)
 	}
 }
@@ -264,7 +264,7 @@ func TestObjectAnswersNoInput(t *testing.T) {
 		t.Fatal(err)
 	}
 	o := s.Object()
-	for _, in := range []string{`"x"`, `null`, `{}`, `[1]`, `1`, `{"value":"x"}`, `{"INPUT":"x"}`, `{"Input":"x"}`} {
+	for _, in := range []string{`"x"`, `null`, `{}`, `[1]`, `1`, `{"input":"x"}`, `{"VALUE":"x"}`, `{"Value":"x"}`} {
 		_, decodeErr := o.Decode([]byte(in))
 		_, decodeStringErr := o.DecodeString(in)
 		_, unwrapErr := o.Unwrap([]byte(in))
@@ -280,7 +280,7 @@ func TestObjectAnswersNoInput(t *testing.T) {
 			}
 		}
 	}
-	for _, in := range []string{``, `{`, `{"input":`, `{"input":"x"} x`} {
+	for _, in := range []string{``, `{`, `{"value":`, `{"value":"x"} x`} {
 		_, decodeErr := o.Decode([]byte(in))
 		_, unwrapErr := o.Unwrap([]byte(in))
 		for method, err := range map[string]error{"Decode": decodeErr, "Unwrap": unwrapErr, "ValidateRaw": o.ValidateRaw([]byte(in))} {
@@ -293,13 +293,13 @@ func TestObjectAnswersNoInput(t *testing.T) {
 
 func TestObjectOnASchemaWithoutAType(t *testing.T) {
 	o := AnyRawSchema.Object()
-	if string(o.View().Raw) != `{"properties":{"input":{"description":"any JSON value"}},"required":["input"],"type":"object"}` {
-		t.Fatalf("an any schema in object mode shows %s, want it under a required input", o.View().Raw)
+	if string(o.View().Raw) != `{"properties":{"value":{"description":"any JSON value"}},"required":["value"],"type":"object"}` {
+		t.Fatalf("an any schema in object mode shows %s, want it under a required value", o.View().Raw)
 	}
 	if string(AnyRawSchema.View().Raw) != `{"description":"any JSON value"}` {
 		t.Fatalf("object mode changed the any schema to %s", AnyRawSchema.View().Raw)
 	}
-	inner, err := o.Unwrap([]byte(`{"input":{"a":1}}`))
+	inner, err := o.Unwrap([]byte(`{"value":{"a":1}}`))
 	if err != nil || !bytes.Equal(inner, []byte(`{"a":1}`)) {
 		t.Fatalf("Unwrap gave %s, %v, want the inner value", inner, err)
 	}

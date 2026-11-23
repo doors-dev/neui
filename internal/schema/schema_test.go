@@ -385,9 +385,9 @@ func TestView(t *testing.T) {
 		t.Fatalf("an object schema in object mode shows %+v, want %+v", got, want)
 	}
 	want = View{
-		Raw:    []byte(`{"definitions":{"SchemaViewRow":` + row + `},"properties":{"input":{"items":{"$ref":"#/definitions/SchemaViewRow"},"type":"array"}},"required":["input"],"type":"object"}`),
-		Simple: []byte(`{"properties":{"input":{"items":` + row + `,"type":"array"}},"required":["input"],"type":"object"}`),
-		Root:   []byte(`{"type":"object","properties":{"input":{"items":{"$ref":"#/definitions/SchemaViewRow"},"type":"array"}},"required":["input"]}`),
+		Raw:    []byte(`{"definitions":{"SchemaViewRow":` + row + `},"properties":{"value":{"items":{"$ref":"#/definitions/SchemaViewRow"},"type":"array"}},"required":["value"],"type":"object"}`),
+		Simple: []byte(`{"properties":{"value":{"items":` + row + `,"type":"array"}},"required":["value"],"type":"object"}`),
+		Root:   []byte(`{"type":"object","properties":{"value":{"items":{"$ref":"#/definitions/SchemaViewRow"},"type":"array"}},"required":["value"]}`),
 		Defs:   map[string]json.RawMessage{"SchemaViewRow": json.RawMessage(row)},
 	}
 	if got := list.Object().View(); !reflect.DeepEqual(got, want) {

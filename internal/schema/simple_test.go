@@ -100,7 +100,7 @@ func TestSimpleRefusesCycles(t *testing.T) {
 	if !bytes.Contains(wrapped.View().Raw, []byte(`"$ref":"#/definitions/SchemaPairA"`)) {
 		t.Fatalf("pairA is not referred to by name: %s", wrapped.View().Raw)
 	}
-	if !bytes.Contains(list.Object().View().Raw, []byte(`"$ref":"#/properties/input"`)) {
+	if !bytes.Contains(list.Object().View().Raw, []byte(`"$ref":"#/properties/value"`)) {
 		t.Fatalf("the wrapped list does not refer to its input: %s", list.Object().View().Raw)
 	}
 	checkSimple(t, "a type that contains itself", self.View(), "")
@@ -124,13 +124,13 @@ func TestSimpleInlinesObjectModeDefinitions(t *testing.T) {
 	if !bytes.Contains(o.Raw, []byte(`"definitions"`)) {
 		t.Fatalf("object mode has no definitions to inline: %s", o.Raw)
 	}
-	checkSimple(t, "object mode of a list", o, `{"properties":{"input":{"items":{"properties":{"name":{"type":"string"}},"type":"object"},"type":"array"}},"required":["input"],"type":"object"}`)
+	checkSimple(t, "object mode of a list", o, `{"properties":{"value":{"items":{"properties":{"name":{"type":"string"}},"type":"object"},"type":"array"}},"required":["value"],"type":"object"}`)
 	checkSimple(t, "the list itself", s.View(), `{"items":{"properties":{"name":{"type":"string"}},"type":"object"},"type":"array"}`)
 	str, err := NewSchema[string]()
 	if err != nil {
 		t.Fatal(err)
 	}
-	checkSimple(t, "object mode of a string", str.Object().View(), `{"properties":{"input":{"type":"string"}},"required":["input"],"type":"object"}`)
+	checkSimple(t, "object mode of a string", str.Object().View(), `{"properties":{"value":{"type":"string"}},"required":["value"],"type":"object"}`)
 }
 
 func TestSimpleMergesRefSiblings(t *testing.T) {

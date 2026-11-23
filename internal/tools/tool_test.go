@@ -132,7 +132,7 @@ func TestAgentContentError(t *testing.T) {
 		tool, _ := m.Get(name)
 		in := json.RawMessage(`{}`)
 		if name == "nested" {
-			in = json.RawMessage(`{"input":{}}`)
+			in = json.RawMessage(`{"value":{}}`)
 		}
 		content, err := tool.Agent(context.Background(), in)
 		got := api.NewContentToolResult("id", content, err)
@@ -208,9 +208,9 @@ func TestObjectModuleTakesInput(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, want := range map[string]string{
-		"echo": `{"properties":{"input":{"type":"string"}},"required":["input"],"type":"object"}`,
-		"raw":  `{"properties":{"input":{"items":{"type":"integer"},"type":"array"}},"required":["input"],"type":"object"}`,
-		"any":  `{"properties":{"input":{"description":"any JSON value"}},"required":["input"],"type":"object"}`,
+		"echo": `{"properties":{"value":{"type":"string"}},"required":["value"],"type":"object"}`,
+		"raw":  `{"properties":{"value":{"items":{"type":"integer"},"type":"array"}},"required":["value"],"type":"object"}`,
+		"any":  `{"properties":{"value":{"description":"any JSON value"}},"required":["value"],"type":"object"}`,
 	} {
 		tool, _ := m.Get(name)
 		if string(tool.Input().Raw) != want {
@@ -222,17 +222,17 @@ func TestObjectModuleTakesInput(t *testing.T) {
 		want     any
 		err      error
 	}{
-		{"echo", `{"input":"x"}`, "got:x", nil},
+		{"echo", `{"value":"x"}`, "got:x", nil},
 		{"echo", `"x"`, nil, schema.ErrNoInput},
 		{"echo", `{}`, nil, schema.ErrNoInput},
-		{"echo", `{"INPUT":"x"}`, nil, schema.ErrNoInput},
-		{"echo", `{"input":1}`, nil, schema.ErrInvalidArguments},
-		{"echo", `{"input":`, nil, schema.ErrInvalidInput},
-		{"raw", `{"input":[1,2]}`, `[1,2]`, nil},
+		{"echo", `{"VALUE":"x"}`, nil, schema.ErrNoInput},
+		{"echo", `{"value":1}`, nil, schema.ErrInvalidArguments},
+		{"echo", `{"value":`, nil, schema.ErrInvalidInput},
+		{"raw", `{"value":[1,2]}`, `[1,2]`, nil},
 		{"raw", `[1,2]`, nil, schema.ErrNoInput},
-		{"raw", `{"input":["a"]}`, nil, schema.ErrInvalidArguments},
-		{"any", `{"input":{"a":1}}`, `{"a":1}`, nil},
-		{"any", `{"input":"x"}`, `"x"`, nil},
+		{"raw", `{"value":["a"]}`, nil, schema.ErrInvalidArguments},
+		{"any", `{"value":{"a":1}}`, `{"a":1}`, nil},
+		{"any", `{"value":"x"}`, `"x"`, nil},
 		{"any", `{"a":1}`, nil, schema.ErrNoInput},
 		{"any", `"x"`, nil, schema.ErrNoInput},
 	} {
