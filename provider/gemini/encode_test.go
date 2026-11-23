@@ -31,8 +31,8 @@ import (
 	"testing"
 
 	"neui.dev/api"
+	"neui.dev/internal/response"
 	"neui.dev/internal/testkit/conform"
-	"neui.dev/internal/thread/response"
 	"neui.dev/provider/lib"
 )
 
@@ -737,7 +737,7 @@ func TestReplayReproducesTheTurnByteForByte(t *testing.T) {
 	}
 	events := collect(t, serve(t, sseServer(string(data))), turn("What is the weather in Paris right now? Use the tool."))
 	conform.CheckGrammar(t, events)
-	b := response.NewBulder()
+	b := response.NewBuilder()
 	for _, e := range events {
 		if _, ok := b.On(e); !ok {
 			t.Fatalf("builder refused %s", conform.Describe(e))

@@ -33,8 +33,8 @@ import (
 	"time"
 
 	"neui.dev/api"
+	"neui.dev/internal/response"
 	"neui.dev/internal/testkit/conform"
-	"neui.dev/internal/thread/response"
 )
 
 type streamTee struct {
@@ -148,7 +148,7 @@ func liveToolLoop(t *testing.T, base string, keyName string, model string, syste
 	var reply api.Message
 	for i := range usage {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-		b := response.NewBulder()
+		b := response.NewBuilder()
 		var events []api.Event
 		for e := range p.Stream(ctx, api.Request{System: system, Tools: tools, Messages: msgs}) {
 			events = append(events, e)

@@ -21,7 +21,7 @@ import (
 	"neui.dev/api"
 	"neui.dev/internal/common"
 	"neui.dev/internal/page"
-	"neui.dev/internal/thread/response"
+	"neui.dev/internal/response"
 )
 
 type Command interface {

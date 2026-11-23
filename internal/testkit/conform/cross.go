@@ -27,8 +27,8 @@ import (
 	"testing"
 
 	"neui.dev/api"
+	"neui.dev/internal/response"
 	"neui.dev/internal/testkit"
-	"neui.dev/internal/thread/response"
 	"neui.dev/provider/lib"
 )
 
@@ -81,7 +81,7 @@ func issue(t *testing.T, a Adapter, srv *server, m api.Model) []turn {
 		}
 		srv.reset(reply{body: sse})
 		events := collect(t, a.build(t, srv.srv.URL, m, Params{}), entry(t, m.Name, "text"))
-		b := response.NewBulder()
+		b := response.NewBuilder()
 		for _, e := range events {
 			if _, ok := b.On(e); !ok {
 				t.Fatalf("%s: builder refused %s", s.Name, Describe(e))

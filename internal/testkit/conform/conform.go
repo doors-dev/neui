@@ -32,9 +32,9 @@ import (
 
 	"neui.dev/api"
 	"neui.dev/internal/replay"
+	"neui.dev/internal/response"
 	"neui.dev/internal/storage/local"
 	"neui.dev/internal/testkit"
-	"neui.dev/internal/thread/response"
 )
 
 func Run(t *testing.T, a Adapter) {
@@ -456,7 +456,7 @@ func checkScript(t *testing.T, a Adapter, s Script, events []api.Event) []api.Co
 		t.Fatalf("ended %s, want EventErr %s", Describe(last), s.Stop)
 	}
 	var usage *api.EventUsage
-	b := response.NewBulder()
+	b := response.NewBuilder()
 	for _, e := range events {
 		if u, ok := e.(api.EventUsage); ok {
 			usage = &u

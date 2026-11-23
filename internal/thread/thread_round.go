@@ -21,7 +21,7 @@ import (
 
 	"neui.dev/api"
 	"neui.dev/internal/replay"
-	"neui.dev/internal/thread/response"
+	"neui.dev/internal/response"
 )
 
 type threadRound struct {
@@ -49,19 +49,19 @@ func (s *threadRound) tick() bool {
 			Tools:    s.thread.link.tools(),
 		})
 		s.messages = nil
-	case e, contunue := <-s.ch:
-		if !contunue {
+	case e, more := <-s.ch:
+		if !more {
 			s.finalize()
 			return true
 		}
-		e, contunue = s.response.On(e)
+		e, more = s.response.On(e)
 		switch e := e.(type) {
 		case api.IndexedEvent:
 			s.thread.link.send(newMessageEvent(nil, api.ChatEventIndexed{Event: e}))
 		case api.EventUsage:
 			s.thread.link.send(newMessageEvent(nil, api.ChatEventRoundUsage{Round: s.round.ID, Usage: e}))
 		}
-		if !contunue {
+		if !more {
 			s.cancel(nil)
 			s.finalize()
 		}

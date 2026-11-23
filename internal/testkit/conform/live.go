@@ -38,7 +38,7 @@ import (
 	"time"
 
 	"neui.dev/api"
-	"neui.dev/internal/thread/response"
+	"neui.dev/internal/response"
 )
 
 var record = flag.Bool("record", false, "save the live streams to testdata/streams, scrubbed, as level one fixtures, and the cross histories RunLiveCross replays to conform's testdata/cross/live/<adapter>.json")
@@ -157,7 +157,7 @@ func liveGenerate(t *testing.T, a Adapter, key string) {
 		} else {
 			CheckGrammar(t, events)
 		}
-		b := response.NewBulder()
+		b := response.NewBuilder()
 		for _, e := range events {
 			b.On(e)
 		}

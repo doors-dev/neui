@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"neui.dev/api"
-	"neui.dev/internal/thread/response"
+	"neui.dev/internal/response"
 	"neui.dev/provider/lib"
 )
 
@@ -55,7 +55,7 @@ func RunLiveCross(t *testing.T, a Adapter) {
 			t.Fatalf("the turn produced no events: %v", ctx.Err())
 		}
 		var usage api.EventUsage
-		b := response.NewBulder()
+		b := response.NewBuilder()
 		for _, e := range events {
 			if u, ok := e.(api.EventUsage); ok {
 				usage = u

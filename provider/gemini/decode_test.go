@@ -30,8 +30,8 @@ import (
 	"time"
 
 	"neui.dev/api"
+	"neui.dev/internal/response"
 	"neui.dev/internal/testkit/conform"
-	"neui.dev/internal/thread/response"
 	"neui.dev/provider/lib"
 )
 
@@ -427,7 +427,7 @@ func TestToolArgumentsThatNeverParse(t *testing.T) {
 	wantTrace(t, events, "start  gemini-4-hydrogen", `tool 0 "call_t" "search" ""`, `tool 0 "" "" "{\"q\": \"San Fr"`, usageLine, "err capped")
 	logs := countLogs(t)
 	var raw strings.Builder
-	b := response.NewBulder()
+	b := response.NewBuilder()
 	for _, e := range events {
 		if tl, ok := e.(api.EventTool); ok {
 			raw.WriteString(tl.Args)

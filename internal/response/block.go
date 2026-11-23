@@ -25,8 +25,8 @@ import (
 	"neui.dev/api"
 )
 
-var ErrClosed = errors.New("thread: block already closed")
-var ErrMismatch = errors.New("thread: event does not belong")
+var ErrClosed = errors.New("response: block already closed")
+var ErrMismatch = errors.New("response: event does not belong")
 
 func closedErr(kind string, e api.IndexedEvent) error {
 	return fmt.Errorf("%w: %T arrived for %s block %d", ErrClosed, e, kind, e.At())
@@ -124,7 +124,7 @@ func (t *toolBlock) assemble(final bool) api.Content {
 		input = nil
 	} else if !json.Valid(input) {
 		if final {
-			slog.Warn("thread: tool call arguments discarded, never formed valid JSON", "id", t.id, "name", t.name.String(), "args", t.args.String())
+			slog.Warn("response: tool call arguments discarded, never formed valid JSON", "id", t.id, "name", t.name.String(), "args", t.args.String())
 		}
 		input = api.DiscardedArguments
 	}

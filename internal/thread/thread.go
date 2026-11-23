@@ -26,7 +26,7 @@ import (
 	"neui.dev/internal/common"
 	"neui.dev/internal/page"
 	"neui.dev/internal/replay"
-	"neui.dev/internal/thread/response"
+	"neui.dev/internal/response"
 	"neui.dev/internal/utils"
 )
 
@@ -480,7 +480,7 @@ func (t *thread) switchStateRoundReplay(round api.Round, replay []api.Message) *
 		cancel:   cancel,
 		messages: replay,
 		guard:    t.link.backpressure(),
-		response: response.NewBulder(),
+		response: response.NewBuilder(),
 	}
 	t.state = state
 	return state
@@ -629,7 +629,7 @@ func (t *thread) compact(force bool) (bool, error) {
 		Tools:    t.link.tools(),
 	})
 	go func() {
-		b := response.NewBulder()
+		b := response.NewBuilder()
 		for e := range events {
 			b.On(e)
 		}

@@ -31,8 +31,8 @@ import (
 	"time"
 
 	"neui.dev/api"
+	"neui.dev/internal/response"
 	"neui.dev/internal/testkit/conform"
-	"neui.dev/internal/thread/response"
 	"neui.dev/provider/lib"
 )
 
@@ -709,7 +709,7 @@ func TestRecordedStreams(t *testing.T) {
 			}
 			events := collect(t, serve(t, stringHandler(string(data))), turn("hi"))
 			conform.CheckUnframed(t, events)
-			b := response.NewBulder()
+			b := response.NewBuilder()
 			var parts []string
 			for _, e := range events {
 				if _, ok := b.On(e); !ok {
@@ -807,7 +807,7 @@ func TestRecordedOpaqueFields(t *testing.T) {
 			p.model.Name = tc.model
 			events := collect(t, p, turn("hi"))
 			conform.CheckUnframed(t, events)
-			b := response.NewBulder()
+			b := response.NewBuilder()
 			for _, e := range events {
 				if _, ok := b.On(e); !ok {
 					t.Fatalf("builder refused %s", conform.Describe(e))
@@ -880,7 +880,7 @@ func TestRecordedReasoningSummary(t *testing.T) {
 	p.model.Name = "openai/gpt-5-mini"
 	events := collect(t, p, turn("hi"))
 	conform.CheckUnframed(t, events)
-	b := response.NewBulder()
+	b := response.NewBuilder()
 	for _, e := range events {
 		if _, ok := b.On(e); !ok {
 			t.Fatalf("builder refused %s", conform.Describe(e))

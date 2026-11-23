@@ -27,8 +27,8 @@ import (
 	"neui.dev/internal/common"
 	"neui.dev/internal/page"
 	"neui.dev/internal/replay"
+	"neui.dev/internal/response"
 	"neui.dev/internal/testkit"
-	"neui.dev/internal/thread/response"
 )
 
 func compactionThread(t *testing.T, id api.ThreadID, model api.Model, rounds int) (*thread, replay.Replay, func() []api.ChatEvent) {
@@ -53,7 +53,7 @@ func compactionThread(t *testing.T, id api.ThreadID, model api.Model, rounds int
 }
 
 func flushed(events ...api.Event) response.Response {
-	b := response.NewBulder()
+	b := response.NewBuilder()
 	b.On(api.EventStart{ID: "c", Model: "stub"})
 	for _, e := range events {
 		b.On(e)

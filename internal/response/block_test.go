@@ -23,7 +23,7 @@ import (
 )
 
 func TestToolArgumentsThatNeverParseAssembleDiscarded(t *testing.T) {
-	b := NewBulder()
+	b := NewBuilder()
 	events := []api.Event{
 		api.EventStart{ID: "r1", Model: "m"},
 		api.EventTool{Index: 0, ID: "call_a", Name: "search", Args: `{"query": "San Franc`},
@@ -72,7 +72,7 @@ func TestLiveStateDoesNotWarnAboutUnfinishedArguments(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
 	t.Cleanup(func() { slog.SetDefault(restore) })
 
-	b := NewBulder()
+	b := NewBuilder()
 	for _, e := range []api.Event{
 		api.EventStart{ID: "r1", Model: "m"},
 		api.EventTool{Index: 0, ID: "call_a", Name: "write", Args: `{"path": "/home/alex/secret`},
@@ -113,7 +113,7 @@ func TestAbortDoesNotWarnAboutUnfinishedArguments(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
 	t.Cleanup(func() { slog.SetDefault(restore) })
 
-	b := NewBulder()
+	b := NewBuilder()
 	for _, e := range []api.Event{
 		api.EventStart{ID: "r1", Model: "m"},
 		api.EventTool{Index: 0, ID: "call_a", Name: "write", Args: `{"path": "half`},

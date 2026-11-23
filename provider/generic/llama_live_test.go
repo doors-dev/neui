@@ -35,8 +35,8 @@ import (
 	"time"
 
 	"neui.dev/api"
+	"neui.dev/internal/response"
 	"neui.dev/internal/testkit/conform"
-	"neui.dev/internal/thread/response"
 )
 
 func llamaEnv(t *testing.T) (string, string) {
@@ -177,7 +177,7 @@ func llamaSend(t *testing.T, tee *llamaTee, name string, m api.Model, req api.Re
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	var out llamaTurn
-	b := response.NewBulder()
+	b := response.NewBuilder()
 	for e := range p.Stream(ctx, req) {
 		out.events = append(out.events, e)
 		if u, ok := e.(api.EventUsage); ok {

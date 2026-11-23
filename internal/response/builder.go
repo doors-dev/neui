@@ -24,7 +24,7 @@ import (
 
 type Builder = *builder
 
-func NewBulder() Builder {
+func NewBuilder() Builder {
 	return &builder{
 		blocks: make(map[int]block),
 	}
@@ -192,7 +192,7 @@ func (r *builder) On(e api.Event) (api.Event, bool) {
 		r.usage = &e
 		return r.Spent(), true
 	default:
-		panic(fmt.Sprintf("thread: %T is not handled", e))
+		panic(fmt.Sprintf("response: %T is not handled", e))
 	}
 }
 
@@ -212,7 +212,7 @@ func (r *builder) reset() {
 	r.err = nil
 }
 
-var ErrNotStarted = errors.New("thread: turn has not started")
-var ErrStarted = errors.New("thread: turn already started")
-var ErrNotEnded = errors.New("thread: turn has not ended")
-var ErrEnded = errors.New("thread: turn already ended")
+var ErrNotStarted = errors.New("response: turn has not started")
+var ErrStarted = errors.New("response: turn already started")
+var ErrNotEnded = errors.New("response: turn has not ended")
+var ErrEnded = errors.New("response: turn already ended")
