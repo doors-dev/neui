@@ -46,8 +46,9 @@ var ErrWrongState = errors.New("thread is in the wrong state to perform this act
 
 // ErrNoProvider is what Enable returns when the session would have no
 // provider: the app has no WithProvider and Enable gets no OptionProvider, or
-// the last OptionProvider is given nil. The session stays as it was.
-var ErrNoProvider = errors.New("no provider: set WithProvider on the app or pass OptionProvider to Enable")
+// the last OptionProvider is given nil. The session stays as it was. Generate
+// returns it when it has no Provider and ctx carries no app WithProvider.
+var ErrNoProvider = errors.New("no provider: set WithProvider on the app, or pass OptionProvider to Enable or a Provider to Generate")
 
 // ErrCanceledByUser is the cause a tool or task context carries when the user
 // stopped the round, cancelled the task from the UI, or rewound past it; read
@@ -70,6 +71,10 @@ var ErrCompactionFailed = errors.New("the conversation no longer fits the model'
 
 // ErrToolNotFound reports a tool call naming no registered tool.
 var ErrToolNotFound = errors.New("tool not found")
+
+// ErrInvalidOutput reports that the model's output did not match the requested
+// schema.
+var ErrInvalidOutput = errors.New("the model gave no valid output")
 
 // ErrReadOnly reports a write aimed at the uploads dirs.
 var ErrReadOnly = errors.New("uploads dirs accept no direct writes; copy an upload into the workspace to edit it, copy to agent_uploads/<name> to store")
