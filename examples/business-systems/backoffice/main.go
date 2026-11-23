@@ -36,9 +36,27 @@ import (
 	"neui.dev/provider/gpt"
 )
 
+type headers map[string]string
+
+func (h headers) RoundTrip(r *http.Request) (*http.Response, error) {
+	r = r.Clone(r.Context())
+	for name, value := range h {
+		r.Header.Set(name, value)
+	}
+	return http.DefaultTransport.RoundTrip(r)
+}
+
 func main() {
 	var provider api.Provider
 	var err error
+	client := &http.Client{}
+	if v := os.Getenv("HEADERS"); v != "" {
+		var h headers
+		if err = json.Unmarshal([]byte(v), &h); err != nil {
+			log.Fatalf("HEADERS: %v", err)
+		}
+		client.Transport = h
+	}
 	switch {
 	case os.Getenv("GENERIC_URL") != "":
 		window := 0
@@ -51,7 +69,7 @@ func main() {
 		if name == "" {
 			name = "local"
 		}
-		opts := []generic.Option{generic.WithAPIKey(os.Getenv("GENERIC_KEY"))}
+		opts := []generic.Option{generic.WithAPIKey(os.Getenv("GENERIC_KEY")), generic.WithHTTPClient(client)}
 		if v := os.Getenv("GENERIC_BODY"); v != "" {
 			var body map[string]any
 			if err = json.Unmarshal([]byte(v), &body); err != nil {
@@ -68,13 +86,13 @@ func main() {
 		}
 		provider, err = generic.New(generic.Conf{Model: api.Model{Name: name, Context: window}, BaseURL: os.Getenv("GENERIC_URL")}, opts...)
 	case os.Getenv("DEEPSEEK_API_KEY") != "":
-		provider, err = deepseek.New(deepseek.Conf{Model: deepseek.Flash})
+		provider, err = deepseek.New(deepseek.Conf{Model: deepseek.Flash}, deepseek.WithHTTPClient(client))
 	case os.Getenv("OPENAI_API_KEY") != "":
-		provider, err = gpt.New(gpt.Conf{Model: gpt.GPT61Terra}, gpt.WithEffort(gpt.EffortMedium))
+		provider, err = gpt.New(gpt.Conf{Model: gpt.GPT61Terra}, gpt.WithEffort(gpt.EffortMedium), gpt.WithHTTPClient(client))
 	case os.Getenv("ANTHROPIC_API_KEY") != "":
-		provider, err = claude.New(claude.Conf{Model: claude.Haiku55}, claude.WithEffort(claude.EffortMedium))
+		provider, err = claude.New(claude.Conf{Model: claude.Haiku55}, claude.WithEffort(claude.EffortMedium), claude.WithHTTPClient(client))
 	case os.Getenv("GEMINI_API_KEY") != "":
-		provider, err = gemini.New(gemini.Conf{Model: gemini.Hydrogen4}, gemini.WithEffort(gemini.EffortMedium))
+		provider, err = gemini.New(gemini.Conf{Model: gemini.Hydrogen4}, gemini.WithEffort(gemini.EffortMedium), gemini.WithHTTPClient(client))
 	default:
 		log.Fatal("set GENERIC_URL, DEEPSEEK_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY or GEMINI_API_KEY")
 	}

@@ -19,6 +19,8 @@ GENERIC_URL=https://openrouter.ai/api/v1 GENERIC_KEY=sk-or-... GENERIC_MODEL=qwe
 
 `GENERIC_MAX_TOKENS` caps each reply at that many tokens, thinking included; unset, the server's own limit applies.
 
+`HEADERS` holds a JSON object of headers added to every request, whichever provider runs, such as OpenRouter's app attribution `{"HTTP-Referer":"https://your.app","X-OpenRouter-Title":"Your app"}`.
+
 A `GENERIC_URL` model reads text only: images and PDFs reach it as short notes, and text documents as their text.
 
 Google's free tier uses your prompts and the model's answers to improve its products (https://aistudio.google.com/docs/pricing); use a paid key for anything private.
