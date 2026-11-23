@@ -84,7 +84,15 @@ func main() {
 			}
 			opts = append(opts, generic.WithMaxTokens(n))
 		}
-		provider, err = generic.New(generic.Conf{Model: api.Model{Name: name, Context: window}, BaseURL: os.Getenv("GENERIC_URL")}, opts...)
+		simpleSchemas := false
+		switch v := os.Getenv("SIMPLE_SCHEMAS"); v {
+		case "", "0":
+		case "1":
+			simpleSchemas = true
+		default:
+			log.Fatalf("SIMPLE_SCHEMAS: %q is not 0 or 1", v)
+		}
+		provider, err = generic.New(generic.Conf{Model: api.Model{Name: name, Context: window, SimpleSchemas: simpleSchemas}, BaseURL: os.Getenv("GENERIC_URL")}, opts...)
 	case os.Getenv("DEEPSEEK_API_KEY") != "":
 		provider, err = deepseek.New(deepseek.Conf{Model: deepseek.Flash}, deepseek.WithHTTPClient(client))
 	case os.Getenv("OPENAI_API_KEY") != "":
@@ -114,13 +122,6 @@ func main() {
 		modules = modules[1:]
 	default:
 		log.Fatalf("TIER: %q is not developer, agent or assistant", v)
-	}
-	switch v := os.Getenv("SIMPLE_SCHEMAS"); v {
-	case "", "0":
-	case "1":
-		options = append(options, neui.WithSimpleSchemas(true))
-	default:
-		log.Fatalf("SIMPLE_SCHEMAS: %q is not 0 or 1", v)
 	}
 	db, err := sql.Open("sqlite", "neui.db")
 	if err != nil {

@@ -52,8 +52,8 @@ func TestSimpleSchemasReachTheProvider(t *testing.T) {
 			"probe__run": `{"type":"object","properties":{}}`,
 		},
 	} {
-		p := testkit.NewProvider(api.Model{}, testkit.Say("hi"))
-		c := stack.Headless(t, stack.Host{Provider: p, Options: []common.Option{module, common.OptionSimpleSchemas(on)}})
+		p := testkit.NewProvider(api.Model{SimpleSchemas: on}, testkit.Say("hi"))
+		c := stack.Headless(t, stack.Host{Provider: p, Options: []common.Option{module}})
 		c.Send("hello")
 		c.Wait()
 		got := map[string]string{}

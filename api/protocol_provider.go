@@ -104,6 +104,12 @@ type Model struct {
 	// when its type is a text type and its bytes are non-empty UTF-8, and
 	// becomes a note otherwise.
 	Inputs Modalities `json:"inputs"`
+	// SimpleSchemas sends every tool's input schema with its references
+	// inlined and "properties":{} on every object schema without one, for
+	// servers that refuse anything else. An agent's tool whose schema cannot
+	// be inlined, such as one that refers to itself, is left out and an error
+	// is logged; Generate's Object fails before sending instead.
+	SimpleSchemas bool `json:"simpleSchemas"`
 }
 
 // Modalities lists the input kinds a model reads besides text, such as

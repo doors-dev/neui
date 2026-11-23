@@ -138,22 +138,6 @@ func OptionTier(t ModelTier) Option {
 	return common.OptionTier(t)
 }
 
-// WithSimpleSchemas, when on, sends every tool's input schema with its
-// references inlined and "properties":{} on every object schema without one,
-// for servers that refuse anything else. A tool whose schema cannot be
-// inlined, such as one that refers to itself, is left out and an error is
-// logged. It is an app option for doors.NewApp; OptionSimpleSchemas sets it
-// for one session.
-func WithSimpleSchemas(on bool) doors.With {
-	return doors.WithValue(common.SimpleSchemasKey{}, on)
-}
-
-// OptionSimpleSchemas sets WithSimpleSchemas for one session, taking
-// precedence over the app's.
-func OptionSimpleSchemas(on bool) Option {
-	return common.OptionSimpleSchemas(on)
-}
-
 // OptionFilesConfig sets the session's workspace filesystem and files
 // module limits, taking precedence over the app's WithFilesConfig if there
 // is one. It is not merged with the app's config: a zero field takes the
