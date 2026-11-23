@@ -298,6 +298,12 @@ const (
 	CodeUnknown       ErrCode = "unknown"        // nothing was recognized; Err carries it and the caller decides
 )
 
+// Error returns the code, so a code can be returned as an error, or wrapped
+// with its cause, and matched with errors.Is(err, CodeBusy).
+func (c ErrCode) Error() string {
+	return string(c)
+}
+
 // EventOk ends the turn with a reply worth keeping: fold the blocks into a
 // Message and store it. Nothing follows it, and it completes every block still
 // open.
