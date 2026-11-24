@@ -35,15 +35,8 @@ type styleKey struct{}
 // --neisland-item-md.
 func Style() gox.Elem {
 	return func(cur gox.Cursor) error {
-		if store := neui.IslandStore(cur.Context()); store != nil {
-			first := false
-			store.Init(styleKey{}, func() any {
-				first = true
-				return struct{}{}
-			})
-			if !first {
-				return nil
-			}
+		if store := neui.IslandStore(cur.Context()); store != nil && store.Save(styleKey{}, struct{}{}) != nil {
+			return nil
 		}
 		if err := cur.InitVoid("link"); err != nil {
 			return err

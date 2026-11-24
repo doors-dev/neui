@@ -1,0 +1,9 @@
+{
+	"name": "neisland-echarts",
+	"private": true,
+	"type": "module",
+	"devDependencies": {
+		"echarts": "6.1.0",
+		"esbuild": "0.28.2"
+	}
+}

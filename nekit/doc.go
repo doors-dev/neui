@@ -24,7 +24,8 @@
 // user to pick from a list inside the chat.
 //
 // Package nekit is the ready-made widget set for neui islands: layouts,
-// markdown, forms, tables and buttons. Register them on Island.Library:
+// markdown, stat tiles, forms, tables and buttons. Register them on
+// Island.Library:
 //
 //	Library: nekit.IslandRegisterAll
 //

@@ -1,0 +1,245 @@
+// Copyright 2026 doors dev LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package stat
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"math"
+	"sync"
+	"time"
+
+	"github.com/doors-dev/doors"
+	"github.com/doors-dev/gox"
+	"golang.org/x/text/currency"
+	"golang.org/x/text/language"
+	"golang.org/x/text/message"
+	"neui.dev"
+	"neui.dev/api"
+	"neui.dev/internal/island"
+)
+
+var refreshFloor = 3 * time.Second
+
+var backoffCeiling = 5 * time.Minute
+
+type widget struct {
+	params Params
+	currency currency.Unit
+	scale int
+	refresh time.Duration
+	mu sync.Mutex
+	query neui.IslandCall[struct{}, data]
+	value float64
+	reference *float64
+	door *doors.Door
+	failed bool
+	reset chan struct{}
+	shown statView
+}
+
+func New(ctx context.Context, p Params) (api.Widget[Patch], error) {
+	switch {
+	case (p.Value == nil) == (p.Query == ""):
+		return nil, errors.New(valueOrQueryMessage)
+	case p.Refresh != 0 && p.Query == "":
+		return nil, errors.New(refreshWithoutQueryMessage)
+	case p.Reference != nil && p.Value == nil:
+		return nil, errors.New(referenceWithoutValueMessage)
+	case p.Format == "currency" && p.Unit == "":
+		return nil, errors.New(currencyUnitMessage)
+	case p.Unit != "" && p.Format != "" && p.Format != "number" && p.Format != "currency":
+		return nil, fmt.Errorf(unitMessage, p.Format)
+	}
+	if p.Format == "" {
+		p.Format = "number"
+	}
+	if p.Good == "" {
+		p.Good = "up"
+	}
+	w := &widget{params: p, query: p.Query, reference: p.Reference, reset: make(chan struct{}, 1), shown: statView{Label: p.Label, State: "no data"}}
+	if p.Format == "currency" {
+		code, err := currency.ParseISO(p.Unit)
+		if err != nil || code == currency.XXX {
+			return nil, fmt.Errorf(currencyCodeMessage, p.Unit)
+		}
+		w.currency = code
+		w.scale, _ = currency.Standard.Rounding(code)
+	}
+	if w.refresh = time.Duration(p.Refresh) * time.Second; w.refresh > 0 {
+		w.refresh = max(w.refresh, refreshFloor)
+	}
+	if p.Value != nil {
+		w.value = *p.Value
+	}
+	return w, nil
+}
+
+func (w *widget) Update(ctx context.Context, patch Patch) {
+	if w.params.Query != "" && (patch.Query == "" || patch.Value != nil || patch.Reference != nil) {
+		neui.IslandReport(ctx, errors.New(queryPatchMessage))
+		return
+	}
+	if w.params.Query == "" && (patch.Query != "" || patch.Value == nil) {
+		neui.IslandReport(ctx, errors.New(valuePatchMessage))
+		return
+	}
+	w.mu.Lock()
+	if patch.Query != "" {
+		w.query = patch.Query
+	} else {
+		w.value, w.reference = *patch.Value, patch.Reference
+	}
+	door := w.door
+	w.mu.Unlock()
+	if door != nil {
+		door.Reload(ctx)
+	}
+	if patch.Query != "" {
+		select {
+		case w.reset <- struct{}{}:
+		default:
+		}
+	}
+}
+
+func (w *widget) getStat(ctx context.Context, _ struct{}) (statView, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.shown, nil
+}
+
+func (w *widget) loop(ctx context.Context, door *doors.Door) {
+	delay := w.refresh
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-w.reset:
+			delay = w.refresh
+			continue
+		case <-time.After(delay):
+		}
+		if island.Ended(ctx) {
+			return
+		}
+		<-door.Reload(ctx)
+		w.mu.Lock()
+		failed := w.failed
+		w.mu.Unlock()
+		if failed {
+			delay = max(w.refresh, min(2 * delay, backoffCeiling))
+		} else {
+			delay = w.refresh
+		}
+	}
+}
+
+elem (w *widget) Main() {
+	~~
+	door := new(doors.Door)
+	w.mu.Lock()
+	w.door = door
+	w.mu.Unlock()
+	~~
+	~neui.Tool[struct{}, statView]{Name: getStatName, Desc: getStatDesc, Handler: w.getStat}
+	~>(door) <div class="neisland-stat">
+		~~
+		tag, _ := doors.DeriveBeam(doors.BrowserLocale(ctx), func(locale doors.Locale) language.Tag {
+			return locale.Language
+		}).Effect(ctx)
+		if tag == language.Und {
+			tag = language.AmericanEnglish
+		}
+		format := numberFormat{kind: w.params.Format, unit: w.params.Unit, scale: w.scale, printer: message.NewPrinter(tag)}
+		if w.params.Format == "currency" {
+			format.symbol = format.printer.Sprint(currency.Symbol(w.currency))
+		}
+		w.mu.Lock()
+		query, value, reference := w.query, w.value, w.reference
+		w.mu.Unlock()
+		shown := true
+		if w.params.Query != "" {
+			result, err := query.Call(ctx, struct{}{})
+			w.mu.Lock()
+			if ctx.Err() == nil {
+				w.failed = err != nil
+			}
+			w.mu.Unlock()
+			shown, value, reference = err == nil, result.Value, result.Reference
+		}
+		view := statView{Label: w.params.Label, State: "no data"}
+		if shown {
+			view.State, view.Value, view.Reference = "shown", &value, reference
+			if reference != nil && *reference != 0 {
+				change := (value - *reference) / math.Abs(*reference)
+				view.Change = &change
+			}
+		}
+		w.mu.Lock()
+		if ctx.Err() == nil {
+			w.shown = view
+		}
+		w.mu.Unlock()
+		~~
+		<div class="neisland-stat-head">
+			<span class="neisland-stat-label">~(w.params.Label)</span>
+		</div>
+		~(if !shown {
+			<div class="neisland-stat-value neisland-stat-empty">No data</div>
+		} else {
+			<div class="neisland-stat-value" title=(format.exact(value))>~(format.show(value))</div>
+			~(if reference != nil {
+				~~
+				text, direction := format.change(value, *reference)
+				tone := ""
+				arrow := ""
+				switch {
+				case direction > 0:
+					arrow = "▲"
+				case direction < 0:
+					arrow = "▼"
+				}
+				switch {
+				case direction == 0:
+				case (direction > 0) == (w.params.Good == "up"):
+					tone = " neisland-stat-good"
+				default:
+					tone = " neisland-stat-bad"
+				}
+				~~
+				<div class="neisland-stat-change">
+					<span class=("neisland-stat-delta" + tone)>
+						~(if arrow != "" {
+							<span class="neisland-stat-arrow" aria-hidden="true">~(arrow)</span>
+							~" "
+						})
+						~(text)
+					</span>
+					~(if w.params.ReferenceLabel != "" {
+						~" "
+						<span class="neisland-stat-reference">~(w.params.ReferenceLabel)</span>
+					})
+				</div>
+			})
+		})
+	</div>
+	~(if w.refresh > 0 {
+		~(doors.Go(func(ctx context.Context) {
+			w.loop(ctx, door)
+		}))
+	})
+}

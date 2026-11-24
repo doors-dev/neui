@@ -1,0 +1,630 @@
+// Copyright 2026 doors dev LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package chart
+
+import (
+	"context"
+	_ "embed"
+	"errors"
+	"fmt"
+	"sync"
+	"time"
+
+	"github.com/doors-dev/doors"
+	"github.com/doors-dev/gox"
+	"golang.org/x/text/currency"
+	"neui.dev"
+	"neui.dev/api"
+	"neui.dev/internal/island"
+)
+
+//go:embed _echarts/echarts.js
+var echartsJS []byte
+
+var refreshFloor = 3 * time.Second
+
+var backoffCeiling = 5 * time.Minute
+
+type widget struct {
+	params Params
+	mu sync.Mutex
+	update chan struct{}
+	rows []record
+	query neui.IslandCall[struct{}, result]
+	stale bool
+	drawn chartView
+}
+
+func New(ctx context.Context, p Params) (api.Widget[Patch], error) {
+	if p.Format == "" {
+		p.Format = "number"
+	}
+	switch {
+	case (p.Rows == nil) == (p.Query == ""):
+		return nil, errors.New(sourceMessage)
+	case p.Refresh > 0 && p.Query == "":
+		return nil, errors.New(refreshMessage)
+	case p.SplitBy != "" && p.Type == "pie":
+		return nil, fmt.Errorf(splitByMessage, p.Type, "slice")
+	case p.SplitBy != "" && p.Type == "funnel":
+		return nil, fmt.Errorf(splitByMessage, p.Type, "stage")
+	case p.Stack && p.Type != "bar":
+		return nil, errors.New(stackMessage)
+	case p.Format == "currency" && p.Unit == "":
+		return nil, errors.New(currencyUnitMessage)
+	case p.Unit != "" && p.Format != "number" && p.Format != "currency":
+		return nil, fmt.Errorf(unitMessage, p.Format)
+	}
+	if _, err := currency.ParseISO(p.Unit); p.Format == "currency" && err != nil {
+		return nil, fmt.Errorf(currencyCodeMessage, p.Unit)
+	}
+	if p.Rows != nil {
+		if _, err := compile(p, p.Rows); err != nil {
+			return nil, err
+		}
+	}
+	return &widget{params: p, rows: p.Rows, query: p.Query}, nil
+}
+
+func (w *widget) Update(ctx context.Context, patch Patch) {
+	switch {
+	case patch.Rows != nil && w.params.Query != "":
+		neui.IslandReport(ctx, errors.New(rowsPatchMessage))
+		return
+	case patch.Query != "" && w.params.Query == "":
+		neui.IslandReport(ctx, errors.New(queryPatchMessage))
+		return
+	}
+	var err error
+	if patch.Rows != nil {
+		_, err = compile(w.params, patch.Rows)
+	}
+	if err != nil {
+		neui.IslandReport(ctx, err)
+	}
+	w.mu.Lock()
+	switch {
+	case patch.Query != "":
+		w.query = patch.Query
+	case err != nil:
+		w.stale = true
+	default:
+		w.rows, w.stale = patch.Rows, false
+	}
+	update := w.update
+	w.mu.Unlock()
+	select {
+	case update <- struct{}{}:
+	default:
+	}
+}
+
+func (w *widget) getChart(ctx context.Context, _ struct{}) (chartView, error) {
+	w.mu.Lock()
+	drawn := w.drawn
+	w.mu.Unlock()
+	drawn.Type, drawn.Title = w.params.Type, w.params.Title
+	return drawn, nil
+}
+
+func (w *widget) loop(ctx context.Context, update chan struct{}) {
+	base := time.Duration(w.params.Refresh) * time.Second
+	if base > 0 {
+		base = max(base, refreshFloor)
+	}
+	period := base
+	for {
+		var tick <-chan time.Time
+		if period > 0 {
+			tick = time.After(period)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick:
+		case <-update:
+		}
+		w.mu.Lock()
+		rows, query, stale := w.rows, w.query, w.stale
+		w.mu.Unlock()
+		shown := view{Format: w.params.Format, Unit: w.params.Unit, Stale: true}
+		if w.params.Query == "" {
+			shown, _ = compile(w.params, rows)
+			shown.Stale = stale
+		} else if res, err := query.Call(ctx, struct{}{}); err != nil && (ctx.Err() != nil || island.Ended(ctx)) {
+			return
+		} else if err == nil {
+			if compiled, err := compile(w.params, res.Rows); err != nil {
+				neui.IslandReport(ctx, fmt.Errorf(queryMessage, err))
+			} else {
+				shown = compiled
+			}
+		}
+		if ctx.Err() != nil {
+			return
+		}
+		for range doors.Call(ctx, doors.ActionEmit[any]{Name: emitName, Arg: shown}) {
+		}
+		if ctx.Err() != nil {
+			return
+		}
+		w.mu.Lock()
+		switch {
+		case shown.Option != nil:
+			w.drawn = shown.Drawn
+			w.drawn.State = "shown"
+			if shown.Stale {
+				w.drawn.State = "out of date"
+			}
+		case !shown.Stale:
+			w.drawn = chartView{State: "no data"}
+		case w.drawn.State != "no data":
+			w.drawn.State = "out of date"
+		}
+		w.mu.Unlock()
+		if shown.Stale {
+			period = min(period * 2, max(base, backoffCeiling))
+		} else {
+			period = base
+		}
+	}
+}
+
+elem (w *widget) Main() {
+	~~
+	w.mu.Lock()
+	update := make(chan struct{}, 1)
+	w.update = update
+	rows, query, stale := w.rows, w.query, w.stale
+	w.mu.Unlock()
+	shown := view{Format: w.params.Format, Unit: w.params.Unit, Stale: true}
+	if w.params.Query == "" {
+		shown, _ = compile(w.params, rows)
+		shown.Stale = stale
+	} else if res, err := query.Call(ctx, struct{}{}); err == nil {
+		if compiled, err := compile(w.params, res.Rows); err != nil {
+			neui.IslandReport(ctx, fmt.Errorf(queryMessage, err))
+		} else {
+			shown = compiled
+		}
+	}
+	drawn := chartView{State: "no data"}
+	if shown.Option != nil {
+		drawn = shown.Drawn
+		drawn.State = "shown"
+		if shown.Stale {
+			drawn.State = "out of date"
+		}
+	}
+	w.mu.Lock()
+	w.drawn = drawn
+	w.mu.Unlock()
+	~~
+	~neui.Tool[struct{}, chartView]{Name: getChartName, Desc: getChartDesc, Handler: w.getChart}
+	~>(new(doors.Door)) <div class="neisland-chart-card">
+		~(if w.params.Title != "" || w.params.Subtitle != "" {
+			<div class="neisland-chart-head">
+				~(if w.params.Title != "" {
+					<p class="neisland-chart-title">~(w.params.Title)</p>
+				})
+				~(if w.params.Subtitle != "" {
+					<p class="neisland-chart-subtitle">~(w.params.Subtitle)</p>
+				})
+			</div>
+		})
+		<div class="neisland-chart-box">
+			<div class="neisland-chart-plot"></div>
+			<p class="neisland-chart-empty" hidden>No data</p>
+		</div>
+		<p class="neisland-chart-stale" role="status" hidden>Out of date</p>
+		<span class="neisland-chart-palette" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+		<script
+			data:echarts=(doors.ResourceBytes(echartsJS).Script().Module().Raw())
+			data:chart=(shown)
+			(doors.AHook[struct{}]{
+				Name: "ready",
+				On: func(ctx context.Context, _ doors.RequestHook[struct{}]) (any, bool) {
+					go w.loop(doors.DetachedContext(ctx), update)
+					return nil, true
+				},
+			})>
+			const root = document.currentScript.parentElement
+			const plot = root.querySelector(".neisland-chart-plot")
+			const empty = root.querySelector(".neisland-chart-empty")
+			const stale = root.querySelector(".neisland-chart-stale")
+			const palette = root.querySelector(".neisland-chart-palette")
+			const still = matchMedia("(prefers-reduced-motion: reduce)")
+			const echarts = await import($data("echarts"))
+			const pixel = document
+				.createElement("canvas")
+				.getContext("2d", { willReadFrequently: true })
+			const rgba = (color, alpha) => {
+				pixel.clearRect(0, 0, 1, 1)
+				pixel.fillStyle = "#000"
+				pixel.fillStyle = color
+				pixel.fillRect(0, 0, 1, 1)
+				const [r, g, b, a] = pixel.getImageData(0, 0, 1, 1).data
+				return `rgba(${r}, ${g}, ${b}, ${((a / 255) * alpha).toFixed(3)})`
+			}
+			const escape = (text) =>
+				String(text).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
+			const formatter = (format, unit, compact) => {
+				const number = (options) => new Intl.NumberFormat(undefined, options)
+				let show
+				if (format === "currency") {
+					const f = number(
+						compact
+							? {
+									style: "currency",
+									currency: unit,
+									notation: "compact",
+									maximumFractionDigits: 1,
+							  }
+							: { style: "currency", currency: unit },
+					)
+					show = (v) => f.format(v)
+				} else if (format === "percent") {
+					const f = number({ style: "percent", maximumFractionDigits: 1 })
+					show = (v) => f.format(v)
+				} else if (format === "bytes") {
+					const f = number({ maximumFractionDigits: compact ? 1 : 2 })
+					const units = ["B", "KB", "MB", "GB", "TB", "PB"]
+					show = (v) => {
+						let size = Math.abs(v)
+						let step = 0
+						while (size >= 1024 && step < units.length - 1) {
+							size /= 1024
+							step++
+						}
+						return `${f.format(Math.sign(v) * size)} ${units[step]}`
+					}
+				} else if (format === "duration") {
+					const steps = [
+						["day", 86400],
+						["hour", 3600],
+						["minute", 60],
+						["second", 1],
+					].map(([unit, size]) => [
+						size,
+						number({
+							style: "unit",
+							unit,
+							unitDisplay: compact ? "short" : "narrow",
+							maximumFractionDigits: compact ? 1 : 0,
+						}),
+					])
+					const seconds = number({
+						style: "unit",
+						unit: "second",
+						unitDisplay: "short",
+						maximumFractionDigits: 2,
+					})
+					show = (v) => {
+						if (compact) {
+							const [size, f] =
+								steps.find(([size]) => Math.abs(v) >= size) ?? steps[3]
+							return f.format(v / size)
+						}
+						if (Math.abs(v) < 60) return seconds.format(v)
+						let rest = Math.round(Math.abs(v))
+						const parts = []
+						for (const [size, f] of steps) {
+							const count = Math.floor(rest / size)
+							rest -= count * size
+							if (count) parts.push(f.format(count))
+						}
+						return (v < 0 ? "-" : "") + parts.join(" ")
+					}
+				} else {
+					const f = number(
+						compact
+							? { notation: "compact", maximumFractionDigits: 1 }
+							: { maximumFractionDigits: 2 },
+					)
+					show = (v) => (unit ? `${f.format(v)} ${unit}` : f.format(v))
+				}
+				return (v) => (v == null || Number.isNaN(v) ? "–" : show(v))
+			}
+			const slots = new Map()
+			let chart = null
+			let shape = ""
+			let last = null
+			const render = () => {
+				const spec = last
+				const style = getComputedStyle(root)
+				const text = rgba(style.color, 1)
+				const muted = rgba(style.color, 0.72)
+				const rule = rgba(style.color, 0.24)
+				const faint = rgba(style.color, 0.1)
+				const surface = rgba(getComputedStyle(palette).backgroundColor, 1)
+				const colors = Array.from(palette.children, (e) =>
+					rgba(getComputedStyle(e).color, 1),
+				)
+				const full = formatter(spec.format, spec.unit, false)
+				const compact = formatter(spec.format, spec.unit, true)
+				const plain = formatter("number", "", false)
+				const plainCompact = formatter("number", "", true)
+				const share = formatter("percent", "", false)
+				const zone = spec.option.useUTC ? { timeZone: "UTC" } : {}
+				const when = new Intl.DateTimeFormat(undefined, {
+					...(spec.time === "month"
+						? { year: "numeric", month: "short" }
+						: { dateStyle: "medium" }),
+					...(spec.time === "datetime" ? { timeStyle: "short" } : {}),
+					...zone,
+				})
+				const day = new Intl.DateTimeFormat(undefined, {
+					month: "short",
+					day: "numeric",
+					...zone,
+				})
+				const month = new Intl.DateTimeFormat(undefined, { month: "short", ...zone })
+				const year = new Intl.DateTimeFormat(undefined, {
+					month: "short",
+					year: "numeric",
+					...zone,
+				})
+				const option = structuredClone(spec.option)
+				const series = option.series
+				const kind = series[0]?.type
+				const names =
+					kind === "pie"
+						? series[0].data.map((d) => d.name)
+						: series.map((s) => s.name)
+				for (const name of slots.keys()) {
+					if (!names.includes(name)) slots.delete(name)
+				}
+				const used = new Set(slots.values())
+				for (const name of names) {
+					if (slots.has(name)) continue
+					let slot = 0
+					while (used.has(slot)) slot++
+					slots.set(name, slot)
+					used.add(slot)
+				}
+				const color = (name) => colors[slots.get(name) % colors.length]
+				option.backgroundColor = "transparent"
+				option.animation = !still.matches
+				option.textStyle = {
+					color: muted,
+					fontFamily: style.fontFamily,
+					fontSize: 12,
+				}
+				for (const axis of [option.xAxis, option.yAxis]) {
+					if (!axis) continue
+					axis.axisLine = { ...axis.axisLine, lineStyle: { color: rule } }
+					axis.splitLine = { ...axis.splitLine, lineStyle: { color: faint } }
+					axis.axisLabel = { ...axis.axisLabel, color: muted }
+					axis.nameTextStyle = { color: muted }
+					if (axis.type === "value")
+						axis.axisLabel.formatter =
+							axis === option[spec.measure] ? compact : plainCompact
+					if (axis.type === "time" && spec.time === "date")
+						axis.axisLabel.formatter = (v) => day.format(v)
+					if (axis.type === "time" && spec.time === "month")
+						axis.axisLabel.formatter = (v, i) =>
+							(i === 0 ||
+							new Date(v)[spec.option.useUTC ? "getUTCMonth" : "getMonth"]() === 0
+								? year
+								: month
+							).format(v)
+				}
+				if (option.legend) {
+					option.legend = {
+						...option.legend,
+						textStyle: { color: muted },
+						inactiveColor: rgba(style.color, 0.3),
+						pageTextStyle: { color: muted },
+						pageIconColor: muted,
+						pageIconInactiveColor: faint,
+					}
+				}
+				option.tooltip = {
+					...option.tooltip,
+					backgroundColor: surface,
+					borderColor: rule,
+					borderWidth: 1,
+					padding: [6, 10],
+					textStyle: { color: text, fontFamily: style.fontFamily, fontSize: 12 },
+					extraCssText: "box-shadow: none;",
+				}
+				if (option.tooltip.axisPointer) {
+					option.tooltip.axisPointer = {
+						...option.tooltip.axisPointer,
+						lineStyle: { color: rule },
+						shadowStyle: { color: rgba(style.color, 0.06) },
+					}
+				}
+				const line = (marker, name, value) =>
+					`<div style="display:flex;gap:16px;justify-content:space-between"><span>${marker}${escape(
+						name,
+					)}</span><b style="font-variant-numeric:tabular-nums">${escape(
+						value,
+					)}</b></div>`
+				if (option.tooltip.trigger === "axis") {
+					option.tooltip.formatter = (items) => {
+						const head = spec.time
+							? when.format(items[0].axisValue)
+							: items[0].axisValueLabel
+						return (
+							`<div style="margin-bottom:4px">${escape(head)}</div>` +
+							items
+								.map((p) =>
+									line(
+										p.marker,
+										p.seriesName,
+										full(Array.isArray(p.value) ? p.value[1] : p.value),
+									),
+								)
+								.join("")
+						)
+					}
+				} else if (kind === "pie") {
+					option.tooltip.formatter = (p) =>
+						line(p.marker, p.name, `${full(p.value)} · ${share(p.percent / 100)}`)
+					series[0].label = {
+						...series[0].label,
+						formatter: (p) => `${p.name}\n${share(p.percent / 100)}`,
+					}
+				} else if (kind === "funnel") {
+					const data = series[0].data
+					const first = data[0]?.value
+					option.tooltip.formatter = (p) => {
+						const before = data[p.dataIndex - 1]?.value
+						return (
+							line(p.marker, p.name, full(p.value)) +
+							line("", "of first", first ? share(p.value / first) : "–") +
+							(p.dataIndex > 0
+								? line("", "of previous", before ? share(p.value / before) : "–")
+								: "")
+						)
+					}
+					series[0].label = {
+						...series[0].label,
+						formatter: (p) =>
+							`${p.name}\n${compact(p.value)} · ${
+								first ? share(p.value / first) : "–"
+							}`,
+					}
+				} else if (kind === "scatter") {
+					option.tooltip.formatter = (p) =>
+						`<div style="margin-bottom:4px">${p.marker}${escape(
+							p.seriesName,
+						)}</div>` +
+						line("", spec.x, plain(p.value[0])) +
+						line("", spec.y, full(p.value[1]))
+				}
+				for (const s of series) {
+					const c = kind === "funnel" ? colors[0] : color(s.name)
+					s.itemStyle = { ...s.itemStyle, borderColor: surface }
+					if (kind === "pie") {
+						s.data = s.data.map((d) => ({
+							...d,
+							itemStyle: { color: color(d.name) },
+						}))
+					} else {
+						s.itemStyle.color = c
+					}
+					if (s.type === "line") s.lineStyle = { ...s.lineStyle, color: c }
+					s.label = { ...s.label, color: text }
+					s.labelLine = { ...s.labelLine, lineStyle: { color: rule } }
+				}
+				const listed = (items, newest) =>
+					(items.length <= 10
+						? items
+						: newest
+							? [`${items.length - 10} earlier`, ...items.slice(-10)]
+							: [...items.slice(0, 10), `${items.length - 10} more`]
+					).join("; ")
+				if (kind === "pie") {
+					const data = series[0].data
+					const total = data.reduce((sum, d) => sum + d.value, 0)
+					option.aria.label = {
+						description: `Pie chart, ${data.length} slices: ${listed(
+							data.map(
+								(d) => `${d.name} is ${full(d.value)} (${share(total ? d.value / total : 0)})`,
+							),
+						)}.`,
+					}
+				} else if (kind === "funnel") {
+					const data = series[0].data
+					const first = data[0]?.value
+					option.aria.label = {
+						description: `Funnel chart, ${data.length} stages: ${listed(
+							data.map(
+								(d) =>
+									`${d.name} is ${full(d.value)} (${
+										first ? share(d.value / first) : "–"
+									} of first)`,
+							),
+						)}.`,
+					}
+				} else {
+					const categories = [option.xAxis, option.yAxis].find(
+						(axis) => axis.type === "category",
+					)?.data
+					const type = kind === "line" && series[0].areaStyle ? "area" : kind
+					option.aria.label = {
+						description:
+							`${type[0].toUpperCase()}${type.slice(1)} chart, ${series.length} series.` +
+							series
+								.map(
+									(s) =>
+										` ${s.name}: ${listed(
+											s.data.map((d, i) =>
+												kind === "scatter"
+													? `${spec.x} ${plain(d[0])}, ${spec.y} ${full(d[1])}`
+													: spec.time
+														? `${when.format(d[0])} is ${full(d[1])}`
+														: `${categories[i]} is ${full(d)}`,
+											),
+											!!spec.time,
+										)}.`,
+								)
+								.join(""),
+					}
+				}
+				const next = JSON.stringify([
+					kind,
+					option.xAxis?.type,
+					option.yAxis?.type,
+					series.length,
+					spec.time,
+					spec.option.useUTC,
+				])
+				if (!chart) {
+					chart = echarts.init(plot, null, { renderer: "svg" })
+					chart.on("mousemove", "series", () => chart.getZr().setCursorStyle("default"))
+				}
+				chart.setOption(
+					option,
+					next === shape ? { replaceMerge: ["series"] } : { notMerge: true },
+				)
+				shape = next
+			}
+			const draw = (spec) => {
+				if (spec.option) {
+					last = spec
+					render()
+				} else if (!spec.stale) {
+					last = null
+					shape = ""
+					chart?.clear()
+				}
+				empty.hidden = !!last
+				stale.hidden = !last || !spec.stale
+			}
+			const resize = new ResizeObserver(() => chart?.resize())
+			let queued = false
+			const repaint = () => {
+				if (queued) return
+				queued = true
+				requestAnimationFrame(() => {
+					queued = false
+					if (last) render()
+				})
+			}
+			resize.observe(plot)
+			palette.addEventListener("transitionend", repaint)
+			$sys.clean(() => {
+				resize.disconnect()
+				chart?.dispose()
+			})
+			draw($data("chart"))
+			$on("neisland_chart", draw)
+			await $hook("ready", {})
+		</script>
+	</div>
+}

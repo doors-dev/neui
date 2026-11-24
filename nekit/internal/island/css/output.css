@@ -1,6 +1,6 @@
 /*! tailwindcss v4.3.3 | MIT License | https://tailwindcss.com */
 @layer properties;
-.neisland-column, .neisland-row, .neisland-grid, .neisland-grid-cell, .neisland-prose, .neisland-form, .neisland-table-card, .neisland-button, :is(.neisland-column, .neisland-row, .neisland-grid, .neisland-grid-cell, .neisland-prose, .neisland-form, .neisland-table-card, .neisland-button)::before, :is(.neisland-column, .neisland-row, .neisland-grid, .neisland-grid-cell, .neisland-prose, .neisland-form, .neisland-table-card, .neisland-button)::after, :is(.neisland-column, .neisland-row, .neisland-grid, .neisland-grid-cell, .neisland-prose, .neisland-form, .neisland-table-card, .neisland-button)::placeholder, :is(.neisland-column, .neisland-row, .neisland-grid, .neisland-grid-cell, .neisland-prose, .neisland-form, .neisland-table-card, .neisland-button)::marker, :is(.neisland-column, .neisland-row, .neisland-grid, .neisland-grid-cell, .neisland-prose, .neisland-form, .neisland-table-card, .neisland-button)::backdrop, :is(.neisland-column, .neisland-row, .neisland-grid, .neisland-grid-cell, .neisland-prose, .neisland-form, .neisland-table-card, .neisland-button)::file-selector-button, :is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-button) :where(:not(svg *)), :is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-button) :where(:not(svg *))::before, :is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-button) :where(:not(svg *))::after, :is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-button) :where(:not(svg *))::placeholder, :is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-button) :where(:not(svg *))::marker, :is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-button) :where(:not(svg *))::backdrop, :is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-button) :where(:not(svg *))::file-selector-button {
+.neisland-column, .neisland-row, .neisland-grid, .neisland-grid-cell, .neisland-prose, .neisland-form, .neisland-table-card, .neisland-chart-card, .neisland-stat, .neisland-button, :is(.neisland-column, .neisland-row, .neisland-grid, .neisland-grid-cell, .neisland-prose, .neisland-form, .neisland-table-card, .neisland-chart-card, .neisland-stat, .neisland-button)::before, :is(.neisland-column, .neisland-row, .neisland-grid, .neisland-grid-cell, .neisland-prose, .neisland-form, .neisland-table-card, .neisland-chart-card, .neisland-stat, .neisland-button)::after, :is(.neisland-column, .neisland-row, .neisland-grid, .neisland-grid-cell, .neisland-prose, .neisland-form, .neisland-table-card, .neisland-chart-card, .neisland-stat, .neisland-button)::placeholder, :is(.neisland-column, .neisland-row, .neisland-grid, .neisland-grid-cell, .neisland-prose, .neisland-form, .neisland-table-card, .neisland-chart-card, .neisland-stat, .neisland-button)::marker, :is(.neisland-column, .neisland-row, .neisland-grid, .neisland-grid-cell, .neisland-prose, .neisland-form, .neisland-table-card, .neisland-chart-card, .neisland-stat, .neisland-button)::backdrop, :is(.neisland-column, .neisland-row, .neisland-grid, .neisland-grid-cell, .neisland-prose, .neisland-form, .neisland-table-card, .neisland-chart-card, .neisland-stat, .neisland-button)::file-selector-button, :is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-chart-card, .neisland-stat, .neisland-button) :where(:not(svg *)), :is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-chart-card, .neisland-stat, .neisland-button) :where(:not(svg *))::before, :is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-chart-card, .neisland-stat, .neisland-button) :where(:not(svg *))::after, :is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-chart-card, .neisland-stat, .neisland-button) :where(:not(svg *))::placeholder, :is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-chart-card, .neisland-stat, .neisland-button) :where(:not(svg *))::marker, :is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-chart-card, .neisland-stat, .neisland-button) :where(:not(svg *))::backdrop, :is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-chart-card, .neisland-stat, .neisland-button) :where(:not(svg *))::file-selector-button {
   box-sizing: revert;
   width: revert;
   height: revert;
@@ -49,13 +49,13 @@
   text-size-adjust: revert;
   -webkit-tap-highlight-color: revert;
 }
-.neisland-column, .neisland-row, .neisland-grid, .neisland-grid-cell, .neisland-prose, .neisland-form, .neisland-table-card, .neisland-button, :is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-button) :where(:not(svg *, d0-r)) {
+.neisland-column, .neisland-row, .neisland-grid, .neisland-grid-cell, .neisland-prose, .neisland-form, .neisland-table-card, .neisland-chart-card, .neisland-stat, .neisland-button, :is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-chart-card, .neisland-stat, .neisland-button) :where(:not(svg *, d0-r)) {
   display: revert;
 }
-.neisland-column, .neisland-row, .neisland-grid, .neisland-grid-cell, .neisland-prose, .neisland-form, .neisland-table-card, .neisland-button, :is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-button) :where(:not(svg *)) {
+.neisland-column, .neisland-row, .neisland-grid, .neisland-grid-cell, .neisland-prose, .neisland-form, .neisland-table-card, .neisland-chart-card, .neisland-stat, .neisland-button, :is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-chart-card, .neisland-stat, .neisland-button) :where(:not(svg *)) {
   text-align: revert;
 }
-:is(.neisland-column, .neisland-row, .neisland-grid, .neisland-grid-cell, .neisland-prose, .neisland-form, .neisland-table-card, .neisland-button):where(:not(:is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-button) *)) {
+:is(.neisland-column, .neisland-row, .neisland-grid, .neisland-grid-cell, .neisland-prose, .neisland-form, .neisland-table-card, .neisland-chart-card, .neisland-stat, .neisland-button):where(:not(:is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-chart-card, .neisland-stat, .neisland-button) *)) {
   font-style: normal;
   font-variant: normal;
   font-weight: normal;
@@ -87,27 +87,27 @@
   text-size-adjust: auto;
   -webkit-tap-highlight-color: initial;
 }
-:is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-button) :where(:not(svg *))::-webkit-date-and-time-value {
+:is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-chart-card, .neisland-stat, .neisland-button) :where(:not(svg *))::-webkit-date-and-time-value {
   min-height: revert;
   text-align: revert;
 }
-:is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-button) :where(:not(svg *))::-webkit-datetime-edit {
+:is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-chart-card, .neisland-stat, .neisland-button) :where(:not(svg *))::-webkit-datetime-edit {
   display: revert;
   padding: revert;
 }
-:is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-button) :where(:not(svg *))::-webkit-datetime-edit-fields-wrapper {
+:is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-chart-card, .neisland-stat, .neisland-button) :where(:not(svg *))::-webkit-datetime-edit-fields-wrapper {
   padding: revert;
 }
-:is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-button) :where(:not(svg *))::-webkit-datetime-edit-year-field, :is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-button) :where(:not(svg *))::-webkit-datetime-edit-month-field, :is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-button) :where(:not(svg *))::-webkit-datetime-edit-day-field, :is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-button) :where(:not(svg *))::-webkit-datetime-edit-hour-field, :is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-button) :where(:not(svg *))::-webkit-datetime-edit-minute-field, :is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-button) :where(:not(svg *))::-webkit-datetime-edit-second-field, :is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-button) :where(:not(svg *))::-webkit-datetime-edit-millisecond-field, :is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-button) :where(:not(svg *))::-webkit-datetime-edit-meridiem-field {
+:is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-chart-card, .neisland-stat, .neisland-button) :where(:not(svg *))::-webkit-datetime-edit-year-field, :is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-chart-card, .neisland-stat, .neisland-button) :where(:not(svg *))::-webkit-datetime-edit-month-field, :is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-chart-card, .neisland-stat, .neisland-button) :where(:not(svg *))::-webkit-datetime-edit-day-field, :is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-chart-card, .neisland-stat, .neisland-button) :where(:not(svg *))::-webkit-datetime-edit-hour-field, :is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-chart-card, .neisland-stat, .neisland-button) :where(:not(svg *))::-webkit-datetime-edit-minute-field, :is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-chart-card, .neisland-stat, .neisland-button) :where(:not(svg *))::-webkit-datetime-edit-second-field, :is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-chart-card, .neisland-stat, .neisland-button) :where(:not(svg *))::-webkit-datetime-edit-millisecond-field, :is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-chart-card, .neisland-stat, .neisland-button) :where(:not(svg *))::-webkit-datetime-edit-meridiem-field {
   padding: revert;
 }
-:is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-button) :where(:not(svg *))::-webkit-calendar-picker-indicator {
+:is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-chart-card, .neisland-stat, .neisland-button) :where(:not(svg *))::-webkit-calendar-picker-indicator {
   line-height: revert;
 }
-:is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-button) :where(:not(svg *))::-webkit-search-decoration {
+:is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-chart-card, .neisland-stat, .neisland-button) :where(:not(svg *))::-webkit-search-decoration {
   appearance: revert;
 }
-:is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-button) :where(:not(svg *))::-webkit-inner-spin-button, :is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-button) :where(:not(svg *))::-webkit-outer-spin-button {
+:is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-chart-card, .neisland-stat, .neisland-button) :where(:not(svg *))::-webkit-inner-spin-button, :is(.neisland-prose, .neisland-form, .neisland-table-card, .neisland-chart-card, .neisland-stat, .neisland-button) :where(:not(svg *))::-webkit-outer-spin-button {
   height: revert;
 }
 [class*="neisland-"], [class*="neisland-"]::before, [class*="neisland-"]::after {
@@ -2794,6 +2794,253 @@
 }
 .neisland-table-search {
   max-width: var(--container-xs, 20rem);
+}
+.neisland-chart-card {
+  position: relative;
+  display: flex;
+  min-width: min(100%, var(--neisland-item-md,12rem));
+  flex-grow: 1;
+  flex-direction: column;
+  gap: calc(var(--spacing, 0.25rem) * 2);
+  border-radius: var(--neisland-radius-lg,0.375rem);
+  border-style: var(--neisland-tw-border-style);
+  border-width: 1px;
+  border-color: currentcolor;
+  @supports (color: color-mix(in lab, red, red)) {
+    border-color: color-mix(in oklab, currentcolor 16%, transparent);
+  }
+  padding: calc(var(--spacing, 0.25rem) * 3);
+  font-size: var(--text-sm, 0.875rem);
+  line-height: var(--neisland-tw-leading, var(--text-sm--line-height, calc(1.25 / 0.875)));
+  @media (forced-colors: active) {
+    border-color: CanvasText;
+  }
+}
+.neisland-chart-head {
+  display: flex;
+  min-width: 0px;
+  flex-direction: column;
+  gap: calc(var(--spacing, 0.25rem) * 0.5);
+}
+.neisland-chart-title {
+  margin: 0px;
+  font-size: var(--text-sm, 0.875rem);
+  line-height: var(--leading-snug, 1.375);
+  --neisland-tw-font-weight: var(--font-weight-semibold, 600);
+  font-weight: var(--font-weight-semibold, 600);
+  overflow-wrap: break-word;
+}
+.neisland-chart-subtitle {
+  margin: 0px;
+  font-size: var(--text-xs, 0.75rem);
+  line-height: var(--leading-snug, 1.375);
+  overflow-wrap: break-word;
+  color: currentcolor;
+  @supports (color: color-mix(in lab, red, red)) {
+    color: color-mix(in oklab, currentcolor 72%, transparent);
+  }
+}
+.neisland-chart-box {
+  position: relative;
+  min-width: 0px;
+}
+.neisland-chart-plot {
+  height: var(--neisland-chart-height,18rem);
+  width: 100%;
+  min-width: 0px;
+}
+.neisland-chart-empty {
+  position: absolute;
+  inset: 0px;
+  margin: 0px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-sm, 0.875rem);
+  line-height: var(--neisland-tw-leading, var(--text-sm--line-height, calc(1.25 / 0.875)));
+  color: currentcolor;
+  @supports (color: color-mix(in lab, red, red)) {
+    color: color-mix(in oklab, currentcolor 72%, transparent);
+  }
+  font-style: italic;
+  &[hidden] {
+    display: none;
+  }
+}
+.neisland-chart-stale {
+  margin: 0px;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--spacing, 0.25rem) * 1.5);
+  font-size: var(--text-xs, 0.75rem);
+  line-height: var(--leading-snug, 1.375);
+  color: currentcolor;
+  @supports (color: color-mix(in lab, red, red)) {
+    color: color-mix(in oklab, currentcolor 72%, transparent);
+  }
+  &::before {
+    content: var(--neisland-tw-content);
+    width: calc(var(--spacing, 0.25rem) * 1.5);
+    height: calc(var(--spacing, 0.25rem) * 1.5);
+  }
+  &::before {
+    content: var(--neisland-tw-content);
+    flex-shrink: 0;
+  }
+  &::before {
+    content: var(--neisland-tw-content);
+    border-radius: calc(infinity * 1px);
+  }
+  &::before {
+    content: var(--neisland-tw-content);
+    background-color: var(--neisland-warning,var(--color-amber-700,#b45309));
+  }
+  &::before {
+    content: var(--neisland-tw-content);
+    --neisland-tw-content: '';
+    content: var(--neisland-tw-content);
+  }
+  @media (forced-colors: active) {
+    &::before {
+      content: var(--neisland-tw-content);
+      background-color: CanvasText;
+    }
+  }
+  &[hidden] {
+    display: none;
+  }
+}
+.neisland-chart-palette {
+  visibility: hidden;
+  position: absolute;
+  width: 0px;
+  height: 0px;
+  overflow: hidden;
+  background-color: var(--neisland-bg,Canvas);
+  transition: color 1ms,background-color 1ms;
+  :is(& > *) {
+    transition: color 1ms;
+  }
+}
+.neisland-chart-palette > :nth-child(1) {
+  color: var(--neisland-chart-1, light-dark(#2a78d6, #3987e5));
+}
+.neisland-chart-palette > :nth-child(2) {
+  color: var(--neisland-chart-2, light-dark(#eb6834, #d95926));
+}
+.neisland-chart-palette > :nth-child(3) {
+  color: var(--neisland-chart-3, light-dark(#1baf7a, #199e70));
+}
+.neisland-chart-palette > :nth-child(4) {
+  color: var(--neisland-chart-4, light-dark(#eda100, #c98500));
+}
+.neisland-chart-palette > :nth-child(5) {
+  color: var(--neisland-chart-5, light-dark(#e87ba4, #d55181));
+}
+.neisland-chart-palette > :nth-child(6) {
+  color: var(--neisland-chart-6, light-dark(#008300, #0ca30c));
+}
+.neisland-chart-palette > :nth-child(7) {
+  color: var(--neisland-chart-7, light-dark(#6250d6, #9085e9));
+}
+.neisland-chart-palette > :nth-child(8) {
+  color: var(--neisland-chart-8, light-dark(#e34948, #e66767));
+}
+.neisland-stat {
+  display: flex;
+  height: 100%;
+  min-width: min(100%, var(--neisland-item-sm,9rem));
+  flex-grow: 1;
+  flex-direction: column;
+  gap: var(--spacing, 0.25rem);
+  border-radius: var(--neisland-radius-lg,0.375rem);
+  border-style: var(--neisland-tw-border-style);
+  border-width: 1px;
+  border-color: currentcolor;
+  @supports (color: color-mix(in lab, red, red)) {
+    border-color: color-mix(in oklab, currentcolor 16%, transparent);
+  }
+  padding: calc(var(--spacing, 0.25rem) * 3);
+  @media (forced-colors: active) {
+    border-color: CanvasText;
+  }
+}
+.neisland-stat-head {
+  display: flex;
+  min-width: 0px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: calc(var(--spacing, 0.25rem) * 2);
+}
+.neisland-stat-label {
+  min-width: 0px;
+  font-size: var(--text-sm, 0.875rem);
+  line-height: var(--leading-snug, 1.375);
+  --neisland-tw-font-weight: var(--font-weight-medium, 500);
+  font-weight: var(--font-weight-medium, 500);
+  overflow-wrap: break-word;
+  color: currentcolor;
+  @supports (color: color-mix(in lab, red, red)) {
+    color: color-mix(in oklab, currentcolor 72%, transparent);
+  }
+}
+.neisland-stat-value {
+  font-size: var(--text-3xl, 1.875rem);
+  line-height: var(--leading-tight, 1.25);
+  --neisland-tw-font-weight: var(--font-weight-semibold, 600);
+  font-weight: var(--font-weight-semibold, 600);
+  --neisland-tw-tracking: var(--tracking-tight, -0.025em);
+  letter-spacing: var(--tracking-tight, -0.025em);
+  overflow-wrap: anywhere;
+  --neisland-tw-numeric-spacing: tabular-nums;
+  font-variant-numeric: var(--neisland-tw-ordinal,) var(--neisland-tw-slashed-zero,) var(--neisland-tw-numeric-figure,) var(--neisland-tw-numeric-spacing,) var(--neisland-tw-numeric-fraction,);
+}
+.neisland-stat-empty {
+  --neisland-tw-font-weight: var(--font-weight-normal, 400);
+  font-weight: var(--font-weight-normal, 400);
+  color: currentcolor;
+  @supports (color: color-mix(in lab, red, red)) {
+    color: color-mix(in oklab, currentcolor 56%, transparent);
+  }
+}
+.neisland-stat-change {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: calc(var(--spacing, 0.25rem) * 1.5);
+  font-size: var(--text-sm, 0.875rem);
+  line-height: var(--leading-snug, 1.375);
+  --neisland-tw-numeric-spacing: tabular-nums;
+  font-variant-numeric: var(--neisland-tw-ordinal,) var(--neisland-tw-slashed-zero,) var(--neisland-tw-numeric-figure,) var(--neisland-tw-numeric-spacing,) var(--neisland-tw-numeric-fraction,);
+}
+.neisland-stat-delta {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--spacing, 0.25rem);
+  --neisland-tw-font-weight: var(--font-weight-semibold, 600);
+  font-weight: var(--font-weight-semibold, 600);
+  white-space: nowrap;
+}
+.neisland-stat-arrow {
+  font-size: 0.75em;
+}
+.neisland-stat-good {
+  color: var(--neisland-success,oklch(52.7% 0.154 150.069));
+  @supports (color: color-mix(in lab, red, red)) {
+    color: color-mix(in oklab,var(--neisland-success,var(--color-green-700,#15803d)) 70%,currentColor);
+  }
+}
+.neisland-stat-bad {
+  color: var(--neisland-danger,oklch(57.7% 0.245 27.325));
+  @supports (color: color-mix(in lab, red, red)) {
+    color: color-mix(in oklab,var(--neisland-danger,var(--color-red-600,#dc2626)) 70%,currentColor);
+  }
+}
+.neisland-stat-reference {
+  color: currentcolor;
+  @supports (color: color-mix(in lab, red, red)) {
+    color: color-mix(in oklab, currentcolor 72%, transparent);
+  }
 }
 .neisland-form {
   container-type: inline-size;
