@@ -390,14 +390,14 @@ The agent writes a script that wires the components of the island's library into
 // app.gox
 func library(l neui.Library) error {
 	l.Layout("card", "a titled card around its items", card)
-	l.View("chart", "a bar chart of labeled values", chart)
+	l.View("receipt", "a printable receipt of an order", receipt)
 	l.Control("rating", "asks the user for a rating from 1 to 5", rating)
 	return nil
 }
 ```
 
 - **Layouts** arrange other components, like `card`.
-- **Views** present information, like `chart`.
+- **Views** present information, like `receipt`.
 - **Controls** collect input from the user and pass it to the script, like `rating`.
 
 Each one is a Go function that renders your component from the params the script passes.
@@ -414,7 +414,7 @@ l.Add(neui.Tool[StockInput, Product]{
 l.Tool("top_customers", "customers ranked by what they paid", topCustomers)
 ```
 
-Out of the box neui ships a library of powerful widgets (layouts, markdown, forms, tables and buttons) that covers almost any workflow. Add it to your library with:
+Out of the box neui ships a library of powerful widgets (layouts, markdown, forms, tables, buttons, charts and stat tiles) that covers almost any workflow. Add it to your library with:
 
 ```gox
 // app.gox
