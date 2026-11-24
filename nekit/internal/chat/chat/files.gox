@@ -24,7 +24,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	
+
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
 	"neui.dev/api"
@@ -52,7 +52,7 @@ elem (c *chat) files() {
 		})
 	}))
 	~(c.pops.BindPop("files", elem(hide func(context.Context)) {
-		~(&fileList{fs: c.thread.FS(), loc: c.inst.Location()})
+		~(&fileList{fs: c.thread.FS(), loc: doors.BrowserLocale(ctx).Get().TimeZone})
 	}))
 }
 

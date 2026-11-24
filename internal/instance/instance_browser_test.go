@@ -86,14 +86,6 @@ func TestInstanceLinksAThread(t *testing.T) {
 	}
 }
 
-func TestInstanceLocationIsBrowserZone(t *testing.T) {
-	c := stack.Browser(t, stack.Host{Provider: testkit.NewProvider(api.Model{})})
-	_, offset := time.Now().Zone()
-	if _, got := time.Now().In(c.Instance().Location()).Zone(); got != offset {
-		t.Fatalf("the session zone is %v, want the browser's offset %d", c.Instance().Location(), offset)
-	}
-}
-
 func TestThreadNewSwitchesChat(t *testing.T) {
 	p := testkit.NewProvider(api.Model{}, testkit.Say("first"), testkit.Say("second"))
 	c := stack.Browser(t, stack.Host{Provider: p})

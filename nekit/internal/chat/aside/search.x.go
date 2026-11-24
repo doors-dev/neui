@@ -23,7 +23,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	
+
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
 	"neui.dev/api"
@@ -55,7 +55,7 @@ func (p *Aside) overviewBody(body *doors.Door, input string, open func(ctx conte
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 //line search.gox:46
-		loc := p.Instance.Location()
+		loc := doors.BrowserLocale(ctx).Get().TimeZone
 	current := p.Instance.State().Get().Thread.ID
 	var failed error
 	threads, err := p.Instance.ThreadList(ctx, time.Time{}, time.Time{}, false, overview + 1, input)
@@ -480,7 +480,7 @@ func (r *hitRow) Main() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 //line search.gox:261
-		__e = __c.Any(r.hits.aside.hit(r.hit, r.hits.aside.Instance.Location(), r.hits.exclude)); if __e != nil { return }
+		__e = __c.Any(r.hits.aside.hit(r.hit, doors.BrowserLocale(ctx).Get().TimeZone, r.hits.exclude)); if __e != nil { return }
 	return })
 //line search.gox:262
 }

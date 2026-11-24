@@ -27,7 +27,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	
+
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
 	"neui.dev/api"
@@ -94,7 +94,7 @@ func (c *chat) files() gox.Elem {
 		return gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
 //line files.gox:55
-			__e = __c.Any(&fileList{fs: c.thread.FS(), loc: c.inst.Location()}); if __e != nil { return }
+			__e = __c.Any(&fileList{fs: c.thread.FS(), loc: doors.BrowserLocale(ctx).Get().TimeZone}); if __e != nil { return }
 		return })
 //line files.gox:56
 	})); if __e != nil { return }

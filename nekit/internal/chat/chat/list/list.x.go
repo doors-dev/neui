@@ -23,7 +23,7 @@ import (
 	"slices"
 	"sync"
 	"time"
-	
+
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
 	"github.com/gammazero/deque"
@@ -303,7 +303,7 @@ func (l List) RoundStart(ctx context.Context, r api.Round, truncate api.RoundID)
 		}
 		if l.lastSection.entry.door != nil {
 			if atBottom {
-				if label := l.seamLabel(l.lastSection.entry.head, r.Created); label != "" {
+				if label := l.seamLabel(ctx, l.lastSection.entry.head, r.Created); label != "" {
 					l.lastSection.roundAppender.Static(ctx, seam(label))
 				}
 				l.history.PushBack(l.lastSection.entry)
@@ -418,17 +418,17 @@ func (l List) intoHistory(ctx context.Context, s []api.Round, next time.Time, ba
 		id: e.id,
 		batch: batch,
 		rounds: rounds,
-		seam: l.seamLabel(e.head, next),
+		seam: l.seamLabel(ctx, e.head, next),
 		after: after,
 	}))
 	return e
 }
 
-func (l List) seamLabel(prev, next time.Time) string {
+func (l List) seamLabel(ctx context.Context, prev, next time.Time) string {
 	if prev.IsZero() || next.IsZero() {
 		return ""
 	}
-	loc := l.inst.Location()
+	loc := doors.BrowserLocale(ctx).Get().TimeZone
 	from, to := prev.In(loc), next.In(loc)
 	fromYear, fromMonth, fromDay := from.Date()
 	toYear, toMonth, toDay := to.Date()

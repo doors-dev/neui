@@ -20,7 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	
+
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
 	"neui.dev/api"
@@ -43,7 +43,7 @@ elem (p *Aside) overview(input string, open func(ctx context.Context, kind contr
 
 elem (p *Aside) overviewBody(body *doors.Door, input string, open func(ctx context.Context, kind controller.SearchKind)) {
 	~~
-	loc := p.Instance.Location()
+	loc := doors.BrowserLocale(ctx).Get().TimeZone
 	current := p.Instance.State().Get().Thread.ID
 	var failed error
 	threads, err := p.Instance.ThreadList(ctx, time.Time{}, time.Time{}, false, overview + 1, input)
@@ -258,7 +258,7 @@ type hitRow struct {
 }
 
 elem (r *hitRow) Main() {
-	~(r.hits.aside.hit(r.hit, r.hits.aside.Instance.Location(), r.hits.exclude))
+	~(r.hits.aside.hit(r.hit, doors.BrowserLocale(ctx).Get().TimeZone, r.hits.exclude))
 }
 
 func shortDate(t time.Time, loc *time.Location) string {

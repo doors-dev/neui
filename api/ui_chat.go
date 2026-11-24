@@ -120,12 +120,6 @@ type Instance interface {
 	// tab: when a tab opens a thread another tab has open, that other tab
 	// moves to a fresh thread, so each entry is the one tab that has it.
 	Chats() doors.Beam[map[ThreadID]InstanceChat]
-	// Location is the session's time zone, a fixed UTC offset read from the
-	// browser's clock and kept for the session once one reading succeeds.
-	// Until then it is time.Local, the server's zone. When an instance's own
-	// reading succeeds, it is stored before that instance's Status leaves
-	// InstanceLoading.
-	Location() *time.Location
 	// ThreadOpen switches the instance to the thread, replacing whatever it
 	// had open. A thread that is not in storage, a New one included, returns
 	// the storage's ErrNotFound. meta reaches the chat that initialises for

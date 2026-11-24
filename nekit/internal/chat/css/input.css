@@ -159,118 +159,39 @@
 }
 
 .nechat-widget {
-	--app-bg: var(--nechat-dark-app-bg, --theme(--color-zinc-950 inline));
-	--app-border: var(--nechat-dark-app-border, --theme(--color-zinc-700 inline));
-	--app-ink: var(--nechat-dark-app-ink, --theme(--color-zinc-100 inline));
-	--app-ink-quiet: var(--nechat-dark-app-ink-quiet, --theme(--color-zinc-400 inline));
-	--panel-bg: var(--nechat-dark-panel-bg, --theme(--color-zinc-800 inline));
+	--app-bg: light-dark(var(--nechat-light-app-bg, --theme(--color-zinc-50 inline)), var(--nechat-dark-app-bg, --theme(--color-zinc-950 inline)));
+	--app-border: light-dark(var(--nechat-light-app-border, --theme(--color-zinc-300 inline)), var(--nechat-dark-app-border, --theme(--color-zinc-700 inline)));
+	--app-ink: light-dark(var(--nechat-light-app-ink, --theme(--color-zinc-900 inline)), var(--nechat-dark-app-ink, --theme(--color-zinc-100 inline)));
+	--app-ink-quiet: light-dark(var(--nechat-light-app-ink-quiet, --theme(--color-zinc-600 inline)), var(--nechat-dark-app-ink-quiet, --theme(--color-zinc-400 inline)));
+	--panel-bg: light-dark(var(--nechat-light-panel-bg, --theme(--color-zinc-100 inline)), var(--nechat-dark-panel-bg, --theme(--color-zinc-800 inline)));
 	--panel-border: var(--app-border);
-	--panel-border-focus: var(--nechat-dark-panel-border-focus, --theme(--color-zinc-500 inline));
-	--button-border: var(--nechat-dark-button-border, --theme(--color-zinc-600 inline));
-	--button-ink: var(--nechat-dark-button-ink, --theme(--color-zinc-300 inline));
+	--panel-border-focus: light-dark(var(--nechat-light-panel-border-focus, --theme(--color-zinc-500 inline)), var(--nechat-dark-panel-border-focus, --theme(--color-zinc-500 inline)));
+	--button-border: light-dark(var(--nechat-light-button-border, --theme(--color-zinc-400 inline)), var(--nechat-dark-button-border, --theme(--color-zinc-600 inline)));
+	--button-ink: light-dark(var(--nechat-light-button-ink, --theme(--color-zinc-700 inline)), var(--nechat-dark-button-ink, --theme(--color-zinc-300 inline)));
 	--button-bg-hover: var(--secondary-bg-hover);
 	--button-ink-hover: var(--app-ink);
 	--button-bg-active: var(--secondary-bg-active);
 	--button-border-off: var(--app-border);
-	--button-ink-off: var(--nechat-dark-button-ink-off, --theme(--color-zinc-500 inline));
-	--secondary-bg: var(--nechat-dark-secondary-bg, --theme(--color-zinc-900 inline));
+	--button-ink-off: light-dark(var(--nechat-light-button-ink-off, --theme(--color-zinc-500 inline)), var(--nechat-dark-button-ink-off, --theme(--color-zinc-500 inline)));
+	--secondary-bg: light-dark(var(--nechat-light-secondary-bg, --theme(--color-zinc-200 inline)), var(--nechat-dark-secondary-bg, --theme(--color-zinc-900 inline)));
 	--secondary-ink: var(--app-ink-quiet);
 	--secondary-bg-hover: var(--app-border);
 	--secondary-ink-hover: var(--app-ink);
-	--secondary-ink-quiet-hover: var(--nechat-dark-app-ink-quiet, --theme(--color-zinc-300 inline));
+	--secondary-ink-quiet-hover: light-dark(var(--app-ink-quiet), var(--nechat-dark-app-ink-quiet, --theme(--color-zinc-300 inline)));
 	--secondary-bg-active: var(--button-border);
 	--secondary-bg-selected: var(--secondary-bg-hover);
-	--secondary-ink-off: var(--nechat-dark-button-ink-off, var(--app-ink-quiet));
-	--danger-ink: var(--nechat-dark-danger-ink, --theme(--color-red-400 inline));
-	--danger-bg-hover: var(--nechat-dark-danger-bg-hover, --theme(--color-red-600 inline));
-	--danger-bg-active: var(--nechat-dark-danger-bg-active, --theme(--color-red-700 inline));
-	--danger-ink-on-fill: var(--nechat-dark-danger-ink-on-fill, --theme(--color-white inline));
-	--launcher-bg: var(--nechat-dark-launcher-bg, var(--app-ink));
-	--launcher-ink: var(--nechat-dark-launcher-ink, var(--app-bg));
+	--secondary-ink-off: light-dark(var(--button-ink-off), var(--nechat-dark-button-ink-off, var(--app-ink-quiet)));
+	--danger-ink: light-dark(var(--nechat-light-danger-ink, --theme(--color-red-700 inline)), var(--nechat-dark-danger-ink, --theme(--color-red-400 inline)));
+	--danger-bg-hover: light-dark(var(--nechat-light-danger-bg-hover, var(--danger-ink)), var(--nechat-dark-danger-bg-hover, --theme(--color-red-600 inline)));
+	--danger-bg-active: light-dark(var(--nechat-light-danger-bg-active, --theme(--color-red-800 inline)), var(--nechat-dark-danger-bg-active, --theme(--color-red-700 inline)));
+	--danger-ink-on-fill: light-dark(var(--nechat-light-danger-ink-on-fill, --theme(--color-white inline)), var(--nechat-dark-danger-ink-on-fill, --theme(--color-white inline)));
+	--launcher-bg: light-dark(var(--nechat-light-launcher-bg, var(--app-ink)), var(--nechat-dark-launcher-bg, var(--app-ink)));
+	--launcher-ink: light-dark(var(--nechat-light-launcher-ink, var(--app-bg)), var(--nechat-dark-launcher-ink, var(--app-bg)));
 	--figure-value: var(--app-ink);
 	--figure-track: color-mix(in srgb, transparent, currentColor 35%);
 	--field-border: var(--panel-border-focus);
 	--focus-ring: var(--app-ink-quiet);
 	accent-color: var(--app-ink-quiet);
-
-	@apply scheme-dark
-}
-@media (prefers-color-scheme: light) {
-	.nechat-widget:not([data-theme="dark"], [data-theme="dark"] *) {
-		--app-bg: var(--nechat-light-app-bg, --theme(--color-zinc-50 inline));
-		--app-border: var(--nechat-light-app-border, --theme(--color-zinc-300 inline));
-		--app-ink: var(--nechat-light-app-ink, --theme(--color-zinc-900 inline));
-		--app-ink-quiet: var(--nechat-light-app-ink-quiet, --theme(--color-zinc-600 inline));
-		--panel-bg: var(--nechat-light-panel-bg, --theme(--color-zinc-100 inline));
-		--panel-border: var(--app-border);
-		--panel-border-focus: var(--nechat-light-panel-border-focus, --theme(--color-zinc-500 inline));
-		--button-border: var(--nechat-light-button-border, --theme(--color-zinc-400 inline));
-		--button-ink: var(--nechat-light-button-ink, --theme(--color-zinc-700 inline));
-		--button-bg-hover: var(--secondary-bg-hover);
-		--button-ink-hover: var(--app-ink);
-		--button-bg-active: var(--secondary-bg-active);
-		--button-border-off: var(--app-border);
-		--button-ink-off: var(--nechat-light-button-ink-off, --theme(--color-zinc-500 inline));
-		--secondary-bg: var(--nechat-light-secondary-bg, --theme(--color-zinc-200 inline));
-		--secondary-ink: var(--app-ink-quiet);
-		--secondary-bg-hover: var(--app-border);
-		--secondary-ink-hover: var(--app-ink);
-		--secondary-ink-quiet-hover: var(--app-ink-quiet);
-		--secondary-bg-active: var(--button-border);
-		--secondary-bg-selected: var(--secondary-bg-hover);
-		--secondary-ink-off: var(--button-ink-off);
-		--danger-ink: var(--nechat-light-danger-ink, --theme(--color-red-700 inline));
-		--danger-bg-hover: var(--nechat-light-danger-bg-hover, var(--danger-ink));
-		--danger-bg-active: var(--nechat-light-danger-bg-active, --theme(--color-red-800 inline));
-		--danger-ink-on-fill: var(--nechat-light-danger-ink-on-fill, --theme(--color-white inline));
-		--launcher-bg: var(--nechat-light-launcher-bg, var(--app-ink));
-		--launcher-ink: var(--nechat-light-launcher-ink, var(--app-bg));
-		--figure-value: var(--app-ink);
-		--figure-track: color-mix(in srgb, transparent, currentColor 35%);
-		--field-border: var(--panel-border-focus);
-		--focus-ring: var(--app-ink-quiet);
-		accent-color: var(--app-ink-quiet);
-
-		@apply scheme-light
-	}
-}
-[data-theme="light"] .nechat-widget:not([data-theme="dark"]),
-.nechat-widget[data-theme="light"] {
-	--app-bg: var(--nechat-light-app-bg, --theme(--color-zinc-50 inline));
-	--app-border: var(--nechat-light-app-border, --theme(--color-zinc-300 inline));
-	--app-ink: var(--nechat-light-app-ink, --theme(--color-zinc-900 inline));
-	--app-ink-quiet: var(--nechat-light-app-ink-quiet, --theme(--color-zinc-600 inline));
-	--panel-bg: var(--nechat-light-panel-bg, --theme(--color-zinc-100 inline));
-	--panel-border: var(--app-border);
-	--panel-border-focus: var(--nechat-light-panel-border-focus, --theme(--color-zinc-500 inline));
-	--button-border: var(--nechat-light-button-border, --theme(--color-zinc-400 inline));
-	--button-ink: var(--nechat-light-button-ink, --theme(--color-zinc-700 inline));
-	--button-bg-hover: var(--secondary-bg-hover);
-	--button-ink-hover: var(--app-ink);
-	--button-bg-active: var(--secondary-bg-active);
-	--button-border-off: var(--app-border);
-	--button-ink-off: var(--nechat-light-button-ink-off, --theme(--color-zinc-500 inline));
-	--secondary-bg: var(--nechat-light-secondary-bg, --theme(--color-zinc-200 inline));
-	--secondary-ink: var(--app-ink-quiet);
-	--secondary-bg-hover: var(--app-border);
-	--secondary-ink-hover: var(--app-ink);
-	--secondary-ink-quiet-hover: var(--app-ink-quiet);
-	--secondary-bg-active: var(--button-border);
-	--secondary-bg-selected: var(--secondary-bg-hover);
-	--secondary-ink-off: var(--button-ink-off);
-	--danger-ink: var(--nechat-light-danger-ink, --theme(--color-red-700 inline));
-	--danger-bg-hover: var(--nechat-light-danger-bg-hover, var(--danger-ink));
-	--danger-bg-active: var(--nechat-light-danger-bg-active, --theme(--color-red-800 inline));
-	--danger-ink-on-fill: var(--nechat-light-danger-ink-on-fill, --theme(--color-white inline));
-	--launcher-bg: var(--nechat-light-launcher-bg, var(--app-ink));
-	--launcher-ink: var(--nechat-light-launcher-ink, var(--app-bg));
-	--figure-value: var(--app-ink);
-	--figure-track: color-mix(in srgb, transparent, currentColor 35%);
-	--field-border: var(--panel-border-focus);
-	--focus-ring: var(--app-ink-quiet);
-	accent-color: var(--app-ink-quiet);
-
-	@apply scheme-light
 }
 
 .nechat-widget {

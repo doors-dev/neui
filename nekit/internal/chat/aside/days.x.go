@@ -24,7 +24,7 @@ import (
 	"strconv"
 	"sync"
 	"time"
-	
+
 	"github.com/doors-dev/doors"
 	"github.com/doors-dev/gox"
 	"neui.dev/api"
@@ -71,16 +71,16 @@ func (d *days) Compare(a string, b string) int {
 	return cmp.Compare(x, y)
 }
 
-func (d *days) loc() *time.Location {
-	return d.aside.Instance.Location()
+func (d *days) loc(ctx context.Context) *time.Location {
+	return doors.BrowserLocale(ctx).Get().TimeZone
 }
 
-func (d *days) today() time.Time {
-	return todayIn(d.loc())
+func (d *days) today(ctx context.Context) time.Time {
+	return todayIn(d.loc(ctx))
 }
 
 func (d *days) Sections(ctx context.Context, from string, inclusive bool, asc bool, limit int) ([]window.Section, bool, error) {
-	loc := d.loc()
+	loc := d.loc(ctx)
 	today := todayIn(loc)
 	at, _ := strconv.ParseInt(from, 10, 64)
 	bound := time.Time{}
@@ -197,12 +197,12 @@ func (d *day) content() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 //line days.gox:182
-		today := d.days.name == "" && d.start.Equal(d.days.today())
+		today := d.days.name == "" && d.start.Equal(d.days.today(ctx))
 	label := ""
 	switch {
 	case today:
 		label = "Today"
-	case d.start.Year() == time.Now().In(d.days.loc()).Year():
+	case d.start.Year() == time.Now().In(d.days.loc(ctx)).Year():
 		label = d.start.Format("January 2")
 	default:
 		label = d.start.Format("January 2, 2006")

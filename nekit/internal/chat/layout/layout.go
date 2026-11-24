@@ -20,11 +20,11 @@ type State struct {
 	Dock     bool
 }
 
-func Mode(s State, dock bool) string {
+func Mode(s State, float bool, dock bool) string {
 	switch {
 	case !s.Expanded:
 		return "collapsed"
-	case s.Dock && dock:
+	case dock && (s.Dock || !float):
 		return "dock"
 	default:
 		return "float"

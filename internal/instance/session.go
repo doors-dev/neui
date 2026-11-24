@@ -19,8 +19,6 @@ import (
 	"fmt"
 	"maps"
 	"sync"
-	"sync/atomic"
-	"time"
 
 	"github.com/doors-dev/doors"
 	"neui.dev/api"
@@ -54,18 +52,10 @@ type session struct {
 	backend             *common.Backend
 	instances           map[*instance]struct{}
 	chats               ui.Chats
-	zone                atomic.Pointer[time.Location]
 }
 
 func (s Session) Chats() doors.Beam[map[api.ThreadID]api.InstanceChat] {
 	return s.chats.Beam()
-}
-
-func (s Session) Location() *time.Location {
-	if zone := s.zone.Load(); zone != nil {
-		return zone
-	}
-	return time.Local
 }
 
 func (s Session) removeInstance(inst *instance) {

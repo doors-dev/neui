@@ -20,6 +20,7 @@ import (
 	"strconv"
 
 	"github.com/zeebo/xxh3"
+	"neui.dev/nekit/internal/chat/feature"
 )
 
 type Side uint8
@@ -30,14 +31,11 @@ const (
 )
 
 type Layout struct {
-	// Side is the page edge the chat sits at; the zero value is the right edge.
-	Side Side
-	// Width is the floating window's width; default 25rem.
-	Width string
-	// Height is the floating window's height; default 40rem.
-	Height string
-	// DockWidth is the docked panel's width, which the page makes room for; default 28rem.
+	Side      Side
+	Width     string
+	Height    string
 	DockWidth string
+	Start     feature.Mode
 }
 
 var length = regexp.MustCompile(`^(\d+|\d*\.\d+)(px|rem|em|vw|vh|%)$`)
@@ -51,6 +49,7 @@ func (l Layout) valid() Layout {
 	if l.Side != Left {
 		l.Side = Right
 	}
+	l.Start = feature.Float
 	return l
 }
 

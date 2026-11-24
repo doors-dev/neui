@@ -25,6 +25,7 @@ import (
 	"neui.dev/nekit/internal/chat/aside"
 	"neui.dev/nekit/internal/chat/chat"
 	"neui.dev/nekit/internal/chat/css"
+	"neui.dev/nekit/internal/chat/feature"
 	"neui.dev/nekit/internal/chat/icons"
 	"neui.dev/nekit/internal/chat/layout"
 	"neui.dev/nekit/internal/chat/notify"
@@ -32,38 +33,17 @@ import (
 	"neui.dev/nekit/internal/chat/pops"
 )
 
-// Chat is the ready-made chat widget: the chat list sidebar, the thread, the
-// composer and its popovers. Render it on a page as ~nekit.Chat{}; the zero
-// value is a complete chat. It fills its container, so give that container a
-// height.
 type Chat struct {
-	// MaxAttachmentSize is the largest file, in bytes, a user may attach. Zero means 12 MiB.
 	MaxAttachmentSize int
-	// MaxAttachments is how many files one draft may hold. Zero means 10.
 	MaxAttachments int
-	// AttachmentTimeout bounds one file upload. Zero means 10 minutes.
 	AttachmentTimeout time.Duration
-	// AsideRight puts the chat list sidebar on the right instead of the left.
 	AsideRight bool
-	// Framed draws a rounded border around the widget.
 	Framed bool
-	// ThemeDark recolours the dark face, shown under a dark system scheme or
-	// inside data-theme="dark". The zero value keeps the built-in palette.
 	ThemeDark css.Theme
-	// ThemeLight recolours the light face, shown under a light system scheme or
-	// inside data-theme="light". The zero value keeps the built-in palette.
 	ThemeLight css.Theme
-	// Layout sets the chat's side and sizes; the zero value keeps the defaults.
 	Layout css.Layout
-	// GreetingTitle is the heading a new chat shows before its first message:
-	// a string or a GoX element. nil shows "How can I help?"; "" leaves it out.
 	GreetingTitle any
-	// GreetingBody is what shows under GreetingTitle: a string or a GoX element,
-	// such as the host's own template. nil shows "Ask a question or describe
-	// what you need."; "" leaves it out.
 	GreetingBody any
-	// Disable lists features hidden from the user; nil shows everything.
-	// ChatSimple is the preset for non-technical users and grows with technical features added later.
 	Disable []params.Feature
 }
 
@@ -73,9 +53,6 @@ type windowStateWrapper struct {
 
 type windowStateKey struct{}
 
-// Main renders the widget for the doors instance (browser tab) being
-// rendered. It shows a disabled chat until neui.Enable succeeds for the
-// session, and again after neui.Disable.
 func (k Chat) Main() gox.Elem {
 	params := params.Params{
 		MaxAttachmentSize: k.MaxAttachmentSize,
@@ -106,7 +83,10 @@ func (k Chat) Main() gox.Elem {
 				doors.SessionStore(ctx).Save(windowStateKey{}, *ws.State)
 				return false
 			}
-			s, _ := doors.SessionStore(ctx).Load(windowStateKey{}).(layout.State)
+			s, ok := doors.SessionStore(ctx).Load(windowStateKey{}).(layout.State)
+			if !ok {
+				s.Dock = params.Layout.Start == feature.Dock
+			}
 			s.Aside = false
 			state.Update(ctx, &windowStateWrapper{State: &s})
 			return false
@@ -138,6 +118,10 @@ func (k Chat) Main() gox.Elem {
 					if !enabled {
 						return
 					}
+					locale, _ := doors.BrowserLocale(ctx).Effect(ctx)
+					if !locale.Synced {
+						return
+					}
 					~~
 					~(&widget{
 						params: params,
@@ -164,7 +148,7 @@ elem (k *widget) Main() {
 	state, _ := k.state.Read(ctx)
 	badge := doors.NewSource(chat.Badge{Collapsed: !state.Expanded, Block: "text"})
 	mode, _ := doors.DeriveBeam(k.state, func(s layout.State) string {
-		return layout.Mode(s, !k.params.Off(params.Dock))
+		return layout.Mode(s, !k.params.Off(params.Float), !k.params.Off(params.Dock))
 	}).ReadAndSub(ctx, func(ctx context.Context, m string) bool {
 		doors.Call(ctx, shell.Set("data-mode", m))
 		badge.Mutate(ctx, func(b chat.Badge) chat.Badge {
@@ -223,7 +207,7 @@ elem (k *widget) Main() {
 	dock := doors.AClick{
 		Scope: scope,
 		On: func(ctx context.Context, _ doors.RequestPointer) bool {
-			if k.params.Off(params.Dock) {
+			if k.params.Off(params.Float) || k.params.Off(params.Dock) {
 				return false
 			}
 			k.state.Mutate(ctx, func(s layout.State) layout.State {
@@ -269,7 +253,7 @@ elem (k *widget) Main() {
 			return key
 		})>
 		<div class="nechat-wctl">
-			~(if !k.params.Off(params.Dock) {
+			~(if !k.params.Off(params.Float) && !k.params.Off(params.Dock) {
 				~>(dock) <button type="button" class="nechat-iconbtn nechat-wctl-dock" title="Dock to the side" aria-label="Dock to the side">
 					~>(doors.Class("nechat-ic")) ~(dockIcon())
 				</button>

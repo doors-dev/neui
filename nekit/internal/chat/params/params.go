@@ -13,7 +13,6 @@
 // limitations under the License.
 
 // Package params carries nekit chat settings through the widget's components.
-// Hosts use it only through nekit.ChatFeature.
 package params
 
 import (
@@ -21,6 +20,7 @@ import (
 
 	"github.com/doors-dev/doors"
 	"neui.dev/nekit/internal/chat/css"
+	"neui.dev/nekit/internal/chat/feature"
 )
 
 // Params are the widget settings shared by the nekit chat components. The exported
@@ -38,40 +38,34 @@ type Params struct {
 	GreetingTitle     any
 	GreetingBody      any
 	ID                string
-	off               uint32
+	off               feature.Set
 }
 
-// Feature is a part of the chat UI that can be hidden; hosts use the
-// constants nekit re-exports, such as nekit.ChatTokens, in Chat.Disable.
-type Feature uint8
+type Feature = feature.Feature
 
-// The features the nekit chat can hide; each is documented on its nekit constant.
 const (
-	Tokens Feature = iota + 1
-	Thinking
-	Tools
-	Tasks
-	Edit
-	Retry
-	Attachments
-	Files
-	Sidebar
-	ThreadEdit
-	MessageSearch
-	Greeting
-	Dock
+	Tokens        = feature.Tokens
+	Thinking      = feature.Thinking
+	Tools         = feature.Tools
+	Tasks         = feature.Tasks
+	Edit          = feature.Edit
+	Retry         = feature.Retry
+	Attachments   = feature.Attachments
+	Files         = feature.Files
+	Sidebar       = feature.Sidebar
+	ThreadEdit    = feature.ThreadEdit
+	MessageSearch = feature.MessageSearch
+	Greeting      = feature.Greeting
+	Float         = feature.Float
+	Dock          = feature.Dock
 )
 
-// Disable hides features.
 func (p *Params) Disable(features []Feature) {
-	for _, f := range features {
-		p.off |= 1 << f
-	}
+	p.off |= feature.NewSet(features)
 }
 
-// Off reports whether f is hidden.
 func (p Params) Off(f Feature) bool {
-	return p.off&(1<<f) != 0
+	return p.off.Has(f)
 }
 
 // InitDefault fills zero attachment limits and nil greeting parts with their defaults and assigns a fresh ID.

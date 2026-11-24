@@ -46,10 +46,6 @@ func (inst *instance) Chats() doors.Beam[map[api.ThreadID]api.InstanceChat] {
 	return inst.session.Chats()
 }
 
-func (inst *instance) Location() *time.Location {
-	return inst.session.Location()
-}
-
 func (inst *instance) ThreadOpen(ctx context.Context, id api.ThreadID, meta any) error {
 	backend := inst.backend.Load()
 	if backend == nil {

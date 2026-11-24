@@ -93,23 +93,6 @@ func (inst *instance) run() {
 		close(tab)
 		return true
 	})
-	synced := make(chan struct{})
-	go func() {
-		if inst.session.zone.Load() == nil {
-			var now time.Time
-			ch := doors.Call(inst.ctx, doors.ActionTime{}.Into(&now))
-			if err := <-ch; err == nil {
-				if err, ok := <-ch; ok && err == nil {
-					inst.session.zone.Store(now.Location())
-				}
-			}
-		}
-		select {
-		case <-tab:
-			close(synced)
-		case <-inst.ctx.Done():
-		}
-	}()
 	for {
 		var recv <-chan thread.Message
 		var done <-chan struct{}
@@ -133,8 +116,8 @@ func (inst *instance) run() {
 			inst.onMessage(m)
 		case send <- front:
 			inst.queue.PopFront()
-		case <-synced:
-			synced = nil
+		case <-tab:
+			tab = nil
 			inst.synced.Store(true)
 			if inst.backend.Load() != nil {
 				inst.getUplink()
