@@ -49,19 +49,20 @@ func TestIslandPathIsCanonical(t *testing.T) {
 	}
 }
 
-func TestTreeListsWhereNavigationLeads(t *testing.T) {
-	links := inputs{list: []input{{Kind: kindLink, Desc: "the orders list"}, {Kind: kindButton, Desc: "log out"}, {Kind: kindLink, Desc: "the orders list"}, {Kind: kindLink, Desc: "the customers list"}}}
+func TestTreeListsHighlights(t *testing.T) {
+	menu := inputs{list: []input{{Kind: kindLink, Desc: "the orders list", highlight: true}, {Kind: kindButton, Desc: "log out"}, {Kind: kindLink, Desc: "", highlight: true}, {Kind: kindLink, Desc: "the orders list", highlight: true}, {Kind: kindButton, Desc: "the customers list", highlight: true}}}
+	plain := inputs{list: []input{{Kind: kindLink, Desc: "the orders list"}, {Kind: kindLink, Desc: "the customers list"}}}
 	p := NewPage(context.Background())
 	p.space.children = []*space{
-		{root: p, name: "menu", path: "menu", parts: []*part{{nav: true}}, inputs: links},
-		{root: p, name: "recent", path: "recent", inputs: links},
+		{root: p, name: "menu", path: "menu", inputs: menu},
+		{root: p, name: "recent", path: "recent", inputs: plain},
 	}
 	got := p.space.tree(1, common.TierDeveloper)
-	if want := []string{"the orders list", "the customers list"}; !slices.Equal(got.Children[0].Goes, want) {
-		t.Fatalf("the navigation space goes %v, want %v", got.Children[0].Goes, want)
+	if want := []string{"the orders list", "the customers list"}; !slices.Equal(got.Children[0].Highlights, want) {
+		t.Fatalf("the menu highlights %v, want %v", got.Children[0].Highlights, want)
 	}
-	if got.Children[1].Goes != nil {
-		t.Fatalf("a plain space lists links %v", got.Children[1].Goes)
+	if got.Children[1].Highlights != nil {
+		t.Fatalf("a space without highlighted inputs lists %v", got.Children[1].Highlights)
 	}
 }
 
@@ -296,10 +297,10 @@ func TestTreeCountsWhatEachSpaceHolds(t *testing.T) {
 	form.list = []input{field, field}
 	form.data = []*data{note("x"), note("y"), note("x")}
 	got := p.space.tree(1, common.TierDeveloper).Children[0]
-	if got.Tools != 2 || got.Inputs != 1 || got.Data != 2 {
-		t.Fatalf("form counts %d tools, %d inputs and %d data, want 2, 1 and 2: inputs and data that cannot be told apart are listed once", got.Tools, got.Inputs, got.Data)
+	if !slices.Equal(got.Tools, []string{"a", "b"}) || got.Inputs != 1 || got.Data != 2 {
+		t.Fatalf("form shows tools %v, %d inputs and %d data, want a and b, 1 and 2: inputs and data that cannot be told apart are listed once", got.Tools, got.Inputs, got.Data)
 	}
-	if root := p.space.tree(0, common.TierDeveloper); root.Tools != 0 || root.Inputs != 0 || root.Data != 0 {
+	if root := p.space.tree(0, common.TierDeveloper); root.Tools != nil || root.Inputs != 0 || root.Data != 0 {
 		t.Fatalf("the empty root counts %+v, want nothing", root)
 	}
 }

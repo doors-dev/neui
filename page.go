@@ -51,23 +51,13 @@ type Space struct {
 	Name string
 	// Desc tells the agent what the region is and what it is for.
 	Desc string
-	// Nav marks the space as navigation, such as the main menu: the agent's
-	// page tree lists the descriptions of its links, so it sees where it can
-	// go without reading the space. Describe each link by what its
-	// destination offers.
-	Nav bool
 }
 
 // Proxy renders el inside the space. It fails when the enclosing render has
 // already ended.
 func (s Space) Proxy(cur gox.Cursor, el gox.Elem) error {
 	ctx := cur.Context()
-	var err error
-	if s.Nav {
-		ctx, err = instance.GetSpace(ctx).AddNav(ctx, s.Name, s.Desc)
-	} else {
-		ctx, err = instance.GetSpace(ctx).AddSpace(ctx, s.Name, s.Desc)
-	}
+	ctx, err := instance.GetSpace(ctx).AddSpace(ctx, s.Name, s.Desc)
 	if err != nil {
 		return err
 	}
@@ -219,6 +209,12 @@ type Use struct {
 	Desc string
 	// Rights limits what the agent may do with it. Default RW.
 	Rights Rights
+	// Highlight highlights the element for the agent: the page tree lists its
+	// Desc, so the agent sees it without reading its space. It changes nothing
+	// on screen. Each highlight costs context on every tree call: highlight
+	// only what helps the agent find its way, such as menu links, and describe
+	// a link by what its destination offers.
+	Highlight bool
 }
 
 // Proxy renders el and registers its element. When el does not start with a
@@ -299,27 +295,27 @@ func (p *inputPrinter) Send(j gox.Job) error {
 
 func (p *inputPrinter) target(open *gox.JobOpen) (gox.Elem, error) {
 	ctx, tag, attrs := open.Ctx, open.Tag, open.Attrs
-	rights, desc := p.input.Rights.rights(), p.input.Desc
+	rights, desc, highlight := p.input.Rights.rights(), p.input.Desc, p.input.Highlight
 	space := instance.GetSpace(p.cur.Context())
 	switch {
 	case strings.EqualFold(tag, "button"):
-		return space.Button(ctx, rights, desc, attrs)
+		return space.Button(ctx, rights, desc, highlight, attrs)
 	case strings.EqualFold(tag, "a"):
-		return space.Link(ctx, rights, desc, attrs)
+		return space.Link(ctx, rights, desc, highlight, attrs)
 	case strings.EqualFold(tag, "input"):
 		switch t, _ := attrs.Get("type").Value().(string); {
 		case strings.EqualFold(t, "submit"), strings.EqualFold(t, "button"),
 			strings.EqualFold(t, "reset"), strings.EqualFold(t, "image"):
-			return space.Button(ctx, rights, desc, attrs)
+			return space.Button(ctx, rights, desc, highlight, attrs)
 		case strings.EqualFold(t, "radio"):
-			return space.Radio(ctx, rights, desc, attrs)
+			return space.Radio(ctx, rights, desc, highlight, attrs)
 		default:
-			return space.Input(ctx, rights, desc, attrs)
+			return space.Input(ctx, rights, desc, highlight, attrs)
 		}
 	case strings.EqualFold(tag, "textarea"):
-		return space.Textarea(ctx, rights, desc, attrs)
+		return space.Textarea(ctx, rights, desc, highlight, attrs)
 	case strings.EqualFold(tag, "select"):
-		return space.Select(ctx, rights, desc, attrs)
+		return space.Select(ctx, rights, desc, highlight, attrs)
 	default:
 		return nil, fmt.Errorf("unsupported tag %q for neui.Use", tag)
 	}

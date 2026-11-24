@@ -33,7 +33,7 @@ type treeNode struct {
 	Name     string
 	Desc     string
 	Island   bool
-	Tools    int
+	Tools    []string
 	Children []treeNode
 }
 
@@ -88,8 +88,8 @@ return pitcher().price`}),
 	testkit.Decode(t, result(1), &root)
 	spaces := root.paths("")
 	for path, want := range map[string]int{"api.orders": len(orderOperations) + 1, "api.customers": len(customerOperations) + 1, "api.products": len(productOperations) + 1} {
-		if got, ok := spaces[path]; !ok || got.Tools != want {
-			t.Errorf("tree shows %s with %d tools, want %d", path, got.Tools, want)
+		if got, ok := spaces[path]; !ok || len(got.Tools) != want {
+			t.Errorf("tree shows %s with %d tools, want %d", path, len(got.Tools), want)
 		}
 	}
 	var script struct{ Result float64 }

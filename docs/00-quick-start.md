@@ -280,11 +280,9 @@ The agent can help the user find their way around your app, offer features your 
 First, organize page regions into spaces. Spaces separate the functional areas of your app and help the agent understand the page:
 
 ```gox
-~>neui.Space{Name: "navigation", Desc: "main navigation menu", Nav: true} <nav>...</nav>
+~>neui.Space{Name: "navigation", Desc: "main navigation menu"} <nav>...</nav>
 ~>neui.Space{Name: "product", Desc: "product card"} <section>...</section>
 ```
-
-Mark the main menu with `Nav: true`: the agent's page tree then lists its links' descriptions, so it sees where it can go from anywhere. Describe each link by what its destination offers, not only where it leads: `"go to the orders list: search, filter by status and dates, sort by any column"`.
 
 ### Inputs
 
@@ -294,6 +292,8 @@ Next, mark what the agent can use: put `neui.Use` in front of the element. With 
 ~>neui.Use{Desc: "go to the orders list"} <a (doors.ALink{Model: Path{Section: SectionOrders}})>Orders</a>
 ~>neui.Use{Desc: "place the order", Rights: neui.R} <button type="submit">Place order</button>
 ```
+
+Set `Highlight: true` on the main menu's links: the agent's page tree then lists their descriptions, so it sees where it can go from anywhere. Describe each link by what its destination offers, not only where it leads: `"go to the orders list: search, filter by status and dates, sort by any column"`.
 
 Keep one task per space: a form, its fields and its submit button together. It makes the agent's work easier:
 

@@ -45,6 +45,7 @@ type input struct {
 	elementID string                   `json:"-"`
 	members   map[uint]context.Context `json:"-"`
 	name      string                   `json:"-"`
+	highlight bool                     `json:"-"`
 	raw       json.RawMessage          `json:"-"`
 	hash      uint64                   `json:"-"`
 }
@@ -72,27 +73,27 @@ func (s *space) elementID() string {
 	return fmt.Sprintf("%s-%d", s.path, s.root.counter)
 }
 
-func (s Space) Button(ctx context.Context, permissios Rights, desc string, attrs gox.Attrs) (gox.Elem, error) {
-	return s.element(ctx, permissios, desc, attrs, "button", kindButton, element)
+func (s Space) Button(ctx context.Context, permissios Rights, desc string, highlight bool, attrs gox.Attrs) (gox.Elem, error) {
+	return s.element(ctx, permissios, desc, highlight, attrs, "button", kindButton, element)
 }
 
-func (s Space) Link(ctx context.Context, permissios Rights, desc string, attrs gox.Attrs) (gox.Elem, error) {
-	return s.element(ctx, permissios, desc, attrs, "link", kindLink, element)
+func (s Space) Link(ctx context.Context, permissios Rights, desc string, highlight bool, attrs gox.Attrs) (gox.Elem, error) {
+	return s.element(ctx, permissios, desc, highlight, attrs, "link", kindLink, element)
 }
 
-func (s Space) Input(ctx context.Context, permissios Rights, desc string, attrs gox.Attrs) (gox.Elem, error) {
-	return s.element(ctx, permissios, desc, attrs, "text", kindInput, element)
+func (s Space) Input(ctx context.Context, permissios Rights, desc string, highlight bool, attrs gox.Attrs) (gox.Elem, error) {
+	return s.element(ctx, permissios, desc, highlight, attrs, "text", kindInput, element)
 }
 
-func (s Space) Textarea(ctx context.Context, permissios Rights, desc string, attrs gox.Attrs) (gox.Elem, error) {
-	return s.element(ctx, permissios, desc, attrs, "textarea", kindInput, element)
+func (s Space) Textarea(ctx context.Context, permissios Rights, desc string, highlight bool, attrs gox.Attrs) (gox.Elem, error) {
+	return s.element(ctx, permissios, desc, highlight, attrs, "textarea", kindInput, element)
 }
 
-func (s Space) Select(ctx context.Context, permissios Rights, desc string, attrs gox.Attrs) (gox.Elem, error) {
-	return s.element(ctx, permissios, desc, attrs, "select", kindInput, element)
+func (s Space) Select(ctx context.Context, permissios Rights, desc string, highlight bool, attrs gox.Attrs) (gox.Elem, error) {
+	return s.element(ctx, permissios, desc, highlight, attrs, "select", kindInput, element)
 }
 
-func (s Space) Radio(ctx context.Context, permissios Rights, desc string, attrs gox.Attrs) (gox.Elem, error) {
+func (s Space) Radio(ctx context.Context, permissios Rights, desc string, highlight bool, attrs gox.Attrs) (gox.Elem, error) {
 	idAttr := attrs.Get("data-neid")
 	if idAttr.IsSet() {
 		return nil, errors.New("element is already used")
@@ -130,6 +131,7 @@ func (s Space) Radio(ctx context.Context, permissios Rights, desc string, attrs 
 			Type:      "radio",
 			name:      name,
 			Rights:    permissios,
+			highlight: highlight,
 		}
 		type bare input
 		raw, err := json.Marshal(bare(in))
@@ -167,7 +169,7 @@ func (s Space) Radio(ctx context.Context, permissios Rights, desc string, attrs 
 	return radioGroup(elementID), nil
 }
 
-func (s Space) element(ctx context.Context, permissios Rights, desc string, attrs gox.Attrs, typ string, kind kind, script func(string) gox.Elem) (gox.Elem, error) {
+func (s Space) element(ctx context.Context, permissios Rights, desc string, highlight bool, attrs gox.Attrs, typ string, kind kind, script func(string) gox.Elem) (gox.Elem, error) {
 	idAttr := attrs.Get("data-neid")
 	if idAttr.IsSet() {
 		return nil, errors.New("element is already used")
@@ -198,6 +200,7 @@ func (s Space) element(ctx context.Context, permissios Rights, desc string, attr
 		Desc:      desc,
 		Rights:    permissios,
 		Type:      typ,
+		highlight: highlight,
 	}
 	type bare input
 	raw, err := json.Marshal(bare(in))

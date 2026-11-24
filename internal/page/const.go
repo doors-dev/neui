@@ -61,7 +61,7 @@ const focusDesc = `Focus a UI input and scroll it into view, to point the user a
 const syncName = "sync"
 const syncDesc = `Read one space of the currently rendered page whole.`
 const treeName = "tree"
-const treeDesc = `Show the spaces of the currently rendered page: names, descriptions and how many tools, inputs and data items each has, without their content. It does not count as reading them.`
+const treeDesc = `Show the spaces of the currently rendered page: names, descriptions, tool names and how many inputs and data items each has. It does not count as reading them.`
 
 const refusedUnreadMessage = "not done: this space had not been read: sync it, then call again"
 const refusedChangedMessage = "not done: the space changed since your last read: sync it, then call again"

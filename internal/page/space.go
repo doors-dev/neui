@@ -54,19 +54,14 @@ type space struct {
 
 type part struct {
 	desc string
-	nav  bool
 }
 
 func (s Space) AddSpace(ctx context.Context, name string, desc string) (context.Context, error) {
-	return s.addSpace(ctx, name, desc, nil, false)
-}
-
-func (s Space) AddNav(ctx context.Context, name string, desc string) (context.Context, error) {
-	return s.addSpace(ctx, name, desc, nil, true)
+	return s.addSpace(ctx, name, desc, nil)
 }
 
 func (s Space) AddIsland(ctx context.Context, name string, desc string, island island.Island) (context.Context, error) {
-	ctx, err := s.addSpace(ctx, name, desc, island, false)
+	ctx, err := s.addSpace(ctx, name, desc, island)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +69,7 @@ func (s Space) AddIsland(ctx context.Context, name string, desc string, island i
 	return ctx, nil
 }
 
-func (s Space) addSpace(ctx context.Context, name string, desc string, island island.Island, nav bool) (context.Context, error) {
+func (s Space) addSpace(ctx context.Context, name string, desc string, island island.Island) (context.Context, error) {
 	if name == "" {
 		return nil, errors.New("space name is empty")
 	}
@@ -108,7 +103,7 @@ func (s Space) addSpace(ctx context.Context, name string, desc string, island is
 		s.rehash(3)
 	}
 	space := s.children[index]
-	added := &part{desc: desc, nav: nav}
+	added := &part{desc: desc}
 	space.parts = append(space.parts, added)
 	if desc != "" {
 		space.desc = desc
@@ -333,25 +328,24 @@ func (s *space) diff(old snapshot, tier common.ModelTier) *diff {
 }
 
 func (s *space) tree(depth uint, tier common.ModelTier) node {
-	out := node{child: child{Name: s.name, Desc: s.desc, Island: s.island != nil}, Tools: len(s.tools)}
+	out := node{child: child{Name: s.name, Desc: s.desc, Island: s.island != nil}}
+	for _, t := range s.tools {
+		out.Tools = append(out.Tools, t.Name)
+	}
 	seen := map[uint64]bool{}
 	for _, in := range s.list {
 		if !seen[in.hash] {
 			seen[in.hash] = true
 			out.Inputs++
 		}
+		if in.highlight && in.Desc != "" && !slices.Contains(out.Highlights, in.Desc) {
+			out.Highlights = append(out.Highlights, in.Desc)
+		}
 	}
 	for _, e := range s.data {
 		if !seen[e.hash] {
 			seen[e.hash] = true
 			out.Data++
-		}
-	}
-	if slices.ContainsFunc(s.parts, func(p *part) bool { return p.nav }) {
-		for _, in := range s.list {
-			if in.Kind == kindLink && !slices.Contains(out.Goes, in.Desc) {
-				out.Goes = append(out.Goes, in.Desc)
-			}
 		}
 	}
 	for _, c := range s.children {

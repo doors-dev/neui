@@ -254,8 +254,8 @@ func TestTreeShowsSpacesAndCountsOnly(t *testing.T) {
 		got = append(got, string(raw))
 	}
 	want := []string{
-		`{"name":"","desc":"","tools":1,"data":1,"children":[{"name":"cart","desc":"the cart","tools":1,"inputs":2,"data":1},{"name":"notes","desc":"the notes","tools":1,"data":1}]}`,
-		`{"name":"cart","desc":"the cart","tools":1,"inputs":2,"data":1}`,
+		`{"name":"","desc":"","tools":["checkout"],"data":1,"children":[{"name":"cart","desc":"the cart","tools":["add"],"inputs":2,"data":1},{"name":"notes","desc":"the notes","tools":["restock"],"data":1}]}`,
+		`{"name":"cart","desc":"the cart","tools":["add"],"inputs":2,"data":1}`,
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("tree answered\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
@@ -1549,7 +1549,7 @@ func TestSameNamedSpacesAreOne(t *testing.T) {
 	results := testkit.Results(p.Request(t, 1))
 	var tree json.RawMessage
 	testkit.Decode(t, results[0], &tree)
-	if want := `{"name":"","desc":"","tools":2,"children":[{"name":"orders","desc":"the orders","tools":2,"inputs":2,"data":2,"children":[{"name":"detail","desc":"the detail","tools":1,"data":1}]}]}`; string(tree) != want {
+	if want := `{"name":"","desc":"","tools":["hide_first","hide_second"],"children":[{"name":"orders","desc":"the orders","tools":["add","archive"],"inputs":2,"data":2,"children":[{"name":"detail","desc":"the detail","tools":["open"],"data":1}]}]}`; string(tree) != want {
 		t.Fatalf("tree answered\n%s\nwant\n%s", tree, want)
 	}
 	var orders state
@@ -1621,21 +1621,21 @@ func TestSpaceGoesWithItsLastPart(t *testing.T) {
 	}
 	var tree json.RawMessage
 	testkit.Decode(t, testkit.Results(p.Request(t, 4))[0], &tree)
-	if want := `{"name":"","desc":"","tools":2}`; string(tree) != want {
+	if want := `{"name":"","desc":"","tools":["hide_first","hide_second"]}`; string(tree) != want {
 		t.Fatalf("tree answered %s, want %s", tree, want)
 	}
 }
 
-func TestSpacePartsShareDescAndNav(t *testing.T) {
+func TestSpacePartsShareDescAndHighlights(t *testing.T) {
 	main, footer := doors.NewSource(true), doors.NewSource(false)
-	part := func(on doors.Source[bool], s neui.Space, desc string, href string) gox.Elem {
+	part := func(on doors.Source[bool], s neui.Space, use neui.Use, href string) gox.Elem {
 		return on.Bind(func(on bool) gox.Elem {
 			return func(cur gox.Cursor) error {
 				if !on {
 					return nil
 				}
 				return s.Proxy(cur, func(cur gox.Cursor) error {
-					return (neui.Use{Desc: desc}).Proxy(cur, func(cur gox.Cursor) error {
+					return use.Proxy(cur, func(cur gox.Cursor) error {
 						if err := cur.Init("a"); err != nil {
 							return err
 						}
@@ -1661,9 +1661,9 @@ func TestSpacePartsShareDescAndNav(t *testing.T) {
 				main.Mutate(ctx, func(bool) bool { return false })
 				return "hidden", nil
 			}},
-			part(doors.NewSource(true), neui.Space{Name: "menu"}, "the orders list", "/orders"),
-			part(main, neui.Space{Name: "menu", Desc: "the main menu", Nav: true}, "the customers list", "/customers"),
-			part(footer, neui.Space{Name: "menu", Desc: "the footer menu"}, "the help", "/help"),
+			part(doors.NewSource(true), neui.Space{Name: "menu"}, neui.Use{Desc: "the orders list", Highlight: true}, "/orders"),
+			part(main, neui.Space{Name: "menu", Desc: "the main menu"}, neui.Use{Desc: "the customers list", Highlight: true}, "/customers"),
+			part(footer, neui.Space{Name: "menu", Desc: "the footer menu"}, neui.Use{Desc: "the help"}, "/help"),
 		} {
 			if err := cur.Any(el); err != nil {
 				return err
@@ -1689,9 +1689,9 @@ func TestSpacePartsShareDescAndNav(t *testing.T) {
 		got = append(got, string(tree))
 	}
 	want := []string{
-		`{"name":"","desc":"","tools":2,"children":[{"name":"menu","desc":"the main menu","inputs":2,"goes":["the orders list","the customers list"]}]}`,
-		`{"name":"","desc":"","tools":2,"children":[{"name":"menu","desc":"the footer menu","inputs":3,"goes":["the orders list","the customers list","the help"]}]}`,
-		`{"name":"","desc":"","tools":2,"children":[{"name":"menu","desc":"the footer menu","inputs":2}]}`,
+		`{"name":"","desc":"","tools":["hide_main","show_footer"],"children":[{"name":"menu","desc":"the main menu","inputs":2,"highlights":["the orders list","the customers list"]}]}`,
+		`{"name":"","desc":"","tools":["hide_main","show_footer"],"children":[{"name":"menu","desc":"the footer menu","inputs":3,"highlights":["the orders list","the customers list"]}]}`,
+		`{"name":"","desc":"","tools":["hide_main","show_footer"],"children":[{"name":"menu","desc":"the footer menu","inputs":2,"highlights":["the orders list"]}]}`,
 	}
 	anyOrder := func(trees []string) string {
 		var out []string
@@ -1701,8 +1701,8 @@ func TestSpacePartsShareDescAndNav(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, child := range tree["children"].([]any) {
-				if goes, ok := child.(map[string]any)["goes"].([]any); ok {
-					slices.SortFunc(goes, func(a, b any) int { return strings.Compare(a.(string), b.(string)) })
+				if highlights, ok := child.(map[string]any)["highlights"].([]any); ok {
+					slices.SortFunc(highlights, func(a, b any) int { return strings.Compare(a.(string), b.(string)) })
 				}
 			}
 			b, err := json.Marshal(tree)
@@ -1714,7 +1714,78 @@ func TestSpacePartsShareDescAndNav(t *testing.T) {
 		return strings.Join(out, "\n")
 	}
 	if anyOrder(got) != anyOrder(want) {
-		t.Fatalf("tree answered\n%s\nwant, in any order of goes\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+		t.Fatalf("tree answered\n%s\nwant, in any order of highlights\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+func TestHighlightShowsInTheTreeOnly(t *testing.T) {
+	lit := doors.NewSource(false)
+	page := func(cur gox.Cursor) error {
+		if err := cur.Comp(neui.Tool[struct{}, string]{Name: "highlight", Desc: "highlights the orders link", Handler: func(ctx context.Context, _ struct{}) (string, error) {
+			lit.Mutate(ctx, func(bool) bool { return true })
+			return "highlighted", nil
+		}}); err != nil {
+			return err
+		}
+		return (neui.Space{Name: "menu", Desc: "the main menu"}).Proxy(cur, func(cur gox.Cursor) error {
+			if err := cur.Comp(neui.Tool[struct{}, string]{Name: "noop", Desc: "does nothing", Handler: func(context.Context, struct{}) (string, error) {
+				return "nothing", nil
+			}}); err != nil {
+				return err
+			}
+			return cur.Any(lit.Bind(func(on bool) gox.Elem {
+				return func(cur gox.Cursor) error {
+					return (neui.Use{Desc: "the orders list", Highlight: on}).Proxy(cur, func(cur gox.Cursor) error {
+						if err := cur.Init("a"); err != nil {
+							return err
+						}
+						if err := cur.Set("href", "/orders"); err != nil {
+							return err
+						}
+						if err := cur.Submit(); err != nil {
+							return err
+						}
+						return cur.Close()
+					})
+				}
+			}))
+		})
+	}
+	p := testkit.NewProvider(api.Model{},
+		round(call("tree", "page__tree", map[string]any{}), call("root", "page__sync", map[string]any{"path": ""}), call("menu", "page__sync", map[string]any{"path": "menu"})),
+		testkit.Call("page__tool", map[string]any{"path": "", "tool": "highlight", "arg": map[string]any{}}),
+		round(call("tree", "page__tree", map[string]any{}), call("noop", "page__tool", map[string]any{"path": "menu", "tool": "noop", "arg": map[string]any{}})),
+		testkit.Call("page__sync", map[string]any{"path": "menu"}),
+		testkit.Say("done"),
+	)
+	c := stack.Page(t, stack.Host{Provider: p, Page: page})
+	c.Send("highlight the orders link")
+	c.Wait()
+	raw := func(r api.ContentToolResult) string {
+		var out json.RawMessage
+		testkit.Decode(t, r, &out)
+		return string(out)
+	}
+	before := testkit.Results(p.Request(t, 1))
+	if want := `{"name":"","desc":"","tools":["highlight"],"children":[{"name":"menu","desc":"the main menu","tools":["noop"],"inputs":1}]}`; raw(before[0]) != want {
+		t.Fatalf("tree answered\n%s\nwant\n%s", raw(before[0]), want)
+	}
+	var highlighted toolOutput
+	testkit.Decode(t, testkit.Results(p.Request(t, 2))[0], &highlighted)
+	if highlighted.Output != "highlighted" || !empty(highlighted.Diff) || highlighted.Changes != nil {
+		t.Fatalf("highlighting answered %+v with changes %s, want no change anywhere", highlighted, highlighted.Changes)
+	}
+	after := testkit.Results(p.Request(t, 3))
+	if want := `{"name":"","desc":"","tools":["highlight"],"children":[{"name":"menu","desc":"the main menu","tools":["noop"],"inputs":1,"highlights":["the orders list"]}]}`; raw(after[0]) != want {
+		t.Fatalf("tree answered\n%s\nwant\n%s", raw(after[0]), want)
+	}
+	var noop toolOutput
+	testkit.Decode(t, after[1], &noop)
+	if noop.Output != "nothing" {
+		t.Fatalf("a call on the menu after the highlight answered %+v, want it run on the read from before", noop)
+	}
+	if synced := raw(testkit.Results(p.Request(t, 4))[0]); synced != raw(before[2]) {
+		t.Fatalf("the menu synced as\n%s\nafter the highlight, want it as before\n%s", synced, raw(before[2]))
 	}
 }
 
@@ -1792,8 +1863,8 @@ func TestIslandReplacesItsNamesake(t *testing.T) {
 		got = append(got, string(tree))
 	}
 	want := []string{
-		`{"name":"","desc":"","tools":2,"children":[{"name":"board","desc":"an island","island":true,"more":1},{"name":"pad","desc":"a space"}]}`,
-		`{"name":"","desc":"","tools":2,"children":[{"name":"board","desc":"an island","island":true,"more":1},{"name":"pad","desc":"a space"}]}`,
+		`{"name":"","desc":"","tools":["hide_first","show_second"],"children":[{"name":"board","desc":"an island","island":true,"more":1},{"name":"pad","desc":"a space"}]}`,
+		`{"name":"","desc":"","tools":["hide_first","show_second"],"children":[{"name":"board","desc":"an island","island":true,"more":1},{"name":"pad","desc":"a space"}]}`,
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("tree answered\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
@@ -1850,7 +1921,7 @@ func TestDeferredRerenderKeepsSpacesCurrent(t *testing.T) {
 	c.Wait()
 	var tree json.RawMessage
 	testkit.Decode(t, testkit.Results(p.Request(t, 3))[0], &tree)
-	if want := `{"name":"","desc":"","tools":1,"children":[{"name":"board","desc":"the orders","island":true,"more":1},{"name":"orders","desc":"the orders","data":1}]}`; string(tree) != want {
+	if want := `{"name":"","desc":"","tools":["load"],"children":[{"name":"board","desc":"the orders","island":true,"more":1},{"name":"orders","desc":"the orders","data":1}]}`; string(tree) != want {
 		t.Fatalf("tree answered\n%s\nwant\n%s", tree, want)
 	}
 }
@@ -1904,7 +1975,7 @@ func TestSpacesMovedBetweenDoorsStayCurrent(t *testing.T) {
 	for n := 1; n <= 20; n++ {
 		var tree json.RawMessage
 		testkit.Decode(t, testkit.Results(p.Request(t, 2*n+1))[0], &tree)
-		if want := fmt.Sprintf(`{"name":"","desc":"","tools":1,"children":[{"name":"board","desc":"board %d","island":true,"more":1},{"name":"detail","desc":"order %d"}]}`, n, n); string(tree) != want {
+		if want := fmt.Sprintf(`{"name":"","desc":"","tools":["bump"],"children":[{"name":"board","desc":"board %d","island":true,"more":1},{"name":"detail","desc":"order %d"}]}`, n, n); string(tree) != want {
 			t.Fatalf("after move %d tree answered\n%s\nwant\n%s", n, tree, want)
 		}
 	}
@@ -1963,9 +2034,9 @@ func TestSpaceDescFallsBackWhenItsPartLeaves(t *testing.T) {
 		got = append(got, string(tree))
 	}
 	want := []string{
-		`{"name":"","desc":"","tools":2,"children":[{"name":"orders","desc":"the third"}]}`,
-		`{"name":"","desc":"","tools":2,"children":[{"name":"orders","desc":"the first"}]}`,
-		`{"name":"","desc":"","tools":2,"children":[{"name":"orders","desc":""}]}`,
+		`{"name":"","desc":"","tools":["hide_first","hide_third"],"children":[{"name":"orders","desc":"the third"}]}`,
+		`{"name":"","desc":"","tools":["hide_first","hide_third"],"children":[{"name":"orders","desc":"the first"}]}`,
+		`{"name":"","desc":"","tools":["hide_first","hide_third"],"children":[{"name":"orders","desc":""}]}`,
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("tree answered\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
