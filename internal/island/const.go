@@ -36,8 +36,9 @@ const scriptErrorNote = "the part stopped at this error and any parts queued beh
 const scriptErrorActionNote = "the part threw this error while handling last_action, the action its last ui.draw() returned; what it did before the error, app calls included, stays done; any parts queued behind it were dropped, listed in dropped; the app runs on: send the fix with island_append, and in it finish that action without repeating what is done, or ask the user to redo it"
 const callErrorNote = "fix the source and pass it again, by an update or in a new view or control"
 const widgetErrorNote = "the view or control keeps running: update or replace it"
-const undrawnNote = "the app is running but has not drawn yet, so the user sees nothing: append a part that calls ui.draw(), or end the app with island_end"
-const undrawnErrorNote = "nothing has been drawn yet: the user sees an empty panel"
+const undrawnNote = "the app is running but has not drawn yet, so the user does not see it: append a part that calls ui.draw(), or end the app with island_end"
+const undrawnErrorNote = "nothing has been drawn yet, so the user does not see the app"
+const idleNote = "script %d ended with no ui.draw() waiting, so the user's last action stays pending and the app's controls do nothing: to go on, or to show a final screen, append a part that draws; if the work is done, end the app with ui.end() or island_end; ignore this if you already sent the next script"
 const turnTimeMessage = "the part went that long without ui.draw, app function and tool calls included, and was stopped: keep the work between two draws short and avoid unbounded loops"
 const queueFullMessage = "too many parts are already queued: wait for the app to run them, or send this one with island_interrupt"
 const fnTimeMessage = "the function ran that long and was stopped: keep it short and avoid unbounded loops"
@@ -74,7 +75,7 @@ A frame with no control can have no action: its ui.draw() waits until you send t
 
 ui.notify(value) queues value for you as part of the frame: the draw sends the queued values to you as one notifications_list record, and so does each part's end, an error included.
 
-When a part ends, whether its code finishes or throws, the app stays open with its last drawn screen and waits for the next part. No draw is waiting then, so its controls do nothing until a later part draws. To close the app from a script, call ui.end().
+When a part ends, whether its code finishes or throws, the app stays open with its last drawn screen and waits for the next part: changes made after that draw are not shown, the user's last action stays pending, and the controls do nothing until a later part draws. To leave a final screen, such as a summary, set it and draw it. To close the app from a script, call ui.end(): the island then shows its end screen instead.
 
 A throw reaches you as a script_error with its line and reason. An error you catch reaches you only if you ui.notify it; otherwise the app can break without you knowing. So catch only errors you expect and handle, such as a tool refusing input the user can correct, and put only that call in the try, not the code that uses its result. Let anything else throw, or catch it and ui.notify it, and fix it in the next part. If you spot a bug in a part that is still running, don't wait for the user to hit it: send the fix at once with island_interrupt; the app's views and state stay. A part that throws keeps what it ran before the error, so a part you send again should assign, not push or concat.
 
@@ -102,7 +103,7 @@ Example, with made-up names: the real views, controls, layouts and app functions
     body.set(ui.orderEditor({ order: app.order({ id: action.output }) }))
     action = ui.draw()
 
-What the island shows is also a space of the page: the island's screen child space. While an app runs, it holds a child space for each view and control on screen. A view or control may expose inputs, data or tools there, so you can help the user with the app or check it, but none has to.
+What the island shows is also a space of the page: the island's screen child space. While an app runs, it holds a child space for each view and control on screen. A view or control may expose inputs, data or tools there, so you can help the user with the app or look into what they report, but none has to.
 `
 
 const guideViewsAndControls = `
@@ -156,7 +157,7 @@ Example, with made-up names:
           try {
             app.saveOrder(action.output)
           } catch (e) {
-            status.update({ text: e.message })
+            status.update({ text: e.message, style: "danger" }) // right above the editor
             continue
           }
           saved++
@@ -165,7 +166,7 @@ Example, with made-up names:
             ui.notify({ order: action.output.id, refund: action.output.refund })
             return // the part ends here
           }
-          status.update({ text: "Saved order " + action.output.id })
+          status.update({ text: "Saved order " + action.output.id, style: "success" })
           body.set(orders)
         }
       }
@@ -176,7 +177,7 @@ Saving an order with a refund ends the part, and its end sends you [{"order":7,"
 
     // island_append
     app.refundOrder({ id: 7, amount: 120 })
-    status.update({ text: "Refund of 120 for order 7 approved" })
+    status.update({ text: "Refund of 120 for order 7 approved", style: "success" })
     body.set(orders)
     work()
 

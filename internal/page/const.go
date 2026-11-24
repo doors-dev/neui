@@ -96,12 +96,12 @@ const islandFromJSMessage = "island tools are not accessible from a script"
 const islandName = "island"
 const islandsDesc = `Islands
 
-An island is a space where you run your own app for the user, built and driven by a script you write. Its description usually says what its apps can work with and do. To the user, an island is part of the page: tell them what its app shows or asks, not how its script, parts and task work, unless they ask.
+An island is a space where you run your own app for the user, built and driven by a script you write. Its description usually says what its apps can work with and do. To the user, an island is part of the page: tell them what its app shows or asks, not how its script, parts and task work, unless they ask. Only you can start an app. An app lasts until it ends or the chat moves to a new page; to show it again, start it again from its script. If the user asks to store an app, save its script to agent_uploads, and share the link with them if they ask.
 
 Open one when it serves the user better than chat or direct page calls do:
 - Automation: repetitive or multi-step work in the app that you can drive for them, with the user confirming or choosing along the way instead of being asked in chat at every step.
 - Complex input: several fields, a choice from options, a confirmation, or a structured answer that would be clumsy to collect in prose.
-- A custom view: a table, summary, comparison or overview built from app data that the app itself doesn't show.
+- A custom view: a table, chart, summary, comparison or dashboard built from app data that the app itself doesn't show.
 
 Don't open one when a script alone does the job and you have the js module; for example, when bulk work on the page needs nothing from the user.
 

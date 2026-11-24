@@ -550,7 +550,7 @@ func TestIslandPartWithoutDrawReportsTheEmptyScreen(t *testing.T) {
 	c.Send("open the board")
 	c.Wait()
 	record := recorded(t, c, p, `kind="script_note"`)
-	if !strings.Contains(record, "has not drawn yet, so the user sees nothing") {
+	if !strings.Contains(record, "has not drawn yet, so the user does not see it") {
 		t.Fatalf("a part that ended without drawing reported %q, want the empty-screen note", record)
 	}
 }

@@ -161,6 +161,15 @@ func Report(ctx context.Context, err error) {
 	runner.reportWidget(widget, err)
 }
 
+func Ended(ctx context.Context) bool {
+	store, ok := ctx.Value(common.KeyIslandStore).(doors.Store)
+	if !ok {
+		return false
+	}
+	runner, ok := store.Load(runnerKey{}).(*runner)
+	return ok && runner.owner.ctx.Err() != nil
+}
+
 func (r *runner) reportWidget(widget common.IslandWidget, err error) {
 	if logErr := js.Log(r.owner.fs, r.owner.log, "ERROR", fmt.Sprintf("widget %s #%d: %s", widget.Name, widget.ID, err)); logErr != nil {
 		slog.Error("island: widget log write failed", "log", r.owner.log, "err", logErr)

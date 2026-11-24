@@ -418,10 +418,14 @@ func (r *run) run() {
 				data, _ := json.Marshal(err.Error())
 				r.task.Notify(data, meta)
 			case err == nil:
-				r.state.FlushNotifications("")
 				r.mu.Lock()
 				idle := r.queue.Len() == 0
 				r.mu.Unlock()
+				note := ""
+				if idle && r.state.Drawn() {
+					note = fmt.Sprintf(idleNote, eval.script)
+				}
+				r.state.FlushNotifications(note)
 				if idle && !r.undrawn && !r.state.Drawn() {
 					r.undrawn = true
 					r.Note(undrawnNote)

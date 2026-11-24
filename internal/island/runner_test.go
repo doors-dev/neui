@@ -488,6 +488,11 @@ func TestCallCallerCancelBusyLoop(t *testing.T) {
 
 func TestCallAppEnded(t *testing.T) {
 	r, task, ctx := newCallTestRun(t, api.IslandConfig{}, NewLibrary())
+	throws := callFrom[int, int](t, "(a) => { throw new Error('boom') }")
+	if _, err := throws.Call(ctx, 1); err == nil || Ended(ctx) {
+		t.Fatalf("a failing call on a running app: %v, ended %v", err, Ended(ctx))
+	}
+	task.WaitNotes(t, 1)
 	slow := callFrom[int, int](t, "(a) => { while (true) {} }")
 	done := make(chan error, 1)
 	go func() {
@@ -505,12 +510,15 @@ func TestCallAppEnded(t *testing.T) {
 		t.Fatal("call outlived its app")
 	}
 	quick := callFrom[int, int](t, "(a) => a")
-	if _, err := quick.Call(ctx, 1); !errors.Is(err, errStopped) {
-		t.Fatalf("after end: %v", err)
+	if _, err := quick.Call(ctx, 1); !errors.Is(err, errStopped) || !Ended(ctx) {
+		t.Fatalf("after end: %v, ended %v", err, Ended(ctx))
 	}
-	task.WaitNotes(t, 0)
-	if n := reported(r); n != 0 {
-		t.Fatalf("%d reports for calls that did not fail by their function", n)
+	task.WaitNotes(t, 1)
+	if n := reported(r); n != 1 {
+		t.Fatalf("%d reports, want only the failing call's", n)
+	}
+	if Ended(context.Background()) {
+		t.Fatal("ended outside an island")
 	}
 }
 

@@ -146,7 +146,7 @@ func pressScript(t *testing.T, shown <-chan string, then func(input string) test
 	return testkit.NewProvider(api.Model{},
 		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
 		revised(t, func(revision string) testkit.Turn {
-			return start(revision, `var b = ui.press({label: "go", value: "(n) => app.mark({N: n}) * 2"}); ui.root.set(b); var r = ui.draw(); ui.notify(r); ui.draw(1)`)
+			return start(revision, `var b = ui.press({label: "go", value: "(n) => app.mark({N: n}) * 2"}); ui.root.set(b); var r = ui.draw(); ui.notify(r); ui.draw()`)
 		}),
 		shownThen(t, shown, testkit.Call("page__sync", map[string]any{"path": "board.screen.press_1"})),
 		pressSynced(t, then),
@@ -190,6 +190,24 @@ func TestIslandControlClickSubmits(t *testing.T) {
 		t.Fatalf("value called app.mark with %d, want 21", n)
 	}
 	carries(t, lastText(p.Request(t, 4)), `<task_notify `, `script="1"`, `[{"id":1,"output":42}]`)
+}
+
+func TestIslandPartEndingWithoutDrawNotesDeadControls(t *testing.T) {
+	marks := make(chan int, 1)
+	shown := make(chan string, 1)
+	p := testkit.NewProvider(api.Model{},
+		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
+		revised(t, func(revision string) testkit.Turn {
+			return start(revision, `var b = ui.press({label: "wait", value: "(n) => n"}); ui.root.set(b); ui.draw()`)
+		}),
+		shownThen(t, shown, testkit.Call("page__island_interrupt", map[string]any{"path": "board", "code": `app.mark({N: 2})`})),
+		testkit.Say("continued"),
+		testkit.Say("noted"),
+	)
+	c := stack.Browser(t, stack.Host{Provider: p, Page: board(marks, shown)})
+	c.Send("change the board")
+	c.Wait()
+	carries(t, recorded(t, c, p, "ended with no ui.draw() waiting"), `script="2"`, "script 2 ended", "ignore this if you already sent the next script")
 }
 
 func TestIslandInterruptHandsOverTheUI(t *testing.T) {
@@ -442,7 +460,7 @@ func TestIslandButtonIsAnInputThatSubmitsItsValue(t *testing.T) {
 	p := testkit.NewProvider(api.Model{},
 		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
 		revised(t, func(revision string) testkit.Turn {
-			return start(revision, `ui.root.set(ui.column({}, ui.button({text: "Go", value: "v1"}), ui.button({text: "Plain", value: "v2"}))); ui.notify(ui.draw()); ui.draw(1)`)
+			return start(revision, `ui.root.set(ui.column({}, ui.button({text: "Go", value: "v1"}), ui.button({text: "Plain", value: "v2"}))); ui.notify(ui.draw()); ui.draw()`)
 		}),
 		drawnThen(t, drawn, syncScreen("board.screen.button_1", "board.screen.button_2")),
 		testkit.Then(func(r api.Request) testkit.Turn {

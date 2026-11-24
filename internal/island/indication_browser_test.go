@@ -105,9 +105,16 @@ func (a *pending) still(want map[string]string) {
 	a.states(want)
 }
 
+func (a *pending) click(label string) {
+	a.t.Helper()
+	a.p.Push(testkit.Say("noted"))
+	userClick(a.t, a.c, label)
+	a.c.Wait()
+}
+
 func (a *pending) draw() {
 	a.t.Helper()
-	if r := a.result("page__island_append", map[string]any{"path": "board", "code": `ui.draw(1)`}); r.Error != api.ToolOk {
+	if r := a.result("page__island_append", map[string]any{"path": "board", "code": `ui.draw()`}); r.Error != api.ToolOk {
 		a.t.Fatalf("island_append failed: %#v", r.Content)
 	}
 }
@@ -129,7 +136,7 @@ const goAndPlain = `ui.root.set(ui.column({}, ui.button({text: "Go", value: "v1"
 func TestIslandSubmitIndicationHoldsUntilTheNextDraw(t *testing.T) {
 	a := openPending(t, map[string]string{"board": goAndPlain})
 	a.states(map[string]string{"Go": "- -", "Plain": "- -"})
-	userClick(t, a.c, "Go")
+	a.click("Go")
 	a.states(map[string]string{"Go": "true -", "Plain": "- true"})
 	a.still(map[string]string{"Go": "true -", "Plain": "- true"})
 	focused, err := a.c.Page.Eval(`() => document.activeElement.textContent.trim()`)
@@ -156,7 +163,7 @@ func TestIslandSubmitIndicationStaysInItsIsland(t *testing.T) {
 	if parts := strings.Fields(ids.Value.Str()); len(parts) != 2 || parts[0] == parts[1] || !strings.HasSuffix(parts[0], ":2") || !strings.HasSuffix(parts[1], ":1") {
 		t.Fatalf("the islands are marked %q, want two ids holding two and one submits", ids.Value.Str())
 	}
-	userClick(t, a.c, "Go")
+	a.click("Go")
 	a.states(map[string]string{"Go": "true -", "Plain": "- true", "Elsewhere": "- -"})
 	a.still(map[string]string{"Go": "true -", "Plain": "- true", "Elsewhere": "- -"})
 }
@@ -167,7 +174,7 @@ func TestIslandFormSubmitMarksItsButtonAndDisablesTheIslandSubmits(t *testing.T)
 		ui.button({text: "Plain", value: "v2"})
 	)); ui.draw()`})
 	a.states(map[string]string{"form": "- -", "Send": "- -", "Skip": "- -", "Plain": "- -"})
-	userClick(t, a.c, "Send")
+	a.click("Send")
 	a.states(map[string]string{"Send": "true -", "Skip": "- true", "Plain": "- true"})
 	a.still(map[string]string{"Send": "true -", "Skip": "- true", "Plain": "- true"})
 	a.draw()
@@ -180,7 +187,7 @@ func TestIslandAgentReadsAnotherSubmitAsDisabledWhilePending(t *testing.T) {
 	if a.read("board.screen.button_2") {
 		t.Fatal("Plain read as disabled before any submit")
 	}
-	userClick(t, a.c, "Go")
+	a.click("Go")
 	a.states(map[string]string{"Go": "true -", "Plain": "- true"})
 	if !a.read("board.screen.button_2") {
 		t.Fatal("Plain read as enabled while Go's submit is pending, want disabled")
@@ -194,7 +201,7 @@ func TestIslandAgentReadsAnotherSubmitAsDisabledWhilePending(t *testing.T) {
 
 func TestIslandAgentClickOnASubmitBlockedByAPendingOneIsCanceled(t *testing.T) {
 	a := openPending(t, map[string]string{"board": goAndPlain})
-	userClick(t, a.c, "Go")
+	a.click("Go")
 	a.states(map[string]string{"Go": "true -", "Plain": "- true"})
 	var s inputs
 	testkit.Decode(t, a.result("page__sync", map[string]any{"path": "board.screen.button_2"}), &s)
