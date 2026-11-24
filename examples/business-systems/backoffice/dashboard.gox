@@ -24,14 +24,7 @@ import (
 )
 
 elem dashboardPage() {
-	~~
-	developer := neui.Tier(ctx) == neui.TierDeveloper
-	desc := "Dashboard: this month's numbers, recent orders and products running low"
-	if developer {
-		desc = "Dashboard: this month's numbers, recent orders, products running low and a report panel"
-	}
-	~~
-	~>neui.Space{Name: "dashboard", Desc: desc} <div>
+	~>neui.Space{Name: "dashboard", Desc: "Dashboard: this month's numbers, recent orders and products running low"} <div>
 		~pageHeader{
 			Title: "Dashboard",
 			Meta: <span>~(time.Now().Format("Monday, January 2"))</span>,
@@ -48,9 +41,6 @@ elem dashboardPage() {
 				return nil
 			}
 			return dashboardBody(shop.Stats(), shop.Orders(orderQuery{}))
-		})
-		~(if developer {
-			<div class="mt-6">~(reportPanel())</div>
 		})
 	</div>
 }

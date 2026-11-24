@@ -30,19 +30,6 @@ type productsOutput struct {
 	Products []product `json:"products"`
 }
 
-func reportLibrary(l neui.Library) error {
-	if err := nekit.IslandRegisterLayout(l); err != nil {
-		return err
-	}
-	if err := nekit.IslandRegisterMarkdown(l); err != nil {
-		return err
-	}
-	if err := nekit.IslandRegisterTable(l); err != nil {
-		return err
-	}
-	return addShopData(l)
-}
-
 func workbenchLibrary(l neui.Library) error {
 	if err := nekit.IslandRegisterAll(l); err != nil {
 		return err

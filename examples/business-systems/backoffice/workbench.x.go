@@ -37,7 +37,7 @@ func workbenchPanel() gox.Elem {
 //line workbench.gox:31
 		__e = __c.Any(neui.Island{
 		Name: "workbench",
-		Desc: "Apps over the shop's data. Their scripts read orders, customers and products, and by id can create orders, customers and products, change an order's items and quantities, status, shipping address and due date, send payment reminders, refund or cancel orders, and update customers, products and stock. Build here what the user needs beyond the app UI, such as reviewing and changing many records, comparisons or calculators. It shows as a panel over the page only while an app runs; the user can hide it and bring it back.",
+		Desc: "Apps over the shop's data, in a panel over the page. Build one here when the user wants something the pages don't offer: a chart, visualization, report or dashboard, reviewing and changing many records, comparisons or calculators. Its scripts read orders, customers and products, and by id can create orders, customers and products, change an order's items and quantities, status, shipping address and due date, send payment reminders, refund or cancel orders, and update customers, products and stock. The panel shows only while an app runs; the user can hide it and bring it back.",
 		Placeholder: gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
 			__e = __c.InitContainer(); if __e != nil { return }

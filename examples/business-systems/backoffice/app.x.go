@@ -69,8 +69,6 @@ func (a App) Main() gox.Elem {
 //line app.gox:61
 			__e = __c.Set("lang", "en"); if __e != nil { return }
 //line app.gox:61
-			__e = __c.Set("data-theme", "light"); if __e != nil { return }
-//line app.gox:61
 			__e = __c.Set("class", "bg-stone-50"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
 			__e = __c.Init("head"); if __e != nil { return }
@@ -161,7 +159,7 @@ func (a App) Main() gox.Elem {
 				}
 				__e = __c.Close(); if __e != nil { return }
 //line app.gox:90
-				__e = __c.Any(nekit.Chat{ThemeLight: chatTheme}); if __e != nil { return }
+				__e = __c.Any(nekit.Chat{ThemeLight: chatTheme, Layout: nekit.ChatLayout{Start: nekit.ChatDock}}); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 		}

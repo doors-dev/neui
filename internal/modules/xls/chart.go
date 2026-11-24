@@ -23,7 +23,7 @@ import (
 	"neui.dev/internal/common"
 )
 
-const chartDesc = `Add a chart to a sheet.`
+const chartDesc = `Add a chart to a sheet, when the user wants the chart in the workbook file.`
 
 type chartArg struct {
 	Path       string `json:"path" required:"true"`

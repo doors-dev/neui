@@ -110,7 +110,7 @@ func TestToolkitFollowsTheTier(t *testing.T) {
 		want []string
 		desc string
 	}{
-		{"developer", neui.TierDeveloper, []string{"dashboard.report*", "workbench*"}, ""},
+		{"developer", neui.TierDeveloper, []string{"workbench*"}, ""},
 		{"agent", neui.TierAgent, []string{"api", "api.customers", "api.orders", "api.products"}, "The shop's data and operations as tools"},
 		{"assistant", neui.TierAssistant, []string{"api", "api.customers", "api.orders", "api.products"}, "The shop's data and operations as tools"},
 	} {
@@ -126,7 +126,7 @@ func TestToolkitFollowsTheTier(t *testing.T) {
 				if n.Island {
 					path += "*"
 				}
-				if path == "dashboard.report*" || path == "workbench*" || path == "api" || strings.HasPrefix(path, "api.") {
+				if path == "workbench*" || path == "api" || strings.HasPrefix(path, "api.") {
 					got = append(got, path)
 				}
 			}

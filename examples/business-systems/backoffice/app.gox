@@ -58,7 +58,7 @@ elem (a App) Main() {
 	}
 	~~
 	<!doctype html>
-	<html lang="en" data-theme="light" class="bg-stone-50">
+	<html lang="en" class="bg-stone-50">
 		<head>
 			<meta charset="utf-8">
 			<meta name="viewport" content="width=device-width, initial-scale=1">
@@ -87,7 +87,7 @@ elem (a App) Main() {
 				~(apiSpace())
 				~(toast())
 			</div>
-			~nekit.Chat{ThemeLight: chatTheme}
+			~nekit.Chat{ThemeLight: chatTheme, Layout: nekit.ChatLayout{Start: nekit.ChatDock}}
 		</body>
 	</html>
 }

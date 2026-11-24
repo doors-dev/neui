@@ -31,8 +31,8 @@ Open http://localhost:8095 (set `PORT` to change it). Threads are stored in `neu
 
 `TIER` (`neui.WithTier`) sets what the agent may do; pick the highest tier your model handles well:
 
-- `developer`, the default: works the pages, writes scripts, and builds small apps in the Workbench and the dashboard's Report panel.
-- `agent`: works the pages and writes scripts. The shop's data and operations are an `api` space its scripts call; there is no Workbench or Report panel.
+- `developer`, the default: works the pages, writes scripts, and builds small apps and reports in the Workbench.
+- `agent`: works the pages and writes scripts. The shop's data and operations are an `api` space its scripts call; there is no Workbench.
 - `assistant`: works the pages and calls tools one at a time, the `api` space included. No scripts, smaller files and xls tool sets, shorter tool descriptions.
 
 To compare models, keep one OpenRouter key and change only the model and the tier; set `GENERIC_CONTEXT` to the window on the model's OpenRouter page:
@@ -90,7 +90,7 @@ With `TIER=agent` and `TIER=developer` the agent also writes scripts, so bulk wo
 
 With `TIER=developer` it also builds small apps. The Workbench is a panel over the page; it appears while an app runs and goes away when the app ends:
 
-- On the dashboard: "which customers order the most?". A report appears in the Report panel.
+- "Build me a sales dashboard."
 - "I need to see all orders with the cold brew jar and adjust the quantities."
 - "Go through the unpaid orders older than a week one by one. For each, show the order and the customer's history, and let me choose: remind, extend, or cancel."
 - "Plan a restock: show what's running low, how fast each product sold over the last 30 days, and suggest how many to reorder. Let me adjust the numbers, then give me the purchase list as a spreadsheet."
