@@ -37,8 +37,6 @@ func init() { thread.Backpressure.Store(false) }
 
 type stubProvider struct{}
 
-func (stubProvider) Name() string { return "stub" }
-
 func (stubProvider) Model() api.Model { return api.Model{Name: "stub"} }
 
 func (stubProvider) Stream(context.Context, api.Request) <-chan api.Event {

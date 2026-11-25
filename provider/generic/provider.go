@@ -372,11 +372,6 @@ func encodeFields(fields map[string]any) ([]byte, error) {
 
 var _ api.Provider = (*Provider)(nil)
 
-// Name returns "generic".
-func (p *Provider) Name() string {
-	return providerName
-}
-
 // Model returns the model from Conf. It is fixed for the provider's lifetime.
 func (p *Provider) Model() api.Model {
 	return p.model

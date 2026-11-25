@@ -45,8 +45,6 @@ func NewProvider(model api.Model, turns ...Turn) *Provider {
 	return &Provider{model: model, turns: turns}
 }
 
-func (p *Provider) Name() string { return "fake" }
-
 func (p *Provider) Model() api.Model { return p.model }
 
 func (p *Provider) Stream(ctx context.Context, req api.Request) <-chan api.Event {

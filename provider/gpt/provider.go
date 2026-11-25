@@ -553,11 +553,6 @@ func WithObfuscation(on bool) Option {
 
 var _ api.Provider = (*Provider)(nil)
 
-// Name returns "gpt".
-func (p *Provider) Name() string {
-	return providerName
-}
-
 // Model reports the model this adapter is configured with, as Conf wrote it.
 func (p *Provider) Model() api.Model {
 	return p.model

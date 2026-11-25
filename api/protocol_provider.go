@@ -24,11 +24,6 @@ import (
 // Provider is one model API. It converts a Request into whatever that API wants
 // and the reply back into Events.
 type Provider interface {
-	// Name identifies the API. Signatures and sealed payloads are bound to the
-	// API that issued them and cannot be replayed against another, so whoever
-	// stores a conversation stores this name with it. No Content block carries it.
-	Name() string
-
 	// Stream returns at once and delivers the reply on the channel, in the order
 	// it was produced.
 	//

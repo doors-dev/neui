@@ -1106,12 +1106,6 @@ func TestUnmeasuredRequestTooLargeNamesNoLimit(t *testing.T) {
 	}
 }
 
-func TestName(t *testing.T) {
-	if got := mustNew(t, Conf{Model: api.Model{Name: testModel}}).Name(); got != providerName {
-		t.Fatalf("Name = %q, want %q", got, providerName)
-	}
-}
-
 // Model reads back as configured: a listed model with its window, a caller's
 // literal as written, where zero is unknown rather than a window of zero.
 func TestDeclaredModels(t *testing.T) {

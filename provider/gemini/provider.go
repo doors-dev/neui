@@ -260,11 +260,6 @@ func WithStopSequences(seqs ...string) Option {
 
 var _ api.Provider = (*Provider)(nil)
 
-// Name returns "gemini".
-func (p *Provider) Name() string {
-	return providerName
-}
-
 // Model returns the model from Conf. It is fixed for the provider's lifetime.
 func (p *Provider) Model() api.Model {
 	return p.model

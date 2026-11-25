@@ -151,12 +151,6 @@ func countLogs(t *testing.T) levelCounter {
 	return counts
 }
 
-func TestName(t *testing.T) {
-	if got := encoder(t).Name(); got != "gemini" {
-		t.Fatalf("Name %q", got)
-	}
-}
-
 func TestModel(t *testing.T) {
 	m := api.Model{Name: "gemini-9-unknown", Context: 7}
 	if got := mustNew(t, Conf{Model: m}).Model(); !reflect.DeepEqual(got, m) {

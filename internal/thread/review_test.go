@@ -97,8 +97,6 @@ type hangingProvider struct {
 	model api.Model
 }
 
-func (hangingProvider) Name() string { return "stub" }
-
 func (p hangingProvider) Model() api.Model { return p.model }
 
 func (hangingProvider) Stream(ctx context.Context, _ api.Request) <-chan api.Event {
