@@ -384,7 +384,7 @@ You can have many islands across your app, each serving a specific need with its
 
 The agent writes a script that wires the components of the island's library into the flow the user needs. You register them in the library:
 
-```gox
+```go
 // app.gox
 func library(l neui.Library) error {
 	l.Layout("card", "a titled card around its items", card)
@@ -402,7 +402,7 @@ Each one is a Go function that renders your component from the params the script
 
 Island scripts can call your agent's modules except page and JS. Give an island the tools its apps need in its library; `l.Add` takes the same `neui.Tool` struct you render on the page. The island also exposes them to the agent as tools of its app space.
 
-```gox
+```go
 // app.gox
 l.Add(neui.Tool[StockInput, Product]{
 	Name: "set_stock",
@@ -414,7 +414,7 @@ l.Tool("top_customers", "customers ranked by what they paid", topCustomers)
 
 Out of the box neui ships a library of powerful widgets (layouts, markdown, forms, tables, buttons, charts and stat tiles) that covers almost any workflow. Add it to your library with:
 
-```gox
+```go
 // app.gox
 func library(l neui.Library) error {
 	nekit.IslandRegisterAll(l)
