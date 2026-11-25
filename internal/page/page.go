@@ -215,7 +215,7 @@ func (p *page) Module(ctx context.Context) Module {
 		if ctx.Err() != nil {
 			return node{}, context.Cause(ctx)
 		}
-		s, err := p.space.find(arg.Path, tier)
+		s, err := p.space.find(arg.Path)
 		if err != nil {
 			return node{}, err
 		}
@@ -234,7 +234,7 @@ func (p *page) Module(ctx context.Context) Module {
 		if ctx.Err() != nil {
 			return state{}, context.Cause(ctx)
 		}
-		s, err := p.space.find(arg.Path, tier)
+		s, err := p.space.find(arg.Path)
 		if err != nil {
 			return state{}, err
 		}
@@ -438,18 +438,18 @@ func (m *module) act[T any](ctx context.Context, path string, find func(s *space
 	if ctx.Err() != nil {
 		return permit[T]{}, context.Cause(ctx)
 	}
-	s, err := m.page.space.find(path, m.tier)
+	s, err := m.page.space.find(path)
 	if err != nil {
 		return permit[T]{}, err
 	}
 	old, ok := m.snaps[s.path]
-	if ok && old.digest == s.digestFor(m.tier) {
+	if ok && old.digest == s.digest {
 		item, err := find(s)
 		if err != nil {
 			return permit[T]{}, err
 		}
 		before := map[string][4]uint64{}
-		m.page.space.digests(before, m.tier)
+		m.page.space.digests(before)
 		return permit[T]{module: m, item: item, old: old, before: before, island: s.within}, nil
 	}
 	if ok {
@@ -495,13 +495,13 @@ func (a permit[T]) report(ctx context.Context, path string, message string, res 
 	if ctx.Err() != nil {
 		return context.Cause(ctx)
 	}
-	s, err := p.space.find(path, tier)
+	s, err := p.space.find(path)
 	if err != nil {
 		rep.Diff = &diff{Removed: true}
 	} else {
 		rep.Diff = s.diff(a.old, tier)
 	}
-	rep.Changes = p.space.changes(a.before, path, tier)
+	rep.Changes = p.space.changes(a.before, path)
 	if !fits(ctx, message, res) {
 		*rep = report{}
 		return nil

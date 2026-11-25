@@ -68,11 +68,11 @@ func TestTreeListsHighlights(t *testing.T) {
 
 func TestSlashAndDotPathsAreTheSame(t *testing.T) {
 	p := tree("dashboard", "dashboard.report")
-	dot, err := p.space.find("dashboard.report", common.TierDeveloper)
+	dot, err := p.space.find("dashboard.report")
 	if err != nil {
 		t.Fatal(err)
 	}
-	slash, err := p.space.find("dashboard/report", common.TierDeveloper)
+	slash, err := p.space.find("dashboard/report")
 	if err != nil || slash != dot {
 		t.Fatalf("dashboard/report found %v (%v), want the space dashboard.report", slash, err)
 	}
@@ -81,7 +81,7 @@ func TestSlashAndDotPathsAreTheSame(t *testing.T) {
 		"missing":           `no space "missing" at the page root: call tree to see the current spaces`,
 		"/dashboard":        `no space "" at the page root: call tree to see the current spaces`,
 	} {
-		if _, err := p.space.find(raw, common.TierDeveloper); !errors.Is(err, errSpaceNotFound) || err.Error() != want {
+		if _, err := p.space.find(raw); !errors.Is(err, errSpaceNotFound) || err.Error() != want {
 			t.Fatalf("%q: got %v, want %s", raw, err, want)
 		}
 	}
@@ -114,7 +114,7 @@ func tree(paths ...string) *page {
 func (p *page) restamp() {
 	var walk func(s *space)
 	walk = func(s *space) {
-		s.digest, s.plain = s.fresh()
+		s.digest = s.fresh()
 		for _, c := range s.children {
 			walk(c)
 		}
@@ -123,7 +123,7 @@ func (p *page) restamp() {
 }
 
 func (p *page) at(path string) *space {
-	s, err := p.space.find(path, common.TierDeveloper)
+	s, err := p.space.find(path)
 	if err != nil {
 		panic(err)
 	}
@@ -213,7 +213,7 @@ func TestDiffAndChangesShowToolsAndInputs(t *testing.T) {
 	p.restamp()
 	old := form.snapshot(common.TierDeveloper)
 	before := map[string][4]uint64{}
-	p.space.digests(before, common.TierDeveloper)
+	p.space.digests(before)
 	form.tools = []*tool{kit("b", 2), kit("c", 1)}
 	form.list = []input{field("i2", R), field("i3", RW)}
 	p.at("tools").tools = []*tool{kit("t", 2)}
@@ -231,7 +231,7 @@ func TestDiffAndChangesShowToolsAndInputs(t *testing.T) {
 	if string(raw) != want {
 		t.Fatalf("the diff is %s, want %s: a changed tool or input is removed and added again", raw, want)
 	}
-	raw, err = json.Marshal(p.space.changes(before, "form", common.TierDeveloper))
+	raw, err = json.Marshal(p.space.changes(before, "form"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -308,7 +308,7 @@ func TestTreeCountsWhatEachSpaceHolds(t *testing.T) {
 func TestChangesListOneEntryPerSubtree(t *testing.T) {
 	p := tree("a", "b.gone.deep", "c.x")
 	before := map[string][4]uint64{}
-	p.space.digests(before, common.TierDeveloper)
+	p.space.digests(before)
 	p.at("a").data = []*data{note("new")}
 	p.at("b").children = nil
 	p.at("c").children = append(p.at("c").children, &space{root: p, name: "y", path: "c.y"})
@@ -316,7 +316,7 @@ func TestChangesListOneEntryPerSubtree(t *testing.T) {
 	n.children = []*space{{root: p, name: "inner", path: "n.inner"}}
 	p.space.children = append(p.space.children, n)
 	p.restamp()
-	raw, err := json.Marshal(p.space.changes(before, "c", common.TierDeveloper))
+	raw, err := json.Marshal(p.space.changes(before, "c"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -335,7 +335,7 @@ func TestChangesFoldPastFifty(t *testing.T) {
 	}
 	p := tree(append(paths, "header", "aside")...)
 	before := map[string][4]uint64{}
-	p.space.digests(before, common.TierDeveloper)
+	p.space.digests(before)
 	for _, path := range paths {
 		p.at(path).data = []*data{note(path)}
 	}
@@ -344,7 +344,7 @@ func TestChangesFoldPastFifty(t *testing.T) {
 		p.space.children = append(p.space.children, &space{root: p, name: fmt.Sprintf("toast%d", i), path: fmt.Sprintf("toast%d", i)})
 	}
 	p.restamp()
-	got := p.space.changes(before, "aside", common.TierDeveloper)
+	got := p.space.changes(before, "aside")
 	if len(got) > 50 {
 		t.Fatalf("%d entries, want at most 50", len(got))
 	}
@@ -377,14 +377,14 @@ func TestChangesFoldAddedWhenMoreThanTwentyFive(t *testing.T) {
 	}
 	p := tree(paths...)
 	before := map[string][4]uint64{}
-	p.space.digests(before, common.TierDeveloper)
+	p.space.digests(before)
 	orders := p.at("orders")
 	orders.children = nil
 	for i := range 60 {
 		orders.children = append(orders.children, &space{root: p, name: fmt.Sprintf("k%02d", i), path: fmt.Sprintf("orders.k%02d", i)})
 	}
 	p.restamp()
-	got := p.space.changes(before, "", common.TierDeveloper)
+	got := p.space.changes(before, "")
 	if len(got) != 1 || got[0].Path != "orders" || got[0].Spaces != 120 || !slices.Equal(got[0].Changed, []string{"children"}) {
 		t.Fatalf("a re-rendered list of 60 lists %+v, want one orders entry standing for 120 spaces", got)
 	}
@@ -403,12 +403,12 @@ func TestChangesFoldLargestClustersFirst(t *testing.T) {
 	}
 	p := tree(paths...)
 	before := map[string][4]uint64{}
-	p.space.digests(before, common.TierDeveloper)
+	p.space.digests(before)
 	for _, path := range paths {
 		p.at(path).data = []*data{note(path)}
 	}
 	p.restamp()
-	got := p.space.changes(before, "", common.TierDeveloper)
+	got := p.space.changes(before, "")
 	var folded, listed []string
 	for _, c := range got {
 		if c.Spaces > 0 {
@@ -430,7 +430,7 @@ func TestChangesKeepTwentyFiveAdded(t *testing.T) {
 		}
 		p := tree(append(paths, "list")...)
 		before := map[string][4]uint64{}
-		p.space.digests(before, common.TierDeveloper)
+		p.space.digests(before)
 		for _, path := range paths {
 			p.at(path).data = []*data{note(path)}
 		}
@@ -439,7 +439,7 @@ func TestChangesKeepTwentyFiveAdded(t *testing.T) {
 			list.children = append(list.children, &space{root: p, name: fmt.Sprintf("k%02d", i), path: fmt.Sprintf("list.k%02d", i)})
 		}
 		p.restamp()
-		got := p.space.changes(before, "", common.TierDeveloper)
+		got := p.space.changes(before, "")
 		added := 0
 		for _, c := range got {
 			if c.Added {

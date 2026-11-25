@@ -47,7 +47,6 @@ type space struct {
 	island   island.Island
 	within   island.Island
 	digest   [4]uint64
-	plain    uint64
 	counts   [4]map[uint64]int
 	inputs
 }
@@ -140,13 +139,13 @@ func (s *space) searchTool(name string) (int, bool) {
 	})
 }
 
-func (s *space) find(path string, tier common.ModelTier) (*space, error) {
+func (s *space) find(path string) (*space, error) {
 	if path == "" {
 		return s, nil
 	}
 	for _, name := range strings.Split(strings.ReplaceAll(path, "/", "."), ".") {
 		index, ok := s.search(name)
-		if !ok || s.children[index].hidden(tier) {
+		if !ok {
 			if s.path == "" {
 				return nil, fmt.Errorf("no space %q at the page root: %w", name, errSpaceNotFound)
 			}
@@ -157,15 +156,8 @@ func (s *space) find(path string, tier common.ModelTier) (*space, error) {
 	return s, nil
 }
 
-func (s *space) hidden(tier common.ModelTier) bool {
-	if tier == common.TierDeveloper || s.island == nil {
-		return false
-	}
-	return true
-}
-
 func (s *space) findIsland(path string) (island.Island, string, error) {
-	space, err := s.find(path, common.TierDeveloper)
+	space, err := s.find(path)
 	if err != nil {
 		return nil, "", err
 	}
@@ -209,40 +201,25 @@ func (s *space) rehash(set int) {
 			hashes = append(hashes, t.hash)
 		}
 	case 3:
-		var plain []uint64
 		for _, c := range s.children {
-			hash := xxh3.HashString(c.name)
-			hashes = append(hashes, hash)
-			if c.island == nil {
-				plain = append(plain, hash)
-			}
+			hashes = append(hashes, xxh3.HashString(c.name))
 		}
-		s.plain = sum(plain)
 	default:
 		hashes = slices.Collect(maps.Keys(s.counts[set]))
 	}
 	s.digest[set] = sum(hashes)
 }
 
-func (s *space) digestFor(tier common.ModelTier) [4]uint64 {
-	digest := s.digest
-	if tier != common.TierDeveloper {
-		digest[3] = s.plain
-	}
-	return digest
-}
-
-func (s *space) digests(out map[string][4]uint64, tier common.ModelTier) {
+func (s *space) digests(out map[string][4]uint64) {
 	out[s.path] = s.digest
 	for _, c := range s.children {
-		if !c.hidden(tier) {
-			c.digests(out, tier)
-		}
+		c.digests(out)
 	}
 }
 
 func (s *space) state(tier common.ModelTier) state {
-	out := state{Path: s.path, Desc: s.desc, Island: s.island != nil}
+	developer := tier == common.TierDeveloper
+	out := state{Path: s.path, Desc: s.desc, Island: developer && s.island != nil}
 	for _, t := range s.tools {
 		t := *t
 		if tier == common.TierAssistant {
@@ -264,19 +241,17 @@ func (s *space) state(tier common.ModelTier) state {
 		}
 	}
 	for _, c := range s.children {
-		if !c.hidden(tier) {
-			out.Children = append(out.Children, child{Name: c.name, Desc: c.desc, Island: c.island != nil})
-		}
+		out.Children = append(out.Children, child{Name: c.name, Desc: c.desc, Island: developer && c.island != nil})
 	}
 	return out
 }
 
 func (s *space) snapshot(tier common.ModelTier) snapshot {
-	return snapshot{digest: s.digestFor(tier), state: s.state(tier)}
+	return snapshot{digest: s.digest, state: s.state(tier)}
 }
 
 func (s *space) diff(old snapshot, tier common.ModelTier) *diff {
-	now := s.digestFor(tier)
+	now := s.digest
 	if now == old.digest {
 		return &diff{}
 	}
@@ -328,7 +303,7 @@ func (s *space) diff(old snapshot, tier common.ModelTier) *diff {
 }
 
 func (s *space) tree(depth uint, tier common.ModelTier) node {
-	out := node{child: child{Name: s.name, Desc: s.desc, Island: s.island != nil}}
+	out := node{child: child{Name: s.name, Desc: s.desc, Island: tier == common.TierDeveloper && s.island != nil}}
 	for _, t := range s.tools {
 		out.Tools = append(out.Tools, t.Name)
 	}
@@ -349,9 +324,6 @@ func (s *space) tree(depth uint, tier common.ModelTier) node {
 		}
 	}
 	for _, c := range s.children {
-		if c.hidden(tier) {
-			continue
-		}
 		if depth == 0 || len(out.Children) == 20 {
 			out.More++
 			continue

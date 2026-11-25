@@ -50,7 +50,7 @@ func (n spaceNode) names(prefix string) []string {
 	return out
 }
 
-func TestTiersBelowDeveloperHideIslands(t *testing.T) {
+func TestTiersBelowDeveloperShowIslandsAsPlainSpaces(t *testing.T) {
 	late := func(name string) gox.Elem {
 		return func(cur gox.Cursor) error {
 			return cur.Comp(neui.Island{
@@ -126,32 +126,15 @@ func TestTiersBelowDeveloperHideIslands(t *testing.T) {
 			if opened.Output != fmt.Sprint(tier) {
 				t.Fatalf("the page tool's handler saw tier %s, want %d", opened.Output, tier)
 			}
-			if tier != common.TierDeveloper {
-				if got := tree(1); !slices.Equal(got, []string{"panel"}) {
-					t.Fatalf("tree shows %v, want the panel alone", got)
-				}
-				if got := (spaceNode{Children: root.Children}).names(""); !slices.Equal(got, []string{"panel"}) {
-					t.Fatalf("the root's children are %v, want the panel alone", got)
-				}
-				refused(t, result(3), "no space ")
-				refused(t, result(4), "no space ")
-				refused(t, result(5), "no space ")
-				if len(marks) != 0 {
-					t.Fatal("an island's app function ran below TierDeveloper")
-				}
-				if string(opened.Diff) != "{}" || opened.Changes != nil {
-					t.Fatalf("opening answered diff %s and changes %s, want no change at all", opened.Diff, opened.Changes)
-				}
-				if got := tree(8); !slices.Equal(got, []string{"panel"}) {
-					t.Fatalf("tree after opening shows %v, want the panel alone", got)
-				}
-				return
+			star, flag := "", ""
+			if tier == common.TierDeveloper {
+				star, flag = "*", `,"island":true`
 			}
-			if got := tree(1); !slices.Equal(got, []string{"board*", "board.app", "board.screen", "panel"}) {
-				t.Fatalf("tree shows %v, want the board island and the panel", got)
+			if got := tree(1); !slices.Equal(got, []string{"board" + star, "board.app", "board.screen", "panel"}) {
+				t.Fatalf("tree shows %v, want the board and the panel", got)
 			}
-			if got := (spaceNode{Children: root.Children}).names(""); !slices.Equal(got, []string{"board*", "panel"}) {
-				t.Fatalf("the root's children are %v, want the board island and the panel", got)
+			if got := (spaceNode{Children: root.Children}).names(""); !slices.Equal(got, []string{"board" + star, "panel"}) {
+				t.Fatalf("the root's children are %v, want the board and the panel", got)
 			}
 			if r := result(3); r.Error != api.ToolOk {
 				t.Fatalf("the board's sync answered %#v", r.Content)
@@ -159,10 +142,10 @@ func TestTiersBelowDeveloperHideIslands(t *testing.T) {
 			if r := result(5); r.Error != api.ToolOk || <-marks != 1 {
 				t.Fatalf("the board's mark answered %#v", r.Content)
 			}
-			if string(opened.Diff) != `{"children":{"added":[{"name":"inner","desc":"a late island","island":true}]}}` || string(opened.Changes) != `[{"path":"outer","added":true,"desc":"a late island"}]` {
+			if string(opened.Diff) != `{"children":{"added":[{"name":"inner","desc":"a late island"`+flag+`}]}}` || string(opened.Changes) != `[{"path":"outer","added":true,"desc":"a late island"}]` {
 				t.Fatalf("opening answered diff %s and changes %s, want the inner island in the diff and the outer one in changes", opened.Diff, opened.Changes)
 			}
-			if got := tree(8); !slices.Equal(got, []string{"board*", "outer*", "panel"}) {
+			if got := tree(8); !slices.Equal(got, []string{"board" + star, "outer" + star, "panel"}) {
 				t.Fatalf("tree after opening shows %v, want both islands at the root", got)
 			}
 		})

@@ -134,9 +134,9 @@ func Tier(ctx context.Context) ModelTier {
 // one. The runtime calls it each time a thread opens, with a context that
 // lasts while the thread stays open and carries no tool call. When two
 // modules of a thread share a name, the later one is skipped and an error is
-// logged; the built-in chat, time and files modules come first. It may
-// return nil to add no module. Register factories with WithModules or
-// OptionModules.
+// logged; the built-in chat, time, files and, except at TierAssistant, js
+// modules come first. It may return nil to add no module. Register factories
+// with WithModules or OptionModules.
 type ModuleFactory = common.ModuleFactory
 
 // WithModules registers modules for every session the app serves, as an app
