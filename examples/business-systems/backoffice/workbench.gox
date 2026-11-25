@@ -45,11 +45,11 @@ elem apiSpace() {
 		return nil
 	}
 	~~
-	~>neui.Space{Name: "api", Desc: "The shop's data and operations as tools"} <div hidden>
+	~>neui.Space{Name: "api", Desc: "The shop's data and operations as tools"} <>
 		~(apiEntity("orders", "Orders", readOrders, orderOperations))
 		~(apiEntity("customers", "Customers", readCustomers, customerOperations))
 		~(apiEntity("products", "Products", readProducts, productOperations))
-	</div>
+	</>
 }
 
 elem apiEntity(name string, desc string, read neui.Tooler, operations []neui.Tooler) {

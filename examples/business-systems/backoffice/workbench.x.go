@@ -67,10 +67,8 @@ func apiSpace() gox.Elem {
 //line workbench.gox:48
 		__e = (neui.Space{Name: "api", Desc: "The shop's data and operations as tools"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 			ctx := __c.Context(); _ = ctx
-			__e = __c.Init("div"); if __e != nil { return }
+			__e = __c.InitContainer(); if __e != nil { return }
 			{
-				__e = __c.Set("hidden", true); if __e != nil { return }
-				__e = __c.Submit(); if __e != nil { return }
 //line workbench.gox:49
 				__e = __c.Any(apiEntity("orders", "Orders", readOrders, orderOperations)); if __e != nil { return }
 //line workbench.gox:50
