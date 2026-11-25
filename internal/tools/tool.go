@@ -19,7 +19,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"modernc.org/quickjs"
 	"neui.dev/api"
@@ -45,16 +44,10 @@ func NewTool[I any, O any](name string, desc string, f func(ctx context.Context,
 	var hint string
 	{
 		var o O
-		switch o := any(o).(type) {
+		switch any(o).(type) {
 		case api.Container:
-			hint = "a " + o.ContentType() + " block"
-			if strings.IndexAny(o.ContentType(), "aeiou") == 0 {
-				hint = "an " + o.ContentType() + " block"
-			}
-		case api.MultiContainer:
-			output = schema.BlocksRawSchema.View()
-			hint = "content blocks"
-		case fmt.Stringer:
+			hint = "native content blocks"
+		case string, fmt.Stringer:
 			hint = "a text block"
 		}
 	}
@@ -104,7 +97,7 @@ func NewRawTool(
 	output := outputSchema.View()
 	var hint string
 	if bytes.Equal(output.Raw, schema.BlocksRawSchema.View().Raw) {
-		hint = "content blocks"
+		hint = "native content blocks"
 	}
 	rawCall := func(ctx context.Context, input json.RawMessage) (any, error) {
 		if err := inputSchema.ValidateRaw(input); err != nil {

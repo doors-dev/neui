@@ -58,16 +58,11 @@ func newSchema[T any](raw []byte, doc any, defaultDraft *jsonvalid.Draft) (Schem
 	if err != nil {
 		return Schema[T]{}, err
 	}
-	top, _ := doc.(map[string]any)
-	desc, _ := top["description"].(string)
-	if top["type"] != "object" {
-		desc = ""
-	}
 	schema := Schema[T]{
 		raw:       raw,
 		simple:    simplify(raw),
 		root:      raw,
-		desc:      desc,
+		brief:     brief(raw),
 		objectRaw: objectRaw,
 		Schema:    validSchema,
 	}
@@ -88,6 +83,65 @@ func newSchema[T any](raw []byte, doc any, defaultDraft *jsonvalid.Draft) (Schem
 		}
 	}
 	return schema, nil
+}
+
+func brief(raw []byte) string {
+	var compact bytes.Buffer
+	if json.Compact(&compact, raw) != nil {
+		return ""
+	}
+	p := jsonParser{data: compact.Bytes()}
+	s := &simplifier{root: p.value(nil)}
+	member := func(n *jsonNode, name string) *jsonNode {
+		if n == nil || n.raw[0] != '{' {
+			return nil
+		}
+		for _, m := range n.members {
+			if m.name == name {
+				return m.value
+			}
+		}
+		return nil
+	}
+	text := func(n *jsonNode, name string) string {
+		if v := member(n, name); v != nil && v.raw[0] == '"' {
+			return decodeString(v.raw)
+		}
+		return ""
+	}
+	object := s.root
+	desc := text(object, "description")
+	switch text(object, "type") {
+	case "object":
+	case "array":
+		object = member(object, "items")
+		for hops := 0; hops < 16 && member(object, "$ref") != nil; hops++ {
+			object = s.resolve(text(object, "$ref"))
+		}
+		if text(object, "type") != "object" {
+			object = nil
+		} else if desc == "" {
+			desc = text(object, "description")
+		}
+	default:
+		return ""
+	}
+	var lines []string
+	if props := member(object, "properties"); props != nil {
+		for _, m := range props.members {
+			if d := text(m.value, "description"); d != "" {
+				lines = append(lines, m.name+": "+d)
+			}
+		}
+	}
+	if desc == "" && len(lines) == 0 {
+		return ""
+	}
+	head := "Result:"
+	if desc != "" {
+		head += " " + desc
+	}
+	return strings.Join(append([]string{head}, lines...), "\n")
 }
 
 func wrap(raw []byte) ([]byte, error) {
@@ -128,7 +182,7 @@ type Schema[T any] struct {
 	simple       []byte
 	root         []byte
 	defs         map[string]json.RawMessage
-	desc         string
+	brief        string
 	objectRaw    []byte
 	objectSimple []byte
 	objectSchema *jsonvalid.Schema
@@ -259,7 +313,7 @@ type View struct {
 	Simple []byte                     // Raw with every $ref inlined and "properties":{} on every object schema without one; nil when a $ref cannot be inlined
 	Root   []byte                     // Raw without Defs, referring to them as {"$ref":"#/definitions/X"}
 	Defs   map[string]json.RawMessage // the definitions split out of Raw
-	Desc   string                     // the root description of an object schema; "" otherwise
+	Brief  string                     // for an object or array schema, "Result:" with the root description (an array's own, else its items'), then a "name: description" line per described top-level property (of the items for an array); "" when nothing is described
 }
 
 func (s Schema[T]) View() View {
@@ -271,7 +325,7 @@ func (s Schema[T]) View() View {
 			Defs:   s.defs,
 		}
 	}
-	return View{Raw: s.raw, Simple: s.simple, Root: s.root, Defs: s.defs, Desc: s.desc}
+	return View{Raw: s.raw, Simple: s.simple, Root: s.root, Defs: s.defs, Brief: s.brief}
 }
 
 var anySchema = []byte(`{"description":"any JSON value"}`)

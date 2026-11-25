@@ -425,8 +425,8 @@ func (s Space) AddTool(ctx context.Context, from common.Tool) error {
 	}
 	type bare tool
 	short := bare(*t)
-	if desc := from.Output().Desc; desc != "" {
-		short.Desc += "\nResult: " + desc
+	if brief := from.Output().Brief; brief != "" {
+		short.Desc += "\n" + brief
 	}
 	lean, err := json.Marshal(short)
 	if err != nil {

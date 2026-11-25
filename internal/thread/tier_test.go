@@ -182,9 +182,9 @@ func TestTierShowsResultDescriptions(t *testing.T) {
 		for _, tool := range p.Request(t, 0).Tools {
 			descs[tool.Name] = tool.Desc
 		}
-		rows, text := "Read rows.\nOutput schema: {\"description\":\"the rows; truncated: call again\",", "Read text.\nOutput schema: "
+		rows, text := "Read rows.\nOutput schema: {\"description\":\"the rows; truncated: call again\",", "Read text.\nOutput schema, for scripts: {\"type\":\"string\"}\nOn a direct tool call the result arrives as a text block."
 		if assistant {
-			rows, text = "Read rows.\nResult: the rows; truncated: call again", "Read text."
+			rows, text = "Read rows.\nResult: the rows; truncated: call again", "Read text.\nResult: a text block."
 		}
 		if !strings.HasPrefix(descs["crm__rows"], rows) || !strings.HasPrefix(descs["crm__text"], text) || assistant && (descs["crm__rows"] != rows || descs["crm__text"] != text) {
 			t.Fatalf("tier %d: the tools read %q and %q, want %q and %q", tier, descs["crm__rows"], descs["crm__text"], rows, text)

@@ -122,12 +122,12 @@ func TestAgentContentError(t *testing.T) {
 	}
 	failed := api.ContentText{Text: "render failed"}
 	for name, want := range map[string]api.UserContents{
-		"image":   {failed, image.Content()},
+		"image":   {failed, image.Contents()[0]},
 		"blocks":  {failed, blocks[0], blocks[1]},
 		"empty":   {failed},
 		"plain":   {api.ContentText{Text: "boom"}},
-		"wrapped": {api.ContentText{Text: "x: render failed"}, image.Content()},
-		"nested":  {failed, image.Content()},
+		"wrapped": {api.ContentText{Text: "x: render failed"}, image.Contents()[0]},
+		"nested":  {failed, image.Contents()[0]},
 	} {
 		tool, _ := m.Get(name)
 		in := json.RawMessage(`{}`)
@@ -161,20 +161,24 @@ func TestToolNotesHowResultsArrive(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, want := range map[string]string{
-		"image":    "an image block",
-		"document": "a document block",
+		"image":    "native content blocks",
+		"document": "native content blocks",
 		"label":    "a text block",
-		"parts":    "content blocks",
-		"string":   "",
+		"parts":    "native content blocks",
+		"string":   "a text block",
 	} {
 		tool, _ := m.Get(name)
 		if tool.OutputHint() != want {
 			t.Errorf("%s: hint %q, want %q", name, tool.OutputHint(), want)
 		}
 	}
-	parts, _ := m.Get("parts")
-	if !reflect.DeepEqual(parts.Output(), schema.BlocksRawSchema.View()) {
-		t.Errorf("content blocks declare %+v, want the blocks schema", parts.Output())
+	container, _ := m.Get("parts")
+	own, err := schema.NewSchema[parts]()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(container.Output(), own.View()) {
+		t.Errorf("a container declares %+v, want its own type's schema", container.Output())
 	}
 }
 
@@ -187,7 +191,7 @@ func TestRawToolNotesBlocks(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	for name, want := range map[string]string{"blocks": "content blocks", "any": ""} {
+	for name, want := range map[string]string{"blocks": "native content blocks", "any": ""} {
 		tool, _ := m.Get(name)
 		if tool.OutputHint() != want {
 			t.Errorf("%s: hint %q, want %q", name, tool.OutputHint(), want)
@@ -312,17 +316,17 @@ func TestOutputCarriesTheResultDescription(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, want := range map[string]string{
-		"described":   "rows of the sheet; truncated: call again",
-		"pointer":     "rows of the sheet; truncated: call again",
+		"described":   "Result: rows of the sheet; truncated: call again",
+		"pointer":     "Result: rows of the sheet; truncated: call again",
 		"undescribed": "",
-		"list":        "",
+		"list":        "Result: the part's own description",
 		"string":      "",
 		"parts":       "",
 		"any":         "",
-		"raw":         "the server's rows",
+		"raw":         "Result: the server's rows",
 	} {
 		tool, _ := m.Get(name)
-		if got := tool.Output().Desc; got != want {
+		if got := tool.Output().Brief; got != want {
 			t.Errorf("%s: result description %q, want %q", name, got, want)
 		}
 		if tool.Desc() != "Read rows." {

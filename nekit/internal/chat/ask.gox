@@ -59,12 +59,11 @@ type AskInput struct {
 // AskOutput is the user's answer as the agent receives it. At least one of
 // Picked and Typed is set.
 type AskOutput struct {
-	_ struct{} `description:"picked: the names of the options the user chose; typed: their own answer; both can come when multiple is set"`
 	// Picked holds the names of the chosen options, in option order.
-	Picked []string `json:"picked,omitempty"`
+	Picked []string `json:"picked,omitempty" description:"the names of the options the user chose"`
 	// Typed is the user's own answer, trimmed; empty unless the own row is
 	// selected and has text.
-	Typed string `json:"typed,omitempty"`
+	Typed string `json:"typed,omitempty" description:"their own answer; both can come when multiple is set"`
 }
 
 // ModuleAsk is the built-in module that lets the agent ask the user to pick

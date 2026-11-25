@@ -40,7 +40,7 @@ func (b blocks) MarshalJSON() ([]byte, error) {
 	return json.Marshal(api.UserContents(b))
 }
 
-var _ api.MultiContainer = blocks{}
+var _ api.Container = blocks{}
 
 func result(ctx context.Context, res *mcp.CallToolResult, structured bool) any {
 	if structured && res.StructuredContent != nil {

@@ -289,9 +289,9 @@ func (c ContentToolResult) Refused() ContentToolResult {
 }
 
 // NewToolContents encodes a tool's output as the content of its result:
-// UserContents and UserContent as they are, a Container as its Content, a
-// MultiContainer as its Contents, a string or fmt.Stringer as one text block,
-// and anything else as its JSON in one text block.
+// UserContents and UserContent as they are, a Container as its Contents, a
+// string or fmt.Stringer as one text block, and anything else as its JSON in
+// one text block.
 func NewToolContents(output any) (UserContents, error) {
 	switch output := output.(type) {
 	case UserContents:
@@ -299,8 +299,6 @@ func NewToolContents(output any) (UserContents, error) {
 	case UserContent:
 		return UserContents{output}, nil
 	case Container:
-		return UserContents{output.Content()}, nil
-	case MultiContainer:
 		return output.Contents(), nil
 	case string:
 		return UserContents{ContentText{
@@ -322,9 +320,9 @@ func NewToolContents(output any) (UserContents, error) {
 
 // NewContentToolResult builds the result answering call id. With a nil err it
 // carries content as ToolOk. Otherwise content is dropped and the result is
-// err.Error() as one text block, followed by the Container, else the
-// MultiContainer, that err is or wraps, as NewToolContents encodes it; content
-// that fails to encode is left out. It is classified ToolErrJSON when err
+// err.Error() as one text block, followed by the Container that err is or
+// wraps, as NewToolContents encodes it; content that fails to encode is left
+// out. It is classified ToolErrJSON when err
 // wraps a DiscardedArgumentsError and ToolErrRuntime for any other error.
 func NewContentToolResult(id string, content UserContents, err error) ContentToolResult {
 	if err != nil {
@@ -335,11 +333,8 @@ func NewContentToolResult(id string, content UserContents, err error) ContentToo
 		}
 		var more UserContents
 		var container Container
-		var multi MultiContainer
 		if errors.As(err, &container) {
 			more, _ = NewToolContents(container)
-		} else if errors.As(err, &multi) {
-			more, _ = NewToolContents(multi)
 		}
 		content = append(UserContents{ContentText{Text: err.Error()}}, more...)
 		return ContentToolResult{ID: id, Content: content, Error: failure}

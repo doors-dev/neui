@@ -14,25 +14,18 @@
 
 package api
 
-// Container is a tool output that becomes one block of a result, the block
-// Content returns; ContentType names it for the tool's description.
+// Container is a tool output the agent gets as native content blocks on a
+// direct call: the blocks Contents returns, in order. Everywhere else, in
+// scripts and page tool results, the output is its JSON, which the output
+// schema describes.
 type Container interface {
-	// Content returns the block the output becomes.
-	Content() UserContent
-	// ContentType names the kind of block, such as "image" or "document".
-	ContentType() string
-}
-
-// MultiContainer is a tool output that becomes several blocks of one result,
-// in the order Contents returns them.
-type MultiContainer interface {
 	// Contents returns the blocks of the result, in order.
 	Contents() []UserContent
 }
 
 // Document is a document a tool returns: raw bytes and their DocumentMime.
-// Content turns it into a ContentDocument with the mime as a plain string and
-// no Name. Nothing checks Mime; check it with IsValid before returning.
+// Contents turns it into one ContentDocument with the mime as a plain string
+// and no Name. Nothing checks Mime; check it with IsValid before returning.
 type Document struct {
 	// Data is the raw file bytes.
 	Data []byte `json:"data"`
@@ -40,24 +33,19 @@ type Document struct {
 	Mime DocumentMime `json:"mime"`
 }
 
-// ContentType returns "document".
-func (d Document) ContentType() string {
-	return "document"
-}
-
-// Content returns d as a ContentDocument.
-func (d Document) Content() UserContent {
-	return ContentDocument{
+// Contents returns d as one ContentDocument.
+func (d Document) Contents() []UserContent {
+	return []UserContent{ContentDocument{
 		Data: d.Data,
 		Mime: string(d.Mime),
-	}
+	}}
 }
 
 var _ Container = Document{}
 
-// Image is an image a tool returns: raw bytes and their ImageMime. Content
-// turns it into a ContentImage with the mime as a plain string. Nothing checks
-// Mime; check it with IsValid before returning.
+// Image is an image a tool returns: raw bytes and their ImageMime. Contents
+// turns it into one ContentImage with the mime as a plain string. Nothing
+// checks Mime; check it with IsValid before returning.
 type Image struct {
 	// Data is the raw image bytes.
 	Data []byte `json:"data"`
@@ -65,17 +53,12 @@ type Image struct {
 	Mime ImageMime `json:"mime"`
 }
 
-// Content returns i as a ContentImage.
-func (i Image) Content() UserContent {
-	return ContentImage{
+// Contents returns i as one ContentImage.
+func (i Image) Contents() []UserContent {
+	return []UserContent{ContentImage{
 		Data: i.Data,
 		Mime: string(i.Mime),
-	}
-}
-
-// ContentType returns "image".
-func (i Image) ContentType() string {
-	return "image"
+	}}
 }
 
 var _ Container = Image{}

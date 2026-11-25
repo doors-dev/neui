@@ -303,7 +303,25 @@ func (descText) Description() string {
 	return "a greeting"
 }
 
-func TestViewDesc(t *testing.T) {
+type briefRow struct {
+	ID string   `json:"id" description:"the row's key"`
+	_  struct{} `description:"one row"`
+}
+
+type briefRows struct {
+	Rows      []briefRow `json:"rows" description:"in sheet order"`
+	First     briefRow   `json:"first"`
+	Last      briefRow   `json:"last" description:"the bottom row"`
+	Truncated bool       `json:"truncated,omitempty" description:"more rows remain"`
+	_         struct{}   `description:"rows found"`
+}
+
+type briefFields struct {
+	Count int      `json:"count" description:"how many matched"`
+	Paths []string `json:"paths"`
+}
+
+func TestViewBrief(t *testing.T) {
 	tagged, err1 := NewSchema[descTagged]()
 	plain, err2 := NewSchema[descPlain]()
 	outer, err3 := NewSchema[descOuter]()
@@ -314,8 +332,48 @@ func TestViewDesc(t *testing.T) {
 	accept, err8 := NewRawSchema(true)
 	reject, err9 := NewRawSchema(false)
 	anything, err10 := NewSchema[any]()
-	if err := errors.Join(err1, err2, err3, err4, err5, err6, err7, err8, err9, err10); err != nil {
+	rows, err11 := NewSchema[briefRows]()
+	fields, err12 := NewSchema[briefFields]()
+	list, err13 := NewSchema[[]briefRow]()
+	pointers, err14 := NewSchema[[]*briefRow]()
+	strs, err15 := NewSchema[[]string]()
+	ordered, err16 := NewRawSchema(json.RawMessage(`{"type":"object","description":"orders","properties":{"total":{"description":"in cents"},"id":{"type":"string"},"due":{"description":"a date"}}}`))
+	rawList, err17 := NewRawSchema(json.RawMessage(`{"type":"array","description":"orders","items":{"$ref":"#/$defs/order"},"$defs":{"order":{"type":"object","description":"an order","properties":{"id":{"description":"its key"},"lines":{"type":"array","items":{"type":"object","properties":{"sku":{"description":"nested"}}}}}}}}`))
+	rawStrings, err18 := NewRawSchema(json.RawMessage(`{"type":"array","description":"order ids","items":{"type":"string","description":"an order id"}}`))
+	if err := errors.Join(err1, err2, err3, err4, err5, err6, err7, err8, err9, err10, err11, err12, err13, err14, err15, err16, err17, err18); err != nil {
 		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		name string
+		v    View
+		want string
+	}{
+		{"tagged", tagged.View(), "Result: rows found"},
+		{"tagged in object mode", tagged.Object().View(), "Result: rows found"},
+		{"untagged", plain.View(), ""},
+		{"embedded before the tag", outer.View(), "Result: outer"},
+		{"non-object", text.View(), ""},
+		{"non-object in object mode", text.Object().View(), ""},
+		{"raw", raw.View(), "Result: orders"},
+		{"raw non-object", rawText.View(), ""},
+		{"raw nullable object", nullable.View(), ""},
+		{"boolean true", accept.View(), ""},
+		{"boolean false", reject.View(), ""},
+		{"any raw", AnyRawSchema.View(), ""},
+		{"any", anything.View(), ""},
+		{"root and fields, nested fields left out", rows.View(), "Result: rows found\nlast: the bottom row\nrows: in sheet order\ntruncated: more rows remain"},
+		{"fields without a root description", fields.View(), "Result:\ncount: how many matched"},
+		{"fields in the schema's order", ordered.View(), "Result: orders\ntotal: in cents\ndue: a date"},
+		{"a list", list.View(), "Result: one row\nid: the row's key"},
+		{"a list of pointers", pointers.View(), "Result: one row\nid: the row's key"},
+		{"a list in object mode", list.Object().View(), ""},
+		{"a list of strings", strs.View(), ""},
+		{"a raw list describing itself", rawList.View(), "Result: orders\nid: its key"},
+		{"a raw list of described strings", rawStrings.View(), "Result: order ids"},
+	} {
+		if c.v.Brief != c.want {
+			t.Fatalf("%s: Brief %q, want %q", c.name, c.v.Brief, c.want)
+		}
 	}
 	for _, c := range []struct {
 		name string
@@ -324,24 +382,9 @@ func TestViewDesc(t *testing.T) {
 	}{
 		{"tagged", tagged.View(), "rows found"},
 		{"tagged in object mode", tagged.Object().View(), "rows found"},
-		{"untagged", plain.View(), ""},
 		{"embedded before the tag", outer.View(), "outer"},
-		{"non-object", text.View(), ""},
-		{"non-object in object mode", text.Object().View(), ""},
 		{"raw", raw.View(), "orders"},
-		{"raw non-object", rawText.View(), ""},
-		{"raw nullable object", nullable.View(), ""},
-		{"boolean true", accept.View(), ""},
-		{"boolean false", reject.View(), ""},
-		{"any raw", AnyRawSchema.View(), ""},
-		{"any", anything.View(), ""},
 	} {
-		if c.v.Desc != c.want {
-			t.Fatalf("%s: Desc %q, want %q", c.name, c.v.Desc, c.want)
-		}
-		if c.want == "" {
-			continue
-		}
 		var root struct {
 			Description string `json:"description"`
 		}
@@ -376,7 +419,7 @@ func TestView(t *testing.T) {
 		Simple: []byte(`{"description":"rows found","properties":{"rows":{"items":` + row + `,"type":["array","null"]}},"type":"object"}`),
 		Root:   []byte(root),
 		Defs:   map[string]json.RawMessage{"SchemaViewRow": json.RawMessage(row)},
-		Desc:   "rows found",
+		Brief:  "Result: rows found",
 	}
 	if got := rows.View(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("view %+v, want %+v", got, want)
@@ -393,7 +436,7 @@ func TestView(t *testing.T) {
 	if got := list.Object().View(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("a list in object mode shows %+v, want %+v", got, want)
 	}
-	if got := list.View(); string(got.Root) != `{"items":{"$ref":"#/definitions/SchemaViewRow"},"type":"array"}` || got.Desc != "" {
+	if got := list.View(); string(got.Root) != `{"items":{"$ref":"#/definitions/SchemaViewRow"},"type":"array"}` || got.Brief != "" {
 		t.Fatalf("object mode changed the list to %+v", got)
 	}
 }

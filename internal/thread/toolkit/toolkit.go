@@ -145,18 +145,22 @@ func (t Toolkit) Tools() iter.Seq[api.Tool] {
 			for _, tool := range m.List() {
 				desc := tool.Desc()
 				output := tool.Output()
+				hint := tool.OutputHint()
 				if tier == common.TierAssistant {
-					if output.Desc != "" {
-						desc += "\nResult: " + output.Desc
+					if hint != "" {
+						desc += "\nResult: " + hint + "."
+					} else if output.Brief != "" {
+						desc += "\n" + output.Brief
 					}
 				} else {
 					schema := output.Raw
 					if brief[tool.Name()] {
 						schema = output.Root
 					}
-					desc += "\nOutput schema: " + string(schema)
-					if hint := tool.OutputHint(); hint != "" {
-						desc += "\nOn a direct tool call the result arrives as " + hint
+					if hint != "" {
+						desc += "\nOutput schema, for scripts: " + string(schema) + "\nOn a direct tool call the result arrives as " + hint + "."
+					} else {
+						desc += "\nOutput schema: " + string(schema)
 					}
 				}
 				full := fmt.Sprintf("%s__%s", name, tool.Name())

@@ -74,14 +74,13 @@ func (d data) MarshalJSON() ([]byte, error) {
 }
 
 type state struct {
-	_        struct{} `description:"inputs: a button or link takes click, an input or radio takes write, a radio standing for its whole same-name group; rights RW allow every call, R only read and focus, W only click, write and focus. data: what the application tells you about the space, not a copy of the screen: it may describe things the page does not display"`
-	Path     string   `json:"path"`
-	Desc     string   `json:"desc"`
-	Island   bool     `json:"island,omitempty"`
-	Tools    []tool   `json:"tools,omitempty"`
-	Inputs   []input  `json:"inputs,omitempty"`
-	Data     []data   `json:"data,omitempty"`
-	Children []child  `json:"children,omitempty"`
+	Path     string  `json:"path"`
+	Desc     string  `json:"desc"`
+	Island   bool    `json:"island,omitempty"`
+	Tools    []tool  `json:"tools,omitempty"`
+	Inputs   []input `json:"inputs,omitempty" description:"a button or link takes click, an input or radio takes write, a radio standing for its whole same-name group; rights RW allow every call, R only read and focus, W only click, write and focus"`
+	Data     []data  `json:"data,omitempty" description:"what the application tells you about the space, not a copy of the screen: it may describe things the page does not display"`
+	Children []child `json:"children,omitempty"`
 }
 
 type child struct {
@@ -94,11 +93,10 @@ type node struct {
 	child
 	Tools      []string `json:"tools,omitempty"`
 	Inputs     int      `json:"inputs,omitempty"`
-	Highlights []string `json:"highlights,omitempty"`
+	Highlights []string `json:"highlights,omitempty" description:"descriptions of some of the space's inputs, picked by the application"`
 	Data       int      `json:"data,omitempty"`
 	Children   []node   `json:"children,omitempty" description:"in name order"`
-	More       int      `json:"more,omitempty"`
-	_          struct{} `description:"highlights: descriptions of some of the space's inputs, picked by the application. more: how many of the space's children are not listed; call tree on it to go deeper, or sync it to see them all"`
+	More       int      `json:"more,omitempty" description:"how many of the space's children are not listed; call tree on it to go deeper, or sync it to see them all"`
 }
 
 type report struct {
@@ -139,10 +137,9 @@ type change struct {
 }
 
 type actionReport struct {
-	Handled bool   `json:"handled"`
+	Handled bool   `json:"handled" description:"false is not a failure: the action was done on the page, and the application may use it later"`
 	Note    string `json:"note,omitempty"`
 	report
-	_ struct{} `description:"handled: false is not a failure: the action was done on the page, and the application may use it later"`
 }
 
 type inputRef struct {
@@ -166,9 +163,8 @@ type readResult struct {
 }
 
 type toolResult struct {
-	Output any `json:"output,omitempty"`
+	Output any `json:"output,omitempty" description:"what the page tool returned, or on a failed call what its error carried"`
 	report
-	_ struct{} `description:"output: what the page tool returned, or on a failed call what its error carried"`
 }
 
 type selectOption struct {
@@ -202,9 +198,8 @@ type islandEndArg struct {
 }
 
 type islandRunResult struct {
-	Task   uint     `json:"task"`
-	Script uint     `json:"script"`
-	_      struct{} `description:"task identifies the app in its task_notify records and its task_result; script identifies this part in its notifications_list and script_error records and in an error that ends the app"`
+	Task   uint `json:"task" description:"identifies the app in its task_notify records and its task_result"`
+	Script uint `json:"script" description:"identifies this part in its notifications_list and script_error records and in an error that ends the app"`
 }
 
 type failure struct {
@@ -224,14 +219,10 @@ func (f failure) MarshalJSON() ([]byte, error) {
 	return json.Marshal(f.result)
 }
 
-func (f failure) Content() api.UserContent {
+func (f failure) Contents() []api.UserContent {
 	raw, err := json.Marshal(f.result)
 	if err != nil {
-		return api.ContentText{Text: f.err.Error()}
+		return []api.UserContent{api.ContentText{Text: f.err.Error()}}
 	}
-	return api.ContentText{Text: string(raw)}
-}
-
-func (f failure) ContentType() string {
-	return "text"
+	return []api.UserContent{api.ContentText{Text: string(raw)}}
 }

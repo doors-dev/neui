@@ -71,9 +71,8 @@ type writeArg struct {
 }
 
 type writeResult struct {
-	Range   string   `json:"range"`
-	Created bool     `json:"created,omitempty"`
-	_       struct{} `description:"range: the block written; created: the workbook did not exist and this call made it"`
+	Range   string `json:"range" description:"the block written"`
+	Created bool   `json:"created,omitempty" description:"the workbook did not exist and this call made it"`
 }
 
 func writeTool(ctx context.Context, arg writeArg) (writeResult, error) {

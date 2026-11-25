@@ -23,7 +23,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/doors-dev/doors"
 	"neui.dev/api"
 	"neui.dev/internal/common"
 	"neui.dev/internal/modules/js/task"
@@ -42,14 +41,9 @@ func moduleDesc(tier common.ModelTier) string {
 
 const runDesc = `Run JavaScript from exactly one of file and code; one script runs at a time. The script body runs as a function: end it with a return; the returned value must serialize to JSON. A run outlasting a few seconds returns early with deferred: true. Not accessible from scripts.`
 
-var notAddedLogged sync.Once
-
 func Module(ctx context.Context) common.Module {
 	tier := common.Tier(ctx)
 	if tier == common.TierAssistant {
-		notAddedLogged.Do(func() {
-			doors.Logger(ctx).Error("js: module not added at TierAssistant")
-		})
 		return nil
 	}
 	m := tools.NewModule("js", moduleDesc(tier))
@@ -88,10 +82,9 @@ type RunArg struct {
 }
 
 type RunResult struct {
-	_      struct{}        `description:"deferred: the script goes on in the background, and its return value or error arrives later in a task_result element"`
 	Output json.RawMessage `json:"result,omitempty"`
 	Log    string          `json:"logFile"`
-	Async  bool            `json:"deferred,omitempty"`
+	Async  bool            `json:"deferred,omitempty" description:"the script goes on in the background, and its return value or error arrives later in a task_result element"`
 }
 
 func (m *module) done() {

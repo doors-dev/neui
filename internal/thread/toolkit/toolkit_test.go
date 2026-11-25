@@ -66,28 +66,34 @@ func TestToolsAssembleTheTierText(t *testing.T) {
 		return func(context.Context) common.Module { return m }
 	}
 	blocks := string(schema.BlocksRawSchema.View().Raw)
+	partsSchema, err := schema.NewSchema[toolParts]()
+	if err != nil {
+		t.Fatal(err)
+	}
+	parts := string(partsSchema.View().Raw)
+	const native = "\nOn a direct tool call the result arrives as native content blocks."
 	full := map[string]string{
-		"bare__blocks": "fetches\nOutput schema: " + blocks + "\nOn a direct tool call the result arrives as content blocks",
-		"bare__image":  "draws\nOutput schema: " + image + "\nOn a direct tool call the result arrives as an image block",
+		"bare__blocks": "fetches\nOutput schema, for scripts: " + blocks + native,
+		"bare__image":  "draws\nOutput schema, for scripts: " + image + native,
 		"bare__order":  "reads an order\nOutput schema: " + orderRaw,
-		"bare__parts":  "splits\nOutput schema: " + blocks + "\nOn a direct tool call the result arrives as content blocks",
+		"bare__parts":  "splits\nOutput schema, for scripts: " + parts + native,
 		"bare__rows":   "lists rows\nOutput schema: {\"type\":\"object\",\"description\":\"rows found\"}",
-		"crm__blocks":  "fetches\nOutput schema: " + blocks + "\nOn a direct tool call the result arrives as content blocks",
-		"crm__image":   "draws\nOutput schema: " + image + "\nOn a direct tool call the result arrives as an image block",
+		"crm__blocks":  "fetches\nOutput schema, for scripts: " + blocks + native,
+		"crm__image":   "draws\nOutput schema, for scripts: " + image + native,
 		"crm__order":   "reads an order\nOutput schema: " + order,
-		"crm__parts":   "splits\nOutput schema: " + blocks + "\nOn a direct tool call the result arrives as content blocks",
+		"crm__parts":   "splits\nOutput schema, for scripts: " + parts + native,
 		"crm__rows":    "lists rows\nOutput schema: {\"type\":\"object\",\"description\":\"rows found\"}",
 	}
 	short := map[string]string{
-		"bare__blocks": "fetches",
-		"bare__image":  "draws",
+		"bare__blocks": "fetches\nResult: native content blocks.",
+		"bare__image":  "draws\nResult: native content blocks.",
 		"bare__order":  "reads an order\nResult: the order",
-		"bare__parts":  "splits",
+		"bare__parts":  "splits\nResult: native content blocks.",
 		"bare__rows":   "lists rows\nResult: rows found",
-		"crm__blocks":  "fetches",
-		"crm__image":   "draws",
+		"crm__blocks":  "fetches\nResult: native content blocks.",
+		"crm__image":   "draws\nResult: native content blocks.",
 		"crm__order":   "reads an order\nResult: the order",
-		"crm__parts":   "splits",
+		"crm__parts":   "splits\nResult: native content blocks.",
 		"crm__rows":    "lists rows\nResult: rows found",
 	}
 	system := `<module name="crm">` + "\ncrm tools" + outputDefsHead + "\nToolkitToolCustomer " + customer + "\n</module>"

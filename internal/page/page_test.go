@@ -559,12 +559,8 @@ func (s stuck) Error() string {
 	return "stuck"
 }
 
-func (s stuck) Content() api.UserContent {
-	return api.ContentText{Text: fmt.Sprintf("stuck at %d", s.Count)}
-}
-
-func (s stuck) ContentType() string {
-	return "text"
+func (s stuck) Contents() []api.UserContent {
+	return []api.UserContent{api.ContentText{Text: fmt.Sprintf("stuck at %d", s.Count)}}
 }
 
 type tangled struct {

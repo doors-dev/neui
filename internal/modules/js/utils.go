@@ -110,11 +110,8 @@ func RegisterTools(vm *quickjs.VM, ctx func() context.Context, prefix string, li
 			}
 			var value any
 			var container api.Container
-			var multi api.MultiContainer
 			if errors.As(err, &container) {
 				value = container
-			} else if errors.As(err, &multi) {
-				value = multi
 			}
 			if raw, merr := json.Marshal(value); value != nil && merr == nil {
 				return hostResult{Value: json.RawMessage(raw), Error: err.Error()}, nil

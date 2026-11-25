@@ -74,20 +74,24 @@ type Tool[I any, O any] struct {
 	Name string
 	// Desc tells the agent what the tool does and when to call it. At
 	// TierDeveloper and TierAgent the output schema is appended to it; at
-	// TierAssistant only O's description is, on a line starting "Result: ".
-	// Describe O with the description tag of a `_ struct{}` field placed
-	// after any embedded struct: what the result is and which of its fields
-	// steer the agent's next step.
+	// TierAssistant only the descriptions of O and of its top-level fields
+	// are (for a slice, those of its elements), after "Result:". When O is a
+	// string, a fmt.Stringer or an api.Container, the schema is marked as the
+	// one scripts get and the description adds what a direct tool call
+	// returns; at TierAssistant it says only that. Describe O with the
+	// description tag of a `_ struct{}` field placed after any embedded
+	// struct: what the result is. Describe a field with its own description
+	// tag when it steers the agent's next step.
 	Desc string
 	// Handler runs the call with the input decoded from JSON into I; the
 	// input schema the agent sees comes from I, and what it sees of O is as
-	// Desc says. On a direct agent call to a module tool, a string or
-	// fmt.Stringer result reaches the agent as text, an api content value as
-	// itself and anything else as JSON; a script gets the result as JSON,
-	// and so does the agent from a page tool, together with what the call
-	// changed on the page. An error fails the call with its message as text;
-	// when it is or wraps an api.Container or api.MultiContainer, that
-	// content goes with it, as JSON to a script or from a page tool. ctx
+	// Desc says. On a direct tool call to a module tool, a string or
+	// fmt.Stringer result reaches the agent as text, an api.Container or api
+	// content value as native content blocks and anything else as JSON; a
+	// script gets the result as JSON, and so does the agent from a page tool,
+	// together with what the call changed on the page. An error fails the
+	// call with its message as text; when it is or wraps an api.Container,
+	// that content goes with it, as JSON to a script or from a page tool. ctx
 	// works with the Tool* functions; for a tool rendered on a page it is
 	// also a doors context of that render, so the handler can update the
 	// page, and it runs once the page has settled.

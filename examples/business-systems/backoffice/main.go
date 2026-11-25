@@ -112,7 +112,7 @@ func main() {
 			"The user works on the pages next to the chat: prefer acting there, so they see it happen. " +
 			"Deletions happen only when the user confirms them on the page.",
 	)}
-	modules := []neui.ModuleFactory{neui.ModuleJS, neui.ModuleXLS(neui.XLSConfig{})}
+	modules := []neui.ModuleFactory{neui.ModuleXLS(neui.XLSConfig{})}
 	switch v := os.Getenv("TIER"); v {
 	case "", "developer":
 	case "agent":

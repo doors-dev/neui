@@ -53,10 +53,9 @@ type tableArg struct {
 }
 
 type tableResult struct {
-	Range   string   `json:"range"`
-	Name    string   `json:"name"`
-	Created bool     `json:"created,omitempty"`
-	_       struct{} `description:"range: the table, header row included; name: for formulas like =SUM(Sales[Amount]); created: the workbook did not exist and this call made it"`
+	Range   string `json:"range" description:"the table, header row included"`
+	Name    string `json:"name" description:"for formulas like =SUM(Sales[Amount])"`
+	Created bool   `json:"created,omitempty" description:"the workbook did not exist and this call made it"`
 }
 
 type formatArg struct {

@@ -25,6 +25,7 @@ import (
 	"neui.dev"
 	"neui.dev/api"
 	"neui.dev/internal/common"
+	jsmod "neui.dev/internal/modules/js"
 	"neui.dev/internal/testkit"
 	"neui.dev/internal/testkit/stack"
 )
@@ -74,7 +75,7 @@ return pitcher().price`}),
 		testkit.Call("page__tool", map[string]any{"path": "api.orders", "tool": "set_status", "arg": map[string]any{"order": id, "status": "paid"}}),
 		testkit.Say("done"),
 	)
-	c := stack.Page(t, stack.Host{Provider: p, Page: renderedAt(neui.TierAgent), Options: []neui.Option{neui.OptionTier(neui.TierAgent), neui.OptionModules(neui.ModuleJS)}})
+	c := stack.Page(t, stack.Host{Provider: p, Page: renderedAt(neui.TierAgent), Options: []neui.Option{neui.OptionTier(neui.TierAgent), neui.OptionModules(jsmod.Module)}})
 	c.Send("raise the pitcher's price by 2 and mark the order paid")
 	c.Wait()
 	result := func(i int) api.ContentToolResult {

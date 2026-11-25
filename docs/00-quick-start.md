@@ -248,9 +248,8 @@ err := neui.Enable(ctx, neui.OptionModules(weather))
 
 ### Included modules
 
-By default only the system modules are on. These come included:
+By default only the system modules are on. Except at `TierAssistant` they include js, which lets the agent run sandboxed scripts to automate work, calling your tools from the script. These come included:
 
-- `ModuleJS` lets the agent run sandboxed scripts to automate work, calling your tools from the script.
 - `ModuleXLS` lets the agent read and build Excel workbooks.
 - `ModuleWeb` lets the agent read web pages, and search the web when you give it a search backend.
 - `ModuleMCP` plugs in the tools of any remote MCP server.
@@ -262,7 +261,6 @@ Enable them all, with Exa search over MCP:
 app := doors.NewApp(func(ctx context.Context, r doors.Request) gox.Comp {
 	return App{}
 }, neui.WithProvider(provider), neui.WithModules(
-	neui.ModuleJS,
 	neui.ModuleXLS(neui.XLSConfig{}),
 	neui.ModuleWeb(neui.WebConfig{}),
 	neui.ModuleMCP(neui.MCPConfig{Name: "exa", URL: "https://mcp.exa.ai/mcp"}),

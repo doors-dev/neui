@@ -44,10 +44,10 @@ type unzipArg struct {
 }
 
 type unzipResult struct {
-	_         struct{} `description:"count files were extracted, the first 100 listed in extracted; truncated: more exist"`
+	_         struct{} `description:"count files were extracted, the first 100 listed in extracted"`
 	Count     int      `json:"count"`
 	Extracted []string `json:"extracted"`
-	Truncated bool     `json:"truncated,omitempty"`
+	Truncated bool     `json:"truncated,omitempty" description:"more exist"`
 }
 
 func zipTool(ctx context.Context, arg zipArg) (Entry, error) {

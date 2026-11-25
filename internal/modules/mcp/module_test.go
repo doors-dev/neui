@@ -181,9 +181,9 @@ func TestResultAlwaysBlocks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("call: %v", err)
 	}
-	multi, ok := out.(api.MultiContainer)
+	multi, ok := out.(api.Container)
 	if !ok {
-		t.Fatalf("got %T (%v), want api.MultiContainer", out, out)
+		t.Fatalf("got %T (%v), want api.Container", out, out)
 	}
 	contents := multi.Contents()
 	if len(contents) != 1 {

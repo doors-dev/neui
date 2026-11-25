@@ -27,8 +27,8 @@ import (
 // one. The runtime calls it each time a thread opens, with a context that
 // lasts while the thread stays open and carries no tool call. When two
 // modules of a thread share a name, the later one is skipped and an error is
-// logged; the built-in chat, time and files modules come first. It may
-// return nil to add no module.
+// logged; the built-in chat, time, files and, except at TierAssistant, js
+// modules come first. It may return nil to add no module.
 type ModuleFactory = func(ctx context.Context) Module
 
 // Tool is one tool as the runtime sees it, the result of a Tool or Ask
@@ -42,9 +42,8 @@ type Tool interface {
 	Input() schema.View
 	// Output is the JSON schema of the tool's result.
 	Output() schema.View
-	// OutputHint is how a direct call's result arrives: "a text block",
-	// "content blocks" or "a <type> block" such as "an image block"; "" when
-	// it arrives as JSON.
+	// OutputHint is how a direct tool call's result arrives: "a text block" or
+	// "native content blocks"; "" when it arrives as JSON.
 	OutputHint() string
 	// Agent calls the tool as a direct tool call and returns its result as
 	// content for the model.

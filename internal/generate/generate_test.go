@@ -424,7 +424,7 @@ func TestPartsBecomeContent(t *testing.T) {
 		api.ContentText{Text: "plain"},
 		api.ContentText{Text: "label: x"},
 		api.ContentText{Text: `{"stars":2}`},
-		image.Content(),
+		image.Contents()[0],
 		api.ContentText{Text: "as is"},
 	}
 	if got := p.Request(t, 0).Messages[0].Content; !reflect.DeepEqual(got, want) {

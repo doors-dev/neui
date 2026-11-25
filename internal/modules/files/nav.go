@@ -36,9 +36,9 @@ type listArg struct {
 }
 
 type listResult struct {
-	_         struct{} `description:"the directory's entries, at most 1000; truncated: more exist, list a subdirectory instead"`
+	_         struct{} `description:"the directory's entries, at most 1000"`
 	Entries   []Entry  `json:"entries"`
-	Truncated bool     `json:"truncated,omitempty"`
+	Truncated bool     `json:"truncated,omitempty" description:"more exist, list a subdirectory instead"`
 }
 
 type copyArg struct {

@@ -38,9 +38,8 @@ type totalArg struct {
 }
 
 type totalResult struct {
-	_     struct{} `description:"row and range: the summary row's number and cells"`
-	Row   int      `json:"row"`
-	Range string   `json:"range"`
+	Row   int    `json:"row" description:"the summary row's number"`
+	Range string `json:"range" description:"the summary row's cells"`
 }
 
 var aggFns = map[string]int{

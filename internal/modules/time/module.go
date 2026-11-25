@@ -99,11 +99,10 @@ func (m *module) now(ctx context.Context, _ struct{}) (NowResult, error) {
 }
 
 type ClientResult struct {
-	_      struct{} `description:"skewMs: the browser's clock minus the server's, round trip included; a large value means the user's clock is off"`
-	Time   string   `json:"time" format:"date-time"`
-	UTC    string   `json:"utc" format:"date-time"`
-	Offset int      `json:"offsetMinutes" description:"ahead of UTC"`
-	Skew   int64    `json:"skewMs"`
+	Time   string `json:"time" format:"date-time"`
+	UTC    string `json:"utc" format:"date-time"`
+	Offset int    `json:"offsetMinutes" description:"ahead of UTC"`
+	Skew   int64  `json:"skewMs" description:"the browser's clock minus the server's, round trip included; a large value means the user's clock is off"`
 }
 
 func (m *module) client(ctx context.Context, _ struct{}) (ClientResult, error) {
@@ -143,10 +142,9 @@ type TimerArg struct {
 }
 
 type TimerResult struct {
-	_     struct{} `description:"deferred: the wait goes on in the background, and when the moment arrives a <task_result> element starts a round"`
-	Async bool     `json:"deferred,omitempty"`
-	Fires string   `json:"firesAt" format:"date-time"`
-	Fired string   `json:"firedAt,omitempty" format:"date-time"`
+	Async bool   `json:"deferred,omitempty" description:"the wait goes on in the background, and when the moment arrives a <task_result> element starts a round"`
+	Fires string `json:"firesAt" format:"date-time"`
+	Fired string `json:"firedAt,omitempty" format:"date-time"`
 }
 
 func (m *module) timer(ctx context.Context, arg TimerArg) (TimerResult, error) {

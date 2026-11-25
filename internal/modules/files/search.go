@@ -54,9 +54,9 @@ type grepMatch struct {
 }
 
 type grepResult struct {
-	_         struct{}    `description:"matching lines, at most limit; truncated: more exist, narrow with path or glob"`
+	_         struct{}    `description:"matching lines, at most limit"`
 	Matches   []grepMatch `json:"matches"`
-	Truncated bool        `json:"truncated,omitempty"`
+	Truncated bool        `json:"truncated,omitempty" description:"more exist, narrow with path or glob"`
 }
 
 type globArg struct {
@@ -65,9 +65,9 @@ type globArg struct {
 }
 
 type globResult struct {
-	_         struct{} `description:"at most 100 paths; truncated: more match, narrow the pattern"`
+	_         struct{} `description:"at most 100 paths"`
 	Paths     []string `json:"paths"`
-	Truncated bool     `json:"truncated,omitempty"`
+	Truncated bool     `json:"truncated,omitempty" description:"more match, narrow the pattern"`
 }
 
 func grepTool(ctx context.Context, arg grepArg) (grepResult, error) {

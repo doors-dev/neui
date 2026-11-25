@@ -82,10 +82,10 @@ type assistantReadArg struct {
 }
 
 type readResult struct {
-	_          struct{}   `description:"a page of the range's rows from offset, a merged cell's value in its top-left cell only; truncated: more rows remain, call again with offset set to nextOffset"`
+	_          struct{}   `description:"a page of the range's rows from offset, a merged cell's value in its top-left cell only"`
 	Rows       [][]string `json:"rows"`
 	NextOffset uint       `json:"nextOffset"`
-	Truncated  bool       `json:"truncated,omitempty"`
+	Truncated  bool       `json:"truncated,omitempty" description:"more rows remain, call again with offset set to nextOffset"`
 }
 
 type findArg struct {
@@ -101,9 +101,9 @@ type findHit struct {
 }
 
 type findResult struct {
-	_         struct{}  `description:"the matching cells, up to the module's cap; truncated: more may exist, narrow the query or restrict to one sheet"`
+	_         struct{}  `description:"the matching cells, up to the module's cap"`
 	Hits      []findHit `json:"hits"`
-	Truncated bool      `json:"truncated,omitempty"`
+	Truncated bool      `json:"truncated,omitempty" description:"more may exist, narrow the query or restrict to one sheet"`
 }
 
 type bounds struct {

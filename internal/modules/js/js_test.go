@@ -20,10 +20,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"reflect"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -583,19 +581,9 @@ func TestClearLogQuotaIsNotARuntimeFailure(t *testing.T) {
 }
 
 func TestTierAssistantAddsNoModule(t *testing.T) {
-	notAddedLogged = sync.Once{}
-	var logged strings.Builder
-	restore := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
-	t.Cleanup(func() { slog.SetDefault(restore) })
 	ctx := context.WithValue(context.Background(), common.TierKey{}, common.TierAssistant)
-	for range 2 {
-		if m := Module(ctx); m != nil {
-			t.Fatalf("TierAssistant added the js module %s", m.Name())
-		}
-	}
-	if n := strings.Count(logged.String(), "js: module not added at TierAssistant"); n != 1 {
-		t.Fatalf("the error was logged %d times, want once per process", n)
+	if m := Module(ctx); m != nil {
+		t.Fatalf("TierAssistant added the js module %s", m.Name())
 	}
 	for _, tier := range []common.ModelTier{common.TierDeveloper, common.TierAgent} {
 		m := Module(context.WithValue(context.Background(), common.TierKey{}, tier))

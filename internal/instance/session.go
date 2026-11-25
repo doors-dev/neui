@@ -26,6 +26,7 @@ import (
 	"neui.dev/internal/instance/ui"
 	chatmod "neui.dev/internal/modules/chat"
 	"neui.dev/internal/modules/files"
+	"neui.dev/internal/modules/js"
 	timemod "neui.dev/internal/modules/time"
 	"neui.dev/internal/page"
 	"neui.dev/internal/storage/local"
@@ -121,10 +122,11 @@ func (s Session) Enable(opts []common.Option) error {
 			}
 		})
 	}
-	options := make([]common.Option, 0, len(opts)+5)
+	options := make([]common.Option, 0, len(opts)+6)
 	options = append(options, common.OptionModule(chatmod.Module))
 	options = append(options, common.OptionModule(timemod.Module))
 	options = append(options, common.OptionModule(files.Module))
+	options = append(options, common.OptionModule(js.Module))
 	options = append(options, common.OptionModules(common.AppModules(s.ctx)))
 	options = append(options, common.OptionSystem(common.AppSystem(s.ctx)))
 	options = append(options, opts...)

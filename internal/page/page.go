@@ -116,11 +116,8 @@ func (p *page) Module(ctx context.Context) Module {
 			var res toolResult
 			var value any
 			var container api.Container
-			var multi api.MultiContainer
 			if errors.As(err, &container) {
 				value = container
-			} else if errors.As(err, &multi) {
-				value = multi
 			}
 			if raw, merr := json.Marshal(value); value != nil && merr == nil {
 				res.Output = json.RawMessage(raw)

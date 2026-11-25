@@ -165,19 +165,16 @@ func NewModule(name string, desc string) Module {
 	return Module{new(sync.Mutex), tools.NewModule(name, desc)}
 }
 
-// ModuleJS is the js module: js__run lets the agent run a JavaScript file
+// JSConfig tunes the runtime of the built-in js module, which every thread
+// gets except at TierAssistant: js__run lets the agent run a JavaScript file
 // from the workspace or inline code, with the thread's tools callable as
 // synchronous functions (a tool can refuse script calls, as js's own tools
 // do), and js__stop cancels a run that outlived its call. Scripts run on
-// QuickJS (plain ES2023: no Node, browser APIs or promises), limited by
-// JSConfig. At TierAssistant it adds no module and logs an error, once per
-// process.
-var ModuleJS ModuleFactory = js.Module
-
-// JSConfig tunes the js runtime; a zero or negative field takes its default.
-// The limits are shared by every session of an app that sets WithJSConfig,
-// and by every app in the process that does not: a script waits to start
-// until a worker and enough of TotalMemory are free.
+// QuickJS (plain ES2023: no Node, browser APIs or promises). A zero or
+// negative field takes its default. The limits are shared by every session
+// of an app that sets WithJSConfig, and by every app in the process that does
+// not: a script waits to start until a worker and enough of TotalMemory are
+// free.
 type JSConfig struct {
 	// TotalMemory is the sum in bytes of the memory budgets of all scripts
 	// executing at once across the app. Default 512 MiB; a value below
@@ -208,8 +205,8 @@ type JSConfig struct {
 	MaxCallDepth int
 }
 
-// WithJSConfig tunes the js runtime of ModuleJS, as an app option for
-// doors.NewApp: the app then schedules scripts against its own memory and
+// WithJSConfig tunes the runtime of the built-in js module, as an app option
+// for doors.NewApp: the app then schedules scripts against its own memory and
 // worker limits. Without it, the app runs on defaults and shares one set of
 // limits with every other app in the process that does not set it. The
 // runtime and its scheduling goroutine live for the rest of the process, even

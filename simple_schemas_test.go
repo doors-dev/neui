@@ -24,6 +24,7 @@ import (
 	"neui.dev/internal/common"
 	chatmod "neui.dev/internal/modules/chat"
 	"neui.dev/internal/modules/files"
+	jsmod "neui.dev/internal/modules/js"
 	timemod "neui.dev/internal/modules/time"
 	"neui.dev/internal/page"
 	"neui.dev/nekit"
@@ -40,7 +41,7 @@ func TestBuiltInToolsHaveSimpleSchemas(t *testing.T) {
 		chatmod.Module,
 		timemod.Module,
 		files.Module,
-		neui.ModuleJS,
+		jsmod.Module,
 		neui.ModuleXLS(neui.XLSConfig{}),
 		neui.ModuleWeb(neui.WebConfig{Search: noSearch{}}),
 		nekit.ModuleAsk(),
