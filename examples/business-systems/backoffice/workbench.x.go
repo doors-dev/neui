@@ -60,7 +60,7 @@ func apiSpace() gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 //line workbench.gox:44
-		if neui.Tier(ctx) == neui.TierDeveloper {
+		if neui.Tier(ctx) != neui.TierAgent {
 		return nil
 	}
 
@@ -171,33 +171,64 @@ func workbenchFrame(slot gox.Comp) gox.Elem {
 					__e = __c.Close(); if __e != nil { return }
 				}
 				__e = __c.Close(); if __e != nil { return }
+				__e = __c.Init("div"); if __e != nil { return }
+				{
 //line workbench.gox:97
-				__e = (neui.Use{Desc: "hide the Workbench panel so the page is visible; the app keeps running"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
-					ctx := __c.Context(); _ = ctx
-					__e = __c.Init("button"); if __e != nil { return }
-					{
+					__e = __c.Set("class", "-mr-2 flex items-center gap-1"); if __e != nil { return }
+					__e = __c.Submit(); if __e != nil { return }
 //line workbench.gox:98
-						__e = __c.Modify(show(false)); if __e != nil { return }
+					__e = (neui.Use{Desc: "hide the Workbench panel so the page is visible; the app keeps running"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+						ctx := __c.Context(); _ = ctx
+						__e = __c.Init("button"); if __e != nil { return }
+						{
 //line workbench.gox:99
-						__e = __c.Set("type", "button"); if __e != nil { return }
+							__e = __c.Modify(show(false)); if __e != nil { return }
 //line workbench.gox:100
-						__e = __c.Set("aria-label", "Hide the Workbench"); if __e != nil { return }
+							__e = __c.Set("type", "button"); if __e != nil { return }
 //line workbench.gox:101
-						__e = __c.Set("class", btnGhost.Add("-mr-2 px-2")); if __e != nil { return }
-						__e = __c.Submit(); if __e != nil { return }
+							__e = __c.Set("aria-label", "Hide the Workbench"); if __e != nil { return }
 //line workbench.gox:102
-						__e = __c.Any(icon(iconMinus, "size-5")); if __e != nil { return }
-					}
-					__e = __c.Close(); if __e != nil { return }
-				return })); if __e != nil { return }
+							__e = __c.Set("class", btnGhost.Add("px-2")); if __e != nil { return }
+							__e = __c.Submit(); if __e != nil { return }
+//line workbench.gox:103
+							__e = __c.Any(icon(iconMinus, "size-5")); if __e != nil { return }
+						}
+						__e = __c.Close(); if __e != nil { return }
+					return })); if __e != nil { return }
+//line workbench.gox:105
+					__e = (neui.Use{Desc: "close the app in the Workbench"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
+						ctx := __c.Context(); _ = ctx
+						__e = __c.Init("button"); if __e != nil { return }
+						{
+//line workbench.gox:106
+							__e = __c.Modify(doors.AClick{
+						On: func(ctx context.Context, _ doors.RequestPointer) bool {
+							neui.IslandEnd(ctx)
+							return false
+						},
+					}); if __e != nil { return }
+//line workbench.gox:112
+							__e = __c.Set("type", "button"); if __e != nil { return }
+//line workbench.gox:113
+							__e = __c.Set("aria-label", "Close the app"); if __e != nil { return }
+//line workbench.gox:114
+							__e = __c.Set("class", btnGhost.Add("px-2")); if __e != nil { return }
+							__e = __c.Submit(); if __e != nil { return }
+//line workbench.gox:115
+							__e = __c.Any(icon(iconClose, "size-5")); if __e != nil { return }
+						}
+						__e = __c.Close(); if __e != nil { return }
+					return })); if __e != nil { return }
+				}
+				__e = __c.Close(); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
 			__e = __c.Init("div"); if __e != nil { return }
 			{
-//line workbench.gox:105
+//line workbench.gox:119
 				__e = __c.Set("class", "overflow-y-auto px-5 py-5"); if __e != nil { return }
 				__e = __c.Submit(); if __e != nil { return }
-//line workbench.gox:105
+//line workbench.gox:119
 				__e = __c.Any(slot); if __e != nil { return }
 			}
 			__e = __c.Close(); if __e != nil { return }
@@ -205,26 +236,26 @@ func workbenchFrame(slot gox.Comp) gox.Elem {
 		__e = __c.Close(); if __e != nil { return }
 		__e = __c.Init("div"); if __e != nil { return }
 		{
-//line workbench.gox:108
+//line workbench.gox:122
 			__e = __c.Modify(pill); if __e != nil { return }
-//line workbench.gox:109
+//line workbench.gox:123
 			__e = __c.Set("data-open", open); if __e != nil { return }
-//line workbench.gox:110
+//line workbench.gox:124
 			__e = __c.Set("class", "pointer-events-none fixed inset-x-4 top-16 z-40 flex justify-center data-open:hidden side:top-6 side:left-72 docked:right-[29rem]"); if __e != nil { return }
 			__e = __c.Submit(); if __e != nil { return }
-//line workbench.gox:111
+//line workbench.gox:125
 			__e = (neui.Use{Desc: "show the hidden Workbench panel with the running app"}).Proxy(__c, gox.Elem(func(__c gox.Cursor) (__e error) {
 				ctx := __c.Context(); _ = ctx
 				__e = __c.Init("button"); if __e != nil { return }
 				{
-//line workbench.gox:112
+//line workbench.gox:126
 					__e = __c.Modify(show(true)); if __e != nil { return }
-//line workbench.gox:113
+//line workbench.gox:127
 					__e = __c.Set("type", "button"); if __e != nil { return }
-//line workbench.gox:114
+//line workbench.gox:128
 					__e = __c.Set("class", "pointer-events-auto inline-flex cursor-pointer items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-medium text-stone-800 shadow-lg ring-1 ring-stone-200 transition-colors hover:bg-amber-50 hover:text-stone-900 hover:ring-amber-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500 active:bg-amber-100"); if __e != nil { return }
 					__e = __c.Submit(); if __e != nil { return }
-//line workbench.gox:115
+//line workbench.gox:129
 					__e = __c.Any(icon(iconSparkles, "size-4 text-amber-600")); if __e != nil { return }
 					__e = __c.Text("Show Workbench"); if __e != nil { return }
 				}
@@ -233,5 +264,5 @@ func workbenchFrame(slot gox.Comp) gox.Elem {
 		}
 		__e = __c.Close(); if __e != nil { return }
 	return })
-//line workbench.gox:119
+//line workbench.gox:133
 }

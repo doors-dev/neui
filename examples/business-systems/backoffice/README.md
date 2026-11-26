@@ -33,7 +33,7 @@ Open http://localhost:8095 (set `PORT` to change it). Threads are stored in `neu
 
 - `developer`, the default: works the pages, writes scripts, and builds small apps and reports in the Workbench.
 - `agent`: works the pages and writes scripts. The shop's data and operations are an `api` space its scripts call; there is no Workbench.
-- `assistant`: works the pages and calls tools one at a time, the `api` space included. No scripts, smaller files and xls tool sets, shorter tool descriptions.
+- `assistant`: works the pages and calls tools one at a time. No scripts, smaller files and xls tool sets, shorter tool descriptions. It has no `api` space on purpose: without the data tools, it does everything through the UI, the way a user would.
 
 To compare models, keep one OpenRouter key and change only the model and the tier; set `GENERIC_CONTEXT` to the window on the model's OpenRouter page:
 
@@ -71,7 +71,7 @@ Open the chat with the button in the corner and try these at any tier:
 - On Customers: "add Hedy Lamarr from Spread Spectrum Inc, hedy@spread.example, 1 Frequency Lane, Vienna, in the form". Leave out the email and the form refuses it.
 - "Delete Ken Thompson". He has orders, so he can't be deleted. Deleting customers and products is always your own click.
 
-Changes by id from any page, at any tier; the open page follows and a toast says what changed:
+Changes by id from any page, with `TIER=developer` or `agent`; the open page follows and a toast says what changed:
 
 - "Create an order for Ada Lovelace: 3 espresso cups and a digital scale, paid, and show it to me".
 - "Mark order 1037 paid", "add 2 paper filters to it", "take the burr grinder off" or "ship it to 10 Downing Street, London SW1A 2AA".

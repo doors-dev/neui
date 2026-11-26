@@ -41,7 +41,7 @@ elem workbenchPanel() {
 
 elem apiSpace() {
 	~~
-	if neui.Tier(ctx) == neui.TierDeveloper {
+	if neui.Tier(ctx) != neui.TierAgent {
 		return nil
 	}
 	~~
@@ -94,13 +94,27 @@ elem workbenchFrame(slot gox.Comp) {
 				</h2>
 				<p class="mt-0.5 text-sm text-stone-500">An app the assistant built for you, on live shop data.</p>
 			</div>
-			~>neui.Use{Desc: "hide the Workbench panel so the page is visible; the app keeps running"} <button
-				(show(false))
-				type="button"
-				aria-label="Hide the Workbench"
-				class=(btnGhost.Add("-mr-2 px-2"))>
-				~(icon(iconMinus, "size-5"))
-			</button>
+			<div class="-mr-2 flex items-center gap-1">
+				~>neui.Use{Desc: "hide the Workbench panel so the page is visible; the app keeps running"} <button
+					(show(false))
+					type="button"
+					aria-label="Hide the Workbench"
+					class=(btnGhost.Add("px-2"))>
+					~(icon(iconMinus, "size-5"))
+				</button>
+				~>neui.Use{Desc: "close the app in the Workbench"} <button
+					(doors.AClick{
+						On: func(ctx context.Context, _ doors.RequestPointer) bool {
+							neui.IslandEnd(ctx)
+							return false
+						},
+					})
+					type="button"
+					aria-label="Close the app"
+					class=(btnGhost.Add("px-2"))>
+					~(icon(iconClose, "size-5"))
+				</button>
+			</div>
 		</header>
 		<div class="overflow-y-auto px-5 py-5">~(slot)</div>
 	</section>

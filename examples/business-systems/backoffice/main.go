@@ -96,7 +96,7 @@ func main() {
 	case os.Getenv("DEEPSEEK_API_KEY") != "":
 		provider, err = deepseek.New(deepseek.Conf{Model: deepseek.Flash}, deepseek.WithHTTPClient(client))
 	case os.Getenv("OPENAI_API_KEY") != "":
-		provider, err = gpt.New(gpt.Conf{Model: gpt.GPT61Terra}, gpt.WithEffort(gpt.EffortMedium), gpt.WithHTTPClient(client))
+		provider, err = gpt.New(gpt.Conf{Model: gpt.GPT61Terra}, gpt.WithEffort(gpt.EffortLow), gpt.WithHTTPClient(client))
 	case os.Getenv("ANTHROPIC_API_KEY") != "":
 		provider, err = claude.New(claude.Conf{Model: claude.Haiku55}, claude.WithEffort(claude.EffortMedium), claude.WithHTTPClient(client))
 	case os.Getenv("GEMINI_API_KEY") != "":
