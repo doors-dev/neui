@@ -69,6 +69,14 @@ ran("after")`, quickjs.EvalGlobal)
 	}
 }
 
+func TestSlotHoldsOneItem(t *testing.T) {
+	vm := newUI(t)
+	_, err := vm.Eval(`ui.root.set({}, [{}])`, quickjs.EvalGlobal)
+	if err == nil || err.Error() != "TypeError: a slot holds one item: put several in a layout" {
+		t.Fatalf("setting two items gave %v, want the one-item error", err)
+	}
+}
+
 func TestReservedNamesRejected(t *testing.T) {
 	keys, err := newUI(t).Eval(`JSON.stringify(Object.keys(ui))`, quickjs.EvalGlobal)
 	if err != nil {

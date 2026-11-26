@@ -268,6 +268,9 @@ func TestGetStatReadsWhatTheTileShows(t *testing.T) {
 				if err := nekit.IslandRegisterStat(l); err != nil {
 					return err
 				}
+				if err := nekit.IslandRegisterLayout(l); err != nil {
+					return err
+				}
 				return nekit.IslandRegisterButton(l)
 			},
 		})
@@ -283,7 +286,7 @@ func TestGetStatReadsWhatTheTileShows(t *testing.T) {
 	spec := result("page__island_spec", map[string]any{"path": "board"})
 	text, _ := spec.Content[0].(api.ContentText)
 	revision, _, _ := strings.Cut(strings.TrimPrefix(text.Text, "revision "), "\n")
-	script := `ui.root.set(ui.stat({label: "Revenue", value: 120, reference: 100}), ui.stat({label: "Open", value: 3}), ui.button({text: "OK"}))
+	script := `ui.root.set(ui.column({}, ui.stat({label: "Revenue", value: 120, reference: 100}), ui.stat({label: "Open", value: 3}), ui.button({text: "OK"})))
 ui.draw()`
 	if r := result("page__island_begin", map[string]any{"path": "board", "revision": revision, "code": script, "comment": "the stat app"}); r.Error != api.ToolOk {
 		t.Fatalf("island_begin failed: %#v", r.Content)

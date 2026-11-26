@@ -83,7 +83,11 @@ const ui = (() => {
 			})
 		}
 		set(...content) {
-			setSlot({ id: this.#id, content: this.#buildContent(flatten(content)) })
+			content = flatten(content)
+			if (content.length > 1) {
+				throw new TypeError("a slot holds one item: put several in a layout")
+			}
+			setSlot({ id: this.#id, content: this.#buildContent(content) })
 		}
 	}
 	const Layout = class {

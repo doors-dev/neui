@@ -25,12 +25,13 @@ const nothingToContinueMessage = "no app is running in this island: begin one wi
 const nothingToStopMessage = "no app is running in this island"
 const stoppedMessage = "the island's app was ended with island_end"
 const endedMessage = "the island's app ended normally: its script called ui.end(). If you did not expect it now, the user most likely ended it, for example with one of the app's buttons"
+const closedMessage = "the user closed the island's app"
 const overtakenMessage = "the island's app was replaced by a new one begun with island_begin"
 const relinkedMessage = "the chat moved to a new page, by a reload or in another tab, which ended the app; begin a new one with island_begin if it is still needed"
 const screenSpaceName = "screen"
 const screenSpaceDesc = "what the island shows now: the app while one runs, otherwise its placeholder, end screen or error screen, which may have content of its own"
 const appSpaceName = "app"
-const appSpaceDesc = "The app functions this island's scripts call as app.*. No need to read this space when you plan to start an app in the island: its spec includes them."
+const appSpaceDesc = "The app functions this island's scripts call as app.*."
 const noAppStatus = "no app is running in this island: begin one with island_begin"
 const scriptErrorNote = "the part stopped at this error and any parts queued behind it were dropped, listed in dropped; the app runs on: send what should still run with island_append"
 const scriptErrorActionNote = "the part threw this error while handling last_action, the action its last ui.draw() returned; what it did before the error, app calls included, stays done; any parts queued behind it were dropped, listed in dropped; the app runs on: send the fix with island_append, and in it finish that action without repeating what is done, or ask the user to redo it"
@@ -79,16 +80,16 @@ When a part ends, whether its code finishes or throws, the app stays open with i
 
 A throw reaches you as a script_error with its line and reason. An error you catch reaches you only if you ui.notify it; otherwise the app can break without you knowing. So catch only errors you expect and handle, such as a tool refusing input the user can correct, and put only that call in the try, not the code that uses its result. Let anything else throw, or catch it and ui.notify it, and fix it in the next part. If you spot a bug in a part that is still running, don't wait for the user to hit it: send the fix at once with island_interrupt; the app's views and state stay. A part that throws keeps what it ran before the error, so a part you send again should assign, not push or concat.
 
-At ui.end(), the values notified since the last draw arrive in the app's task result, not as a notifications_list record.
+At ui.end(), or when the user closes the app, the values notified since the last draw arrive in the app's task result, not as a notifications_list record.
 
 To change what a running part does, send the next part with island_interrupt. It takes over at the running part's first draw: that draw presents its frame and, instead of returning an action, hands control to the new part. The rest of the interrupted part never runs, and the parts queued behind it are cleared. The screen stays as that draw left it, so if your script draws in more than one place, such as in a dialog, the new part should first set the screen it needs.
 
-island_interrupt, ui.end(), island_end or a part working too long between draws ends the part on the spot: its catch and finally blocks are skipped.
+island_interrupt, ui.end(), island_end, the user closing the app or a part working too long between draws ends the part on the spot: its catch and finally blocks are skipped.
 `
 
 const guideScreen = `
 The screen
-You control the screen with slots, containers whose content you replace. ui.root is the island's own slot: only the tree it holds, directly or through layouts and other slots, is on screen. ui.slot() creates another slot, which shows nothing until you place it in that tree. slot.set(...content) replaces a slot's content with views, controls, layouts and slots; arrays are flattened, and null, undefined and false are skipped. slot.set() empties the slot. A view or control shows in one place at a time. Layouts arrange content and have no update; to change one, set its slot again.
+You control the screen with slots, containers whose content you replace. ui.root is the island's own slot: only the tree it holds, directly or through layouts and other slots, is on screen. ui.slot() creates another slot, which shows nothing until you place it in that tree. slot.set(item) replaces a slot's content with one view, control, layout or slot; to show several, put them in a layout. slot.set() empties the slot. A view or control shows in one place at a time. Layouts arrange content and have no update; to change one, set its slot again.
 
 Usually you set ui.root once, to a layout with a slot at each place whose content changes, and afterwards set only those slots.
 
@@ -133,7 +134,7 @@ A typical app builds its screen once and then runs one loop. In the first part, 
 1. Draw, and tell the action apart by comparing its id with each control's .id.
 2. Answer in code whatever code can answer: call app functions and tools, update views and controls, set slots, and draw again. The user sees the result without waiting for you, and none of your turns is spent.
 3. When an action needs your judgment, notify what you need to decide, such as choices, ids, counts and statuses, not data loaded only to display it. If your decision doesn't block the flow, keep looping: the next draw sends it, and you answer with island_interrupt. If you need to decide before the user can proceed, return from the loop so the part ends. You decide, then send a part that changes what is needed and calls the loop again.
-4. When the work is done, call ui.end(). Keep the app open only while its screen is what the user wants, such as a dashboard or a view they asked for, or when you will continue it.
+4. When the work is done, call ui.end(). Keep the app open only while its screen is what the user wants, such as a dashboard or a view they asked for, or when you will continue it. The user can also close the app at any time, so notify results as they happen, not only at the end.
 
 Example, with made-up names:
 
@@ -198,6 +199,7 @@ var errNothingToContinue = errors.New(nothingToContinueMessage)
 var errNothingToStop = errors.New(nothingToStopMessage)
 var errStopped = errors.New(stoppedMessage)
 var errEnded = errors.New(endedMessage)
+var errClosed = errors.New(closedMessage)
 var errOvertaken = errors.New(overtakenMessage)
 var errRelinked = errors.New(relinkedMessage)
 var errTurnTime = errors.New(turnTimeMessage)

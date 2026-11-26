@@ -279,6 +279,10 @@ func (r *run) End() {
 	r.cancel(errEnded)
 }
 
+func (r *run) close() {
+	r.cancel(errClosed)
+}
+
 func (r *run) overtake() <-chan struct{} {
 	r.cancel(errOvertaken)
 	return r.end
@@ -317,6 +321,11 @@ func (r *run) run() {
 						Ended         string          `json:"ended"`
 						Notifications json.RawMessage `json:"notifications,omitempty"`
 					}{endedMessage, r.state.TakeNotifications()})
+				case errors.Is(cause, errClosed):
+					result, _ = json.Marshal(struct {
+						Closed        string          `json:"closed"`
+						Notifications json.RawMessage `json:"notifications,omitempty"`
+					}{closedMessage, r.state.TakeNotifications()})
 				case errors.Is(cause, errOvertaken):
 					result = overtakenResult
 				case errors.Is(cause, common.ErrRelinked):

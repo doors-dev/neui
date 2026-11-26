@@ -134,6 +134,22 @@ When you render an island, you register its blocks and tools in `Library`.
 
 `Template` wraps the running app: `slot` is where the app goes. It is required, like `Name`, `Desc` and `Library`.
 
+Put a close button in `Template` so the user can end any app. Its handler calls `neui.IslandEnd(ctx)`: the app ends, and the agent is told the user closed it.
+
+```gox
+Template: func(slot gox.Comp) gox.Elem {
+	return <div class="card">
+		<button (doors.AClick{
+			On: func(ctx context.Context, _ doors.RequestPointer) bool {
+				neui.IslandEnd(ctx)
+				return false
+			},
+		})>Close</button>
+		~(slot)
+	</div>
+},
+```
+
 The rest is optional:
 
 - `Placeholder` shows while no app runs. The agent builds apps only at `TierDeveloper`. At the other tiers the island is a regular space with the placeholder as its content.
@@ -340,6 +356,7 @@ Submitting is not always available: `submit` returns false when the submit was n
 | `neui.IslandDir(ctx)` | The app's own directory in the workspace, emptied when the app starts. |
 | `neui.IslandID(ctx)` | The island's id. `[data-neui-island="<id>"]` selects inside it when a page has several islands. |
 | `neui.IslandReport(ctx, err)` | Reports a runtime error of the widget to the agent. The widget keeps running. |
+| `neui.IslandEnd(ctx)` | Ends the app, as if the user closed it. |
 
 Call them with a `ctx` of the widget: its render, `Update` or event handlers. Outside an island they return nothing.
 

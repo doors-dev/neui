@@ -26,7 +26,7 @@ const moduleName = "page"
 func moduleDesc(tier common.ModelTier) string {
 	desc := `Your access to the live page the user has open: use it to help the user operate the application — navigate, fill inputs, press buttons, call the tools the page exposes, or focus an element. Start from what the application already offers: when its pages have the view or form the task needs, such as a filtered and sorted list or an edit form, do it there, so the user sees it happen. `
 	if tier == common.TierDeveloper {
-		desc += `Open an island or call an island's app functions only for what the pages do not offer. `
+		desc += `Open an island only for what the pages do not offer. `
 	}
 	desc += `The page is a tree of spaces, UI regions carrying tools, inputs and child spaces; a space's path is its child names from the root joined with dots, "" being the page root. Only what the application chose to expose is there, so a missing element means unavailable to you, not absent from the page: say so instead of guessing. read, write, click, focus and tool need the space read first, with sync, `
 	if tier != common.TierAssistant {
@@ -103,9 +103,7 @@ Open one when it serves the user better than chat or direct page calls do:
 - Complex input: several fields, a choice from options, a confirmation, or a structured answer that would be clumsy to collect in prose.
 - A custom view: a table, chart, summary, comparison or dashboard built from app data that the app itself doesn't show.
 
-Don't open one when a script alone does the job and you have the js module; for example, when bulk work on the page needs nothing from the user.
-
-An island's app functions are also tools of its app child space: call one directly for a single change instead of starting an app, or to read records the page shows a page at a time instead of paging through them.
+Don't open one when a script or a direct tool call does the job, such as bulk work on the page that needs nothing from the user, or a single change. Both can call the island's app functions without island_spec or island_spec_schema: they are also tools of its app child space.
 
 Before your first app, read island_guide. Before starting an app in an island, read its spec with island_spec and the schemas of the items you use with island_spec_schema; use only what the spec lists.`
 

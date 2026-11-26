@@ -130,6 +130,90 @@ func TestIslandUIEndCarriesValuesSinceLastDraw(t *testing.T) {
 	carries(t, recorded(t, c, p, "<task_result "), `>{"ended":"the island's app ended normally: its script called ui.end(). If you did not expect it now, the user most likely ended it, for example with one of the app's buttons","notifications":[2]}</task_result>`)
 }
 
+func TestIslandEndFromTheTemplateTellsTheAgentTheUserClosedIt(t *testing.T) {
+	p := testkit.NewProvider(api.Model{},
+		testkit.Call("page__island_spec", map[string]any{"path": "board"}),
+		revised(t, func(revision string) testkit.Turn {
+			return start(revision, `ui.root.set(ui.column({})); ui.notify(1); ui.draw()`)
+		}),
+		testkit.Say("started"),
+		testkit.Say("noted"),
+		testkit.Say("closed"),
+	)
+	peeked := make(chan bool, 1)
+	c := stack.Browser(t, stack.Host{Provider: p, Page: func(cur gox.Cursor) error {
+		return cur.Comp(neui.Island{
+			Name: "board",
+			Desc: "a board",
+			Placeholder: func(cur gox.Cursor) error {
+				if err := cur.Init("button"); err != nil {
+					return err
+				}
+				if err := cur.Modify(doors.AClick{On: func(ctx context.Context, _ doors.RequestPointer) bool {
+					peeked <- neui.IslandStore(ctx) != nil
+					return false
+				}}); err != nil {
+					return err
+				}
+				if err := cur.Submit(); err != nil {
+					return err
+				}
+				if err := cur.Text("idle"); err != nil {
+					return err
+				}
+				return cur.Close()
+			},
+			Template: func(slot gox.Comp) gox.Elem {
+				return func(cur gox.Cursor) error {
+					if err := cur.Init("div"); err != nil {
+						return err
+					}
+					if err := cur.Submit(); err != nil {
+						return err
+					}
+					if err := cur.Init("button"); err != nil {
+						return err
+					}
+					if err := cur.Modify(doors.AClick{On: func(ctx context.Context, _ doors.RequestPointer) bool {
+						neui.IslandEnd(ctx)
+						return false
+					}}); err != nil {
+						return err
+					}
+					if err := cur.Submit(); err != nil {
+						return err
+					}
+					if err := cur.Text("Close"); err != nil {
+						return err
+					}
+					if err := cur.Close(); err != nil {
+						return err
+					}
+					if err := cur.Comp(slot); err != nil {
+						return err
+					}
+					return cur.Close()
+				}
+			},
+			Library: nekit.IslandRegisterLayout,
+		})
+	}})
+	c.Send("open the board")
+	c.Wait()
+	carries(t, recorded(t, c, p, `kind="notifications_list"`), `>[1]</task_notify>`)
+	userClick(t, c, "Close")
+	carries(t, recorded(t, c, p, "<task_result "), `>{"closed":"the user closed the island's app"}</task_result>`)
+	userClick(t, c, "idle")
+	select {
+	case seen := <-peeked:
+		if seen {
+			t.Fatal("the placeholder's handler sees the closed app's store")
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the placeholder's button never answered")
+	}
+}
+
 func pressSynced(t *testing.T, then func(input string) testkit.Turn) testkit.Turn {
 	return testkit.Then(func(r api.Request) testkit.Turn {
 		var s struct{ Inputs []struct{ ID string } }

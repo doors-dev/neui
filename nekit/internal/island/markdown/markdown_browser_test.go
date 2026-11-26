@@ -45,6 +45,9 @@ func TestGetTextReadsTheCurrentText(t *testing.T) {
 				if err := nekit.IslandRegisterMarkdown(l); err != nil {
 					return err
 				}
+				if err := nekit.IslandRegisterLayout(l); err != nil {
+					return err
+				}
 				return nekit.IslandRegisterButton(l)
 			},
 		})
@@ -61,7 +64,7 @@ func TestGetTextReadsTheCurrentText(t *testing.T) {
 	text, _ := spec.Content[0].(api.ContentText)
 	revision, _, _ := strings.Cut(strings.TrimPrefix(text.Text, "revision "), "\n")
 	script := `var m = ui.markdown({ text: "one" })
-ui.root.set(m, ui.button({ text: "OK" }))
+ui.root.set(ui.column({}, m, ui.button({ text: "OK" })))
 ui.draw(50)
 m.update({ text: "**two**", style: "warning" })
 ui.draw()`

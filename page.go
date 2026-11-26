@@ -420,6 +420,16 @@ func IslandReport(ctx context.Context, err error) {
 	island.Report(ctx, err)
 }
 
+// IslandEnd ends the island app ctx renders or handles events for, as the
+// user's choice: the island shows its Success screen, or its Placeholder
+// without one, and the agent is told that the user closed the app, with the
+// values the app reported since its last screen. Call it from a close button
+// in the island's Template or from a widget. ctx must come from the island;
+// elsewhere, and for an app that has already ended, IslandEnd does nothing.
+func IslandEnd(ctx context.Context) {
+	island.End(ctx)
+}
+
 // IslandStore returns the store of the island app ctx renders or handles
 // events for, shared by all the app's widgets; each app run gets a fresh
 // one. It is nil outside an island.

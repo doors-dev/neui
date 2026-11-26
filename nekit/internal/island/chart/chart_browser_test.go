@@ -35,6 +35,7 @@ import (
 	"neui.dev/internal/testkit/stack"
 	"neui.dev/nekit/internal/island"
 	"neui.dev/nekit/internal/island/button"
+	"neui.dev/nekit/internal/island/layout"
 )
 
 type board struct {
@@ -59,6 +60,9 @@ func open(t *testing.T, script string) *board {
 			Library: func(l neui.Library) error {
 				l.Head(island.Style())
 				if err := l.View("chart", Desc, New); err != nil {
+					return err
+				}
+				if err := l.Layout("column", "", layout.Column); err != nil {
 					return err
 				}
 				return l.Tool("tick", "counts its calls", func(ctx context.Context, _ struct{}) (int64, error) {
@@ -227,7 +231,7 @@ func TestChartQueryBacksOff(t *testing.T) {
 func TestChartsKeepTheirOwnUpdates(t *testing.T) {
 	b := open(t, `var left = ui.chart({type: "bar", x: "k", y: "n", rows: [{k: "left", n: 1}]})
 var right = ui.chart({type: "bar", x: "k", y: "n", rows: [{k: "right", n: 2}]})
-ui.root.set(left, right)`+idle)
+ui.root.set(ui.column({}, left, right))`+idle)
 	b.waitAria(0, "left is 1.")
 	b.waitAria(1, "right is 2.")
 	b.then(`left.update({rows: [{k: "left", n: 5}]})`)
@@ -326,7 +330,7 @@ ui.root.set(sales)`+idle)
 	b.then(`sales.update({rows: [{m: "Jan", v: 7}]})`)
 	b.waitAria(0, "Jan is 7.")
 	b.Page.MustEval(`() => { document.querySelector(".neisland-chart-plot").dataset.before = "" }`)
-	b.then(`ui.root.set(ui.chart({type: "bar", x: "k", y: "n", rows: [{k: "first", n: 1}]}), sales)`)
+	b.then(`ui.root.set(ui.column({}, ui.chart({type: "bar", x: "k", y: "n", rows: [{k: "first", n: 1}]}), sales))`)
 	b.waitAria(1, "Jan is 7.")
 	if b.Page.MustEval(`() => document.querySelectorAll(".neisland-chart-plot[data-before]").length`).Int() != 0 {
 		t.Fatal("the chart was moved, not rendered again")
@@ -336,10 +340,10 @@ ui.root.set(sales)`+idle)
 }
 
 func TestChartDescribesFormattedValues(t *testing.T) {
-	b := open(t, `ui.root.set(ui.chart({type: "line", x: "m", y: "v", format: "currency", unit: "USD", rows: [
+	b := open(t, `ui.root.set(ui.column({}, ui.chart({type: "line", x: "m", y: "v", format: "currency", unit: "USD", rows: [
 		{m: "2026-01", v: 1}, {m: "2026-02", v: 2}, {m: "2026-03", v: 3}, {m: "2026-04", v: 4}, {m: "2026-05", v: 5}, {m: "2026-06", v: 6},
 		{m: "2026-07", v: 7}, {m: "2026-08", v: 8}, {m: "2026-09", v: 9}, {m: "2026-10", v: 10}, {m: "2026-11", v: 11}, {m: "2026-12", v: null}
-	]}), ui.chart({type: "pie", x: "k", y: "n", rows: [{k: "a", n: 1}, {k: "b", n: 3}]}))`+idle)
+	]}), ui.chart({type: "pie", x: "k", y: "n", rows: [{k: "a", n: 1}, {k: "b", n: 3}]})))`+idle)
 	want := b.Page.MustEval(`() => {
 		const month = new Intl.DateTimeFormat(undefined, { year: "numeric", month: "short", timeZone: "UTC" })
 		const money = new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" })
@@ -367,6 +371,9 @@ func TestGetChartReadsWhatTheChartShows(t *testing.T) {
 				if err := l.View("chart", Desc, New); err != nil {
 					return err
 				}
+				if err := l.Layout("column", "", layout.Column); err != nil {
+					return err
+				}
 				return l.Control("button", "", button.New)
 			},
 		})
@@ -382,7 +389,7 @@ func TestGetChartReadsWhatTheChartShows(t *testing.T) {
 	spec := result("page__island_spec", map[string]any{"path": "board"})
 	text, _ := spec.Content[0].(api.ContentText)
 	revision, _, _ := strings.Cut(strings.TrimPrefix(text.Text, "revision "), "\n")
-	script := `ui.root.set(ui.chart({type: "line", title: "Sales", x: "m", y: "v", splitBy: "g", rows: [{m: "2026-02", v: 2, g: "a"}, {m: "2026-01", v: 1, g: "b"}]}), ui.chart({type: "pie", x: "k", y: "v", rows: [{k: "x", v: 1}, {k: "y", v: 3}]}), ui.button({text: "OK"}))
+	script := `ui.root.set(ui.column({}, ui.chart({type: "line", title: "Sales", x: "m", y: "v", splitBy: "g", rows: [{m: "2026-02", v: 2, g: "a"}, {m: "2026-01", v: 1, g: "b"}]}), ui.chart({type: "pie", x: "k", y: "v", rows: [{k: "x", v: 1}, {k: "y", v: 3}]}), ui.button({text: "OK"})))
 ui.draw()`
 	if r := result("page__island_begin", map[string]any{"path": "board", "revision": revision, "code": script, "comment": "the chart app"}); r.Error != api.ToolOk {
 		t.Fatalf("island_begin failed: %#v", r.Content)
@@ -417,6 +424,9 @@ func TestGetChartFollowsTheDrawnState(t *testing.T) {
 			},
 			Library: func(l neui.Library) error {
 				l.Head(island.Style())
+				if err := l.Layout("column", "", layout.Column); err != nil {
+					return err
+				}
 				return l.View("chart", Desc, func(ctx context.Context, p Params) (api.Widget[Patch], error) {
 					w, err := New(ctx, p)
 					if err == nil {
@@ -431,7 +441,7 @@ func TestGetChartFollowsTheDrawnState(t *testing.T) {
 		Script: `var sales = ui.chart({type: "bar", x: "k", y: "n", rows: [{k: "a", n: 1}]})
 var live = ui.chart({type: "bar", x: "k", y: "n", query: "() => ({ rows: [{ k: 'b', n: 2 }] })"})
 var down = ui.chart({type: "bar", x: "k", y: "n", query: "() => { throw new Error('down') }"})
-ui.root.set(sales, live, down)` + idle,
+ui.root.set(ui.column({}, sales, live, down))` + idle,
 	})
 	b := &board{IslandApp: a, t: t}
 	b.waitAria(1, "b is 2.")

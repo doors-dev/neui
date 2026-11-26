@@ -161,6 +161,18 @@ func Report(ctx context.Context, err error) {
 	runner.reportWidget(widget, err)
 }
 
+func End(ctx context.Context) {
+	store, ok := ctx.Value(common.KeyIslandStore).(doors.Store)
+	if !ok {
+		return
+	}
+	runner, ok := store.Load(runnerKey{}).(*runner)
+	if !ok {
+		return
+	}
+	runner.owner.close()
+}
+
 func Ended(ctx context.Context) bool {
 	store, ok := ctx.Value(common.KeyIslandStore).(doors.Store)
 	if !ok {
