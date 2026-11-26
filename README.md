@@ -41,7 +41,7 @@ Your users get the chat experience they already know from chat apps, with nothin
 
 ### Cheaper to run
 
-The conversation is prompt-cache friendly, so input costs 6 to 14 times less than in copilots that rebuild the prompt for every screen. Built-in scripts do bulk work without extra model turns or context bloat.
+The conversation is prompt-cache friendly, so input costs an estimated 6 to 14 times less than in copilots that rebuild the prompt for every screen, depending on the provider's cache pricing. Built-in scripts do bulk work without extra model turns or context bloat.
 
 ### The browser can't steer the agent
 
@@ -178,6 +178,6 @@ go get neui.dev
 
 Neui is a Go module (`neui.dev`) that plugs into a Doors app: you configure the agent once with options on the Doors app, turn it on per session once the user is known, and render `nekit.Chat` on the pages where the user should talk to the agent.
 
-Claude, GPT and DeepSeek providers are included, as are SQLite thread storage and disk or S3 upload storage.
+Claude, GPT, Gemini and DeepSeek providers are included, plus a generic one for any server with an OpenAI-compatible Chat Completions API, such as Ollama, vLLM or OpenRouter. SQLite thread storage and disk or S3 upload storage are included too.
 
 Start with the [quick start](docs/00-quick-start.md) and the [back office example](examples/business-systems/backoffice), and see the package documentation in [`doc.go`](doc.go), [`api/doc.go`](api/doc.go) and [`nekit/doc.go`](nekit/doc.go), and the Doors documentation for building the app itself.

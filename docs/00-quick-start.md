@@ -41,7 +41,7 @@ func main() {
 }
 ```
 
-Three providers come included: Claude (`neui.dev/provider/claude`), GPT (`neui.dev/provider/gpt`) and DeepSeek (`neui.dev/provider/deepseek`). To use another model, implement `api.Provider`.
+Four providers come included: Claude (`neui.dev/provider/claude`), GPT (`neui.dev/provider/gpt`), Gemini (`neui.dev/provider/gemini`) and DeepSeek (`neui.dev/provider/deepseek`). For any server with an OpenAI-compatible Chat Completions API, such as Ollama, vLLM or OpenRouter, use `neui.dev/provider/generic`. To use another model, implement `api.Provider`.
 
 Then enable neui for the user, typically right after sign-in:
 
