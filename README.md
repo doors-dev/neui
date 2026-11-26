@@ -1,7 +1,7 @@
 # Neui: an AI agent built into your Go web app
 [![Go Reference](https://pkg.go.dev/badge/neui.dev.svg)](https://pkg.go.dev/neui.dev)
 
-<img width="800" height="615" alt="neui-demo-alt-10fps" src="https://github.com/user-attachments/assets/461d6346-e5a8-476e-9267-5493d1459ee5" />
+<img width="800" height="615" alt="neui-demo-alt-10fps" src="https://github.com/user-attachments/assets/730c7f2d-62b8-416e-9b84-12359689adf3" />
 
 Neui is an AI agent and a web framework built as one stack. The framework, [Doors](https://github.com/doors-dev/doors) (Apache-2.0), lets Go teams build modern interactive apps with no separate frontend and no API layer. Neui adds the agent: it runs inside the user's session, sees the parts of the page you let it see, operates the UI like a user, and brings its own work environment for the jobs a chat alone cannot do.
 
