@@ -25,16 +25,14 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Set up Chrome
-        id: chrome
-        uses: browser-actions/setup-chrome@v2
-        with:
-          chrome-version: stable
-          install-dependencies: true
+      - name: Set up Chrome headless shell
+        run: |
+          npx -y playwright@1.58.0 install --with-deps --only-shell chromium
+          bin=$(ls -d ~/.cache/ms-playwright/chromium_headless_shell-*/*/headless_shell ~/.cache/ms-playwright/chromium_headless_shell-*/*/chrome-headless-shell 2>/dev/null | head -1)
+          test -x "$bin"
+          echo "NEUI_TEST_CHROME=$bin" >> "$GITHUB_ENV"
 
       - name: Run test suite with coverage
-        env:
-          NEUI_TEST_CHROME: ${{ steps.chrome.outputs.chrome-path }}
         run: |
           coverpkg=$(go list ./... | grep -v -E '^neui.dev/(examples/|internal/testkit|internal/devkit)' | paste -sd, -)
           go test -tags browser -count=1 -p 1 -coverpkg="$coverpkg" -coverprofile=coverage.txt $(go list ./... | grep -v '^neui.dev/examples/')
