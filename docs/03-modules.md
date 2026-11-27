@@ -167,12 +167,11 @@ A module can declare asks: questions shown to the user in the chat, in place of 
 type ChatAsk struct {
 	Form   gox.Elem
 	Button gox.Elem
-	Cancel func(context.Context)
 	Error  doors.Beam[string]
 }
 ```
 
-`Form` is the question and its inputs. `Button` is shown in place of the send button, and its handler passes the answer with `answer.Submit`. `Error` is a message shown next to the question. Leave `Cancel` empty: neui sets it.
+`Form` is the question and its inputs. `Button` is shown in place of the send button, and its handler passes the answer with `answer.Submit`. `Error` is a message shown next to the question.
 
 ```gox
 m.Ask("pickup", "Ask the user to choose a pickup slot.", func(in PickupInput, answer neui.Answer[Pickup]) api.ChatAsk {
@@ -191,6 +190,28 @@ Ask the user to choose a pickup slot.
 This shows the user something in the chat and waits for them to answer, which can take a long time. ...
 Output schema: {"properties":{"slot":{"description":"the slot the user chose","type":"string"}},"type":"object"}
 ```
+
+### Ask during a tool call
+
+To get the user's approval or choice in the middle of a tool call, call `neui.ToolAsk` with an input and an ask handler. It shows the question and returns the answer:
+
+```go
+out, err := neui.ToolAsk(ctx, nekit.AskInput{
+	Question: "Delete 12 orders?",
+	Options: []nekit.AskOption{
+		{
+			Name: "Delete",
+		},
+		{
+			Name: "Keep",
+		},
+	},
+}, nekit.AskOptions)
+```
+
+It works in any tool: a module tool, a tool on the page, an island app function, also when a script calls it, and in a task's background work. When the user dismisses the question, it returns `api.ErrCanceledByUser`. Questions show one at a time, in the order asked.
+
+neui adds nothing to the tool's description, so say there that the tool may ask the user.
 
 ## Default modules
 

@@ -70,7 +70,7 @@ type ChatState struct {
 	Name  string
 	Input ChatInput
 	Round *Round
-	Ask   *ChatAsk
+	Ask   *ChatAskView
 	Tasks []Task
 	Usage EventUsage
 	...
@@ -171,7 +171,7 @@ err = thread.Send(ctx, api.Input{
 
 ### Asks
 
-An ask arrives as `ChatState.Ask` or as `ChatEventAsk`. Show its `Form` in place of the message box and its `Button` in place of the send button, until `ChatEventAskDone`. Call `Cancel` from your own dismiss control. `Error` is a message to show next to the question.
+An ask arrives as `ChatState.Ask` or as `ChatEventAsk`, one at a time. Show its `Form` in place of the message box and its `Button` in place of the send button, until `ChatEventAskDone`. Call `Dismiss` from your own dismiss control. `Error` is a message to show next to the question.
 
 ### Critical errors
 
