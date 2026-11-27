@@ -358,7 +358,7 @@ func (c *Composer) rewind() gox.Elem {
 }
 
 //line composer.gox:173
-func (c *Composer) asking(ask *api.ChatAsk) gox.Elem {
+func (c *Composer) asking(ask *api.ChatAskView) gox.Elem {
 	return gox.Elem(func(__c gox.Cursor) (__e error) {
 		ctx := __c.Context(); _ = ctx
 		__e = __c.Init("span"); if __e != nil { return }
@@ -403,7 +403,7 @@ func (c *Composer) asking(ask *api.ChatAsk) gox.Elem {
 				__e = (doors.AClick{
 				Scope: new(doors.ScopeBlocking),
 				On: func(ctx context.Context, rp doors.RequestPointer) bool {
-					ask.Cancel(ctx)
+					ask.Dismiss(ctx)
 					return false
 				},
 				OnError: notify.OnError,

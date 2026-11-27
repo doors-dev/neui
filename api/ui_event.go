@@ -47,11 +47,12 @@ type ChatEventIndexed struct {
 
 func (ChatEventIndexed) chatEvent() {}
 
-// ChatEventAsk reports a tool asking the user for a decision. Show the ask
-// until ChatEventAskDone; a new ask replaces one still showing.
+// ChatEventAsk reports a question for the user. Show it until
+// ChatEventAskDone; the next waiting question comes in a new ChatEventAsk
+// after it.
 type ChatEventAsk struct {
 	// Ask is what to show: its Form, Button and Error.
-	Ask ChatAsk
+	Ask ChatAskView
 }
 
 func (ChatEventAsk) chatEvent() {}

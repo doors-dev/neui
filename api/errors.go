@@ -105,6 +105,7 @@ var ErrReserved = errors.New("that name is reserved for module scratch space and
 // a whole empty file from offset 0 is not an error.
 var ErrOutOfRange = errors.New("read offset past end of file")
 
-// ErrAskInIsland reports an Ask added to an island Library: an app function
-// runs inside a script or a widget, where no one waits on a chat question.
+// ErrAskInIsland reports an Ask added to an island Library: an Ask is a
+// question tool for the agent, and an app asks through its own controls or
+// ToolAsk.
 var ErrAskInIsland = errors.New("an ask tool cannot be an island app function")

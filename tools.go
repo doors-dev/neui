@@ -50,10 +50,10 @@ func ToolThreadID(ctx context.Context) api.ThreadID {
 // ToolThreadContext returns a context that outlives the tool call: for a
 // module tool it ends when the thread closes, for a page tool when the thread
 // is no longer linked to the page that rendered it. ToolFS, ToolThreadID,
-// ToolConfig, ToolModel, ToolFilesConfig and ToolTask work on it; ToolFromJS
-// and ToolFromAgent report false on it. Run background work registered with
-// ToolTask on it. It panics when ctx comes from neither a tool call nor
-// ToolThreadContext.
+// ToolConfig, ToolModel, ToolFilesConfig, ToolTask and ToolAsk work on it;
+// ToolFromJS and ToolFromAgent report false on it. Run background work
+// registered with ToolTask on it. It panics when ctx comes from neither a
+// tool call nor ToolThreadContext.
 func ToolThreadContext(ctx context.Context) context.Context {
 	return ctx.Value(common.KeyController).(common.Controller).Context()
 }
@@ -87,26 +87,54 @@ func ToolFilesConfig(ctx context.Context) api.FilesConfig {
 // keeps running; it is dropped once the task has finished.
 type Task = common.Task
 
-// ToolTask registers a background task for the calling tool; the tool usually
-// returns at once and the task delivers its result later through the returned
-// Task. comment is a short description shown to the user while the task runs
-// and stored with its result; attrs become the task's meta, nil meaning none.
-// cancel is what a chat UI calls through api.Task.Cancel to stop the task
-// (nekit.Chat passes api.ErrCanceledByUser), and the cause it receives is what the
-// task should report with Err; the runtime calls it with ErrCanceledByUser
-// when the round that started the task is rewound, and the work must also stop
-// when ToolThreadContext ends; cancel must not be nil. Run the work on
-// ToolThreadContext, not the call's ctx, which ends with the call. Call it
-// before the tool returns: it fails with context.Canceled when the thread is
-// closed, with an error when cancel is nil or the round of tool calls it
-// belongs to has ended, and with an error when the tool was called from a
-// script (ToolFromJS), since scripts cannot start background tasks. It panics
-// when ctx comes from neither a tool call nor ToolThreadContext.
+// ToolTask is used to run long work in the background: the tool returns at
+// once and the task delivers its result later through the returned Task.
+// comment says what the task does; the user sees it while the task runs.
+// attrs are short facts, such as an order id, added as attributes to the
+// task's result and notes the agent receives; the chat gets them as
+// api.Task.Meta. task_id, module, name, comment and error are set by neui and
+// override yours. nil adds none.
+//
+// cancel is called when the user stops the task or the round that started it
+// is rewound; report the cause it gets with Task.Err. Run the work on
+// ToolThreadContext, as the call's ctx ends when the tool returns, and stop it
+// when that context ends too.
+//
+// Call it before the tool returns. It fails when cancel is nil, when the tool
+// was called from a script, when the round of tool calls has ended or the
+// thread is closed. It panics when ctx comes from neither a tool call nor
+// ToolThreadContext.
 func ToolTask(ctx context.Context, comment string, attrs map[string]any, cancel context.CancelCauseFunc) (Task, error) {
 	if tools.FromJS(ctx) {
 		return nil, errors.New("a background task cannot be started from a script")
 	}
 	return ctx.Value(common.KeyController).(common.Controller).Task(comment, attrs, cancel)
+}
+
+// ToolAsk is used to get user confirmation or choice during tool execution.
+// It shows a question in the chat and waits for the answer; ask builds the
+// question from input, like a Module.Ask handler. It works in any tool call,
+// scripts included, and in background work on ToolThreadContext. Questions
+// show one at a time, in the order asked.
+//
+// It returns the answer, api.ErrCanceledByUser when the user dismisses the
+// question, or the cause of ctx when ctx ends first. Mention in the tool's
+// description that it may ask the user. It panics when ctx comes from neither
+// a tool call nor ToolThreadContext.
+//
+//	out, err := neui.ToolAsk(ctx, nekit.AskInput{
+//		Question: "Delete 12 orders?",
+//		Options: []nekit.AskOption{
+//			{
+//				Name: "Delete",
+//			},
+//			{
+//				Name: "Keep",
+//			},
+//		},
+//	}, nekit.AskOptions)
+func ToolAsk[I any, O any](ctx context.Context, input I, ask func(input I, answer Answer[O]) api.ChatAsk) (O, error) {
+	return tools.Asking(ask)(ctx, input)
 }
 
 // ToolFromJS reports whether the tool was called from a script rather than by
@@ -479,8 +507,8 @@ func (m Module) Tool[I any, O any](name string, desc string, f func(ctx context.
 	return m.Add(Tool[I, O]{Name: name, Desc: desc, Handler: f})
 }
 
-// Answer is how an Ask's form returns the user's answer to the waiting tool
-// call: Submit with the answer or Fail with an error.
+// Answer is how an ask's form returns the user's answer: Submit with the
+// answer or Fail with an error.
 type Answer[O any] = common.Answer[O]
 
 // Ask is shorthand for Add(Ask[I, O]{name, desc, f}).

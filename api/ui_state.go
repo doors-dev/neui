@@ -39,15 +39,21 @@ type ChatAsk struct {
 	// Button is the submit control, shown where the send button normally is;
 	// its click handler calls Answer.Submit.
 	Button gox.Elem
-	// Cancel dismisses the ask and fails the tool call. The harness sets it,
-	// overwriting whatever the handler returned, so leave it nil; a chat calls
-	// it from its own dismiss control.
-	Cancel func(context.Context)
 	// Error is what the ask has to say about the answer as it stands, shown
 	// next to the question; nil or an empty string shows nothing. It is a
 	// readout, not a gate: whether the answer can be submitted stays the
 	// ask's own business.
 	Error doors.Beam[string]
+}
+
+// ChatAskView is an ask as a chat receives it: the ChatAsk to show and the
+// function that dismisses it.
+type ChatAskView struct {
+	ChatAsk
+	// Dismiss dismisses the ask; a chat calls it from its dismiss control.
+	// The waiting Ask tool call or neui.ToolAsk then fails with
+	// ErrCanceledByUser.
+	Dismiss func(context.Context)
 }
 
 // ChatState is the snapshot ChatFactory.Chat renders a thread from. Every later
@@ -64,7 +70,7 @@ type ChatState struct {
 	// ChatThread.RoundBefore.
 	Round *Round
 	// Ask is the question showing to the user; nil when there is none.
-	Ask *ChatAsk
+	Ask *ChatAskView
 	// Tasks is the background tasks still running.
 	Tasks []Task
 	// Usage is the token usage of the thread's context as it stands, what

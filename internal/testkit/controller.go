@@ -103,7 +103,7 @@ func (c *Controller) Task(string, map[string]any, context.CancelCauseFunc) (comm
 	return task, nil
 }
 
-func (c *Controller) Ask(api.ChatAsk) (func(context.Context), error) {
+func (c *Controller) Ask(api.ChatAsk, func(context.Context)) (func(context.Context), error) {
 	return nil, errors.New("testkit: no asks")
 }
 

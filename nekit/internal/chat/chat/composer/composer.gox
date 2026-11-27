@@ -170,7 +170,7 @@ elem (c *Composer) rewind() {
 	</span>
 }
 
-elem (c *Composer) asking(ask *api.ChatAsk) {
+elem (c *Composer) asking(ask *api.ChatAskView) {
 	<span class="nechat-gauge">
 		<span class="nechat-gauge-lead">~>(doors.Class("nechat-ic")) ~(icons.CheckSquareFill())</span>
 		<span class="nechat-gauge-body"><span class="nechat-gauge-val">asking</span></span>
@@ -178,7 +178,7 @@ elem (c *Composer) asking(ask *api.ChatAsk) {
 			~>doors.AClick{
 				Scope: new(doors.ScopeBlocking),
 				On: func(ctx context.Context, rp doors.RequestPointer) bool {
-					ask.Cancel(ctx)
+					ask.Dismiss(ctx)
 					return false
 				},
 				OnError: notify.OnError,

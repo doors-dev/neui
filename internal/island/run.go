@@ -358,7 +358,7 @@ func (r *run) run() {
 			r.current = eval.script
 			r.runner.reset()
 			r.mu.Unlock()
-			turnCtx, cancelTurn := context.WithCancelCause(common.AttachThread(r.island.ctx, r.ctx))
+			turnCtx, cancelTurn := context.WithCancelCause(context.WithValue(common.AttachThread(r.island.ctx, r.ctx), common.KeyIslandTurn, common.IslandTurn(r)))
 			stopRun := context.AfterFunc(r.ctx, func() {
 				cancelTurn(context.Cause(r.ctx))
 			})

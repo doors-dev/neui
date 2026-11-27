@@ -61,6 +61,6 @@ type Controller interface {
 	Model() api.Model
 	FS() api.FS
 	Task(comment string, attrs map[string]any, cancel context.CancelCauseFunc) (Task, error)
-	Ask(ask api.ChatAsk) (done func(ctx context.Context), err error)
+	Ask(ask api.ChatAsk, dismiss func(context.Context)) (done func(ctx context.Context), err error)
 	Rename(ctx context.Context, name string) error
 }

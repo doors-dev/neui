@@ -110,7 +110,7 @@ func TestSeqBumpResetsUploading(t *testing.T) {
 			c.UploadStarted(ctx, c.origin.Get().inputSeq)
 			c.CancelRewind(ctx)
 		},
-		"Ask": func(c Controller) { c.Ask(ctx, api.ChatAsk{}) },
+		"Ask": func(c Controller) { c.Ask(ctx, api.ChatAskView{}) },
 	} {
 		t.Run(name, func(t *testing.T) {
 			c := newTestController(&fakeThread{})

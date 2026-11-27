@@ -31,7 +31,6 @@ type threadTools struct {
 	stopped bool
 	ch      <-chan api.ContentToolResult
 	results map[string]api.ContentToolResult
-	ask     *api.ChatAsk
 }
 
 func (s *threadTools) tick() bool {
@@ -52,29 +51,10 @@ func (s *threadTools) dump(state *api.ChatState) {
 	round := s.round
 	round.Results = maps.Clone(s.results)
 	state.Round = &round
-	state.Ask = s.ask
 }
 
 func (s *threadTools) on(cmd any) {
 	switch cmd := cmd.(type) {
-	case commandAskDone:
-		if s.ask != cmd.ask {
-			cmd.Operation.NoMessage()
-			return
-		}
-		s.ask = nil
-		s.thread.link.send(newMessageEvent(cmd.intoMessage(), api.ChatEventAskDone{}))
-	case commandAsk:
-		if s.thread.link.linkTasks != cmd.link.linkTasks {
-			cmd.Err(api.ErrUnlinked)
-			return
-		}
-		if s.ask != nil {
-			s.ask.Cancel(context.Background())
-		}
-		s.ask = cmd.ask
-		cmd.Ok(struct{}{})
-		s.thread.link.send(newMessageEvent(nil, api.ChatEventAsk{Ask: *s.ask}))
 	case commandLink:
 		if cmd.backend != s.thread.link.backend {
 			defer s.thread.switchStateWait()
@@ -116,10 +96,6 @@ func (s *threadTools) on(cmd any) {
 			return
 		}
 		s.stop()
-		if s.ask != nil {
-			s.thread.link.send(newMessageEvent(nil, api.ChatEventAskDone{}))
-			s.ask = nil
-		}
 		s.thread.rewind(cmd)
 	case commandTask:
 		if s.thread.link == nil || s.thread.link.linkTasks != cmd.linkTasks {
@@ -153,10 +129,6 @@ func (s *threadTools) stop() {
 }
 
 func (s *threadTools) finalize() {
-	if s.ask != nil {
-		s.thread.link.send(newMessageEvent(nil, api.ChatEventAskDone{}))
-		s.ask = nil
-	}
 	if err := s.thread.link.fs.TempWipe(); err != nil {
 		doors.Logger(s.thread.link.backend.Context()).Error("thread: scratch wipe failed", "thread", s.thread.id, "err", err)
 	}

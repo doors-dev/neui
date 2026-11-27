@@ -254,7 +254,7 @@ func TestAskDoneAfterThreadExitReturns(t *testing.T) {
 	}
 	result := make(chan asked, 1)
 	go func() {
-		done, err := c.Ask(api.ChatAsk{})
+		done, err := c.Ask(api.ChatAsk{}, nil)
 		result <- asked{done, err}
 	}()
 	cmd := (<-th.ch).(commandAsk)
@@ -300,14 +300,14 @@ func TestAskFromBeforeReloadReachesTheNewPage(t *testing.T) {
 	}
 	result := make(chan error, 1)
 	go func() {
-		_, err := controller{link: old}.Ask(api.ChatAsk{})
+		_, err := controller{link: old}.Ask(api.ChatAsk{}, nil)
 		result <- err
 	}()
 	tools.on(<-th.ch)
 	if err := <-result; err != nil {
 		t.Fatalf("an ask from a tool started before the reload: %v", err)
 	}
-	if tools.ask == nil {
+	if len(th.asks) != 1 {
 		t.Fatalf("the ask did not reach the reloaded page")
 	}
 }

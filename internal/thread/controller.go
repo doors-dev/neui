@@ -35,8 +35,8 @@ func (c controller) ID() api.ThreadID {
 	return c.link.thread.id
 }
 
-func (c controller) Ask(ask api.ChatAsk) (func(ctx context.Context), error) {
-	a := &ask
+func (c controller) Ask(ask api.ChatAsk, dismiss func(context.Context)) (func(ctx context.Context), error) {
+	a := &api.ChatAskView{ChatAsk: ask, Dismiss: dismiss}
 	r := NewResultResponse[struct{}]()
 	select {
 	case <-c.link.thread.close:

@@ -33,10 +33,10 @@ type InputState struct {
 	Input api.Input
 	Pending bool
 	Rewind bool
-	Ask *api.ChatAsk
+	Ask *api.ChatAskView
 }
 
-func New(thread api.ChatThread, input api.ChatInput, active bool, settled api.EventUsage, tasks []api.Task, compaction bool, canCompact bool, ask *api.ChatAsk) Controller {
+func New(thread api.ChatThread, input api.ChatInput, active bool, settled api.EventUsage, tasks []api.Task, compaction bool, canCompact bool, ask *api.ChatAskView) Controller {
 	limit := replay.RoundItemBudget(thread.Config(), thread.Model())
 	origin := doors.NewSourceEqual(state{
 		input: input.Input,
@@ -216,7 +216,7 @@ type state struct {
 	tasks []api.Task
 	compaction bool
 	canCompact bool
-	ask *api.ChatAsk
+	ask *api.ChatAskView
 }
 
 type Bar struct {
@@ -298,7 +298,7 @@ func (s Controller) InitRewind(ctx context.Context, round api.RoundID, input api
 	})
 }
 
-func (s Controller) Ask(ctx context.Context, ask api.ChatAsk) {
+func (s Controller) Ask(ctx context.Context, ask api.ChatAskView) {
 	s.origin.Mutate(ctx, func(s state) state {
 		s.ask = &ask
 		s.inputSeq += 1
@@ -409,7 +409,7 @@ func (s Controller) Escape(ctx context.Context, fromComposer bool) {
 		return
 	}
 	if d.ask != nil {
-		d.ask.Cancel(ctx)
+		d.ask.Dismiss(ctx)
 		return
 	}
 	if d.pending {

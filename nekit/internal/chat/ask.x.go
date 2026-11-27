@@ -34,7 +34,7 @@ import (
 	"neui.dev/nekit/internal/chat/notify"
 )
 
-const askModuleDesc = `Questions for the user. One at a time: a new question cancels the one still open.`
+const askModuleDesc = `Questions for the user. They show one at a time, in the order asked.`
 
 const askOptionsDesc = `Ask the user to pick from a list. Use it for a choice that is theirs to make, not for anything you can work out yourself.`
 

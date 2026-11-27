@@ -20,6 +20,7 @@ import (
 	"errors"
 	"github.com/doors-dev/doors"
 	"maps"
+	"slices"
 	"sync"
 
 	"neui.dev/api"
@@ -110,6 +111,7 @@ type thread struct {
 	replay  replay.Replay
 	input   api.Input
 	pending bool
+	asks    []*api.ChatAskView
 	state   interface {
 		tick() bool
 		dump(s *api.ChatState)
@@ -133,6 +135,7 @@ func (t *thread) criticalErr(m *message, err error) {
 	}
 	t.link.send(newMessageEvent(m, api.ChatEventCriticalError{Err: err}))
 	t.pending = false
+	t.asks = nil
 	t.compaction.stop()
 	t.link.dispose()
 	t.link = nil
@@ -155,6 +158,9 @@ func (t *thread) getState() api.ChatState {
 	s.Name = t.replay.Name()
 	s.Compaction = t.compaction.isActive()
 	s.CanCompact = t.canCompact()
+	if len(t.asks) != 0 {
+		s.Ask = t.asks[0]
+	}
 	t.state.dump(&s)
 	return s
 }
@@ -398,9 +404,30 @@ func (t *thread) on(cmd any) {
 		}
 		cmd.NoMessage()
 	case commandAskDone:
-		cmd.Operation.NoMessage()
+		i := slices.Index(t.asks, cmd.ask)
+		if i < 0 {
+			cmd.Operation.NoMessage()
+			return
+		}
+		t.asks = slices.Delete(t.asks, i, i+1)
+		if i != 0 {
+			cmd.Operation.NoMessage()
+			return
+		}
+		t.link.send(newMessageEvent(cmd.intoMessage(), api.ChatEventAskDone{}))
+		if len(t.asks) != 0 {
+			t.link.send(newMessageEvent(nil, api.ChatEventAsk{Ask: *t.asks[0]}))
+		}
 	case commandAsk:
-		cmd.Err(api.ErrWrongState)
+		if t.link == nil || t.link.linkTasks != cmd.link.linkTasks {
+			cmd.Err(api.ErrUnlinked)
+			return
+		}
+		t.asks = append(t.asks, cmd.ask)
+		cmd.Ok(struct{}{})
+		if len(t.asks) == 1 {
+			t.link.send(newMessageEvent(nil, api.ChatEventAsk{Ask: *cmd.ask}))
+		}
 	default:
 		panic("unknown command")
 	}
@@ -408,6 +435,7 @@ func (t *thread) on(cmd any) {
 
 func (t *thread) disconnect() {
 	t.pending = false
+	t.asks = nil
 	t.compaction.stop()
 	t.link.dispose()
 	t.link = nil
@@ -416,6 +444,7 @@ func (t *thread) disconnect() {
 
 func (t *thread) connect(backend *common.Backend, page page.Page, load bool, meta any) (Link, error) {
 	t.pending = false
+	t.asks = nil
 	t.compaction.stop()
 	if t.link != nil {
 		t.link.dispose()

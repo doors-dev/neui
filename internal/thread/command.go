@@ -133,12 +133,12 @@ type commandTask struct {
 
 type commandAsk struct {
 	link *link
-	ask  *api.ChatAsk
+	ask  *api.ChatAskView
 	ResultResponse[struct{}]
 }
 
 type commandAskDone struct {
-	ask *api.ChatAsk
+	ask *api.ChatAskView
 	Operation
 }
 

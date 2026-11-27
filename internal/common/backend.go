@@ -58,15 +58,15 @@ type Tool interface {
 	Call(ctx context.Context, input any) (any, error)
 }
 
-// Answer is how an Ask's form returns the user's answer to the waiting tool
-// call. Only the first Submit or Fail counts; later calls, and calls after
-// the tool call has ended, do nothing.
+// Answer is how an ask's form returns the user's answer. Only the first
+// Submit or Fail counts; later calls, and calls after the tool stopped
+// waiting, do nothing.
 type Answer[O any] interface {
-	// Submit ends the call with output as its result and removes the
-	// question from the chat; ctx is the answering event handler's.
+	// Submit answers with output and removes the question from the chat; ctx
+	// is the answering event handler's.
 	Submit(ctx context.Context, output O)
-	// Fail ends the call with err and removes the question from the chat;
-	// ctx is the answering event handler's.
+	// Fail answers with err and removes the question from the chat; ctx is
+	// the answering event handler's.
 	Fail(ctx context.Context, err error)
 }
 

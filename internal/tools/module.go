@@ -138,13 +138,14 @@ func Asking[I any, O any](f func(input I, reply common.Answer[O]) api.ChatAsk) f
 		answer := newAnswer[O](ctx)
 		defer answer.ctxCancel()
 		ask := f(input, answer)
-		ask.Cancel = answer.cancel
-		done, err := ctrl.Ask(ask)
+		done, err := ctrl.Ask(ask, answer.cancel)
 		if err != nil {
 			var o O
 			return o, err
 		}
+		resume := common.IslandPause(ctx)
 		output, ctx, err := answer.receive()
+		resume()
 		done(ctx)
 		return output, err
 	}

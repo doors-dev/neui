@@ -14,6 +14,8 @@
 
 package common
 
+import "context"
+
 type ctxKey int
 
 const (
@@ -23,7 +25,22 @@ const (
 	KeyController
 	KeyIslandStore
 	KeyIslandWidget
+	KeyIslandTurn
 )
+
+type IslandTurn interface {
+	PauseTurn()
+	ResumeTurn()
+}
+
+func IslandPause(ctx context.Context) (resume func()) {
+	turn, ok := ctx.Value(KeyIslandTurn).(IslandTurn)
+	if !ok {
+		return func() {}
+	}
+	turn.PauseTurn()
+	return turn.ResumeTurn
+}
 
 type IslandWidget struct {
 	Name string

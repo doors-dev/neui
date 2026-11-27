@@ -72,7 +72,7 @@ func (c *controller) Task(string, map[string]any, context.CancelCauseFunc) (comm
 	return task{id: c.kit.tasks, report: c.kit.app.Report}, nil
 }
 
-func (c *controller) Ask(api.ChatAsk) (func(context.Context), error) {
+func (c *controller) Ask(api.ChatAsk, func(context.Context)) (func(context.Context), error) {
 	return nil, errors.New("devkit: no asks")
 }
 
