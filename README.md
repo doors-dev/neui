@@ -1,4 +1,5 @@
 # Neui: an AI agent built into your Go web app
+[![codecov](https://codecov.io/gh/doors-dev/neui/branch/main/graph/badge.svg)](https://codecov.io/gh/doors-dev/neui)
 [![Go Reference](https://pkg.go.dev/badge/neui.dev.svg)](https://pkg.go.dev/neui.dev)
 
 <img width="800" height="615" alt="neui-demo-alt-10fps" src="https://github.com/user-attachments/assets/730c7f2d-62b8-416e-9b84-12359689adf3" />
@@ -153,7 +154,7 @@ Besides the chat and the page, the agent has a workspace on the server for real 
 
 ## Compared with CopilotKit and Vercel AI SDK
 
-The usual alternatives are CopilotKit (plus paid Intelligence), Vercel AI SDK with Sandbox, assistant-ui, OpenAI ChatKit, LangGraph with Agent Server, browser agents and WebMCP. For a Go team each of them means bolting on a React island, CopilotKit and a Node runtime: a second stack.
+The usual alternatives are CopilotKit (plus paid Intelligence), Vercel AI SDK with Sandbox, assistant-ui, OpenAI ChatKit, LangGraph with Agent Server, browser agents and WebMCP. For a Go team each of them means bolting on a JavaScript frontend and a Node runtime: a second stack.
 
 Each row was checked against neui's code and the competitors' current docs and source. Competitor cells describe the default open-source path.
 
@@ -162,13 +163,13 @@ Each row was checked against neui's code and the competitors' current docs and s
 | Agent operates the UI | **Yes.** Developers mark, right in the UI template, which elements the agent may see and use; no per-action code is needed. | **Partial.** One hand-written frontend tool per action | **No.** Fully hand-wired: each UI action needs a tool on the server and a handler in the browser |
 | Agent work environment | **Built in.** Its own files and scripts; one script can call every tool and work across the whole UI in a single step | **No.** One tool call per action; sandbox only through a third-party service; files need own wiring | **Partial.** Code can call your tools, with Claude only; paid cloud sandbox; files need own wiring |
 | Agentic apps | **Agent-written app.** Built from your components, it runs on the server, handles clicks and data itself, and calls the model only when a step needs judgment | **Model per click, or a free-form page.** The model fills your components and each click starts a new agent run. Or it writes its own web page, reaching your data through functions the developer registers | **Model picks a tool, you pre-wire the screen.** The model calls one of your tools and your component shows the result. Clicks run code you wrote in advance; the next agent step is another model request |
-| Agent permissions | **Built into the screen.** Developers decide what the agent can see and do where they build the UI; no permission code to write | **Manual.** Developers write checks for each agent action; tools sent by the browser are trusted | **Manual.** Developers write checks for each tool |
+| Agent permissions | **Built into the screen.** Developers decide what the agent can see and do where they build the UI; no permission code to write | **Manual.** Developers write checks for each agent action | **Manual.** Developers write checks for each tool |
 | Provider isolation | **Yes.** Keys, prompt and tools are server-only | **Weak.** Keys stay on the server, but the browser sends history, tools, context and state on every run, and the server uses them as sent | **Partial.** Tools declared on the server; chat history sent from the browser |
-| Prompt-cache stability | **Yes.** Fixed tools and system prompt; page state arrives in tool results | **No.** The system prompt is rebuilt from app state every run | **Yes.** Server owns tools and prompt; history is only appended |
+| Prompt-cache stability | **Yes.** Fixed tools and system prompt; page state arrives in tool results | **No.** The system prompt and the tool list change with app state | **Yes.** Server owns tools and prompt; history is only appended |
 | Traffic per message | **Tiny.** Only the new message; history stays on the server, minimal delays | **Grows with the conversation.** Full history on every run and every tool call | **Grows with the conversation by default.** Full history on every request and tool call; trimming needs your own server-side store |
-| Advanced chat features | **Built in.** Thread list, full-text search, rewind, clone | **Partial.** Thread list needs the paid tier; other features require own wiring and backend support | **No.** No thread list; thread features are yours to build |
+| Advanced chat features | **Built in.** Thread list, full-text search, rewind, clone | **Partial.** Thread list needs Intelligence with limited free tier; other features require own wiring and backend support | **No.** No thread list; thread features are yours to build |
 | Auto-compaction | **Yes.** Rolling, in the background, seamless for the user, or manual, and recovers when the history outgrows the model's window, for example after a switch to a smaller model | **No** | **Partial.** Manual recipe in the docs |
-| Supported platforms | **One.** Web apps built with Go and Doors | **Many.** React-first web frontends | **Many.** Most JavaScript frameworks |
+| Supported platforms | **One.** Web apps built with Go and Doors | **Many.** React, Vue and Angular web frontends | **Many.** Most JavaScript frameworks |
 
 ## Getting started
 
