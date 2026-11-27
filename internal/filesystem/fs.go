@@ -24,6 +24,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"unicode/utf8"
@@ -262,6 +263,9 @@ func (w *workFS) ReadDir(ctx context.Context, name string) ([]api.FSEntry, error
 	if err != nil {
 		return nil, err
 	}
+	slices.SortFunc(list, func(a, b fs.DirEntry) int {
+		return strings.Compare(a.Name(), b.Name())
+	})
 	entries := make([]api.FSEntry, 0, len(list)+len(uploadsDirs))
 	if name == "." {
 		for _, d := range uploadsDirs {
